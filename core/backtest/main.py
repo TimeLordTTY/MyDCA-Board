@@ -10,13 +10,13 @@ import argparse
 import sys
 import os
 
-# 确保可以导入本地模块
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 确保可以导入本地模块（项目根目录）
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from fund_backtest.engine import DataFeed, Portfolio, Backtester
-from fund_backtest.engine.backtester import write_results_to_csv
-from fund_backtest.utils.csv_loader import load_nav_series, create_sample_csv
-from fund_backtest.strategies import SipStrategy, TpDipStrategy
+from core.backtest.engine import DataFeed, Portfolio, Backtester
+from core.backtest.engine.backtester import write_results_to_csv
+from core.backtest.utils.csv_loader import load_nav_series, create_sample_csv
+from core.backtest.strategies import SipStrategy, TpDipStrategy
 
 
 # 策略注册表：策略名称 -> 策略类

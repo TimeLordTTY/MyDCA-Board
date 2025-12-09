@@ -12,56 +12,73 @@
 ## 项目结构
 
 ```
-fund_backtest/
-├── engine/                  # 回测引擎核心
-│   ├── __init__.py
-│   ├── types.py            # 数据结构定义
-│   ├── data_feed.py        # 行情数据迭代器
-│   ├── portfolio.py        # 组合管理与交易
-│   └── backtester.py       # 回测主循环
-├── strategies/             # 策略实现
-│   ├── __init__.py
-│   ├── base.py            # 策略基类
-│   ├── sample_sip.py      # 示例：普通定投策略
-│   └── sample_tp_dip.py   # 示例：止盈补仓策略
-├── utils/                  # 工具函数
-│   ├── __init__.py
-│   └── csv_loader.py      # CSV 数据加载
-├── main.py                # 命令行入口
-├── requirements.txt       # 依赖声明
-└── README.md
+MyDCA-Board/
+├── core/                          # 核心模块
+│   └── backtest/                  # 回测引擎（本目录）
+│       ├── engine/                # 引擎核心
+│       │   ├── types.py           # 数据结构定义
+│       │   ├── data_feed.py       # 行情数据迭代器
+│       │   ├── portfolio.py       # 组合管理与交易
+│       │   └── backtester.py      # 回测主循环
+│       ├── strategies/            # 策略实现
+│       │   ├── base.py            # 策略基类
+│       │   ├── sample_sip.py      # 普通定投策略
+│       │   └── sample_tp_dip.py   # 止盈补仓策略
+│       ├── utils/                 # 工具函数
+│       │   └── csv_loader.py      # CSV 数据加载
+│       └── main.py                # 命令行入口
+│
+├── services/                      # 服务层
+│   └── hub/                       # 中枢管理服务（待开发）
+│
+├── frontend/                      # 前端层
+│   └── web/                       # 中枢前台（待开发）
+│
+├── data/                          # 数据目录
+│   ├── nav/                       # 基金净值数据
+│   ├── results/                   # 回测结果
+│   └── configs/                   # 策略配置
+│
+└── scripts/                       # 独立脚本
+    ├── download_nav.py            # 净值下载工具
+    ├── run_backtest.py            # 快速回测脚本
+    └── ...
 ```
 
 ## 快速开始
 
-### 1. 生成示例数据
+### 方式一：使用快速回测脚本（推荐）
 
 ```bash
-cd fund_backtest
+# 1. 下载基金净值数据
+cd scripts
+python download_nav.py 163406
+
+# 2. 编辑 run_backtest.py 中的配置参数
+
+# 3. 运行回测
+python run_backtest.py
+```
+
+### 方式二：使用命令行
+
+```bash
+# 1. 下载数据
+cd scripts
+python download_nav.py 163406
+
+# 2. 运行回测
+cd ../core/backtest
+python main.py --csv ../../data/nav/163406.csv --fund 163406 --strategy sip
+```
+
+### 方式三：生成模拟数据测试
+
+```bash
+cd core/backtest
 python main.py --generate-sample
-```
-
-这会生成 `sample_nav.csv` 文件，包含 3 年的模拟净值数据。
-
-### 2. 运行回测
-
-**普通定投策略（每月定额买入，不止盈不补仓）：**
-
-```bash
-python main.py --csv sample_nav.csv --fund TEST --strategy sip
-```
-
-**止盈补仓策略（多档止盈 + 多档逢低加仓）：**
-
-```bash
 python main.py --csv sample_nav.csv --fund TEST --strategy tp_dip
 ```
-
-### 3. 查看结果
-
-回测完成后会：
-- 在终端打印摘要统计
-- 生成 `result_<基金代码>_<策略名>.csv` 详细结果文件
 
 ## 命令行参数
 
@@ -78,7 +95,9 @@ python main.py --csv sample_nav.csv --fund TEST --strategy tp_dip
 | `--nav-col` | CSV 净值列名 | nav |
 | `--output` | 输出文件路径 | 自动生成 |
 
-## CSV 数据格式
+## 数据文件
+
+### 净值数据（data/nav/）
 
 CSV 文件至少需要两列：
 - 日期列（支持列名：date, 净值日期, FSRQ, 日期）
@@ -90,14 +109,53 @@ date,nav
 2023-01-03,1.0000
 2023-01-04,1.0120
 2023-01-05,0.9980
-...
 ```
+
+使用下载工具获取真实数据：
+```bash
+cd scripts
+python download_nav.py 163406              # 下载全部历史
+python download_nav.py 163406 -s 2020-01-01  # 从指定日期开始
+```
+
+### 回测结果（data/results/）
+
+回测完成后自动保存到此目录，包含每日详细数据。
+
+## 内置策略
+
+### 1. 普通定投策略 (sip)
+
+最朴素的定期定额策略：
+- 每月第一个交易日，将新增资金全部买入
+- 不做任何止盈或补仓操作
+- 作为基准策略，用于对比其他复杂策略的效果
+
+### 2. 止盈补仓策略 (tp_dip)
+
+多档止盈 + 多档逢低加仓：
+
+**止盈档位（默认）：**
+| 收益率 | 卖出比例 |
+|--------|----------|
+| ≥10% | 卖出 25% |
+| ≥20% | 卖出 25% |
+| ≥30% | 卖出 50% |
+
+**补仓档位（默认）：**
+| 回撤 | 补仓金额 |
+|------|----------|
+| ≥5% | 500 元 |
+| ≥10% | 1000 元 |
+| ≥15% | 1500 元 |
+
+可通过配置自定义档位参数。
 
 ## 如何添加新策略
 
 ### 1. 创建策略文件
 
-在 `strategies/` 目录下创建新文件，如 `my_strategy.py`：
+在 `core/backtest/strategies/` 目录下创建新文件，如 `my_strategy.py`：
 
 ```python
 from typing import Dict, Any
@@ -142,10 +200,10 @@ class MyStrategy(Strategy):
 
 ### 2. 注册策略
 
-在 `main.py` 中添加导入和注册：
+在 `core/backtest/main.py` 中添加导入和注册：
 
 ```python
-from fund_backtest.strategies.my_strategy import MyStrategy
+from core.backtest.strategies.my_strategy import MyStrategy
 
 STRATEGY_REGISTRY = {
     'sip': SipStrategy,
@@ -157,37 +215,13 @@ STRATEGY_REGISTRY = {
 ### 3. 使用新策略
 
 ```bash
-python main.py --csv nav.csv --strategy my_strategy
+python main.py --csv ../../data/nav/163406.csv --strategy my_strategy
 ```
 
-## 内置策略说明
-
-### 1. 普通定投策略 (sip)
-
-最朴素的定期定额策略：
-- 每月第一个交易日，将新增资金全部买入
-- 不做任何止盈或补仓操作
-- 作为基准策略，用于对比其他复杂策略的效果
-
-### 2. 止盈补仓策略 (tp_dip)
-
-多档止盈 + 多档逢低加仓：
-
-**止盈档位（默认）：**
-| 收益率 | 卖出比例 |
-|--------|----------|
-| ≥10% | 卖出 25% |
-| ≥20% | 卖出 25% |
-| ≥30% | 卖出 50% |
-
-**补仓档位（默认）：**
-| 回撤 | 补仓金额 |
-|------|----------|
-| ≥5% | 500 元 |
-| ≥10% | 1000 元 |
-| ≥15% | 1500 元 |
-
-可通过配置自定义档位参数。
+或在 `scripts/run_backtest.py` 中修改：
+```python
+策略类型 = "my_strategy"
+```
 
 ## 核心概念
 
@@ -238,4 +272,3 @@ class Signal:
 ## License
 
 MIT
-

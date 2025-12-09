@@ -1,25 +1,36 @@
+"""
+旧版回测脚本（使用 pandas 实现）
+
+注意：这是遗留脚本，建议使用新的回测引擎：
+    python run_backtest.py
+"""
+
 import pandas as pd
 from datetime import timedelta
+import os
+
+# 获取项目根目录
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # ========= 1. 基本参数 =========
 
-CSV_PATH = "fund_163406_nav.csv"   # 你的历史净值 CSV 路径
+CSV_PATH = os.path.join(PROJECT_ROOT, "data/nav/fund_163406_nav.csv")   # 净值 CSV 路径
 DATE_COL = "date"             # 日期列名
 NAV_COL = "nav"               # 单位净值列名
 
 YEARS = 10                    # 回测最近多少年
 
 initial_investment = 2000.0   # 初始一次性投入（第一天全买入）
-monthly_contribution = 500.0  # 每月追加的“工资定投额度”
+monthly_contribution = 500.0  # 每月追加的"工资定投额度"
 
 tp_threshold = 0.20           # 止盈阈值：未实现收益率 >= 20% 时触发
 tp_sell_ratio = 0.25          # 每次止盈卖出当前仓位的 25%
 
-dip_threshold = 0.10          # 回撤阈值：相对历史高点回撤 10% 视为“跌深”
+dip_threshold = 0.10          # 回撤阈值：相对历史高点回撤 10% 视为"跌深"
 dip_buy_ratio = 0.40          # 每次用现金池的 40% 进行补仓
 min_dip_cash = 0.0            # 触发补仓的最小现金门槛（可设 1000 之类）
 
-OUTPUT_CSV = "backtest_163406_strategy.csv"
+OUTPUT_CSV = os.path.join(PROJECT_ROOT, "data/results/backtest_163406_strategy.csv")
 
 
 # ========= 2. 读取 & 预处理数据 =========

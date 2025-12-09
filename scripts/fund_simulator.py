@@ -1,6 +1,17 @@
+"""
+基金模拟器
+
+使用随机收益率模拟基金净值走势，测试定投策略效果
+"""
+
 import csv
 import math
 import random
+import os
+
+# 获取项目根目录
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 def simulate_fund(
     months=24,
@@ -139,19 +150,25 @@ def simulate_fund(
 
 
 def save_history_to_csv(history, filename="simulation_result.csv"):
+    """保存模拟结果到 data/results/ 目录"""
     if not history:
         print("没有模拟数据可写入。")
         return
 
+    # 输出到 data/results/ 目录
+    output_dir = os.path.join(PROJECT_ROOT, "data", "results")
+    os.makedirs(output_dir, exist_ok=True)
+    filepath = os.path.join(output_dir, filename)
+
     fieldnames = list(history[0].keys())
 
-    with open(filename, "w", newline="", encoding="utf-8-sig") as f:
+    with open(filepath, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for row in history:
             writer.writerow(row)
 
-    print(f"✅ 模拟结果已写入：{filename}")
+    print(f"✅ 模拟结果已写入：{filepath}")
 
 
 if __name__ == "__main__":
