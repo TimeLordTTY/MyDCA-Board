@@ -6,8 +6,6 @@
 使用方法：
     1. 修改下方的配置参数
     2. 直接运行：python run_backtest.py
-
-注意：这是一个临时脚本，以后会通过页面或 API 触发回测
 """
 
 import sys
@@ -20,23 +18,16 @@ sys.path.insert(0, PROJECT_ROOT)
 from core.backtest.engine import DataFeed, Portfolio, Backtester
 from core.backtest.engine.backtester import write_results_to_csv
 from core.backtest.utils.csv_loader import load_nav_series
-from core.backtest.strategies import SipStrategy, TpDipStrategy
-from core.backtest.strategies.master_strategy_v1 import MasterStrategyV1
+from core.backtest.strategies.profit_recycle import ProfitRecycleStrategy
+from core.backtest.strategies.pure_sip import PureSipStrategy
 
 
 # =============================================================================
 #                              📊 基本配置
 # =============================================================================
 
-# 基金代码（用于标记输出文件）
 基金代码 = "163406"
-
-# 净值数据文件路径（相对于项目根目录）
-# 可以使用 scripts/download_nav.py 下载数据
-# 示例：python download_nav.py 163406
 净值数据文件 = "data/nav/163406.csv"
-
-# 回测结果输出目录
 输出目录 = "data/results"
 
 
@@ -44,10 +35,7 @@ from core.backtest.strategies.master_strategy_v1 import MasterStrategyV1
 #                              💰 资金配置
 # =============================================================================
 
-# 初始一次性投入金额（第一天买入）
 初始投入金额 = 2000.0
-
-# 每月定投金额
 每月定投金额 = 500.0
 
 
@@ -55,102 +43,43 @@ from core.backtest.strategies.master_strategy_v1 import MasterStrategyV1
 #                              📈 费率配置
 # =============================================================================
 
-# 买入手续费率（0.0015 = 0.15%）
-买入费率 = 0.0015
-
-# 卖出手续费率（0.005 = 0.5%）
-卖出费率 = 0.005
+买入费率 = 0.0012   # 0.12%
+卖出费率 = 0.0      # 这里默认不考虑赎回费（纯定投对比用）
 
 
 # =============================================================================
 #                              🎯 策略选择
 # =============================================================================
+# 可选：
+#   "profit_recycle" - 利润回收策略（你现在的 V6）
+#   "pure_sip"       - 纯基础定投策略（基准线）
+策略类型 = "profit_recycle"
+# 策略类型 = "pure_sip"
 
-# 策略类型：
-#   "sip"       - 普通定投（每月定额买入，不止盈不补仓）
-#   "tp_dip"    - 止盈补仓（多档止盈 + 多档逢低加仓）
-#   "master_v1" - 主人策略V1（三段式止盈 + 盈利池补仓，本金永不卖出）
-策略类型 = "master_v1"
-
-
-# =============================================================================
-#                    🔧 止盈补仓策略配置（仅 tp_dip 生效）
-# =============================================================================
-
-# 止盈档位配置
-# - threshold: 收益率阈值（0.10 = 10%）
-# - sell_ratio: 触发后卖出的比例（0.25 = 卖出25%持仓）
-止盈档位 = [
-    {"threshold": 0.10, "sell_ratio": 0.25},   # 收益率达 10%，卖出 25%
-    {"threshold": 0.20, "sell_ratio": 0.25},   # 收益率达 20%，卖出 25%
-    {"threshold": 0.30, "sell_ratio": 0.50},   # 收益率达 30%，卖出 50%
-]
-
-# 补仓档位配置
-# - drawdown: 从历史高点回撤的比例（0.05 = 回撤5%）
-# - extra_amount: 触发后额外买入的金额
-补仓档位 = [
-    {"drawdown": 0.05, "extra_amount": 500},   # 回撤 5%，补仓 500 元
-    {"drawdown": 0.10, "extra_amount": 1000},  # 回撤 10%，补仓 1000 元
-    {"drawdown": 0.15, "extra_amount": 1500},  # 回撤 15%，补仓 1500 元
-]
-
-# 单次补仓最多使用现金池的比例（1.0 = 100%）
-单次补仓最大比例 = 1.0
-
-# 是否自动投资每月新增资金
-# True: 每月定投资金会自动买入（即使没触发补仓）
-# False: 每月资金只进入现金池，等待补仓条件触发
-自动投资新增资金 = True
-
-
-# =============================================================================
-#                    🔧 主人策略V1配置（仅 master_v1 生效）
-# =============================================================================
-
-# 止盈档位（相对 last_peak_nav 的涨幅）
-# 所有档位都只卖"盈利对应份额"，不动本金
-主人策略_止盈档位1 = 0.10   # 10% 涨幅，卖出盈利的 25%
-主人策略_止盈档位2 = 0.20   # 20% 涨幅，卖出盈利的 25%
-主人策略_止盈档位3 = 0.30   # 30% 涨幅，卖出全部盈利
-
-# 低估补仓档位（相对 last_peak_nav 的跌幅）
-# 补仓金额来自"盈利池"，深度低估时可动用少量本金
-主人策略_补仓档位1 = -0.05   # 回撤 5%，用盈利的 40% 补仓
-主人策略_补仓档位2 = -0.10   # 回撤 10%，用盈利的 70% 补仓
-主人策略_补仓档位3 = -0.15   # 回撤 15%，用盈利的 100% + 本金上限
-
-# 深度低估时允许动用的本金上限（元）
-主人策略_深度低估本金上限 = 200.0
-
-
-# =============================================================================
-#                              🚀 执行回测
-# =============================================================================
 
 def run():
     """执行回测"""
-    
+
     print("=" * 70)
     print("                    基金定投策略回测")
     print("=" * 70)
-    
+
     # 构建完整路径
     csv_path = os.path.join(PROJECT_ROOT, 净值数据文件)
     output_dir = os.path.join(PROJECT_ROOT, 输出目录)
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # 1. 加载数据
     print(f"\n📊 基金代码: {基金代码}")
     print(f"📁 数据文件: {净值数据文件}")
-    
+
     if not os.path.exists(csv_path):
         print(f"\n❌ 错误：找不到净值数据文件: {csv_path}")
         print(f"💡 提示：请先运行下载脚本:")
         print(f"   cd scripts")
         print(f"   python download_nav.py {基金代码}")
         return
-    
+
     try:
         bars = load_nav_series(csv_path)
         print(f"   数据条数: {len(bars)} 条")
@@ -158,7 +87,7 @@ def run():
     except Exception as e:
         print(f"❌ 数据加载失败: {e}")
         return
-    
+
     # 2. 创建数据源和组合
     data_feed = DataFeed(bars)
     portfolio = Portfolio(
@@ -166,62 +95,40 @@ def run():
         buy_fee_rate=买入费率,
         sell_fee_rate=卖出费率
     )
-    
+
     # 3. 创建策略
     print(f"\n📈 策略类型: {策略类型}")
-    print(f"💰 初始投入: {初始投入金额:,.2f} 元")
-    print(f"💰 每月定投: {每月定投金额:,.2f} 元")
-    print(f"📊 买入费率: {买入费率:.4%}")
-    print(f"📊 卖出费率: {卖出费率:.4%}")
-    
-    if 策略类型 == "sip":
-        strategy = SipStrategy({
-            'immediate_invest': True,
-        })
-        print("   策略说明: 每月定额买入，不止盈不补仓")
-        
-    elif 策略类型 == "tp_dip":
-        strategy = TpDipStrategy({
-            'tp_levels': 止盈档位,
-            'dip_levels': 补仓档位,
-            'max_dip_buy_ratio_of_cash': 单次补仓最大比例,
-            'tp_reference': 'cost',
-            'auto_invest_inflow': 自动投资新增资金,
-        })
-        print("   策略说明: 多档止盈 + 多档逢低加仓")
-        print(f"\n   止盈档位:")
-        for level in 止盈档位:
-            print(f"     - 收益率 ≥ {level['threshold']:.0%} → 卖出 {level['sell_ratio']:.0%}")
-        print(f"\n   补仓档位:")
-        for level in 补仓档位:
-            print(f"     - 回撤 ≥ {level['drawdown']:.0%} → 补仓 {level['extra_amount']:.0f} 元")
-    
-    elif 策略类型 == "master_v1":
-        strategy = MasterStrategyV1({
-            'monthly_invest': 每月定投金额,
-            'tp1': 主人策略_止盈档位1,
-            'tp2': 主人策略_止盈档位2,
-            'tp3': 主人策略_止盈档位3,
-            'dip1': 主人策略_补仓档位1,
-            'dip2': 主人策略_补仓档位2,
-            'dip3': 主人策略_补仓档位3,
-            'max_principal_per_deep_dip': 主人策略_深度低估本金上限,
-        })
-        print("   策略说明: 主人策略V1 — 三段式止盈 + 盈利池补仓")
-        print("   核心原则: 本金永不卖出，所有止盈只卖盈利对应份额")
-        print(f"\n   止盈档位（相对前高涨幅）:")
-        print(f"     - 涨幅 ≥ {主人策略_止盈档位1:.0%} → 卖出盈利的 25%（不超过盈利）")
-        print(f"     - 涨幅 ≥ {主人策略_止盈档位2:.0%} → 卖出盈利的 25%（不超过盈利）")
-        print(f"     - 涨幅 ≥ {主人策略_止盈档位3:.0%} → 卖出全部盈利")
-        print(f"\n   补仓档位（相对前高回撤）:")
-        print(f"     - 回撤 ≥ {abs(主人策略_补仓档位1):.0%} → 用盈利的 40% 补仓")
-        print(f"     - 回撤 ≥ {abs(主人策略_补仓档位2):.0%} → 用盈利的 70% 补仓")
-        print(f"     - 回撤 ≥ {abs(主人策略_补仓档位3):.0%} → 用盈利 100% + 本金 {主人策略_深度低估本金上限:.0f} 元")
-    
+
+    if 策略类型 == "profit_recycle":
+        strategy = ProfitRecycleStrategy({})
+        print(f"   策略名称: {strategy.get_name()}")
+        print("   策略说明: 利润回收策略 — 止盈 + 盈利池补仓 + 深跌少量本金参与")
+        print("   核心原则: 盈利回收到盈利池，逢低优先使用盈利池，深跌时按比例使用预投入本金池")
+
+        levels = strategy.get_levels_info()
+        print("\n   止盈档位（策略内置）:")
+        for line in levels.get("tp_levels_desc", []):
+            print(f"     - {line}")
+
+        print("\n   补仓档位（策略内置）:")
+        for line in levels.get("dip_levels_desc", []):
+            print(f"     - {line}")
+
+    elif 策略类型 == "pure_sip":
+        strategy = PureSipStrategy({})
+        print(f"   策略名称: {strategy.get_name()}")
+        print("   策略说明: 纯基础定投策略 — 初始+每月定额全额买入，不止盈、不补仓")
+        print("   核心原则: 不择时，只看长期收益，把它作为所有花样策略的对照基准")
+
     else:
         print(f"❌ 未知策略类型: {策略类型}")
         return
-    
+
+    print(f"\n💰 初始投入: {初始投入金额:,.2f} 元")
+    print(f"💰 每月定投: {每月定投金额:,.2f} 元")
+    print(f"📊 买入费率: {买入费率:.4%}")
+    print(f"📊 卖出费率: {卖出费率:.4%}")
+
     # 4. 创建回测引擎
     backtester = Backtester(
         data_feed=data_feed,
@@ -229,58 +136,33 @@ def run():
         strategy=strategy,
         initial_invest=初始投入金额,
         periodic_invest=每月定投金额,
-        invest_day_rule="month_change"
+        invest_day_rule="month_change",
     )
-    
+
     # 5. 执行回测
     print(f"\n⏳ 正在执行回测...")
     results = backtester.run()
-    
-    # 6. 输出结果
+
+    # 6. 输出结果（统一交给策略来渲染）
     summary = backtester.get_summary()
-    
+
     print("\n" + "=" * 70)
-    print("                         📊 回测结果")
+    print("                         📊 回测结果（由策略输出）")
     print("=" * 70)
-    
-    print(f"\n【时间区间】")
-    print(f"   起止时间: {summary['start_date']} ~ {summary['end_date']}")
-    print(f"   回测天数: {summary['days']} 天")
-    
-    print(f"\n【资金情况】")
-    print(f"   累计投入本金: {summary['total_cost']:>12,.2f} 元")
-    print(f"   期末基金市值: {summary['final_fund_value']:>12,.2f} 元")
-    print(f"   期末现金余额: {summary['final_cash']:>12,.2f} 元")
-    print(f"   期末总资产:   {summary['final_value']:>12,.2f} 元")
-    
-    print(f"\n【收益情况】")
-    profit = summary['final_value'] - summary['total_cost']
-    print(f"   总盈亏金额:   {profit:>+12,.2f} 元")
-    print(f"   总收益率:     {summary['total_return']:>+12.2%}")
-    print(f"   年化收益率:   {summary['annual_return']:>+12.2%}")
-    
-    print(f"\n【交易统计】")
-    print(f"   买入次数: {summary['buy_count']}")
-    print(f"   卖出次数: {summary['sell_count']}")
-    print(f"   总买入金额: {summary['total_buy']:,.2f} 元")
-    print(f"   总卖出金额: {summary['total_sell']:,.2f} 元")
-    
-    if 'tp_count' in summary:
-        print(f"   止盈触发次数: {summary['tp_count']}")
-    if 'dip_count' in summary:
-        print(f"   补仓触发次数: {summary['dip_count']}")
-    
+
+    strategy.render_summary(summary)
+
+    print("\n" + "=" * 70)
+    print(f"✅ 回测完成（{strategy.get_name()}.render_summary）")
+    print("=" * 70)
+
     # 7. 保存结果
     output_file = os.path.join(output_dir, f"backtest_{基金代码}_{策略类型}.csv")
     write_results_to_csv(results, output_file)
-    
-    print(f"\n" + "=" * 70)
-    print(f"✅ 回测完成！详细结果已保存到:")
+
+    print("\n明细已写入 CSV 文件：")
     print(f"   {output_file}")
-    print("=" * 70)
 
 
 if __name__ == "__main__":
     run()
-
-
