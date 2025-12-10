@@ -20,6 +20,7 @@ from core.backtest.engine.backtester import write_results_to_csv
 from core.backtest.utils.csv_loader import load_nav_series
 from core.backtest.strategies.profit_recycle import ProfitRecycleStrategy
 from core.backtest.strategies.pure_sip import PureSipStrategy
+from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 
 
 # =============================================================================
@@ -55,7 +56,7 @@ from core.backtest.strategies.pure_sip import PureSipStrategy
 #   "pure_sip"       - 纯基础定投策略（基准线）
 策略类型 = "profit_recycle"
 # 策略类型 = "pure_sip"
-
+# 策略类型 = "ma_enhanced"
 
 def run():
     """执行回测"""
@@ -119,6 +120,18 @@ def run():
         print(f"   策略名称: {strategy.get_name()}")
         print("   策略说明: 纯基础定投策略 — 初始+每月定额全额买入，不止盈、不补仓")
         print("   核心原则: 不择时，只看长期收益，把它作为所有花样策略的对照基准")
+        
+    elif 策略类型 == "ma_enhanced":
+        strategy = MovingAverageEnhancedStrategy({
+            "base_amount": 每月定投金额,
+            "ma_window": 250,
+            "multiplier": 2.0,
+            "min_factor": 0.0,
+            "max_factor": 3.0,
+        })
+        print("   策略名称: MA250 均线增强定投策略")
+        print("   策略说明: 高估少买，低估多买，不做止盈，只调节每次买入金额")
+        print("   核心原则: 永远在场，利用估值波动优化买入时点")
 
     else:
         print(f"❌ 未知策略类型: {策略类型}")
