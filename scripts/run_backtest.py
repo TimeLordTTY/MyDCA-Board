@@ -16,7 +16,6 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from core.backtest.engine import DataFeed, Portfolio, Backtester
-from core.backtest.engine.backtester import write_results_to_csv
 from core.backtest.utils.csv_loader import load_nav_series
 from core.backtest.strategies.profit_recycle import ProfitRecycleStrategy
 from core.backtest.strategies.pure_sip import PureSipStrategy
@@ -54,9 +53,9 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 # 可选：
 #   "profit_recycle" - 利润回收策略（你现在的 V6）
 #   "pure_sip"       - 纯基础定投策略（基准线）
-策略类型 = "profit_recycle"
+# 策略类型 = "profit_recycle"
 # 策略类型 = "pure_sip"
-# 策略类型 = "ma_enhanced"
+策略类型 = "ma_enhanced"
 
 
 # =============================================================================
@@ -64,8 +63,8 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 # =============================================================================
 # 自定义回测开始和结束日期（格式：YYYY-MM-DD）
 # 设置为 None 则使用数据文件的全部时间范围
-回测起始日期 = None
-回测结束日期 = None
+回测起始日期 = "2020-12-01"
+回测结束日期 = "2025-12-01"
 
 def run():
     """执行回测"""
@@ -191,12 +190,22 @@ def run():
     # 调用策略的 render_summary（只调用一次，由策略负责所有输出）
     strategy.render_summary(summary)
 
-    # 7. 保存结果
-    output_file = os.path.join(output_dir, f"backtest_{基金代码}_{策略类型}.csv")
-    write_results_to_csv(results, output_file)
+    # 7. 输出结果表格并保存 CSV
+    export_result = backtester.export_results(
+        output_dir=output_dir,
+        prefix=f"backtest_{基金代码}_{策略类型}",
+        fund_name="",  # 可以从基金信息中获取
+        print_to_console=False,  # 控制台不输出表格
+        save_to_csv=True,
+    )
 
-    print("\n明细已写入 CSV 文件：")
-    print(f"   {output_file}")
+    print("\n📁 已生成文件：")
+    for key, filepath in export_result.get("files", {}).items():
+        if isinstance(filepath, list):
+            for fp in filepath:
+                print(f"   - {fp}")
+        else:
+            print(f"   - {filepath}")
 
 
 if __name__ == "__main__":

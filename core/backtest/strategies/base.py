@@ -7,7 +7,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, Any, TYPE_CHECKING
+from typing import Dict, Any, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..engine.portfolio import Portfolio
@@ -118,4 +118,29 @@ class Strategy(ABC):
             策略类名
         """
         return self.__class__.__name__
+    
+    def get_result_tables(self) -> List[Dict[str, Any]]:
+        """
+        返回策略自定义表格数据列表
+        
+        策略可重写此方法，返回需要输出的表格数据。
+        引擎会在回测结束后调用此方法获取表格并输出。
+        
+        Returns:
+            表格数据列表，每个字典包含:
+            - title: str, 表格标题
+            - headers: List[str], 列头名称列表
+            - rows: List[List[Any]], 数据行列表，每行是一个值列表
+        
+        Example:
+            return [{
+                "title": "止盈触发记录",
+                "headers": ["日期", "净值", "触发档位", "卖出金额"],
+                "rows": [
+                    ["2024-01-15", 1.2345, "10%", 1000.00],
+                    ["2024-03-20", 1.3456, "20%", 2000.00],
+                ]
+            }]
+        """
+        return []
 
