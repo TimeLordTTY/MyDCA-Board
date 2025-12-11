@@ -64,8 +64,8 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 # =============================================================================
 # 自定义回测开始和结束日期（格式：YYYY-MM-DD）
 # 设置为 None 则使用数据文件的全部时间范围
-回测起始日期 = "2020-12-09"
-回测结束日期 = "2025-12-10"
+回测起始日期 = None
+回测结束日期 = None
 
 def run():
     """执行回测"""
@@ -169,6 +169,7 @@ def run():
         invest_day_rule="month_change",
         start_date=回测起始日期,
         end_date=回测结束日期,
+        fund_code=基金代码,
     )
 
     # 5. 执行回测
@@ -177,22 +178,18 @@ def run():
 
     # 6. 输出结果
     summary = backtester.get_summary()
-
-    print("\n" + "=" * 70)
-    print("                         📊 回测结果")
-    print("=" * 70)
     
-    # 显示日期区间信息
-    print(f"\n【数据区间】")
-    print(f"   原始数据区间: {summary.get('data_start_date', 'N/A')} ~ {summary.get('data_end_date', 'N/A')}")
-    print(f"   实际回测区间: {summary.get('backtest_start_date', 'N/A')} ~ {summary.get('backtest_end_date', 'N/A')}")
+    # 显示日期区间信息（仅在有自定义区间时显示）
+    if 回测起始日期 or 回测结束日期:
+        print("\n" + "=" * 70)
+        print("                         📊 数据区间信息")
+        print("=" * 70)
+        print(f"\n【数据区间】")
+        print(f"   原始数据区间: {summary.get('data_start_date', 'N/A')} ~ {summary.get('data_end_date', 'N/A')}")
+        print(f"   实际回测区间: {summary.get('backtest_start_date', 'N/A')} ~ {summary.get('backtest_end_date', 'N/A')}")
     
-    # 调用策略的 render_summary
+    # 调用策略的 render_summary（只调用一次，由策略负责所有输出）
     strategy.render_summary(summary)
-
-    print("\n" + "=" * 70)
-    print(f"✅ 回测完成（{strategy.get_name()}.render_summary）")
-    print("=" * 70)
 
     # 7. 保存结果
     output_file = os.path.join(output_dir, f"backtest_{基金代码}_{策略类型}.csv")

@@ -80,7 +80,8 @@ class Backtester:
         periodic_invest: float = 0.0,
         invest_day_rule: str = "month_change",
         start_date: Optional[str] = None,
-        end_date: Optional[str] = None
+        end_date: Optional[str] = None,
+        fund_code: str = "未知"
     ):
         """
         初始化回测引擎
@@ -96,12 +97,14 @@ class Backtester:
                 - "week_change": 每周第一个交易日
             start_date: 回测起始日期（格式：YYYY-MM-DD），为 None 则从数据起始开始
             end_date: 回测结束日期（格式：YYYY-MM-DD），为 None 则到数据结束
+            fund_code: 基金代码（用于标识和展示）
         """
         # 保存原始数据信息
         self.original_start_date = data_feed.start_date
         self.original_end_date = data_feed.end_date
         self.config_start_date = start_date
         self.config_end_date = end_date
+        self.fund_code = fund_code
         
         # 对数据进行日期切片
         self.data_feed = self._slice_data_by_date(data_feed, start_date, end_date)
@@ -115,6 +118,7 @@ class Backtester:
         # 内部状态
         self.results: List[DayResult] = []
         self.cash_pool = 0.0  # 待投资现金池
+        self.principal_total = 0.0  # 真实打入本金总额（包括初始投资和定期投资）
     
     def _slice_data_by_date(
         self,
@@ -224,6 +228,7 @@ class Backtester:
         """
         self.results = []
         self.cash_pool = 0.0
+        self.principal_total = 0.0  # 重置真实打入本金总额
         prev_date: Optional[datetime] = None
         is_first_day = True
         
@@ -240,6 +245,7 @@ class Backtester:
             if is_first_day and self.initial_invest > 0:
                 cash_inflow += self.initial_invest
                 self.cash_pool += self.initial_invest
+                self.principal_total += self.initial_invest  # 记录真实打入本金
                 is_first_day = False
             else:
                 is_first_day = False
@@ -250,6 +256,7 @@ class Backtester:
                 if prev_date is not None:
                     cash_inflow += self.periodic_invest
                     self.cash_pool += self.periodic_invest
+                    self.principal_total += self.periodic_invest  # 记录真实打入本金
             
             # ===== 2. 更新组合估值 =====
             self.portfolio.update_valuation(nav)
@@ -347,29 +354,48 @@ class Backtester:
         if hasattr(self.strategy, 'get_stats'):
             strategy_stats = self.strategy.get_stats()
         
+        # 计算真实收益率（基于 principal_total）
+        real_return = (last.total_value - self.principal_total) / self.principal_total if self.principal_total > 0 else 0.0
+        nominal_pnl = last.total_value - last.total_cost
+        
         return {
+            # 基础信息
+            'strategy_name': self.strategy.get_name(),
+            'fund_code': self.fund_code,
+            'start_date': first.date.strftime('%Y-%m-%d'),
+            'end_date': last.date.strftime('%Y-%m-%d'),
+            'days': days,
+            
             # 日期区间信息
             'data_start_date': self.original_start_date.strftime('%Y-%m-%d') if self.original_start_date else None,
             'data_end_date': self.original_end_date.strftime('%Y-%m-%d') if self.original_end_date else None,
             'backtest_start_date': first.date.strftime('%Y-%m-%d'),
             'backtest_end_date': last.date.strftime('%Y-%m-%d'),
             
-            # 兼容旧字段（保持向后兼容）
-            'start_date': first.date.strftime('%Y-%m-%d'),
-            'end_date': last.date.strftime('%Y-%m-%d'),
-            'days': days,
+            # 资金情况
+            'principal_total': self.principal_total,  # 真实打入本金总额
+            'total_cost': last.total_cost,  # 实际买入成本（已下场的资金）
+            'final_fund_value': last.fund_value,  # 期末基金市值
+            'final_cash': last.cash,  # 期末现金余额
+            'final_assets': last.total_value,  # 期末总资产
             
-            # 收益指标
-            'total_cost': last.total_cost,
-            'final_value': last.total_value,
-            'final_fund_value': last.fund_value,
-            'final_cash': last.cash,
+            # 收益情况
+            'nominal_pnl': nominal_pnl,  # 基于 total_cost 的名义盈亏
+            'nominal_return': total_return,  # 基于 total_cost 的名义收益率
+            'real_return': real_return,  # 基于 principal_total 的真实收益率
+            'annual_return': annual_return,  # 年化收益率
+            
+            # 兼容旧字段
             'total_return': total_return,
-            'annual_return': annual_return,
+            'final_value': last.total_value,
             
             # 交易统计
             'buy_count': buy_count,
             'sell_count': sell_count,
+            'total_buy_amount': total_buy,
+            'total_sell_amount': total_sell,
+            
+            # 兼容旧字段
             'total_buy': total_buy,
             'total_sell': total_sell,
             
