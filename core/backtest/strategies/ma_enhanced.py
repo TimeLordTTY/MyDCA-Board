@@ -32,24 +32,59 @@ class MovingAverageEnhancedStrategy(Strategy):
         - render_summary 中同时输出：
             * 对 total_cost 的名义收益率；
             * 对 principal_total 的真实收益率。
+
+    可配置参数：
+    ----------------------------------------------------------------
+    - ma_window: 均线窗口长度（默认 250）
+    - base_amount: 每月基础定投金额（默认 500.0）
+    - multiplier: 偏离度放大倍数（默认 2.0）
+    - min_factor: 最小买入因子（默认 0.3）
+    - max_factor: 最大买入因子（默认 3.0）
+    - allow_non_invest_day_buy: 非定投日是否允许抄底（默认 True）
+    - non_invest_day_threshold: 非定投日抄底阈值（默认 1.0）
+    - first_day_full_invest: 首日是否全仓买入（默认 True）
     """
+
+    # =======================================================
+    # 默认配置值
+    # =======================================================
+    DEFAULT_MA_WINDOW = 250                    # 均线窗口长度
+    DEFAULT_BASE_AMOUNT = 500.0                # 每月基础定投金额
+    DEFAULT_MULTIPLIER = 2.0                   # 偏离度放大倍数
+    DEFAULT_MIN_FACTOR = 0.3                   # 最小买入因子
+    DEFAULT_MAX_FACTOR = 3.0                   # 最大买入因子
+    DEFAULT_ALLOW_NON_INVEST_DAY_BUY = True    # 非定投日是否允许抄底
+    DEFAULT_NON_INVEST_DAY_THRESHOLD = 1.0    # 非定投日抄底阈值
+    DEFAULT_FIRST_DAY_FULL_INVEST = True       # 首日是否全仓买入
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(config or {})
 
-        # 均线窗口长度：250 交易日，大致一年
-        self.ma_window: int = int(self.config.get("ma_window", 250))
-
-        # 每月基础定投金额（单位：元）
-        self.base_amount: float = float(self.config.get("base_amount", 500.0))
-
-        # 偏离度放大倍数：factor_raw = 1 - bias * multiplier
-        # multiplier 越大，对高估/低估的反应越激进
-        self.multiplier: float = float(self.config.get("multiplier", 2.0))
-
-        # 为防止在高估时完全踏空，给定一个最小买入因子（仅用于"定投日"）
-        # 例如：min_factor = 0.3 => 最少买 30% 的 base_amount
-        self.min_factor: float = float(self.config.get("min_factor", 0.3))
+        # 加载可配置参数
+        self.ma_window: int = int(
+            self.config.get("ma_window", self.DEFAULT_MA_WINDOW)
+        )
+        self.base_amount: float = float(
+            self.config.get("base_amount", self.DEFAULT_BASE_AMOUNT)
+        )
+        self.multiplier: float = float(
+            self.config.get("multiplier", self.DEFAULT_MULTIPLIER)
+        )
+        self.min_factor: float = float(
+            self.config.get("min_factor", self.DEFAULT_MIN_FACTOR)
+        )
+        self.max_factor: float = float(
+            self.config.get("max_factor", self.DEFAULT_MAX_FACTOR)
+        )
+        self.allow_non_invest_day_buy: bool = bool(
+            self.config.get("allow_non_invest_day_buy", self.DEFAULT_ALLOW_NON_INVEST_DAY_BUY)
+        )
+        self.non_invest_day_threshold: float = float(
+            self.config.get("non_invest_day_threshold", self.DEFAULT_NON_INVEST_DAY_THRESHOLD)
+        )
+        self.first_day_full_invest: bool = bool(
+            self.config.get("first_day_full_invest", self.DEFAULT_FIRST_DAY_FULL_INVEST)
+        )
 
     # ------------------------------------------------------------------
     # 生命周期钩子
@@ -60,6 +95,8 @@ class MovingAverageEnhancedStrategy(Strategy):
         """
         self.state.setdefault("nav_history", [])       # 记录每日 NAV
         self.state.setdefault("initialized", False)
+        self.state.setdefault("low_buy_count", 0)      # 低估抄底次数
+        self.state.setdefault("high_reduce_count", 0)  # 高估减仓次数
 
     # ------------------------------------------------------------------
     # 每个交易日的策略逻辑
@@ -92,7 +129,7 @@ class MovingAverageEnhancedStrategy(Strategy):
 
         buy_cash: float = 0.0
         sell_units: float = 0.0   # 本策略不卖出
-        note_parts: list[str] = []
+        note_parts: List[str] = []
 
         # -----------------------------
         # 3. 特殊处理：首日建仓
@@ -100,11 +137,15 @@ class MovingAverageEnhancedStrategy(Strategy):
         if not self.state.get("initialized", False):
             self.state["initialized"] = True
 
-            # 首日一般是初始 2000 元，我们直接全仓买入作为起点
-            # （如果你想让首日也走均线逻辑，这里可以改掉）
-            if cash_pool > 0:
+            if self.first_day_full_invest and cash_pool > 0:
+                # 首日全仓买入
                 buy_cash = cash_pool
                 note_parts.append(f"首日建仓：一次性买入 {buy_cash:.2f} 元")
+                return Signal(buy_cash=buy_cash, sell_units=sell_units, note="; ".join(note_parts))
+            elif cash_pool > 0:
+                # 首日也走均线逻辑（但此时没有历史数据，按全买处理）
+                buy_cash = cash_pool
+                note_parts.append(f"首日建仓（无历史数据）：买入 {buy_cash:.2f} 元")
                 return Signal(buy_cash=buy_cash, sell_units=sell_units, note="; ".join(note_parts))
             else:
                 # 极端情况下首日没有钱，那就什么也不做
@@ -116,7 +157,7 @@ class MovingAverageEnhancedStrategy(Strategy):
             return Signal(buy_cash=0.0, sell_units=0.0, note="现金为 0，今日不买入")
 
         # -----------------------------
-        # 4. 计算 MA250 & 偏离度（使用"截至昨日"的数据）
+        # 4. 计算 MA & 偏离度（使用"截至昨日"的数据）
         # -----------------------------
         # 截至昨日的 NAV 历史
         prev_history: List[float] = history[:-1]
@@ -127,7 +168,7 @@ class MovingAverageEnhancedStrategy(Strategy):
             ma_val = nav
             bias = 0.0
         else:
-            # 用截至昨日的历史数据计算 MA250
+            # 用截至昨日的历史数据计算 MA
             if len(prev_history) < self.ma_window:
                 window_slice = prev_history
             else:
@@ -146,9 +187,8 @@ class MovingAverageEnhancedStrategy(Strategy):
             # -------------------------------------------------
             # 场景 A：定投日 —— 对本月定投做"估值加权"
             # -------------------------------------------------
-            # 定投日不使用 factor_raw 作为最终因子，而是加一个下限，
-            # 防止在高估时完全不买，导致长期踏空。
-            factor_for_inflow = max(self.min_factor, factor_raw)
+            # 定投日不使用 factor_raw 作为最终因子，而是加一个下限和上限
+            factor_for_inflow = max(self.min_factor, min(self.max_factor, factor_raw))
 
             # 基于估值因子的"目标买入金额"
             planned_buy = self.base_amount * factor_for_inflow
@@ -159,6 +199,12 @@ class MovingAverageEnhancedStrategy(Strategy):
             buy_cash = min(planned_buy, total_available)
 
             remaining = total_available - buy_cash
+
+            # 统计高估/低估
+            if factor_raw < 1.0:
+                self.state["high_reduce_count"] = self.state.get("high_reduce_count", 0) + 1
+            elif factor_raw > 1.0:
+                self.state["low_buy_count"] = self.state.get("low_buy_count", 0) + 1
 
             note_parts.append(
                 f"[定投日] NAV={nav:.4f}, MA{self.ma_window}={ma_val:.4f}, "
@@ -172,17 +218,17 @@ class MovingAverageEnhancedStrategy(Strategy):
             # -------------------------------------------------
             # 场景 B：非定投日 —— 只在"明显低估"时抄底
             # -------------------------------------------------
-            # 规则：
-            #   - 如果 factor_raw > 1.0，说明 NAV 明显低于均线（低估）
-            #     => 允许用一部分 cash_pool 做额外买入；
-            #   - 否则，不买，让 cash_pool 继续囤着。
-            if factor_raw > 1.0:
+            if self.allow_non_invest_day_buy and factor_raw > self.non_invest_day_threshold:
                 # 这里我们可以稍微激进一点，用 base_amount * factor_raw 作为"抄底力度"
-                planned_buy = self.base_amount * factor_raw
+                # 但也需要限制最大因子
+                effective_factor = min(self.max_factor, factor_raw)
+                planned_buy = self.base_amount * effective_factor
 
                 total_available = cash_pool
                 buy_cash = min(planned_buy, total_available)
                 remaining = total_available - buy_cash
+
+                self.state["low_buy_count"] = self.state.get("low_buy_count", 0) + 1
 
                 note_parts.append(
                     f"[非定投日低估抄底] NAV={nav:.4f}, MA{self.ma_window}={ma_val:.4f}, "
@@ -206,12 +252,23 @@ class MovingAverageEnhancedStrategy(Strategy):
     # ------------------------------------------------------------------
     def get_stats(self) -> Dict[str, Any]:
         """
-        返回策略专有统计信息
+        返回策略专有统计信息，包含配置参数
         """
         nav_history = self.state.get("nav_history") or []
         return {
-            "ma_window": self.ma_window,
+            # 配置参数
+            "cfg_ma_window": self.ma_window,
+            "cfg_base_amount": self.base_amount,
+            "cfg_multiplier": self.multiplier,
+            "cfg_min_factor": self.min_factor,
+            "cfg_max_factor": self.max_factor,
+            "cfg_allow_non_invest_day_buy": self.allow_non_invest_day_buy,
+            "cfg_non_invest_day_threshold": self.non_invest_day_threshold,
+            "cfg_first_day_full_invest": self.first_day_full_invest,
+            # 运行时状态
             "nav_history_len": len(nav_history),
+            "low_buy_count": self.state.get("low_buy_count", 0),
+            "high_reduce_count": self.state.get("high_reduce_count", 0),
         }
 
     def render_summary(self, summary: Dict[str, Any]) -> None:
@@ -234,6 +291,17 @@ class MovingAverageEnhancedStrategy(Strategy):
         print(f"   基金代码: {fund_code}")
         print(f"   起止时间: {start_date} ~ {end_date}")
         print(f"   回测天数: {days} 天")
+        
+        # 策略配置参数
+        print(f"\n【策略配置参数】")
+        print(f"   均线窗口 (ma_window):                   {self.ma_window}")
+        print(f"   基础定投金额 (base_amount):             {self.base_amount:.2f} 元")
+        print(f"   偏离度放大倍数 (multiplier):            {self.multiplier:.2f}")
+        print(f"   最小买入因子 (min_factor):              {self.min_factor:.2f}")
+        print(f"   最大买入因子 (max_factor):              {self.max_factor:.2f}")
+        print(f"   非定投日允许抄底 (allow_non_invest_day_buy): {self.allow_non_invest_day_buy}")
+        print(f"   非定投日抄底阈值 (non_invest_day_threshold): {self.non_invest_day_threshold:.2f}")
+        print(f"   首日全仓买入 (first_day_full_invest):   {self.first_day_full_invest}")
         
         # 资金情况
         principal_total = summary.get("principal_total", 0.0)
@@ -274,12 +342,14 @@ class MovingAverageEnhancedStrategy(Strategy):
         print(f"   总卖出金额:  {total_sell_amount:>12,.2f} 元")
         
         # 策略专有信息
-        ma_window = summary.get("ma_window", self.ma_window)
-        nav_history_len = summary.get("nav_history_len", 0)
+        nav_history_len = summary.get("nav_history_len", len(self.state.get("nav_history", [])))
+        low_buy_count = summary.get("low_buy_count", self.state.get("low_buy_count", 0))
+        high_reduce_count = summary.get("high_reduce_count", self.state.get("high_reduce_count", 0))
         
         print(f"\n【策略内部状态】")
-        print(f"   均线窗口长度 (ma_window):         {ma_window}")
-        print(f"   记录的 NAV 历史长度 (nav_history_len):  {nav_history_len}")
+        print(f"   记录的 NAV 历史长度:  {nav_history_len}")
+        print(f"   低估抄底次数:         {low_buy_count}")
+        print(f"   高估减仓次数:         {high_reduce_count}")
         
         print("\n" + "=" * 70)
         print(f"✅ 回测完成（{strategy_name}）")
@@ -289,4 +359,4 @@ class MovingAverageEnhancedStrategy(Strategy):
     # 元数据：供 run_backtest 打印
     # ------------------------------------------------------------------
     def get_name(self) -> str:
-        return "MA250 均线增强定投策略"
+        return "MA均线增强定投策略"

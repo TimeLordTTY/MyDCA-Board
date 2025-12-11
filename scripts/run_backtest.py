@@ -51,11 +51,82 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 #                              🎯 策略选择
 # =============================================================================
 # 可选：
-#   "profit_recycle" - 利润回收策略（你现在的 V6）
+#   "profit_recycle" - 利润回收策略 v8（深跌小额补仓版）
 #   "pure_sip"       - 纯基础定投策略（基准线）
-# 策略类型 = "profit_recycle"
+#   "ma_enhanced"    - MA均线增强定投策略
+策略类型 = "profit_recycle"
 # 策略类型 = "pure_sip"
-策略类型 = "ma_enhanced"
+# 策略类型 = "ma_enhanced"
+
+
+# =============================================================================
+#                              ⚙️ 策略参数配置
+# =============================================================================
+# 各策略的可配置参数，设置为 None 则使用默认值
+# ---------- 利润回收策略 (profit_recycle) 参数 V10 ----------
+# 目标：在 163406 上相比纯定投形成“可见的超额收益”，同时逻辑仍然现实可执行
+利润回收策略参数 = {
+    # ========== 基础参数 ==========
+    # 1) 固定锁定比例（动态预投入启用时作为兜底 & 中性区参考）
+    "pre_invest_ratio": 0.05,        # 中性区：默认每笔锁 5%
+
+    # 2) 单一阈值模式参数（multi_stage_thresholds 为空时使用）
+    #    这里只是兜底，实际会被多级阈值覆盖
+    "deep_dip_threshold": -0.10,     # 备用：回撤 10% 触发
+    "deep_dip_use_ratio": 0.50,      # 备用：释放 50%
+
+    # 3) 重置与连发控制
+    "reset_on_new_high": True,       # 净值创新高时重置深跌标记
+    "allow_multi_deep_dip": False,   # 关闭“无脑连发”，交给连发机制控制频率
+
+    # ========== 连发机制参数 ==========
+    "rebound_reset_rate": 0.05,      # 从上次补仓价位反弹 5% 即可重置
+    "debounce_days": 30,             # 或者横盘超过 30 天也重置
+
+    # ========== 多级阈值模式 ==========
+    # 对齐你和 Gemini 说的：
+    #   - 跌 10% 补一半
+    #   - 跌 15% 全补完
+    "multi_stage_thresholds": [
+        {"threshold": -0.10, "use_ratio": 0.50},  # 回撤 ≥10%，释放 50% 锁定资金
+        {"threshold": -0.15, "use_ratio": 1.00},  # 回撤 ≥15%，释放剩余全部锁定资金
+    ],
+
+    # ========== 动态预投入 ==========
+    #   - MA250 下方视为低位：不锁钱，全部买入
+    #   - MA250~MA250*1.2 视为中性：每笔锁 5%
+    #   - 高于 MA250*1.2 视为高位：每笔锁 20% 等待未来深跌
+    "dynamic_pre_invest": {
+        "enabled": True,         # 打开动态预投入开关
+        "ma_window": 250,        # 使用 250 日均线
+        "low_zone_bias": 0.0,    # nav <= MA -> 低位
+        "high_zone_bias": 0.20,  # nav >= MA * 1.2 -> 高位
+
+        "low_ratio": 0.0,        # 低位不锁钱（全部进场）
+        "normal_ratio": 0.05,    # 中性区锁 5%
+        "high_ratio": 0.20,      # 高位锁 20% 做子弹
+    },
+}
+
+# ---------- 纯定投策略 (pure_sip) 参数 ----------
+纯定投策略参数 = {
+    "invest_all_cash": True,         # 是否全额买入（默认 True）
+    "allow_partial_invest": False,   # 是否允许部分投入（默认 False）
+    "min_invest_amount": 0.0,        # 最小投入金额（默认 0.0）
+    "reinvest_dividend": True,       # 是否再投资分红（默认 True）
+}
+
+# ---------- MA均线增强策略 (ma_enhanced) 参数 ----------
+MA均线策略参数 = {
+    "ma_window": 250,                # 均线窗口长度（默认 250）
+    "base_amount": 每月定投金额,      # 每月基础定投金额
+    "multiplier": 2.0,               # 偏离度放大倍数（默认 2.0）
+    "min_factor": 0.0,               # 最小买入因子（默认 0.3，设为 0 可完全不买）
+    "max_factor": 3.0,               # 最大买入因子（默认 3.0）
+    "allow_non_invest_day_buy": True,  # 非定投日是否允许抄底（默认 True）
+    "non_invest_day_threshold": 1.0,   # 非定投日抄底阈值（默认 1.0）
+    "first_day_full_invest": True,     # 首日是否全仓买入（默认 True）
+}
 
 
 # =============================================================================
@@ -65,6 +136,8 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 # 设置为 None 则使用数据文件的全部时间范围
 回测起始日期 = "2020-12-01"
 回测结束日期 = "2025-12-01"
+# 回测起始日期 = None
+# 回测结束日期 = None
 
 def run():
     """执行回测"""
@@ -105,14 +178,14 @@ def run():
         sell_fee_rate=卖出费率
     )
 
-    # 3. 创建策略
+    # 3. 创建策略（使用对应的配置参数）
     print(f"\n📈 策略类型: {策略类型}")
 
     if 策略类型 == "profit_recycle":
-        strategy = ProfitRecycleStrategy({})
+        strategy = ProfitRecycleStrategy(利润回收策略参数)
         print(f"   策略名称: {strategy.get_name()}")
-        print("   策略说明: 利润回收策略 — 止盈 + 盈利池补仓 + 深跌少量本金参与")
-        print("   核心原则: 盈利回收到盈利池，逢低优先使用盈利池，深跌时按比例使用预投入本金池")
+        print("   策略说明: 利润回收策略 — 预投入锁定 + 深跌补仓")
+        print("   核心原则: 抽取部分本金形成子弹，深跌时集中释放")
 
         levels = strategy.get_levels_info()
         print("\n   止盈档位（策略内置）:")
@@ -124,20 +197,14 @@ def run():
             print(f"     - {line}")
 
     elif 策略类型 == "pure_sip":
-        strategy = PureSipStrategy({})
+        strategy = PureSipStrategy(纯定投策略参数)
         print(f"   策略名称: {strategy.get_name()}")
         print("   策略说明: 纯基础定投策略 — 初始+每月定额全额买入，不止盈、不补仓")
         print("   核心原则: 不择时，只看长期收益，把它作为所有花样策略的对照基准")
         
     elif 策略类型 == "ma_enhanced":
-        strategy = MovingAverageEnhancedStrategy({
-            "base_amount": 每月定投金额,
-            "ma_window": 250,
-            "multiplier": 2.0,
-            "min_factor": 0.0,
-            "max_factor": 3.0,
-        })
-        print("   策略名称: MA250 均线增强定投策略")
+        strategy = MovingAverageEnhancedStrategy(MA均线策略参数)
+        print(f"   策略名称: {strategy.get_name()}")
         print("   策略说明: 高估少买，低估多买，不做止盈，只调节每次买入金额")
         print("   核心原则: 永远在场，利用估值波动优化买入时点")
 

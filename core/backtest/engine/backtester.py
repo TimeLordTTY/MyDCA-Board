@@ -254,22 +254,42 @@ def write_summary_to_csv(
                 f"{summary.get('total_sell_amount', 0.0):.2f}",
             ]
             
-            # 添加策略特有字段
-            strategy_fields = [
+            # 先添加策略运行时状态字段（指标信息）
+            strategy_state_fields = [
                 ("pre_invest_locked", "预投入锁定余额"),
                 ("pre_invest_total_in", "预投入累计划入"),
                 ("pre_invest_released", "深跌已释放总额"),
                 ("deep_dip_count", "深跌补仓次数"),
                 ("last_peak_nav", "观测最高净值"),
+                ("total_invest_count", "投资操作次数"),
+                ("nav_history_len", "NAV历史长度"),
+                ("low_buy_count", "低估抄底次数"),
+                ("high_reduce_count", "高估减仓次数"),
             ]
             
-            for key, label in strategy_fields:
+            for key, label in strategy_state_fields:
                 if key in summary:
                     headers.append(label)
                     value = summary[key]
                     if isinstance(value, float):
                         if key == "last_peak_nav":
                             row.append(f"{value:.4f}")
+                        else:
+                            row.append(f"{value:.2f}")
+                    else:
+                        row.append(str(value))
+            
+            # 最后添加策略配置参数（以 cfg_ 开头的字段）
+            for key, value in sorted(summary.items()):
+                if key.startswith("cfg_"):
+                    # 去掉 cfg_ 前缀作为列名
+                    label = "参数_" + key[4:]  # 添加 "参数_" 前缀便于识别
+                    headers.append(label)
+                    if isinstance(value, bool):
+                        row.append(str(value))
+                    elif isinstance(value, float):
+                        if abs(value) < 1:
+                            row.append(f"{value:.2%}")  # 百分比格式
                         else:
                             row.append(f"{value:.2f}")
                     else:
@@ -311,19 +331,41 @@ def write_summary_to_csv(
             writer.writerow(["总买入金额", f"{summary.get('total_buy_amount', 0.0):.2f}"])
             writer.writerow(["总卖出金额", f"{summary.get('total_sell_amount', 0.0):.2f}"])
             
-            # 策略特有字段
-            strategy_fields = [
+            # 策略配置参数（以 cfg_ 开头的字段）
+            cfg_fields = [(k, v) for k, v in sorted(summary.items()) if k.startswith("cfg_")]
+            if cfg_fields:
+                writer.writerow([])
+                writer.writerow(["# 策略配置参数"])
+                for key, value in cfg_fields:
+                    label = key[4:]  # 移除 "cfg_" 前缀
+                    if isinstance(value, bool):
+                        writer.writerow([label, str(value)])
+                    elif isinstance(value, float):
+                        if abs(value) < 1:
+                            writer.writerow([label, f"{value:.2%}"])
+                        else:
+                            writer.writerow([label, f"{value:.2f}"])
+                    else:
+                        writer.writerow([label, str(value)])
+            
+            # 策略运行时状态字段
+            strategy_state_fields = [
                 ("pre_invest_locked", "预投入锁定余额"),
                 ("pre_invest_total_in", "预投入累计划入"),
                 ("pre_invest_released", "深跌已释放总额"),
                 ("deep_dip_count", "深跌补仓次数"),
                 ("last_peak_nav", "观测最高净值"),
+                ("total_invest_count", "投资操作次数"),
+                ("nav_history_len", "NAV历史长度"),
+                ("low_buy_count", "低估抄底次数"),
+                ("high_reduce_count", "高估减仓次数"),
             ]
             
-            has_strategy_fields = any(key in summary for key, _ in strategy_fields)
-            if has_strategy_fields:
+            has_state_fields = any(key in summary for key, _ in strategy_state_fields)
+            if has_state_fields:
                 writer.writerow([])
-                for key, label in strategy_fields:
+                writer.writerow(["# 策略运行时状态"])
+                for key, label in strategy_state_fields:
                     if key in summary:
                         value = summary[key]
                         if isinstance(value, float):
