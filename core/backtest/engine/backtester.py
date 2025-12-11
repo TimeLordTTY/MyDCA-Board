@@ -67,6 +67,8 @@ class Backtester:
         initial_invest: 初始一次性投入金额
         periodic_invest: 定期投入金额
         invest_day_rule: 定投周期规则 ("month_change" 或 "week_change")
+        start_date: 回测起始日期（格式：YYYY-MM-DD），为 None 则从数据起始开始
+        end_date: 回测结束日期（格式：YYYY-MM-DD），为 None 则到数据结束
     """
     
     def __init__(
@@ -76,7 +78,9 @@ class Backtester:
         strategy: Strategy,
         initial_invest: float = 0.0,
         periodic_invest: float = 0.0,
-        invest_day_rule: str = "month_change"
+        invest_day_rule: str = "month_change",
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
     ):
         """
         初始化回测引擎
@@ -90,8 +94,18 @@ class Backtester:
             invest_day_rule: 定投触发规则
                 - "month_change": 每月第一个交易日
                 - "week_change": 每周第一个交易日
+            start_date: 回测起始日期（格式：YYYY-MM-DD），为 None 则从数据起始开始
+            end_date: 回测结束日期（格式：YYYY-MM-DD），为 None 则到数据结束
         """
-        self.data_feed = data_feed
+        # 保存原始数据信息
+        self.original_start_date = data_feed.start_date
+        self.original_end_date = data_feed.end_date
+        self.config_start_date = start_date
+        self.config_end_date = end_date
+        
+        # 对数据进行日期切片
+        self.data_feed = self._slice_data_by_date(data_feed, start_date, end_date)
+        
         self.portfolio = portfolio
         self.strategy = strategy
         self.initial_invest = initial_invest
@@ -101,6 +115,74 @@ class Backtester:
         # 内部状态
         self.results: List[DayResult] = []
         self.cash_pool = 0.0  # 待投资现金池
+    
+    def _slice_data_by_date(
+        self,
+        data_feed: DataFeed,
+        start_date: Optional[str],
+        end_date: Optional[str]
+    ) -> DataFeed:
+        """
+        根据日期区间对数据进行切片
+        
+        Args:
+            data_feed: 原始数据源
+            start_date: 起始日期字符串（格式：YYYY-MM-DD），为 None 则不限制起始
+            end_date: 结束日期字符串（格式：YYYY-MM-DD），为 None 则不限制结束
+        
+        Returns:
+            切片后的新 DataFeed 对象
+        
+        Raises:
+            ValueError: 如果日期格式错误或切片后数据为空
+        """
+        bars = data_feed.bars
+        
+        # 如果没有指定任何日期限制，直接返回原数据源
+        if start_date is None and end_date is None:
+            return data_feed
+        
+        # 解析日期字符串
+        start_dt = None
+        end_dt = None
+        
+        try:
+            if start_date is not None:
+                start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            if end_date is not None:
+                end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        except ValueError as e:
+            raise ValueError(f"日期格式错误，应为 YYYY-MM-DD 格式: {e}")
+        
+        # 过滤数据
+        filtered_bars = []
+        for bar in bars:
+            # 检查起始日期
+            if start_dt is not None and bar.date < start_dt:
+                continue
+            # 检查结束日期
+            if end_dt is not None and bar.date > end_dt:
+                continue
+            filtered_bars.append(bar)
+        
+        # 验证切片后数据非空
+        if not filtered_bars:
+            date_range_str = ""
+            if start_date and end_date:
+                date_range_str = f"区间 [{start_date}, {end_date}]"
+            elif start_date:
+                date_range_str = f"起始日期 {start_date} 之后"
+            elif end_date:
+                date_range_str = f"结束日期 {end_date} 之前"
+            
+            raise ValueError(
+                f"指定的日期{date_range_str}内没有数据。"
+                f"原始数据区间: [{self.original_start_date.strftime('%Y-%m-%d')}, "
+                f"{self.original_end_date.strftime('%Y-%m-%d')}]"
+            )
+        
+        # 返回新的 DataFeed
+        return DataFeed(filtered_bars)
     
     def _check_invest_day(
         self, 
@@ -240,7 +322,7 @@ class Backtester:
         获取回测摘要统计
         
         Returns:
-            包含关键指标的字典
+            包含关键指标的字典，包括原始数据区间和实际回测区间
         """
         if not self.results:
             return {}
@@ -266,19 +348,32 @@ class Backtester:
             strategy_stats = self.strategy.get_stats()
         
         return {
+            # 日期区间信息
+            'data_start_date': self.original_start_date.strftime('%Y-%m-%d') if self.original_start_date else None,
+            'data_end_date': self.original_end_date.strftime('%Y-%m-%d') if self.original_end_date else None,
+            'backtest_start_date': first.date.strftime('%Y-%m-%d'),
+            'backtest_end_date': last.date.strftime('%Y-%m-%d'),
+            
+            # 兼容旧字段（保持向后兼容）
             'start_date': first.date.strftime('%Y-%m-%d'),
             'end_date': last.date.strftime('%Y-%m-%d'),
             'days': days,
+            
+            # 收益指标
             'total_cost': last.total_cost,
             'final_value': last.total_value,
             'final_fund_value': last.fund_value,
             'final_cash': last.cash,
             'total_return': total_return,
             'annual_return': annual_return,
+            
+            # 交易统计
             'buy_count': buy_count,
             'sell_count': sell_count,
             'total_buy': total_buy,
             'total_sell': total_sell,
+            
+            # 策略自定义统计
             **strategy_stats,
         }
 

@@ -58,6 +58,15 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 # 策略类型 = "pure_sip"
 # 策略类型 = "ma_enhanced"
 
+
+# =============================================================================
+#                              📅 回测日期区间配置
+# =============================================================================
+# 自定义回测开始和结束日期（格式：YYYY-MM-DD）
+# 设置为 None 则使用数据文件的全部时间范围
+回测起始日期 = "2020-12-09"
+回测结束日期 = "2025-12-10"
+
 def run():
     """执行回测"""
 
@@ -141,6 +150,14 @@ def run():
     print(f"💰 每月定投: {每月定投金额:,.2f} 元")
     print(f"📊 买入费率: {买入费率:.4%}")
     print(f"📊 卖出费率: {卖出费率:.4%}")
+    
+    # 显示日期区间配置
+    if 回测起始日期 or 回测结束日期:
+        print(f"\n📅 自定义回测区间:")
+        if 回测起始日期:
+            print(f"   起始日期: {回测起始日期}")
+        if 回测结束日期:
+            print(f"   结束日期: {回测结束日期}")
 
     # 4. 创建回测引擎
     backtester = Backtester(
@@ -150,19 +167,27 @@ def run():
         initial_invest=初始投入金额,
         periodic_invest=每月定投金额,
         invest_day_rule="month_change",
+        start_date=回测起始日期,
+        end_date=回测结束日期,
     )
 
     # 5. 执行回测
     print(f"\n⏳ 正在执行回测...")
     results = backtester.run()
 
-    # 6. 输出结果（统一交给策略来渲染）
+    # 6. 输出结果
     summary = backtester.get_summary()
 
     print("\n" + "=" * 70)
-    print("                         📊 回测结果（由策略输出）")
+    print("                         📊 回测结果")
     print("=" * 70)
-
+    
+    # 显示日期区间信息
+    print(f"\n【数据区间】")
+    print(f"   原始数据区间: {summary.get('data_start_date', 'N/A')} ~ {summary.get('data_end_date', 'N/A')}")
+    print(f"   实际回测区间: {summary.get('backtest_start_date', 'N/A')} ~ {summary.get('backtest_end_date', 'N/A')}")
+    
+    # 调用策略的 render_summary
     strategy.render_summary(summary)
 
     print("\n" + "=" * 70)
