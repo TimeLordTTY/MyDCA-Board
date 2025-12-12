@@ -785,6 +785,8 @@ class Backtester:
         return {
             # 基础信息
             'strategy_name': self.strategy.get_name(),
+            'strategy_key': self.strategy.get_strategy_key(),
+            'strategy_version': self.strategy.get_version(),
             'fund_code': self.fund_code,
             'start_date': first.date.strftime('%Y-%m-%d'),
             'end_date': last.date.strftime('%Y-%m-%d'),

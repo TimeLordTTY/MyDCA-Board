@@ -16,10 +16,9 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, PROJECT_ROOT)
 
 from core.backtest.engine import DataFeed, Portfolio, Backtester
+from core.backtest.engine.backtester import write_results_to_csv
 from core.backtest.utils.csv_loader import load_nav_series
-from core.backtest.strategies.profit_recycle import ProfitRecycleStrategy
-from core.backtest.strategies.pure_sip import PureSipStrategy
-from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
+from core.backtest.strategies import STRATEGY_REGISTRY
 
 
 # =============================================================================
@@ -50,13 +49,18 @@ from core.backtest.strategies.ma_enhanced import MovingAverageEnhancedStrategy
 # =============================================================================
 #                              🎯 策略选择
 # =============================================================================
+# 策略名称（必填）
 # 可选：
-#   "profit_recycle" - 利润回收策略 v8（深跌小额补仓版）
+#   "profit_recycle" - 利润回收策略
 #   "pure_sip"       - 纯基础定投策略（基准线）
 #   "ma_enhanced"    - MA均线增强定投策略
 策略类型 = "profit_recycle"
-# 策略类型 = "pure_sip"
-# 策略类型 = "ma_enhanced"
+
+# 策略版本（可选，None 则使用默认版本）
+# profit_recycle 可用版本: "v10", 或 None (默认)
+# pure_sip 可用版本: None (仅一个版本)
+# ma_enhanced 可用版本: None (仅一个版本)
+策略版本 = "v10"  # None 表示使用默认版本
 
 
 # =============================================================================
@@ -178,38 +182,61 @@ def run():
         sell_fee_rate=卖出费率
     )
 
-    # 3. 创建策略（使用对应的配置参数）
+    # 3. 创建策略（使用策略注册表加载）
     print(f"\n📈 策略类型: {策略类型}")
-
-    if 策略类型 == "profit_recycle":
-        strategy = ProfitRecycleStrategy(利润回收策略参数)
-        print(f"   策略名称: {strategy.get_name()}")
-        print("   策略说明: 利润回收策略 — 预投入锁定 + 深跌补仓")
-        print("   核心原则: 抽取部分本金形成子弹，深跌时集中释放")
-
-        levels = strategy.get_levels_info()
-        print("\n   止盈档位（策略内置）:")
-        for line in levels.get("tp_levels_desc", []):
-            print(f"     - {line}")
-
-        print("\n   补仓档位（策略内置）:")
-        for line in levels.get("dip_levels_desc", []):
-            print(f"     - {line}")
-
-    elif 策略类型 == "pure_sip":
-        strategy = PureSipStrategy(纯定投策略参数)
-        print(f"   策略名称: {strategy.get_name()}")
-        print("   策略说明: 纯基础定投策略 — 初始+每月定额全额买入，不止盈、不补仓")
-        print("   核心原则: 不择时，只看长期收益，把它作为所有花样策略的对照基准")
+    if 策略版本:
+        print(f"   策略版本: {策略版本}")
+    
+    try:
+        # 从注册表获取策略类
+        strategy_class = STRATEGY_REGISTRY.get(策略类型, 策略版本)
         
-    elif 策略类型 == "ma_enhanced":
-        strategy = MovingAverageEnhancedStrategy(MA均线策略参数)
+        # 根据策略类型选择配置参数
+        if 策略类型 == "profit_recycle":
+            strategy_config = 利润回收策略参数
+        elif 策略类型 == "pure_sip":
+            strategy_config = 纯定投策略参数
+        elif 策略类型 == "ma_enhanced":
+            strategy_config = MA均线策略参数
+        else:
+            strategy_config = {}
+        
+        # 实例化策略
+        strategy = strategy_class(strategy_config)
+        
+        # 显示策略信息
         print(f"   策略名称: {strategy.get_name()}")
-        print("   策略说明: 高估少买，低估多买，不做止盈，只调节每次买入金额")
-        print("   核心原则: 永远在场，利用估值波动优化买入时点")
-
-    else:
-        print(f"❌ 未知策略类型: {策略类型}")
+        print(f"   策略标识: {strategy.get_strategy_key()}")
+        print(f"   策略版本: {strategy.get_version()}")
+        
+        # 显示策略说明
+        if 策略类型 == "profit_recycle":
+            print("   策略说明: 利润回收策略 — 预投入锁定 + 深跌补仓")
+            print("   核心原则: 抽取部分本金形成子弹，深跌时集中释放")
+            
+            if hasattr(strategy, 'get_levels_info'):
+                levels = strategy.get_levels_info()
+                print("\n   止盈档位（策略内置）:")
+                for line in levels.get("tp_levels_desc", []):
+                    print(f"     - {line}")
+                
+                print("\n   补仓档位（策略内置）:")
+                for line in levels.get("dip_levels_desc", []):
+                    print(f"     - {line}")
+        
+        elif 策略类型 == "pure_sip":
+            print("   策略说明: 纯基础定投策略 — 初始+每月定额全额买入，不止盈、不补仓")
+            print("   核心原则: 不择时，只看长期收益，把它作为所有花样策略的对照基准")
+        
+        elif 策略类型 == "ma_enhanced":
+            print("   策略说明: 高估少买，低估多买，不做止盈，只调节每次买入金额")
+            print("   核心原则: 永远在场，利用估值波动优化买入时点")
+    
+    except ValueError as e:
+        print(f"❌ 策略加载失败: {e}")
+        print("\n可用策略及版本:")
+        for name, versions in STRATEGY_REGISTRY.list_strategies().items():
+            print(f"   {name}: {versions}")
         return
 
     print(f"\n💰 初始投入: {初始投入金额:,.2f} 元")

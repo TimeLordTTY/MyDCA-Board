@@ -44,6 +44,11 @@ class MovingAverageEnhancedStrategy(Strategy):
     - non_invest_day_threshold: 非定投日抄底阈值（默认 1.0）
     - first_day_full_invest: 首日是否全仓买入（默认 True）
     """
+    
+    # 策略标识（用于注册表）
+    strategy_key = "ma_enhanced"
+    strategy_version = "v2"
+    display_name = "MA250 均线增强定投策略"
 
     # =======================================================
     # 默认配置值
@@ -356,7 +361,5 @@ class MovingAverageEnhancedStrategy(Strategy):
         print("=" * 70)
 
     # ------------------------------------------------------------------
-    # 元数据：供 run_backtest 打印
+    # 策略元数据（已在类属性中定义，此处保留注释供参考）
     # ------------------------------------------------------------------
-    def get_name(self) -> str:
-        return "MA均线增强定投策略"

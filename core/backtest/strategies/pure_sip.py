@@ -192,5 +192,3 @@ class PureSipStrategy(Strategy):
         print(f"✅ 回测完成（{strategy_name}）")
         print("=" * 70)
 
-    def get_name(self) -> str:
-        return "纯基础定投策略（全部现金自动进场）"

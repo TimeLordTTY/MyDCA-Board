@@ -67,7 +67,15 @@ class Strategy(ABC):
     Attributes:
         config: 策略配置字典
         state: 策略内部状态字典
+        strategy_key: 策略标识（如 "profit_recycle"）
+        strategy_version: 策略版本（如 "v8", "v10"）
+        display_name: 策略展示名称（不包含版本号）
     """
+    
+    # 类属性：子类应该覆盖这些
+    strategy_key: str = "unknown"
+    strategy_version: str = "default"
+    display_name: str = "未命名策略"
     
     def __init__(self, config: Dict[str, Any] = None):
         """
@@ -112,12 +120,30 @@ class Strategy(ABC):
     
     def get_name(self) -> str:
         """
-        获取策略名称
+        获取策略展示名称（不包含版本号）
         
         Returns:
-            策略类名
+            策略展示名称
         """
-        return self.__class__.__name__
+        return self.display_name
+    
+    def get_strategy_key(self) -> str:
+        """
+        获取策略标识（用于注册表查找）
+        
+        Returns:
+            策略标识
+        """
+        return self.strategy_key
+    
+    def get_version(self) -> str:
+        """
+        获取策略版本号
+        
+        Returns:
+            版本号
+        """
+        return self.strategy_version
     
     def get_result_tables(self) -> List[Dict[str, Any]]:
         """
