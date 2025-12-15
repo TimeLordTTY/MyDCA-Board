@@ -34,7 +34,7 @@ def collect_and_store():
     for product in products:
         product_code = product['id']
         product_name = product['name']
-        source = product.get('source', 'cmbc')  # 默认使用cmbc
+        source = product.get('source')
         
         logger.info(f"采集产品 {product_name} ({product_code}) [来源: {source}]...")
         

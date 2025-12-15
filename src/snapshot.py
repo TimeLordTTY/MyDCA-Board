@@ -65,6 +65,7 @@ def create_daily_snapshot(nav_records, holdings_map):
         shares = Decimal(str(holdings_map.get(product_code, 0)))
         
         for nav_record in nav_list:
+            # ISS_DATE 已由适配器标准化为 YYYY-MM-DD 格式
             snapshot_date = nav_record['ISS_DATE']
             
             # 检查是否已存在

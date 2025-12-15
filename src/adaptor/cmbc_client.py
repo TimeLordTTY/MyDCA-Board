@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import requests
 
 def bootstrap_session(product_code="FBAE41126E"):
@@ -8,6 +8,24 @@ def bootstrap_session(product_code="FBAE41126E"):
     """
     response = requests.get(f"https://www.cmbcwm.com.cn/grlc/cpxq/index.htm?code={product_code}",timeout=10)
     return response.cookies
+
+def _normalize_nav_record(raw_record):
+    """
+    将API原始数据转换为系统统一格式
+    :param raw_record: API返回的原始记录
+    :return: 标准化后的记录
+    """
+    # 日期格式：YYYYMMDD -> YYYY-MM-DD
+    raw_date = str(raw_record['ISS_DATE'])
+    normalized_date = datetime.strptime(raw_date, '%Y%m%d').strftime('%Y-%m-%d')
+    
+    return {
+        'ISS_DATE': normalized_date,
+        'NAV': str(raw_record['NAV']),
+        'TOT_NAV': str(raw_record['TOT_NAV']),
+        'INCOME': str(raw_record['INCOME']),
+        'WEEK_CLIENTRATE': str(raw_record['WEEK_CLIENTRATE']),
+    }
 
 def query_latest_nav(cookies, product_code, query_date, retry_num):
     """
@@ -39,7 +57,9 @@ def query_latest_nav(cookies, product_code, query_date, retry_num):
         print(f"当前日期{query_date}无最新净值,重试{retry_num}次")
         navs = query_latest_nav(cookies, product_code, query_date - timedelta(days=1), retry_num)
     else:
-        navs = response.get("list")
+        # 标准化原始数据为系统统一格式
+        raw_list = response.get("list") or []
+        navs = [_normalize_nav_record(r) for r in raw_list]
     return navs
 
 if __name__ == "__main__":
