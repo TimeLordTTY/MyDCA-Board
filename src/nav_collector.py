@@ -6,6 +6,7 @@ from datetime import date
 from adaptor import cmbc_client, fund_client
 from storage_csv import save_nav_record
 from snapshot import create_daily_snapshot, get_last_snapshot_value
+from portfolio_summary import generate_portfolio_summary
 from config_loader import load_products, get_holdings_map, load_holdings, get_project_root
 from validator import (
     validate_product_config, 
@@ -172,7 +173,20 @@ def collect_and_store():
         snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map)
         logger.info(f"✓ 新增 {snapshot_count} 条快照记录")
     
-    # 4. 输出汇总日志（10行内）
+    # 4. 生成投资组合汇总
+    logger.info("=== 投资组合汇总阶段 ===")
+    try:
+        snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
+        output_dir = get_project_root() / "data" / "snapshots"
+        nav_count, fetch_count = generate_portfolio_summary(snapshot_path, output_dir)
+        # 主视图：按采集日期（今日资产汇总）
+        logger.info(f"✓ 【主视图】按采集日期汇总（今日资产）: {fetch_count} 个采集日")
+        # 辅助视图：按净值日期（交易日分布）
+        logger.info(f"✓ 【辅助】按净值日期汇总（交易日分布）: {nav_count} 个净值日")
+    except Exception as e:
+        logger.error(f"✗ 投资组合汇总失败: {e}")
+    
+    # 5. 输出汇总日志（10行内）
     logger.info("=== 执行汇总 ===")
     logger.info(f"{'产品代码':<12} {'来源':<6} {'净值日期':<12} {'净值':<8} {'CSV':<6} {'快照':<6} {'PNL':<10} {'状态'}")
     logger.info("-" * 85)

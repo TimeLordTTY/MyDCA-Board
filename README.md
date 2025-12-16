@@ -18,6 +18,8 @@ process_single_product()    # 处理每个产品
 ↓
 create_daily_snapshot()     # 生成快照
 ↓
+generate_portfolio_summary() # 生成资产汇总
+↓
 输出汇总日志               # 显示执行结果
 ```
 
@@ -82,6 +84,7 @@ MyDCA-Board/
 ├── src/                             # 源代码
 │   ├── nav_collector.py             # 【核心】主控协调器
 │   ├── validator.py                 # 【核心】数据校验器
+│   ├── portfolio_summary.py         # 【新增】资产汇总模块
 │   │
 │   ├── adaptor/                     # 适配器目录
 │   │   ├── __init__.py              
@@ -100,7 +103,9 @@ MyDCA-Board/
 │   ├── nav/                         # 净值CSV文件
 │   │   └── {code}_{name}.csv        # 格式：产品代码_产品名称.csv
 │   └── snapshots/                   # 快照目录
-│       └── daily.csv                # 日快照
+│       ├── daily.csv                # 日快照（明细）
+│       ├── portfolio_by_nav_date.csv   # 【新增】按净值日期汇总
+│       └── portfolio_by_fetch_date.csv # 【新增】按采集日期汇总
 │
 └── README.md                        # 本文件
 ```
@@ -153,6 +158,7 @@ MyDCA-Board/
 | **adaptor** | 对接各数据源 | `query_latest_nav()` |
 | **storage_csv** | 净值数据落库 | `save_nav_record()` |
 | **snapshot** | 生成持仓快照 | `create_daily_snapshot()` |
+| **portfolio_summary** | 生成资产汇总（健壮性加固） | `generate_portfolio_summary()`, `safe_decimal()` |
 | **config_loader** | 加载配置文件 | `load_products()` |
 
 ---
@@ -224,7 +230,48 @@ MyDCA-Board/
 
 ---
 
-### 4. 日志输出阶段
+### 4. 资产汇总阶段 (`generate_portfolio_summary`)
+
+```
+读取 daily.csv:
+    │
+    ├─ 按净值日期聚合 (snapshot_date)
+    │   ├─ 按product_code去重统计产品数
+    │   └─ 写入 portfolio_by_nav_date.csv
+    │       └─ total_value, total_pnl, product_count
+    │
+    └─ 按采集日期聚合 (fetched_at 的日期部分)
+        ├─ 按product_code去重统计产品数
+        ├─ 计算滞后产品数和最大滞后天数
+        ├─ 计算真实日变动 (total_pnl_vs_prev_fetch)
+        └─ 写入 portfolio_by_fetch_date.csv
+            └─ total_value, total_pnl, total_pnl_vs_prev_fetch,
+               product_count, stale_products, max_lag_days
+```
+
+**目的**：
+- 按净值日期汇总：用于对账和核算（准确反映资产真实变化）
+- 按采集日期汇总：用于日常看盘（快速查看当天总资产和真实日变动）
+
+**幂等性**：采用全量重算覆盖写入，重复运行不会产生重复数据
+
+**示例场景**：
+```
+假设今天2023-12-16运行系统：
+- 产品A：获取到12-16净值（最新）
+- 产品B：获取到12-15净值（滞后1天，如QDII）
+- 产品C：获取到12-16净值（最新）
+
+fetch_date汇总会显示：
+- total_value: 三个产品的市值总和
+- stale_products: 1 (只有产品B滞后)
+- max_lag_days: 1 (最大滞后1天)
+- total_pnl_vs_prev_fetch: 今天总市值 - 昨天总市值（真实日变动）
+```
+
+---
+
+### 5. 日志输出阶段
 
 ```
 输出汇总表格:
@@ -429,8 +476,120 @@ snapshot_date,product_code,product_name,nav,shares,value,pnl,fetched_at
 
 **说明**：
 - 所有产品汇总在一个文件
-- 记录每日持仓情况
-- pnl = 当前value - 上次value
+- **snapshot_date**: 净值日期（可能滞后）
+- **fetched_at**: 采集时间（系统运行时间）
+- pnl = 当前value - 上次value（同产品）
+
+---
+
+### 🎯 资产汇总文件（核心功能）
+
+系统自动基于 `daily.csv` 生成两种口径的投资组合汇总。
+
+**🎯 汇总口径说明（重要）**：
+- **主口径**：`fetch_date`（采集日期 = fetched_at 的日期部分）
+  - 用户每天跑任务，关心"**今天采集到的完整资产快照**"
+  - 同一采集日的所有产品（无论净值是否滞后）都汇总在一起
+  - **避免因净值滞后导致资产被拆散到不同日期，看起来像少钱**
+  
+- **辅助口径**：`snapshot_date`（净值日期）
+  - 仅用于标识该产品净值对应的**交易日**
+  - 可能滞后 0~N 天（如QDII产品通常滞后1天）
+  - 用于查看净值滞后情况和交易日口径分布
+
+**✨ 健壮性保障**：
+- ✅ **fetched_at 支持多格式**：兼容 `YYYY-MM-DD HH:MM:SS`, `YYYY-MM-DDTHH:MM:SS`, 带毫秒、带时区等格式
+- ✅ **金额字段用 safe_decimal 防脏数据**：自动处理空值、`-`、带逗号数字（如 `12,345.67`），防止程序崩溃
+- ✅ **异常数据自动跳过**：遇到无法解析的数据会记录警告并使用默认值，不影响整体任务
+
+#### 2️⃣ 按净值日期汇总 (`portfolio_by_nav_date.csv`) - 【辅助视图】交易日口径
+
+```csv
+snapshot_date,total_value,total_pnl,product_count
+2023-12-14,8532.50,0.00,10
+2023-12-15,8650.20,117.70,10
+```
+
+**字段说明**：
+- `snapshot_date`: 净值日期（产品实际净值的发布日期）
+- `total_value`: 总市值 = sum(所有产品的 value)
+- `total_pnl`: 总盈亏 = sum(所有产品的 pnl)
+- `product_count`: 参与汇总的产品数量
+
+**使用场景（辅助）**：
+- ✅ **查看净值滞后情况**：了解哪些产品净值不是最新的
+- ✅ **交易日口径分析**：按净值实际发布日期统计
+- ✅ **对账核算**：与基金公司对账时使用此口径
+- ⚠️ **注意**：QDII等产品净值有T+1滞后，同一天可能包含不同日期的净值，**不适合作为"今日资产"视图**
+
+#### 1️⃣ 按采集日期汇总 (`portfolio_by_fetch_date.csv`) - 【主视图】今日资产汇总
+
+```csv
+fetch_date,total_value,total_pnl,total_pnl_vs_prev_fetch,product_count,stale_products,max_lag_days
+2023-12-15,8532.50,0.00,0.00,10,3,1
+2023-12-16,8650.20,117.70,117.70,10,0,0
+2023-12-17,8700.00,50.00,49.80,10,2,1
+```
+
+**字段说明**：
+- `fetch_date`: 采集日期（运行系统的日期）
+- `total_value`: 总市值（基于当天能获取到的所有净值计算）
+- `total_pnl`: 总盈亏（= sum(daily.csv 中的 pnl)）
+- `total_pnl_vs_prev_fetch`: **真实日变动**（= 今天total_value - 昨天total_value）⭐
+- `product_count`: 参与汇总的产品数量（按product_code去重）
+- `stale_products`: 使用滞后净值的产品数量（snapshot_date < fetch_date）
+- `max_lag_days`: 最大滞后天数（0表示所有产品都是最新净值）
+
+**⚠️ 关于两种盈亏字段的区别（重要）**：
+
+| 字段 | 含义 | 计算方式 | 适用场景 |
+|------|------|---------|---------|
+| `total_pnl` | 净值日差分拼盘 | sum(每个产品的pnl) | 了解产品级盈亏分布 |
+| `total_pnl_vs_prev_fetch` | 真实日变动 | 今天总市值 - 昨天总市值 | **日常看盘**（今天赚/亏多少） |
+
+**为什么需要两个PNL字段？**
+
+1. **`total_pnl`** 是把每个产品的pnl加起来：
+   - 优点：能看到每个产品的贡献
+   - 缺点：当产品净值日期不同时（如QDII滞后），这个数字**不反映真实的日变动**
+   - 例如：产品A用12-15净值（pnl=5），产品B用12-16净值（pnl=3），加起来=8，但这不是12-16的真实变化
+
+2. **`total_pnl_vs_prev_fetch`** 是按采集日视角的真实变动：
+   - 优点：**直接反映今天相比昨天的资产变化**，符合直觉
+   - 缺点：无法拆分到每个产品
+   - 例如：昨天总市值8532.50，今天8650.20，真实日变动=117.70
+
+**最佳实践**：
+- 📱 **日常看盘**：看 `total_pnl_vs_prev_fetch`（今天赚/亏了多少）
+- 📊 **产品分析**：看 `total_pnl`（哪些产品贡献大）
+- 🔍 **数据质量**：如果 `stale_products > 0`，说明 `total_pnl_vs_prev_fetch` 包含了部分非今日净值的影响
+
+**使用场景（主要）**：
+- ⭐ **日常看盘**：每天运行系统后，看 `total_pnl_vs_prev_fetch` 了解今天赚/亏多少
+- ⭐ **今日资产**：无论净值是否滞后，都显示在同一天，符合"今天采集的完整资产"直觉
+- ✅ **实时监控**：快速了解当前持仓总市值
+- ✅ **数据质量**：通过 `stale_products` 和 `max_lag_days` 评估数据新鲜度
+- ✅ **趋势分析**：`total_pnl_vs_prev_fetch` 连续几天可看涨跌趋势
+- ⚠️ **注意**：如果 `stale_products > 0`，说明部分产品净值不是当天的，但仍然汇总在当天采集日
+
+**两种口径对比**：
+
+| 维度 | 按采集日期 (fetch_date) 【主】 | 按净值日期 (nav_date) 【辅助】 |
+|------|------------------------------|------------------------------|
+| **时间维度** | 系统运行日期 | 净值实际发布日期 |
+| **适用场景** | ⭐ **日常看盘、今日资产** | 交易日分布、对账核算 |
+| **资产完整性** | ✅ 完整（所有采集产品都在） | ❌ 分散（按净值日期拆散） |
+| **直觉性** | ✅ 符合"今天有多少钱" | ❌ 滞后产品算到昨天 |
+| **盈亏指标** | **total_pnl_vs_prev_fetch**（真实日变动）⭐ | total_pnl（产品级分布） |
+| **数据质量指标** | stale_products, max_lag_days | 无 |
+
+**最佳实践**：
+- ⭐ **每日看盘（主要）**：查看 `portfolio_by_fetch_date.csv` 最新一行的 `total_value` 和 `total_pnl_vs_prev_fetch`
+- 💰 **看今天赚亏**：`total_pnl_vs_prev_fetch` 正数=赚，负数=亏
+- 📱 **看今日资产**：`total_value` 就是今天的总市值，无论净值是否滞后
+- 🔍 **数据质量**：`stale_products` 显示有多少产品净值不是当天的，`max_lag_days` 显示最大滞后天数
+- 📊 **交易日分析（辅助）**：使用 `portfolio_by_nav_date.csv` 了解净值滞后分布
+- 📈 **周度趋势**：连续7天的 `total_pnl_vs_prev_fetch` 可看涨跌规律
 
 ---
 
@@ -475,6 +634,12 @@ snapshot_date,product_code,product_name,nav,shares,value,pnl,fetched_at
 2. 查看 storage_csv.py 的去重逻辑
 3. 运行 `python scripts/self_test.py` 验证
 
+### 问题5：汇总文件生成失败？
+1. 检查 daily.csv 是否存在且有数据
+2. 查看日志中是否有字段解析警告
+3. 验证 fetched_at 字段格式是否支持（支持多种格式）
+4. 检查金额字段是否有异常值（系统会自动处理并警告）
+
 ---
 
 ## 🧪 自测说明
@@ -486,9 +651,12 @@ python scripts/self_test.py
 ```
 
 **测试内容**：
-1. ✅ 幂等性测试：连续运行2次，验证不会重复写入
-2. ✅ 配置校验：故意写错配置，验证能正确报错退出
-3. ✅ 字段完整性：删除必需字段，验证能检测到
+1. ✅ **幂等性测试**：连续运行2次，验证不会重复写入
+2. ✅ **配置校验**：故意写错配置，验证能正确报错退出
+3. ✅ **字段完整性**：删除必需字段，验证能检测到
+4. ✅ **Decimal脏数据测试**：验证空值、`-`、带逗号数字等异常数据不会导致崩溃
+5. ✅ **fetched_at多格式测试**：验证5种不同时间格式都能正确聚合
+6. ✅ **资产汇总功能**：验证滞后产品统计、PNL计算等核心逻辑
 
 ---
 
@@ -522,7 +690,7 @@ python scripts/run_daily.py 2>&1 | tee debug.log
 
 ### 数据流向
 ```
-config/*.json → validator → adaptor → storage_csv → snapshot → 日志输出
+config/*.json → validator → adaptor → storage_csv → snapshot → portfolio_summary → 日志输出
 ```
 
 ### 核心文件（只需看3个）

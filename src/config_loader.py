@@ -23,7 +23,3 @@ def get_holdings_map():
     holdings = load_holdings()
     return {h['products_id']: h['amount'] for h in holdings}
 
-def get_project_root():
-    """向外部暴露项目根目录（供其他模块使用）"""
-    return Path(__file__).parent.parent
-
