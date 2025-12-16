@@ -38,11 +38,12 @@ def get_existing_snapshot_keys(snapshot_path):
     
     return keys
 
-def create_daily_snapshot(nav_records, holdings_map):
+def create_daily_snapshot(nav_records, holdings_map, products_map):
     """
     生成日快照
-    :param nav_records: {product_code: [nav_dict]}
+    :param nav_records: {product_code: nav_dict}
     :param holdings_map: {product_code: shares}
+    :param products_map: {product_code: product_name}
     """
     from config_loader import get_project_root
     
@@ -55,39 +56,40 @@ def create_daily_snapshot(nav_records, holdings_map):
     # 判断文件是否存在
     file_exists = snapshot_path.exists()
     
-    fieldnames = ['snapshot_date', 'product_code', 'nav', 'shares', 'value', 'pnl', 'fetched_at']
+    fieldnames = ['snapshot_date', 'product_code', 'product_name', 'nav', 'shares', 'value', 'pnl', 'fetched_at']
     
     # 准备新快照记录
     new_snapshots = []
     fetched_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    for product_code, nav_list in nav_records.items():
+    for product_code, nav_record in nav_records.items():
         shares = Decimal(str(holdings_map.get(product_code, 0)))
+        product_name = products_map.get(product_code, '')
         
-        for nav_record in nav_list:
-            # ISS_DATE 已由适配器标准化为 YYYY-MM-DD 格式
-            snapshot_date = nav_record['ISS_DATE']
-            
-            # 检查是否已存在
-            if (snapshot_date, product_code) in existing_keys:
-                continue
-            
-            nav = Decimal(nav_record['NAV'])
-            value = shares * nav
-            
-            # 计算pnl (与上一条同产品value差)
-            last_value = get_last_snapshot_value(snapshot_path, product_code)
-            pnl = value - last_value if last_value is not None else Decimal('0')
-            
-            new_snapshots.append({
-                'snapshot_date': snapshot_date,
-                'product_code': product_code,
-                'nav': str(nav),
-                'shares': str(shares),
-                'value': str(value),
-                'pnl': str(pnl),
-                'fetched_at': fetched_at
-            })
+        # ISS_DATE 已由适配器标准化为 YYYY-MM-DD 格式
+        snapshot_date = nav_record['ISS_DATE']
+        
+        # 检查是否已存在
+        if (snapshot_date, product_code) in existing_keys:
+            continue
+        
+        nav = Decimal(nav_record['NAV'])
+        value = shares * nav
+        
+        # 计算pnl (与上一条同产品value差)
+        last_value = get_last_snapshot_value(snapshot_path, product_code)
+        pnl = value - last_value if last_value is not None else Decimal('0')
+        
+        new_snapshots.append({
+            'snapshot_date': snapshot_date,
+            'product_code': product_code,
+            'product_name': product_name,
+            'nav': str(nav),
+            'shares': str(shares),
+            'value': str(value),
+            'pnl': str(pnl),
+            'fetched_at': fetched_at
+        })
     
     if not new_snapshots:
         return 0

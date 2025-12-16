@@ -19,31 +19,32 @@ def get_existing_dates(csv_path):
             dates.add(row['ISS_DATE'])
     return dates
 
-def save_nav_records(product_code, nav_list):
+def save_nav_record(product_code, product_name, nav_record):
     """
     保存净值记录到CSV
     :param product_code: 产品代码
-    :param nav_list: 净值列表 [{'ISS_DATE': '20231215', 'NAV': '1.0234', ...}]
-    :return: 新增记录数
+    :param product_name: 产品名称
+    :param nav_record: 单条净值记录 {'ISS_DATE': '2023-12-15', 'NAV': '1.0234', ...}
+    :return: 是否新增 (1=新增, 0=已存在)
     """
     from config_loader import get_project_root
     
-    csv_path = get_project_root() / "data" / "nav" / f"{product_code}.csv"
+    # 文件名格式：产品代码_产品名称.csv（清理特殊字符）
+    safe_name = product_name.replace('/', '_').replace('\\', '_').replace(':', '_')
+    csv_path = get_project_root() / "data" / "nav" / f"{product_code}_{safe_name}.csv"
     ensure_dir(csv_path)
     
     # 获取已存在的日期
     existing_dates = get_existing_dates(csv_path)
     
-    # 过滤出需要新增的记录
-    new_records = [r for r in nav_list if r['ISS_DATE'] not in existing_dates]
-    
-    if not new_records:
+    # 检查是否已存在
+    if nav_record['ISS_DATE'] in existing_dates:
         return 0
     
     # 判断是否需要写表头
     file_exists = csv_path.exists()
     
-    fieldnames = ['ISS_DATE', 'NAV', 'TOT_NAV', 'INCOME', 'WEEK_CLIENTRATE', 'fetched_at']
+    fieldnames = ['product_code', 'product_name', 'ISS_DATE', 'NAV', 'TOT_NAV', 'INCOME', 'WEEK_CLIENTRATE', 'fetched_at']
     
     with open(csv_path, 'a', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -54,16 +55,17 @@ def save_nav_records(product_code, nav_list):
         
         # 追加新记录
         fetched_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        for record in new_records:
-            row = {
-                'ISS_DATE': record['ISS_DATE'],
-                'NAV': record['NAV'],
-                'TOT_NAV': record['TOT_NAV'],
-                'INCOME': record['INCOME'],
-                'WEEK_CLIENTRATE': record['WEEK_CLIENTRATE'],
-                'fetched_at': fetched_at
-            }
-            writer.writerow(row)
+        row = {
+            'product_code': product_code,
+            'product_name': product_name,
+            'ISS_DATE': nav_record['ISS_DATE'],
+            'NAV': nav_record['NAV'],
+            'TOT_NAV': nav_record['TOT_NAV'],
+            'INCOME': nav_record['INCOME'],
+            'WEEK_CLIENTRATE': nav_record['WEEK_CLIENTRATE'],
+            'fetched_at': fetched_at
+        }
+        writer.writerow(row)
     
-    return len(new_records)
+    return 1
 

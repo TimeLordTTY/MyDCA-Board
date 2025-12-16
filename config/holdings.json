@@ -1,6 +1,48 @@
 [
     {
         "products_id": "FBAE41126E",
-        "amount": 1
+        "amount": 0
+    },{
+        "products_id": "000307",
+        "amount": 324.79
+    },{
+        "products_id": "020602",
+        "amount": 586.37
+    },{
+        "products_id": "110020",
+        "amount": 48.74
+    },{
+        "products_id": "012080",
+        "amount": 162.35
+    },{
+        "products_id": "161125",
+        "amount": 130.25
+    },{
+        "products_id": "161130",
+        "amount": 151.42
+    },{
+        "products_id": "013308",
+        "amount": 395.66
+    },{
+        "products_id": "019172",
+        "amount": 333.73
+    },{
+        "products_id": "017641",
+        "amount": 393.05
+    },{
+        "products_id": "019767",
+        "amount": 226.47
+    },{
+        "products_id": "016452",
+        "amount": 310.88
+    },{
+        "products_id": "018043",
+        "amount": 534.07
+    },{
+        "products_id": "015299",
+        "amount": 685.71
+    },{
+        "products_id": "163406",
+        "amount": 651.09
     }
 ]
