@@ -130,6 +130,6 @@ def query_latest_nav(product_code, query_date, retry_num):
 
 if __name__ == "__main__":
     # 测试：兴全合润混合
-    product_code = "163406"
+    product_code = "015299"
     navs = query_latest_nav(product_code, date.today(), 0)
     print(f"最新净值获取完成: {navs}")

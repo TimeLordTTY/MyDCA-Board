@@ -5,7 +5,7 @@ from datetime import date
 
 from adaptor import cmbc_client, fund_client
 from storage_csv import save_nav_record
-from snapshot import create_daily_snapshot, get_last_snapshot_value
+from snapshot import create_daily_snapshot, get_last_snapshot_value, rebuild_snapshots_from_date
 from portfolio_summary import generate_portfolio_summary
 from config_loader import load_products, get_holdings_map, load_holdings, get_project_root
 from validator import (
@@ -149,10 +149,27 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     
     return result
 
-def collect_and_store():
-    """采集净值并存储，生成快照 - 可控加固版"""
+def collect_and_store(force_overwrite=False, rebuild_from=None):
+    """
+    采集净值并存储，生成快照 - 可控加固版
+    :param force_overwrite: 是否强制覆盖模式（以 fetch_date + product_code 为主键）
+    :param rebuild_from: 从指定日期重建快照（YYYY-MM-DD），会删除该日期及之后的快照并重新生成
+    """
     
+    logger.info("=" * 85)
     logger.info("=== 财富中枢净值采集任务启动 ===")
+    if force_overwrite:
+        logger.info("!!! 强制覆盖模式: 同一 fetch_date + product_code 的快照将被覆盖 !!!")
+    if rebuild_from:
+        logger.info(f"!!! 重建模式: 将重建 {rebuild_from} 及之后的所有快照 !!!")
+    logger.info("=" * 85)
+    
+    # 0. 重建模式：先清理旧快照
+    if rebuild_from:
+        logger.info("=== 快照重建阶段 ===")
+        snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
+        kept, deleted = rebuild_snapshots_from_date(snapshot_path, rebuild_from)
+        logger.info(f"✓ 重建准备完成: 保留 {kept} 条, 删除 {deleted} 条")
     
     # 1. 校验配置（失败则退出）
     products, holdings, products_map, holdings_map = validate_configs()
@@ -170,8 +187,11 @@ def collect_and_store():
     snapshot_count = 0
     if nav_records:
         logger.info("=== 快照生成阶段 ===")
-        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map)
-        logger.info(f"✓ 新增 {snapshot_count} 条快照记录")
+        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, force_overwrite=force_overwrite)
+        if force_overwrite:
+            logger.info(f"✓ 快照更新/新增 {snapshot_count} 条记录 (覆盖模式)")
+        else:
+            logger.info(f"✓ 新增 {snapshot_count} 条快照记录")
     
     # 4. 生成投资组合汇总
     logger.info("=== 投资组合汇总阶段 ===")

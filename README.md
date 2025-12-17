@@ -84,7 +84,7 @@ MyDCA-Board/
 ├── src/                             # 源代码
 │   ├── nav_collector.py             # 【核心】主控协调器
 │   ├── validator.py                 # 【核心】数据校验器
-│   ├── portfolio_summary.py         # 【新增】资产汇总模块
+│   ├── portfolio_summary.py         # 资产汇总模块
 │   │
 │   ├── adaptor/                     # 适配器目录
 │   │   ├── __init__.py              
@@ -97,7 +97,8 @@ MyDCA-Board/
 │
 ├── scripts/                         # 脚本目录
 │   ├── run_daily.py                 # 日常运行入口
-│   └── self_test.py                 # 自测脚本
+│   ├── self_test.py                 # 自测脚本
+│   └── test_force_rebuild.py        # 覆盖/重建功能测试
 │
 ├── data/                            # 数据目录
 │   ├── nav/                         # 净值CSV文件
@@ -337,16 +338,72 @@ fetch_date汇总会显示：
 
 ## 🚀 使用方法
 
-### 日常运行
+### 日常运行（默认模式）
 ```bash
-# 采集所有产品净值并生成快照
+# 采集所有产品净值并生成快照（幂等，去重跳过）
 python scripts/run_daily.py
 ```
 
+**默认行为**：
+- ✅ **净值CSV**: 按 `ISS_DATE` 去重跳过
+- ✅ **快照CSV**: 按 `(snapshot_date, product_code)` 去重跳过
+- ✅ **汇总CSV**: 全量覆盖重算
+
+**幂等性保证**：重复运行不会重复写入同一天的数据
+
+---
+
+### 强制覆盖模式（纠正当天错误）
+```bash
+# 覆盖今天已采集的快照（适用于份额/净值更新纠错）
+python scripts/run_daily.py --force
+```
+
+**适用场景**：
+- 🔧 当天上午采集后，发现份额配置错误，修正后需要重新采集
+- 🔧 当天下午净值更新了，想覆盖上午的快照
+- 🔧 净值日期从 T-1 更新到 T 日，需要覆盖
+
+**覆盖规则**：
+- 主键：`(fetch_date, product_code)` = `(fetched_at的日期, 产品代码)`
+- 覆盖字段：`snapshot_date`, `nav`, `shares`, `value`, `pnl`, `fetched_at`
+- 不影响其他日期的快照
+
+---
+
+### 重建模式（修复历史 PnL 链）
+```bash
+# 从指定日期重建快照（修复链式 PnL）
+python scripts/run_daily.py --rebuild-from 2025-12-01
+
+# 组合使用：重建并启用覆盖模式
+python scripts/run_daily.py --rebuild-from 2025-12-01 --force
+```
+
+**适用场景**：
+- 📊 发现某天的 `pnl` 计算错误（因为 pnl 是链式计算，一个错误会传递）
+- 📊 修改了历史份额配置，需要重新计算后续所有快照
+- 📊 手动删除/修改了某些净值数据，需要重建快照
+
+**重建逻辑**：
+1. 删除 `fetch_date >= rebuild-from` 的所有快照记录
+2. 保留 `rebuild-from` 之前的快照（作为 PnL 计算的基准）
+3. 从现有净值CSV重新生成快照（按时间顺序，链式计算 PnL）
+
+**重要提示**：
+- ⚠️ 净值CSV不会被删除，可以复用
+- ⚠️ 重建前会自动备份（覆盖写入）
+- ⚠️ 建议先备份 `daily.csv` 再执行重建
+
+---
+
 ### 自测验证
 ```bash
-# 运行自动化测试
+# 运行核心功能自动化测试
 python scripts/self_test.py
+
+# 测试强制覆盖与重建功能
+python scripts/test_force_rebuild.py
 ```
 
 ### 测试单个适配器
@@ -639,6 +696,40 @@ fetch_date,total_value,total_pnl,total_pnl_vs_prev_fetch,product_count,stale_pro
 2. 查看日志中是否有字段解析警告
 3. 验证 fetched_at 字段格式是否支持（支持多种格式）
 4. 检查金额字段是否有异常值（系统会自动处理并警告）
+
+### 问题6：发现当天快照数据有误？
+1. **修正配置后重新采集**：
+   ```bash
+   # 修正 holdings.json 中的份额
+   # 然后使用强制模式覆盖今天的快照
+   python scripts/run_daily.py --force
+   ```
+
+2. **快照主键说明**：
+   - 默认模式：`(snapshot_date, product_code)` → 同一净值日期不覆盖
+   - 强制模式：`(fetch_date, product_code)` → 同一采集日期会覆盖
+
+3. **不影响其他日期**：`--force` 只覆盖今天 (`fetch_date = today`) 的快照
+
+### 问题7：历史 PnL 链断了？
+1. **场景**：修改了某天的份额配置，导致后续 PnL 不准确
+
+2. **解决方案**：
+   ```bash
+   # 从该日期重建所有后续快照
+   python scripts/run_daily.py --rebuild-from 2025-12-01
+   ```
+
+3. **重建原理**：
+   - 删除指定日期及之后的所有快照
+   - 保留之前的快照作为 PnL 基准
+   - 从净值CSV按时间顺序重新生成快照
+   - 链式计算 PnL（每天基于前一天的 value）
+
+4. **安全提示**：
+   - 重建前建议备份 `data/snapshots/daily.csv`
+   - 净值CSV不会被删除，可安全复用
+   - 可以多次重建直到 PnL 正确
 
 ---
 
