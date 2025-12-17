@@ -1,4 +1,16 @@
-"""持仓计算模块 - 增量模式：基础持仓 + 交易流水"""
+"""持仓计算模块 - 增量模式：基础持仓 + 交易流水
+
+支持的交易类型 (action):
+  - buy: 买入，份额增加，成本增加
+  - sell: 卖出，份额减少，成本按比例减少
+  - dividend: 分红，份额增加，成本不变（免费获得的份额）
+
+CSV 格式 (data/transactions.csv):
+  date,product_code,action,amount,shares,fee,nav,nav_date,note
+  
+  - buy/sell: 所有字段都需要
+  - dividend: 只需要 date, product_code, action, shares, note（其他字段可留空或填0）
+"""
 import csv
 import json
 from pathlib import Path
@@ -46,10 +58,12 @@ def load_transactions(transactions_path: Path) -> List[Dict]:
         return []
     
     transactions = []
-    with open(transactions_path, 'r', encoding='utf-8') as f:
+    with open(transactions_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            transactions.append(row)
+            # 跳过空行或缺少必要字段的行
+            if row.get('date') and row.get('product_code'):
+                transactions.append(row)
     
     return transactions
 
@@ -151,6 +165,11 @@ def calc_position_incremental(
                 shares_delta -= shares
             else:
                 shares_delta -= amount
+        
+        elif action == 'DIVIDEND':
+            # 分红：份额增加，成本不变（免费获得的份额）
+            if shares > 0:
+                shares_delta += shares
     
     # 4. 计算最终份额
     shares_total = base_shares + shares_delta
@@ -225,6 +244,11 @@ def calc_position_from_transactions(
                     cost_reduction = cost_total * amount / shares_total
                     cost_total -= cost_reduction
                 shares_total -= amount
+        
+        elif action == 'DIVIDEND':
+            # 分红：份额增加，成本不变（免费获得的份额）
+            if shares > 0:
+                shares_total += shares
     
     if shares_total < 0:
         logger.warning(f"产品 {product_code} 计算出负份额 {shares_total}，设为0")

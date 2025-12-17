@@ -1,2 +1,3 @@
 fetch_date,total_value,total_pnl,total_cost,total_unrealized_pnl,total_pnl_vs_prev_fetch,product_count,stale_products,max_lag_days
-2025-12-17,20814.26,0.00,11629.00,3723.55,0.00,15,11,2
+2025-12-17,3489.80,3.80,50.00,969.55,0.00,5,4,2
+2025-12-18,20836.98,-27.31,21184.75,-1777.95,17347.18,15,15,2

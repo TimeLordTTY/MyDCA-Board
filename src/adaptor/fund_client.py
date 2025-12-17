@@ -128,6 +128,119 @@ def query_latest_nav(product_code, query_date, retry_num):
     nav_record = _normalize_nav_record(fund_data, product_code, query_date)
     return [nav_record]  # 返回单元素列表
 
+def query_nav_history(product_code, start_date, end_date, page_size=20):
+    """
+    查询指定日期范围内的历史净值
+    :param product_code: 产品代码（基金代码）
+    :param start_date: 开始日期 (date 或 str 'YYYY-MM-DD')
+    :param end_date: 结束日期 (date 或 str 'YYYY-MM-DD')
+    :param page_size: 每页记录数（默认20）
+    :return: List[Dict] 净值记录列表，按日期升序排列
+    """
+    # 日期格式化
+    if isinstance(start_date, str):
+        sdate = start_date
+    else:
+        sdate = start_date.strftime('%Y-%m-%d')
+    
+    if isinstance(end_date, str):
+        edate = end_date
+    else:
+        edate = end_date.strftime('%Y-%m-%d')
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "http://fund.eastmoney.com/"
+    }
+    
+    all_records = []
+    page = 1
+    
+    while True:
+        try:
+            # 东方财富历史净值 API，支持日期范围
+            url = f"http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code={product_code}&page={page}&per={page_size}&sdate={sdate}&edate={edate}"
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code != 200:
+                raise Exception(f"HTTP {response.status_code}")
+            
+            html_text = response.text
+            
+            # 提取总记录数
+            records_match = re.search(r'records:(\d+)', html_text)
+            total_records = int(records_match.group(1)) if records_match else 0
+            
+            if total_records == 0:
+                break
+            
+            # 提取 content 中的HTML内容
+            content_match = re.search(r'content:"(.*?)",records:', html_text, re.DOTALL)
+            if not content_match:
+                break
+            
+            html_content = content_match.group(1)
+            html_content = html_content.replace(r'<\/td>', '</td>').replace(r'<\/tr>', '</tr>')
+            
+            # 解析所有数据行
+            records = _parse_html_table_all(html_content)
+            if not records:
+                break
+            
+            for record in records:
+                nav_record = _normalize_nav_record(record, product_code, date.today())
+                all_records.append(nav_record)
+            
+            # 检查是否还有更多页
+            if page * page_size >= total_records:
+                break
+            
+            page += 1
+            
+        except Exception as e:
+            print(f"获取历史净值失败 (page={page}): {e}")
+            break
+    
+    # 按日期升序排列
+    all_records.sort(key=lambda x: x['ISS_DATE'])
+    return all_records
+
+
+def _parse_html_table_all(html_content):
+    """
+    解析东方财富返回的HTML表格，返回所有数据行
+    :param html_content: HTML表格内容
+    :return: 解析后的净值数据列表
+    """
+    # 提取tbody中的所有数据行
+    tbody_match = re.search(r'<tbody>(.*?)</tbody>', html_content, re.DOTALL)
+    if not tbody_match:
+        # 没有 tbody，直接解析所有 tr
+        tr_pattern = r'<tr>(.*?)</tr>'
+        rows = re.findall(tr_pattern, html_content, re.DOTALL)
+        rows = rows[1:] if rows else []  # 跳过表头
+    else:
+        tbody_content = tbody_match.group(1)
+        tr_pattern = r'<tr>(.*?)</tr>'
+        rows = re.findall(tr_pattern, tbody_content, re.DOTALL)
+    
+    records = []
+    for row in rows:
+        # 提取单元格 <td>...</td>
+        td_pattern = r'<td[^>]*>(.*?)</td>'
+        cells = re.findall(td_pattern, row)
+        
+        if len(cells) >= 3:
+            records.append({
+                'jzrq': cells[0].strip(),
+                'dwjz': cells[1].strip(),
+                'ljjz': cells[2].strip(),
+                'jzzzl': cells[3].strip() if len(cells) > 3 else '0',
+            })
+    
+    return records
+
+
 if __name__ == "__main__":
     # 测试：兴全合润混合
     product_code = "161130"
