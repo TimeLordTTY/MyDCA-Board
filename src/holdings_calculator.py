@@ -159,11 +159,18 @@ def calc_position_incremental(
                 cost_total += amount + fee
                 
         elif action == 'SELL':
-            # 卖出：份额减少
-            # 注意：卖出时的成本回收暂不处理（需要更复杂的FIFO逻辑）
+            # 卖出：份额减少，成本按比例减少
+            current_shares = base_shares + shares_delta
             if shares > 0:
+                if current_shares > 0 and cost_total > 0:
+                    # 按份额比例减少成本
+                    cost_reduction = cost_total * shares / current_shares
+                    cost_total -= cost_reduction
                 shares_delta -= shares
             else:
+                if current_shares > 0 and cost_total > 0:
+                    cost_reduction = cost_total * amount / current_shares
+                    cost_total -= cost_reduction
                 shares_delta -= amount
         
         elif action == 'DIVIDEND':

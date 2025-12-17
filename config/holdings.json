@@ -1,63 +1,63 @@
 [
     {
-        "products_id": "FBAE41126E",
-        "name": "民生理财贵竹固收增利周周盈7天持有期26号理财产品E",
+        "product_code": "FBAE41126E",
+        "product_name": "民生理财贵竹固收增利周周盈7天持有期26号理财产品E",
         "amount": 0
     },{
-        "products_id": "000307",
-        "name": "易方达黄金ETF联接A",
+        "product_code": "000307",
+        "product_name": "易方达黄金ETF联接A",
         "amount": 0
     },{
-        "products_id": "020602",
-        "name": "易方达红利低波ETF联接A",
+        "product_code": "020602",
+        "product_name": "易方达红利低波ETF联接A",
         "amount": 0
     },{
-        "products_id": "110020",
-        "name": "易方达沪深300ETF联接A",
+        "product_code": "110020",
+        "product_name": "易方达沪深300ETF联接A",
         "amount": 0
     },{
-        "products_id": "012080",
-        "name": "易方达中证500指数量化增强A",
+        "product_code": "012080",
+        "product_name": "易方达中证500指数量化增强A",
         "amount": 0
     },{
-        "products_id": "161125",
-        "name": "易方达标普500指数(QDII-LOF)A",
+        "product_code": "161125",
+        "product_name": "易方达标普500指数(QDII-LOF)A",
         "amount": 0
     },{
-        "products_id": "161130",
-        "name": "易方达纳斯达克100指数(QDII-LOF)A",
+        "product_code": "161130",
+        "product_name": "易方达纳斯达克100指数(QDII-LOF)A",
         "amount": 0
     },{
-        "products_id": "013308",
-        "name": "易方达恒生科技ETF联接(QDII)A",
+        "product_code": "013308",
+        "product_name": "易方达恒生科技ETF联接(QDII)A",
         "amount": 0
     },{
-        "products_id": "019172",
-        "name": "摩根纳斯达克100指数(QDII)A",
+        "product_code": "019172",
+        "product_name": "摩根纳斯达克100指数(QDII)A",
         "amount": 0
     },{
-        "products_id": "017641",
-        "name": "摩根标普500指数(QDII)A",
+        "product_code": "017641",
+        "product_name": "摩根标普500指数(QDII)A",
         "amount": 0
     },{
-        "products_id": "019767",
-        "name": "景顺长城科创50指数增强A",
+        "product_code": "019767",
+        "product_name": "景顺长城科创50指数增强A",
         "amount": 0
     },{
-        "products_id": "016452",
-        "name": "南方纳斯达克100指数(QDII)A",
+        "product_code": "016452",
+        "product_name": "南方纳斯达克100指数(QDII)A",
         "amount": 0
     },{
-        "products_id": "018043",
-        "name": "天弘纳斯达克100指数(QDII)A",
+        "product_code": "018043",
+        "product_name": "天弘纳斯达克100指数(QDII)A",
         "amount": 0
     },{
-        "products_id": "015299",
-        "name": "华夏纳斯达克100ETF联接(QDII)A",
+        "product_code": "015299",
+        "product_name": "华夏纳斯达克100ETF联接(QDII)A",
         "amount": 0
     },{
-        "products_id": "163406",
-        "name": "兴全合润混合(LOF)A",
+        "product_code": "163406",
+        "product_name": "兴全合润混合(LOF)A",
         "amount": 0
     }
 ]

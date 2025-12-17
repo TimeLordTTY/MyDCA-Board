@@ -49,18 +49,18 @@ def _normalize_nav_record(raw_record, product_code, query_date):
     # ljjz: 累计净值
     # jzzzl: 日增长率
     
-    fetched_at = datetime.now().isoformat()
+    fetched_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:23]  # 毫秒精度
     
     return {
-        # 必需字段
-        'PRODUCT_CODE': product_code,
-        'ISS_DATE': raw_record.get('jzrq', query_date.strftime('%Y-%m-%d')),
-        'NAV': str(raw_record.get('dwjz', '0')),
+        # 必需字段（统一小写命名）
+        'product_code': product_code,
+        'nav_date': raw_record.get('jzrq', query_date.strftime('%Y-%m-%d')),
+        'nav': str(raw_record.get('dwjz', '0')),
         'fetched_at': fetched_at,
         # 扩展字段
-        'TOT_NAV': str(raw_record.get('ljjz', raw_record.get('dwjz', '0'))),
-        'INCOME': '0',
-        'WEEK_CLIENTRATE': str(raw_record.get('jzzzl', '0')),
+        'total_nav': str(raw_record.get('ljjz', raw_record.get('dwjz', '0'))),
+        'income': '0',
+        'weekly_rate': str(raw_record.get('jzzzl', '0')),
     }
 
 def query_latest_nav(product_code, query_date, retry_num):
@@ -202,7 +202,7 @@ def query_nav_history(product_code, start_date, end_date, page_size=20):
             break
     
     # 按日期升序排列
-    all_records.sort(key=lambda x: x['ISS_DATE'])
+    all_records.sort(key=lambda x: x['nav_date'])
     return all_records
 
 

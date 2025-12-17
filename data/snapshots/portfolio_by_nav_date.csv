@@ -1,4 +1,4 @@
-snapshot_date,total_value,total_pnl,total_cost,total_unrealized_pnl,product_count
-2025-12-15,1019.55,0.00,50.00,969.55,1
-2025-12-16,17820.74,-48.29,15396.75,-42.46,11
-2025-12-17,15553.23,20.98,17097.00,-1735.49,8
+﻿nav_date,total_value,total_pnl,total_cost,total_unrealized_pnl,product_count
+净值日期,总市值,总盈亏,总成本,总浮动盈亏,产品数量
+2025-12-16,5283.75,0.00,5337.75,-54.00,7
+2025-12-17,15553.23,0.00,15507.82,45.41,8

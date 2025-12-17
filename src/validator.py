@@ -2,8 +2,8 @@
 import re
 from datetime import datetime
 
-# 必需字段定义
-REQUIRED_NAV_FIELDS = ['PRODUCT_CODE', 'ISS_DATE', 'NAV', 'fetched_at']
+# 必需字段定义（统一小写命名）
+REQUIRED_NAV_FIELDS = ['product_code', 'nav_date', 'nav', 'fetched_at']
 
 def validate_date_format(date_str):
     """
@@ -36,19 +36,19 @@ def validate_nav_record(nav_record, product_code):
         return False, f"缺少必需字段: {', '.join(missing_fields)}"
     
     # 校验日期格式
-    iss_date = nav_record.get('ISS_DATE')
-    if not validate_date_format(iss_date):
-        return False, f"ISS_DATE格式错误: {iss_date}，应为YYYY-MM-DD"
+    nav_date = nav_record.get('nav_date')
+    if not validate_date_format(nav_date):
+        return False, f"nav_date格式错误: {nav_date}，应为YYYY-MM-DD"
     
-    # 校验NAV是否为数字
+    # 校验nav是否为数字
     try:
-        float(nav_record['NAV'])
+        float(nav_record['nav'])
     except (ValueError, TypeError):
-        return False, f"NAV不是有效数字: {nav_record['NAV']}"
+        return False, f"nav不是有效数字: {nav_record['nav']}"
     
-    # 校验PRODUCT_CODE一致性
-    if nav_record['PRODUCT_CODE'] != product_code:
-        return False, f"PRODUCT_CODE不匹配: 期望{product_code}，实际{nav_record['PRODUCT_CODE']}"
+    # 校验product_code一致性
+    if nav_record['product_code'] != product_code:
+        return False, f"product_code不匹配: 期望{product_code}，实际{nav_record['product_code']}"
     
     return True, None
 
@@ -58,7 +58,7 @@ def validate_product_config(product):
     :param product: 产品配置字典
     :return: (is_valid, error_message)
     """
-    required_fields = ['id', 'name', 'source']
+    required_fields = ['product_code', 'product_name', 'source']
     missing_fields = [f for f in required_fields if f not in product]
     if missing_fields:
         return False, f"缺少必需字段: {', '.join(missing_fields)}"
@@ -71,16 +71,16 @@ def validate_holdings_config(holdings, products):
     :param products: 产品配置列表
     :return: (is_valid, error_message)
     """
-    product_ids = {p['id'] for p in products}
+    product_ids = {p['product_code'] for p in products}
     invalid_ids = []
     
     for holding in holdings:
-        holding_id = holding.get('products_id')
+        holding_id = holding.get('product_code')
         if holding_id not in product_ids:
             invalid_ids.append(holding_id)
     
     if invalid_ids:
-        return False, f"holdings.json中包含不存在的产品ID: {', '.join(invalid_ids)}"
+        return False, f"holdings.json中包含不存在的产品代码: {', '.join(invalid_ids)}"
     
     return True, None
 

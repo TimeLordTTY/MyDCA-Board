@@ -117,16 +117,20 @@ def parse_datetime(datetime_str):
 
 def read_daily_snapshots(snapshot_path):
     """
-    读取日快照数据
+    读取日快照数据（跳过中文表头行）
     :return: list of dict
     """
     if not Path(snapshot_path).exists():
         return []
     
     records = []
-    with open(snapshot_path, 'r', encoding='utf-8') as f:
+    with open(snapshot_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
+            # 跳过中文表头行
+            first_value = row.get('fetch_date', row.get('nav_date', ''))
+            if first_value and (first_value.startswith('采集') or first_value.startswith('净值')):
+                continue
             records.append(row)
     return records
 
@@ -144,7 +148,7 @@ def aggregate_by_nav_date(records):
     })
     
     for idx, record in enumerate(records):
-        snapshot_date = record.get('snapshot_date', '')
+        snapshot_date = record.get('nav_date', '')
         product_code = record.get('product_code', '')
         
         row_info = f"(第{idx+1}行, 产品{product_code})"
@@ -183,12 +187,17 @@ def aggregate_by_fetch_date(records):
     product_records = defaultdict(list)  # {product_code: [records sorted by fetched_at]}
     
     for idx, record in enumerate(records):
-        fetched_at = record.get('fetched_at', '')
-        fetch_date = parse_datetime(fetched_at)
+        # 优先使用 fetched_date 字段，兼容旧格式从 fetched_at 提取
+        if 'fetch_date' in record and record['fetch_date']:
+            fetch_date = parse_date(record['fetch_date'])
+        else:
+            fetched_at = record.get('fetched_at', '')
+            fetch_date = parse_datetime(fetched_at)
+        
         product_code = record.get('product_code', '')
         
         if not fetch_date:
-            logger.warning(f"跳过无法解析fetched_at的记录: '{fetched_at}' (第{idx+1}行)")
+            logger.warning(f"跳过无法解析fetch_date的记录 (第{idx+1}行)")
             continue
         
         all_fetch_dates.add(fetch_date)
@@ -235,7 +244,7 @@ def aggregate_by_fetch_date(records):
             cost = safe_decimal(latest_record.get('cost', '0'), field_name='cost', row_info=row_info)
             unrealized_pnl = safe_decimal(latest_record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
             
-            snapshot_date = parse_date(latest_record.get('snapshot_date', ''))
+            snapshot_date = parse_date(latest_record.get('nav_date', ''))
             
             total_value += value
             total_pnl += pnl
@@ -269,19 +278,22 @@ def write_portfolio_by_nav_date(aggregated, output_path):
     """
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
-    fieldnames = ['snapshot_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl', 'product_count']
+    fieldnames = ['nav_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl', 'product_count']
+    chinese_headers = ['净值日期', '总市值', '总盈亏', '总成本', '总浮动盈亏', '产品数量']
     
     # 按日期排序
     sorted_dates = sorted(aggregated.keys())
     
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
+        # 写入中文表头
+        f.write(','.join(chinese_headers) + '\n')
         
         for snapshot_date in sorted_dates:
             data = aggregated[snapshot_date]
             writer.writerow({
-                'snapshot_date': snapshot_date,
+                'nav_date': snapshot_date,
                 'total_value': f"{data['total_value']:.2f}",
                 'total_pnl': f"{data['total_pnl']:.2f}",
                 'total_cost': f"{data['total_cost']:.2f}",
@@ -299,13 +311,17 @@ def write_portfolio_by_fetch_date(aggregated, output_path):
     
     fieldnames = ['fetch_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl',
                   'total_pnl_vs_prev_fetch', 'product_count', 'stale_products', 'max_lag_days']
+    chinese_headers = ['采集日期', '总市值', '总盈亏', '总成本', '总浮动盈亏', 
+                       '真实日变动', '产品数量', '滞后产品数', '最大滞后天数']
     
     # 按日期排序
     sorted_dates = sorted(aggregated.keys())
     
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
+        # 写入中文表头
+        f.write(','.join(chinese_headers) + '\n')
         
         prev_total_value = None
         for fetch_date in sorted_dates:
@@ -342,8 +358,13 @@ def aggregate_by_category(records):
     grouped = defaultdict(lambda: defaultdict(list))
     
     for idx, record in enumerate(records):
-        fetched_at = record.get('fetched_at', '')
-        fetch_date = parse_datetime(fetched_at)
+        # 优先使用 fetched_date 字段
+        if 'fetch_date' in record and record['fetch_date']:
+            fetch_date = parse_date(record['fetch_date'])
+        else:
+            fetched_at = record.get('fetched_at', '')
+            fetch_date = parse_datetime(fetched_at)
+        
         category = record.get('category', 'fund')  # 默认为基金
         
         if not fetch_date:
@@ -356,8 +377,13 @@ def aggregate_by_category(records):
     product_records = defaultdict(list)
     
     for idx, record in enumerate(records):
-        fetched_at = record.get('fetched_at', '')
-        fetch_date = parse_datetime(fetched_at)
+        # 优先使用 fetched_date 字段
+        if 'fetch_date' in record and record['fetch_date']:
+            fetch_date = parse_date(record['fetch_date'])
+        else:
+            fetched_at = record.get('fetched_at', '')
+            fetch_date = parse_datetime(fetched_at)
+        
         product_code = record.get('product_code', '')
         category = record.get('category', 'fund')
         
@@ -429,15 +455,18 @@ def write_portfolio_by_category(aggregated, output_path):
     
     fieldnames = ['fetch_date', 'category', 'total_value', 'total_cost', 'total_unrealized_pnl', 
                   'total_pnl_vs_prev', 'product_count']
+    chinese_headers = ['采集日期', '分类', '总市值', '总成本', '总浮动盈亏', '日变动', '产品数量']
     
     sorted_dates = sorted(aggregated.keys())
     
     # 记录上一个日期各分类的 total_value，用于计算日变动
     prev_values = {'fund': None, 'bank': None, 'total': None}
     
-    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
+        # 写入中文表头
+        f.write(','.join(chinese_headers) + '\n')
         
         for fetch_date in sorted_dates:
             category_data = aggregated[fetch_date]

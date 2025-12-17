@@ -127,7 +127,7 @@ def test_missing_product_fields():
             with open(products_path, 'w', encoding='utf-8') as f:
                 json.dump(products, f, indent=4, ensure_ascii=False)
             
-            print(f"\n>>> 已删除产品 {products[0]['id']} 的 source 字段")
+            print(f"\n>>> 已删除产品 {products[0]['product_code']} 的 source 字段")
             print(">>> 尝试运行采集程序...")
             
             # 重新导入以清除缓存
@@ -482,11 +482,11 @@ def test_transactions_cost():
         # 模拟净值记录
         nav_records = {
             'TEST001': {
-                'ISS_DATE': '2025-12-15',
-                'NAV': Decimal('11.00'),  # 当前净值
-                'TOT_NAV': Decimal('11.00'),
-                'INCOME': Decimal('0'),
-                'WEEK_CLIENTRATE': Decimal('0')
+                'nav_date': '2025-12-15',
+                'nav': Decimal('11.00'),  # 当前净值
+                'total_nav': Decimal('11.00'),
+                'income': Decimal('0'),
+                'weekly_rate': Decimal('0')
             }
         }
         

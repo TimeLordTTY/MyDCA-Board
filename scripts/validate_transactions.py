@@ -51,14 +51,14 @@ def load_products_map():
         with open(products_path, 'r', encoding='utf-8') as f:
             products = json.load(f)
             for p in products:
-                products_map[p['id']] = p['name']
+                products_map[p['product_code']] = p['product_name']
     return products_map
 
 
 def load_nav_data(product_code, product_name):
     """
     加载某产品的净值数据
-    :return: {ISS_DATE: NAV}
+    :return: {nav_date: nav}
     """
     nav_dir = get_project_root() / "data" / "nav"
     nav_path = nav_dir / f"{product_code}_{product_name}.csv"
@@ -70,9 +70,10 @@ def load_nav_data(product_code, product_name):
     with open(nav_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            date = row.get('ISS_DATE', '').strip()
-            nav = row.get('NAV', '').strip()
-            if date and nav:
+            date = row.get('nav_date', '').strip()
+            nav = row.get('nav', '').strip()
+            # 跳过中文表头行
+            if date and nav and not date.startswith('净值'):
                 nav_map[date] = nav
     return nav_map
 

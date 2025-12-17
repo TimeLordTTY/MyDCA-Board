@@ -21,5 +21,5 @@ def load_holdings():
 def get_holdings_map():
     """获取产品代码到持仓份额的映射"""
     holdings = load_holdings()
-    return {h['products_id']: h['amount'] for h in holdings}
+    return {h['product_code']: h['amount'] for h in holdings}
 

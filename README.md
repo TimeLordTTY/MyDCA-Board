@@ -16,7 +16,7 @@ validate_configs()          # 校验配置文件
 ↓
 process_single_product()    # 处理每个产品
 ↓
-create_daily_snapshot()     # 生成快照
+create_daily_snapshot()     # 生成快照（含收益率）
 ↓
 generate_portfolio_summary() # 生成资产汇总
 ↓
@@ -98,6 +98,8 @@ MyDCA-Board/
 │
 ├── scripts/                         # 脚本目录
 │   ├── run_daily.py                 # 日常运行入口
+│   ├── validate_transactions.py     # 交易流水校验工具
+│   ├── export_nav_history.py        # 净值历史导出工具
 │   ├── self_test.py                 # 自测脚本
 │   └── test_force_rebuild.py        # 覆盖/重建功能测试
 │
@@ -106,7 +108,7 @@ MyDCA-Board/
 │   ├── nav/                         # 净值CSV文件
 │   │   └── {code}_{name}.csv        # 格式：产品代码_产品名称.csv
 │   └── snapshots/                   # 快照目录
-│       ├── daily.csv                # 日快照（明细）
+│       ├── daily.csv                # 日快照（含收益率，每天每产品一条）
 │       ├── portfolio_by_nav_date.csv   # 按净值日期汇总
 │       ├── portfolio_by_fetch_date.csv # 按采集日期汇总
 │       └── portfolio_by_category.csv   # 按产品类型汇总
@@ -163,6 +165,7 @@ MyDCA-Board/
 | **storage_csv** | 净值数据落库 | `save_nav_record()` |
 | **snapshot** | 生成持仓快照 | `create_daily_snapshot()` |
 | **portfolio_summary** | 生成资产汇总（健壮性加固） | `generate_portfolio_summary()`, `safe_decimal()` |
+| **holdings_calculator** | 从交易流水计算份额和成本 | `calc_position_incremental()` |
 | **config_loader** | 加载配置文件 | `load_products()` |
 
 ---
@@ -219,16 +222,22 @@ MyDCA-Board/
 
 ```
 遍历成功采集的产品:
-    ├─ 获取持仓份额 (holdings.json)
+    ├─ 获取持仓份额 (transactions.csv + holdings.json回退)
     │
     ├─ 计算市值 (value = shares × NAV)
     │
-    ├─ 计算PNL (当前value - 上次value)
+    ├─ 计算PNL (当前value - 上一采集日value)
     │
     └─ 写入 daily.csv
-         ├─ 按 (snapshot_date, product_code) 去重
-         └─ 记录: 日期、产品、净值、份额、市值、盈亏
+         ├─ 按 (fetch_date, product_code) 去重
+         ├─ 同一采集日多次运行 → 覆盖更新
+         └─ 记录: 采集日期、产品、净值日期、净值、份额、市值、盈亏
 ```
+
+**设计理念**：
+- **采集日期 (fetch_date)** 是快照的主维度，每天每产品一条记录
+- **净值日期 (nav_date)** 只记录净值来源日期（可能滞后 T+1）
+- 同一天多次运行会覆盖（保持最新状态），不会产生重复数据
 
 **目的**：汇总持仓情况，追踪盈亏变化
 
@@ -239,7 +248,7 @@ MyDCA-Board/
 ```
 读取 daily.csv:
     │
-    ├─ 按净值日期聚合 (snapshot_date)
+    ├─ 按净值日期聚合 (nav_date)
     │   ├─ 按product_code去重统计产品数
     │   └─ 写入 portfolio_by_nav_date.csv
     │       └─ total_value, total_pnl, product_count
@@ -275,7 +284,7 @@ fetch_date汇总会显示：
 
 ---
 
-### 5. 日志输出阶段
+### 6. 日志输出阶段
 
 ```
 输出汇总表格:
@@ -331,7 +340,7 @@ fetch_date汇总会显示：
 ```json
 [
     {
-        "products_id": "163406",           // 必需：产品代码（必须在products.json中存在）
+        "product_code": "163406",          // 必需：产品代码（必须在products.json中存在）
         "amount": 1000                     // 必需：持仓份额
     }
 ]
@@ -428,8 +437,8 @@ date,product_code,action,amount,shares,fee,nav,nav_date,note
 1. **修改 holdings.json**：将所有产品的份额设为 0
    ```json
    [
-       {"products_id": "163406", "amount": 0},
-       {"products_id": "017641", "amount": 0}
+       {"product_code": "163406", "amount": 0},
+       {"product_code": "017641", "amount": 0}
    ]
    ```
 
@@ -466,28 +475,37 @@ date,product_code,action,amount,shares,fee,nav,nav_date,note
 python scripts/run_daily.py
 ```
 
-**智能去重策略（按 snapshot_date + product_code）**：
+**智能去重策略（按 fetch_date + product_code）**：
 
 | 场景 | 处理方式 | 说明 |
 |------|---------|------|
-| 不存在 | ✅ 新增 | 新净值日期的记录 |
-| 存在但 value 变化 | 🔄 覆盖更新 | 份额变化或配置修正 |
-| 存在且 value 相同 | ⏭️ 跳过 | 重复数据，无需记录 |
+| 当天不存在 | ✅ 新增 | 新采集日的记录 |
+| 当天存在但数据变化 | 🔄 覆盖更新 | 净值/份额/成本变化 |
+| 当天存在且数据相同 | ⏭️ 跳过 | 重复数据，无需记录 |
 
 **典型场景**：
 ```
-时间轴：T-1晚 → T早(份额更新前) → T早(份额更新后) → T下午(净值更新)
-净值日期:  12-16        12-16              12-16              12-17
-份额:      100          100                110                110
-value:     200          200                220                230
-处理:      写入         跳过(重复)          覆盖更新           写入(新日期)
+时间轴：12-17下午 → 12-18早上(净值更新) → 12-18中午(份额确认)
+---------------------------------------------------------------------
+fetch_date:      12-17          12-18              12-18
+nav_date:        12-16          12-17              12-17
+(净值日期)
+份额:            100            100                110
+value:           200            210                231
+处理:            写入           写入(新采集日)      覆盖更新(份额变)
 ```
 
+**设计原理**：
+- **fetch_date** 是主维度：每个采集日每个产品只有一条记录
+- **nav_date** 只是属性：记录净值来源日期，不参与去重
+- 同一天多次运行 → 覆盖同一条记录（保持最新状态）
+- 第二天运行 → 新增一条记录（新的采集日）
+
 **好处**：
-- ✅ 每个净值日期只有一条记录（干净）
-- ✅ 份额变化自动更新（不丢失）
-- ✅ 配置错误可直接修正后重新运行
-- ✅ 完全相同的数据自动跳过（高效）
+- ✅ 每个采集日每产品一条记录（符合"日快照"直觉）
+- ✅ 同一天多次运行自动覆盖（高效、干净）
+- ✅ 份额/净值变化自动更新（不丢失）
+- ✅ 历史数据可控（不会无限膨胀）
 
 ---
 
@@ -642,22 +660,33 @@ product_code,product_name,ISS_DATE,NAV,TOT_NAV,INCOME,WEEK_CLIENTRATE,fetched_at
 ### 快照CSV (`data/snapshots/daily.csv`)
 
 ```csv
-snapshot_date,product_code,product_name,category,nav,shares,value,pnl,cost,unrealized_pnl,fetched_at
-2023-12-14,163406,兴全合润混合,fund,2.1234,1000.00,2123.40,0.00,2000.00,123.40,2023-12-15 10:30:00
-2023-12-15,163406,兴全合润混合,fund,2.1345,1000.00,2134.50,11.10,2000.00,134.50,2023-12-16 10:30:00
+fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl,cost,unrealized_pnl,return_rate,fetched_at
+2025-12-18,163406,兴全合润混合(LOF)A,fund,2025-12-17,2.0523,651.09,1336.23,0.00,1270.82,65.41,5.15%,2025-12-18 02:12:06
+2025-12-18,017641,摩根标普500指数(QDII)A,fund,2025-12-16,1.5670,456.63,715.54,0.00,720.00,-4.46,-0.62%,2025-12-18 02:12:06
 ```
 
-**说明**：
-- 所有产品汇总在一个文件
-- **snapshot_date**: 净值日期（可能滞后）
-- **fetched_at**: 采集时间（系统运行时间）
-- **category**: 产品类型（fund=基金，bank=银行理财）
-- **nav**: 净值（保持原始精度，不做格式化）
-- **shares**: 份额（保留两位小数，与支付宝显示一致）
-- **value**: 市值（保留两位小数）
-- **pnl**: 当日盈亏 = 当前value - 上次value（同产品）
-- **cost**: 持仓成本（从交易流水计算，无流水则为0）
-- **unrealized_pnl**: 浮动盈亏 = value - cost（成本为0时此字段为0）
+**设计理念**：
+- **fetch_date** 是快照的"日期维度"，每天每产品一条记录
+- **nav_date** 只记录净值来源日期（可能滞后 T+1）
+- 同一采集日多次运行 → 覆盖同一条记录（保持最新状态）
+
+**字段说明**：
+
+| 字段 | 说明 |
+|------|------|
+| **fetch_date** | ⭐ 采集日期（主维度），与 product_code 构成唯一键 |
+| **product_code** | 产品代码 |
+| **product_name** | 产品名称 |
+| **category** | 产品类型（fund=基金，bank=银行理财） |
+| **nav_date** | 净值日期（净值来源日期，可能滞后） |
+| **nav** | 净值（保持原始精度） |
+| **shares** | 份额（保留两位小数） |
+| **value** | 市值 = shares × nav |
+| **pnl** | 相比上一采集日的市值变化 |
+| **cost** | 持仓成本（从交易流水计算） |
+| **unrealized_pnl** | 浮动盈亏 = value - cost |
+| **return_rate** | ⭐ 收益率 = unrealized_pnl / cost × 100% |
+| **fetched_at** | 采集时间（精确到秒） |
 
 **数值精度**：
 - 净值（nav）：保持原始精度（如 `1.5709`、`1.040966`）
@@ -675,7 +704,7 @@ snapshot_date,product_code,product_name,category,nav,shares,value,pnl,cost,unrea
   - 同一采集日的所有产品（无论净值是否滞后）都汇总在一起
   - **避免因净值滞后导致资产被拆散到不同日期，看起来像少钱**
   
-- **辅助口径**：`snapshot_date`（净值日期）
+- **辅助口径**：`nav_date`（净值日期）
   - 仅用于标识该产品净值对应的**交易日**
   - 可能滞后 0~N 天（如QDII产品通常滞后1天）
   - 用于查看净值滞后情况和交易日口径分布
@@ -688,13 +717,13 @@ snapshot_date,product_code,product_name,category,nav,shares,value,pnl,cost,unrea
 #### 2️⃣ 按净值日期汇总 (`portfolio_by_nav_date.csv`) - 【辅助视图】交易日口径
 
 ```csv
-snapshot_date,total_value,total_pnl,total_cost,total_unrealized_pnl,product_count
+nav_date,total_value,total_pnl,total_cost,total_unrealized_pnl,product_count
 2023-12-14,8532.50,0.00,8000.00,532.50,10
 2023-12-15,8650.20,117.70,8000.00,650.20,10
 ```
 
 **字段说明**：
-- `snapshot_date`: 净值日期（产品实际净值的发布日期）
+- `nav_date`: 净值日期（产品实际净值的发布日期）
 - `total_value`: 总市值 = sum(所有产品的 value)
 - `total_pnl`: 总盈亏 = sum(所有产品的 pnl)
 - `total_cost`: 总成本（从交易流水计算）
@@ -724,7 +753,7 @@ fetch_date,total_value,total_pnl,total_cost,total_unrealized_pnl,total_pnl_vs_pr
 - `total_unrealized_pnl`: 总浮盈（= total_value - total_cost）
 - `total_pnl_vs_prev_fetch`: **真实日变动**（= 今天total_value - 昨天total_value）⭐
 - `product_count`: 参与汇总的产品数量（按product_code去重）
-- `stale_products`: 使用滞后净值的产品数量（snapshot_date < fetch_date）
+- `stale_products`: 使用滞后净值的产品数量（nav_date < fetch_date）
 - `max_lag_days`: 最大滞后天数（0表示所有产品都是最新净值）
 
 **⚠️ 关于两种盈亏字段的区别（重要）**：
@@ -789,7 +818,7 @@ fetch_date,total_value,total_pnl,total_cost,total_unrealized_pnl,total_pnl_vs_pr
 
 ### 配置约束
 1. **products.json**：必须包含 `id`, `name`, `source`
-2. **holdings.json**：`products_id` 必须存在于 products.json 中
+2. **holdings.json**：`product_code` 必须存在于 products.json 中
 3. **source**：必须在 `ADAPTOR_MAP` 中注册
 
 ### 运行约束
@@ -808,7 +837,7 @@ fetch_date,total_value,total_pnl,total_cost,total_unrealized_pnl,total_pnl_vs_pr
 
 ### 问题2：配置文件报错怎么办？
 1. 检查是否缺少必需字段（id/name/source）
-2. 检查 holdings.json 中的 products_id 是否在 products.json 中
+2. 检查 holdings.json 中的 product_code 是否在 products.json 中
 3. 检查 source 是否有对应的适配器
 
 ### 问题3：数据格式错误？
@@ -906,6 +935,82 @@ python scripts/run_daily.py 2>&1 | tee debug.log
 
 ---
 
+## 🏷️ 字段关键字对照表
+
+系统中所有字段的统一命名规范，确保一致性。
+
+### 核心字段
+
+| 英文字段名 | 中文名称 | 说明 | 使用位置 |
+|-----------|---------|------|---------|
+| `product_code` | 产品代码 | 产品唯一标识（如基金代码） | daily.csv, transactions.csv, nav/*.csv |
+| `product_name` | 产品名称 | 产品全称 | daily.csv, nav/*.csv |
+| `category` | 产品分类 | fund=基金, bank=银行理财 | daily.csv, products.json |
+| `nav` | 净值 | 单位净值 | daily.csv |
+| `shares` | 份额 | 持有份额 | daily.csv, transactions.csv |
+| `value` | 市值 | 当前市值 = shares × nav | daily.csv |
+| `cost` | 成本 | 持仓成本（买入金额+手续费） | daily.csv |
+| `unrealized_pnl` | 浮动盈亏 | 未实现盈亏 = value - cost | daily.csv |
+| `return_rate` | 收益率 | 收益率 = unrealized_pnl / cost × 100% | daily.csv |
+| `pnl` | 日变动 | 相比上一采集日的市值变化 | daily.csv |
+
+### 日期时间字段
+
+| 英文字段名 | 中文名称 | 格式 | 说明 |
+|-----------|---------|------|------|
+| `fetch_date` | 采集日期 | YYYY-MM-DD | 系统运行日期（daily.csv 主维度） |
+| `fetched_at` | 采集时间 | YYYY-MM-DD HH:MM:SS.mmm | 精确采集时间（毫秒精度） |
+| `nav_date` | 净值日期 | YYYY-MM-DD | 净值对应的交易日（可能滞后） |
+| `date` | 确认日期 | YYYY-MM-DD | 交易确认日期（transactions.csv） |
+
+### 交易相关字段
+
+| 英文字段名 | 中文名称 | 说明 |
+|-----------|---------|------|
+| `action` | 交易类型 | BUY=买入, SELL=卖出 |
+| `amount` | 确认金额 | 扣除手续费后的实际金额 |
+| `fee` | 手续费 | 交易手续费 |
+| `note` | 备注 | 交易备注 |
+
+### 汇总字段
+
+| 英文字段名 | 中文名称 | 说明 |
+|-----------|---------|------|
+| `total_value` | 总市值 | 所有产品市值之和 |
+| `total_cost` | 总成本 | 所有产品成本之和 |
+| `total_pnl` | 总盈亏 | 所有产品日变动之和 |
+| `total_unrealized_pnl` | 总浮动盈亏 | 所有产品浮动盈亏之和 |
+| `total_pnl_vs_prev_fetch` | 真实日变动 | 今日总市值 - 昨日总市值 |
+| `product_count` | 产品数量 | 参与统计的产品数 |
+| `stale_products` | 滞后产品数 | 净值日期早于采集日期的产品数 |
+| `max_lag_days` | 最大滞后天数 | 净值最大滞后天数 |
+
+### 配置文件字段映射
+
+| 文件 | 字段 | 说明 |
+|------|------|------|
+| products.json | `product_code` | 产品代码（唯一标识） |
+| products.json | `product_name` | 产品名称 |
+| products.json | `source` | 数据源（fund/cmbc） |
+| holdings.json | `product_code` | 产品代码（与 products.json 对应） |
+| holdings.json | `product_name` | 产品名称（仅用于显示） |
+| holdings.json | `amount` | 初始份额（回退用） |
+
+### 净值文件字段（nav/*.csv）
+
+| 英文字段名 | 中文名称 | 说明 |
+|-----------|---------|------|
+| `product_code` | 产品代码 | 产品唯一标识 |
+| `product_name` | 产品名称 | 产品全称 |
+| `nav_date` | 净值日期 | 净值对应的交易日 |
+| `nav` | 单位净值 | 单位净值 |
+| `total_nav` | 累计净值 | 累计净值 |
+| `income` | 日收益 | 日收益率 |
+| `weekly_rate` | 周收益率 | 周收益率 |
+| `fetched_at` | 采集时间 | 数据采集时间 |
+
+---
+
 ## 📞 快速参考
 
 ### 数据流向
@@ -926,5 +1031,5 @@ config/*.json → validator → adaptor → storage_csv → snapshot → portfol
 
 ---
 
-**最后更新**: 2025-12-17  
+**最后更新**: 2025-12-18  
 **预计学习时间**: 30分钟掌握核心，1小时完全掌控

@@ -20,7 +20,7 @@ from snapshot import create_daily_snapshot, rebuild_snapshots_from_date, read_al
 def create_test_snapshot(path, data):
     """创建测试快照文件"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = ['snapshot_date', 'product_code', 'product_name', 'nav', 'shares', 'value', 'pnl', 'cost', 'unrealized_pnl', 'fetched_at']
+    fieldnames = ['fetch_date', 'product_code', 'product_name', 'category', 'nav_date', 'nav', 'shares', 'value', 'pnl', 'cost', 'unrealized_pnl', 'return_rate', 'fetched_at']
     
     with open(path, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -44,23 +44,23 @@ def test_skip_same_value():
         
         # 初始数据
         initial_data = [
-            {'snapshot_date': today, 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': f'{today} 10:00:00'}
+            {'fetch_date': today, 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': today, 'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': f'{today} 10:00:00'}
         ]
         create_test_snapshot(snapshot_path, initial_data)
-        print(f">>> 初始数据: snapshot_date={today}, value=100.00")
+        print(f">>> 初始数据: fetch_date={today}, value=100.00")
         
         # 模拟第二次运行（同样的数据）
         holdings_map = {'TEST001': Decimal('100')}
         products_map = {'TEST001': 'Test Product'}
         nav_records = {
             'TEST001': {
-                'ISS_DATE': today,
-                'NAV': Decimal('1.00'),  # 净值相同
-                'TOT_NAV': Decimal('1.00'),
-                'INCOME': Decimal('0'),
-                'WEEK_CLIENTRATE': Decimal('0')
+                'nav_date': today,
+                'nav': Decimal('1.00'),  # 净值相同
+                'total_nav': Decimal('1.00'),
+                'income': Decimal('0'),
+                'weekly_rate': Decimal('0')
             }
         }
         
@@ -104,9 +104,9 @@ def test_update_on_value_change():
         
         # 初始数据（份额100）
         initial_data = [
-            {'snapshot_date': today, 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': f'{today} 10:00:00'}
+            {'fetch_date': today, 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': today, 'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': f'{today} 10:00:00'}
         ]
         create_test_snapshot(snapshot_path, initial_data)
         print(f">>> 初始数据: shares=100, value=100.00")
@@ -116,11 +116,11 @@ def test_update_on_value_change():
         products_map = {'TEST001': 'Test Product'}
         nav_records = {
             'TEST001': {
-                'ISS_DATE': today,  # 净值日期相同
-                'NAV': Decimal('1.00'),  # 净值相同
-                'TOT_NAV': Decimal('1.00'),
-                'INCOME': Decimal('0'),
-                'WEEK_CLIENTRATE': Decimal('0')
+                'nav_date': today,  # 净值日期相同
+                'nav': Decimal('1.00'),  # 净值相同
+                'total_nav': Decimal('1.00'),
+                'income': Decimal('0'),
+                'weekly_rate': Decimal('0')
             }
         }
         
@@ -170,23 +170,23 @@ def test_new_snapshot_date():
         
         # 初始数据（昨天的净值）
         initial_data = [
-            {'snapshot_date': yesterday, 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': f'{yesterday} 22:00:00'}
+            {'fetch_date': yesterday, 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': yesterday, 'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': f'{yesterday} 22:00:00'}
         ]
         create_test_snapshot(snapshot_path, initial_data)
-        print(f">>> 初始数据: snapshot_date={yesterday}, value=100.00")
+        print(f">>> 初始数据: fetch_date={yesterday}, value=100.00")
         
         # 模拟新净值的运行
         holdings_map = {'TEST001': Decimal('100')}
         products_map = {'TEST001': 'Test Product'}
         nav_records = {
             'TEST001': {
-                'ISS_DATE': today,  # 新净值日期
-                'NAV': Decimal('1.05'),  # 净值上涨
-                'TOT_NAV': Decimal('1.05'),
-                'INCOME': Decimal('0'),
-                'WEEK_CLIENTRATE': Decimal('0')
+                'nav_date': today,  # 新净值日期
+                'nav': Decimal('1.05'),  # 净值上涨
+                'total_nav': Decimal('1.05'),
+                'income': Decimal('0'),
+                'weekly_rate': Decimal('0')
             }
         }
         
@@ -202,7 +202,7 @@ def test_new_snapshot_date():
         assert len(snapshots) == 2, f"预期2条记录，实际{len(snapshots)}条"
         
         # 验证两条记录都存在
-        dates = [s['snapshot_date'] for s in snapshots]
+        dates = [s['fetch_date'] for s in snapshots]
         assert yesterday in dates, f"应保留{yesterday}的记录"
         assert today in dates, f"应新增{today}的记录"
         
@@ -236,15 +236,15 @@ def test_rebuild_mode():
         
         # 创建多天的数据
         initial_data = [
-            {'snapshot_date': '2025-12-14', 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': '2025-12-14 10:00:00'},
-            {'snapshot_date': '2025-12-15', 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.10', 'shares': '100', 'value': '110.00', 'pnl': '10.00',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': '2025-12-15 10:00:00'},
-            {'snapshot_date': '2025-12-16', 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.05', 'shares': '100', 'value': '105.00', 'pnl': '-5.00',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': '2025-12-16 10:00:00'},
+            {'fetch_date': '2025-12-14', 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': '2025-12-14', 'nav': '1.00', 'shares': '100', 'value': '100.00', 'pnl': '0',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': '2025-12-14 10:00:00'},
+            {'fetch_date': '2025-12-15', 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': '2025-12-15', 'nav': '1.10', 'shares': '100', 'value': '110.00', 'pnl': '10.00',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': '2025-12-15 10:00:00'},
+            {'fetch_date': '2025-12-16', 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': '2025-12-16', 'nav': '1.05', 'shares': '100', 'value': '105.00', 'pnl': '-5.00',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': '2025-12-16 10:00:00'},
         ]
         create_test_snapshot(snapshot_path, initial_data)
         print(f">>> 初始数据: 3天快照 (12-14, 12-15, 12-16)")
@@ -263,7 +263,7 @@ def test_rebuild_mode():
         assert deleted == 1, f"预期删除1条，实际{deleted}条"
         assert len(snapshots) == 2, f"预期剩余2条，实际{len(snapshots)}条"
         
-        dates = [s['snapshot_date'] for s in snapshots]
+        dates = [s['fetch_date'] for s in snapshots]
         assert '2025-12-14' in dates, "应保留12-14"
         assert '2025-12-15' in dates, "应保留12-15"
         assert '2025-12-16' not in dates, "应删除12-16"
@@ -300,9 +300,9 @@ def test_fix_wrong_shares():
         
         # 初始数据（份额写错了，写成1000）
         initial_data = [
-            {'snapshot_date': today, 'product_code': 'TEST001', 'product_name': 'Test Product',
-             'nav': '1.00', 'shares': '1000', 'value': '1000.00', 'pnl': '0',
-             'cost': '0', 'unrealized_pnl': '0', 'fetched_at': f'{today} 10:00:00'}
+            {'fetch_date': today, 'product_code': 'TEST001', 'product_name': 'Test Product',
+             'category': 'fund', 'nav_date': today, 'nav': '1.00', 'shares': '1000', 'value': '1000.00', 'pnl': '0',
+             'cost': '0', 'unrealized_pnl': '0', 'return_rate': '0%', 'fetched_at': f'{today} 10:00:00'}
         ]
         create_test_snapshot(snapshot_path, initial_data)
         print(f">>> 错误数据: shares=1000 (写错了), value=1000.00")
@@ -312,11 +312,11 @@ def test_fix_wrong_shares():
         products_map = {'TEST001': 'Test Product'}
         nav_records = {
             'TEST001': {
-                'ISS_DATE': today,
-                'NAV': Decimal('1.00'),
-                'TOT_NAV': Decimal('1.00'),
-                'INCOME': Decimal('0'),
-                'WEEK_CLIENTRATE': Decimal('0')
+                'nav_date': today,
+                'nav': Decimal('1.00'),
+                'total_nav': Decimal('1.00'),
+                'income': Decimal('0'),
+                'weekly_rate': Decimal('0')
             }
         }
         

@@ -11,18 +11,18 @@ def _normalize_nav_record(raw_record, product_code):
     # 日期格式：YYYYMMDD -> YYYY-MM-DD
     raw_date = str(raw_record['ISS_DATE'])
     normalized_date = datetime.strptime(raw_date, '%Y%m%d').strftime('%Y-%m-%d')
-    fetched_at = datetime.now().isoformat()
+    fetched_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:23]  # 毫秒精度
     
     return {
-        # 必需字段
-        'PRODUCT_CODE': product_code,
-        'ISS_DATE': normalized_date,
-        'NAV': str(raw_record['NAV']),
+        # 必需字段（统一小写命名）
+        'product_code': product_code,
+        'nav_date': normalized_date,
+        'nav': str(raw_record['NAV']),
         'fetched_at': fetched_at,
         # 扩展字段
-        'TOT_NAV': str(raw_record['TOT_NAV']),
-        'INCOME': str(raw_record['INCOME']),
-        'WEEK_CLIENTRATE': str(raw_record['WEEK_CLIENTRATE']),
+        'total_nav': str(raw_record['TOT_NAV']),
+        'income': str(raw_record['INCOME']),
+        'weekly_rate': str(raw_record['WEEK_CLIENTRATE']),
     }
 
 def query_latest_nav(product_code, query_date, retry_num):

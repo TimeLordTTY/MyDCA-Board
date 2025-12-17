@@ -42,14 +42,14 @@ def validate_configs():
     for product in products:
         is_valid, error = validate_product_config(product)
         if not is_valid:
-            logger.error(f"产品配置错误 {product.get('id', 'UNKNOWN')}: {error}")
+            logger.error(f"产品配置错误 {product.get('product_code', 'UNKNOWN')}: {error}")
             sys.exit(1)
         
         # 校验source是否有对应适配器
         source = product['source']
         is_valid, error = validate_adaptor_exists(source, ADAPTOR_MAP)
         if not is_valid:
-            logger.error(f"产品 {product['id']} 配置错误: {error}")
+            logger.error(f"产品 {product['product_code']} 配置错误: {error}")
             sys.exit(1)
     
     # 2. 校验持仓配置
@@ -59,7 +59,7 @@ def validate_configs():
         sys.exit(1)
     
     # 构建映射
-    products_map = {p['id']: p['name'] for p in products}
+    products_map = {p['product_code']: p['product_name'] for p in products}
     holdings_map = get_holdings_map()
     
     logger.info(f"✓ 配置校验通过: {len(products)}个产品, {len(holdings)}个持仓")
@@ -96,8 +96,8 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     处理单个产品的采集、存储和记录
     :return: 处理结果字典（用于日志）
     """
-    product_code = product['id']
-    product_name = product['name']
+    product_code = product['product_code']
+    product_name = product['product_name']
     source = product['source']
     
     result = {
@@ -122,8 +122,8 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     
     # 只处理第一条记录
     nav_record = nav_list[0]
-    result['date'] = nav_record['ISS_DATE']
-    result['nav'] = nav_record['NAV']
+    result['date'] = nav_record['nav_date']
+    result['nav'] = nav_record['nav']
     
     # 存储到CSV
     is_new = save_nav_record(product_code, product_name, nav_record)
@@ -143,7 +143,7 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     if shares > 0:
         snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
         last_value = get_last_snapshot_value(snapshot_path, product_code)
-        current_value = float(shares) * float(nav_record['NAV'])
+        current_value = float(shares) * float(nav_record['nav'])
         if last_value:
             pnl = current_value - float(last_value)
             result['pnl'] = f"{pnl:+.2f}"
@@ -193,9 +193,9 @@ def collect_and_store(rebuild_from=None):
     if nav_records:
         logger.info("=== 快照生成阶段 ===")
         # 传入产品顺序，保持 daily.csv 按 products.json 顺序排列
-        products_order = [p['id'] for p in products]
+        products_order = [p['product_code'] for p in products]
         # 构建产品分类映射
-        category_map = {p['id']: p.get('category', 'fund') for p in products}
+        category_map = {p['product_code']: p.get('category', 'fund') for p in products}
         snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, products_order=products_order, category_map=category_map)
     
     # 4. 生成投资组合汇总
@@ -204,14 +204,12 @@ def collect_and_store(rebuild_from=None):
         snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
         output_dir = get_project_root() / "data" / "snapshots"
         nav_count, fetch_count = generate_portfolio_summary(snapshot_path, output_dir)
-        # 主视图：按采集日期（今日资产汇总）
-        logger.info(f"✓ 【主视图】按采集日期汇总（今日资产）: {fetch_count} 个采集日")
-        # 辅助视图：按净值日期（交易日分布）
-        logger.info(f"✓ 【辅助】按净值日期汇总（交易日分布）: {nav_count} 个净值日")
+        logger.info(f"✓ 按采集日期汇总: {fetch_count} 个采集日")
+        logger.info(f"✓ 按净值日期汇总: {nav_count} 个净值日")
     except Exception as e:
         logger.error(f"✗ 投资组合汇总失败: {e}")
     
-    # 5. 输出汇总日志（10行内）
+    # 5. 输出汇总日志
     logger.info("=== 执行汇总 ===")
     logger.info(f"{'产品代码':<12} {'来源':<6} {'净值日期':<12} {'净值':<8} {'CSV':<6} {'快照':<6} {'PNL':<10} {'状态'}")
     logger.info("-" * 85)
