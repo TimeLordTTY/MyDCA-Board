@@ -15,24 +15,17 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog='''
 使用示例:
-  # 默认模式：去重跳过（幂等）
+  # 正常采集（智能去重：value变化则覆盖，否则跳过）
   python scripts/run_daily.py
-  
-  # 强制覆盖模式：覆盖今天已采集的快照（纠正份额/净值错误）
-  python scripts/run_daily.py --force
   
   # 重建模式：从指定日期重建快照与 PnL 链
   python scripts/run_daily.py --rebuild-from 2025-12-01
-  
-  # 组合使用：重建并启用覆盖模式
-  python scripts/run_daily.py --rebuild-from 2025-12-01 --force
+
+智能去重策略（按 snapshot_date + product_code）：
+  - 不存在 → 新增记录
+  - 存在但 value 变化 → 覆盖更新（份额变化或配置修正）
+  - 存在且 value 相同 → 跳过（重复数据）
         '''
-    )
-    
-    parser.add_argument(
-        '--force',
-        action='store_true',
-        help='强制覆盖模式：以 fetch_date + product_code 为主键，覆盖同一采集日的快照'
     )
     
     parser.add_argument(
@@ -53,7 +46,7 @@ def main():
             sys.exit(1)
     
     # 执行采集
-    collect_and_store(force_overwrite=args.force, rebuild_from=args.rebuild_from)
+    collect_and_store(rebuild_from=args.rebuild_from)
 
 if __name__ == "__main__":
     main()

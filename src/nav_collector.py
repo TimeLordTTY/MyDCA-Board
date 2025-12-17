@@ -130,36 +130,41 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     if is_new:
         result['csv'] = 'Y'
         result['status'] = 'OK'
-        # 记录用于生成快照
-        nav_records[product_code] = nav_record
-        
-        # 计算PNL（如果有持仓）
-        shares = holdings_map.get(product_code, 0)
-        if shares > 0:
-            snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
-            last_value = get_last_snapshot_value(snapshot_path, product_code)
-            current_value = float(shares) * float(nav_record['NAV'])
-            if last_value:
-                pnl = current_value - float(last_value)
-                result['pnl'] = f"{pnl:+.2f}"
-        result['snapshot'] = 'Y'
     else:
         result['csv'] = 'SKIP'
         result['status'] = 'EXIST'
     
+    # 无论净值是否是新的，都要记录用于生成快照
+    # 因为份额可能变化（交易流水），即使净值不变，value 也会变
+    nav_records[product_code] = nav_record
+    
+    # 计算PNL（如果有持仓）
+    shares = holdings_map.get(product_code, 0)
+    if shares > 0:
+        snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
+        last_value = get_last_snapshot_value(snapshot_path, product_code)
+        current_value = float(shares) * float(nav_record['NAV'])
+        if last_value:
+            pnl = current_value - float(last_value)
+            result['pnl'] = f"{pnl:+.2f}"
+    result['snapshot'] = 'Y'
+    
     return result
 
-def collect_and_store(force_overwrite=False, rebuild_from=None):
+def collect_and_store(rebuild_from=None):
     """
     采集净值并存储，生成快照 - 可控加固版
-    :param force_overwrite: 是否强制覆盖模式（以 fetch_date + product_code 为主键）
+    
+    智能去重策略（按 snapshot_date + product_code）：
+    - 不存在 → 新增
+    - 存在但 value 变化 → 覆盖更新（份额变化或配置修正）
+    - 存在且 value 相同 → 跳过（重复数据）
+    
     :param rebuild_from: 从指定日期重建快照（YYYY-MM-DD），会删除该日期及之后的快照并重新生成
     """
     
     logger.info("=" * 85)
     logger.info("=== 财富中枢净值采集任务启动 ===")
-    if force_overwrite:
-        logger.info("!!! 强制覆盖模式: 同一 fetch_date + product_code 的快照将被覆盖 !!!")
     if rebuild_from:
         logger.info(f"!!! 重建模式: 将重建 {rebuild_from} 及之后的所有快照 !!!")
     logger.info("=" * 85)
@@ -187,11 +192,11 @@ def collect_and_store(force_overwrite=False, rebuild_from=None):
     snapshot_count = 0
     if nav_records:
         logger.info("=== 快照生成阶段 ===")
-        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, force_overwrite=force_overwrite)
-        if force_overwrite:
-            logger.info(f"✓ 快照更新/新增 {snapshot_count} 条记录 (覆盖模式)")
-        else:
-            logger.info(f"✓ 新增 {snapshot_count} 条快照记录")
+        # 传入产品顺序，保持 daily.csv 按 products.json 顺序排列
+        products_order = [p['id'] for p in products]
+        # 构建产品分类映射
+        category_map = {p['id']: p.get('category', 'fund') for p in products}
+        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, products_order=products_order, category_map=category_map)
     
     # 4. 生成投资组合汇总
     logger.info("=== 投资组合汇总阶段 ===")

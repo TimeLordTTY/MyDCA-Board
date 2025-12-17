@@ -2,7 +2,7 @@
     {
         "products_id": "FBAE41126E",
         "name": "民生理财贵竹固收增利周周盈7天持有期26号理财产品E",
-        "amount": 10863.95
+        "amount": 0
     },{
         "products_id": "000307",
         "name": "易方达黄金ETF联接A",
@@ -22,11 +22,11 @@
     },{
         "products_id": "161125",
         "name": "易方达标普500指数(QDII-LOF)A",
-        "amount": 133.67
+        "amount": 130.25
     },{
         "products_id": "161130",
         "name": "易方达纳斯达克100指数(QDII-LOF)A",
-        "amount": 153.95
+        "amount": 151.42
     },{
         "products_id": "013308",
         "name": "易方达恒生科技ETF联接(QDII)A",
@@ -34,11 +34,11 @@
     },{
         "products_id": "019172",
         "name": "摩根纳斯达克100指数(QDII)A",
-        "amount": 397.48
+        "amount": 333.73
     },{
         "products_id": "017641",
         "name": "摩根标普500指数(QDII)A",
-        "amount": 456.63
+        "amount": 393.05
     },{
         "products_id": "019767",
         "name": "景顺长城科创50指数增强A",
@@ -46,11 +46,11 @@
     },{
         "products_id": "016452",
         "name": "南方纳斯达克100指数(QDII)A",
-        "amount": 335.31
+        "amount": 310.88
     },{
         "products_id": "018043",
         "name": "天弘纳斯达克100指数(QDII)A",
-        "amount": 561.58
+        "amount": 534.07
     },{
         "products_id": "015299",
         "name": "华夏纳斯达克100ETF联接(QDII)A",

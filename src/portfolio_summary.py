@@ -133,11 +133,13 @@ def read_daily_snapshots(snapshot_path):
 def aggregate_by_nav_date(records):
     """
     按净值日期（snapshot_date）聚合（健壮性加固版）
-    :return: dict {snapshot_date: {total_value, total_pnl, product_codes}}
+    :return: dict {snapshot_date: {total_value, total_pnl, total_cost, total_unrealized_pnl, product_codes}}
     """
     aggregated = defaultdict(lambda: {
         'total_value': Decimal('0'),
         'total_pnl': Decimal('0'),
+        'total_cost': Decimal('0'),
+        'total_unrealized_pnl': Decimal('0'),
         'product_codes': set()  # 用于去重产品
     })
     
@@ -150,6 +152,8 @@ def aggregate_by_nav_date(records):
         # 安全解析金额
         value = safe_decimal(record.get('value'), field_name='value', row_info=row_info)
         pnl = safe_decimal(record.get('pnl'), field_name='pnl', row_info=row_info)
+        cost = safe_decimal(record.get('cost', '0'), field_name='cost', row_info=row_info)
+        unrealized_pnl = safe_decimal(record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
         
         if not snapshot_date:
             logger.warning(f"跳过缺少snapshot_date的记录 {row_info}")
@@ -157,6 +161,8 @@ def aggregate_by_nav_date(records):
         
         aggregated[snapshot_date]['total_value'] += value
         aggregated[snapshot_date]['total_pnl'] += pnl
+        aggregated[snapshot_date]['total_cost'] += cost
+        aggregated[snapshot_date]['total_unrealized_pnl'] += unrealized_pnl
         if product_code:
             aggregated[snapshot_date]['product_codes'].add(product_code)
     
@@ -164,46 +170,80 @@ def aggregate_by_nav_date(records):
 
 def aggregate_by_fetch_date(records):
     """
-    按采集日期（fetched_at的日期部分）聚合（健壮性加固版）
-    :return: dict {fetch_date: {total_value, total_pnl, product_codes, stale_products, max_lag_days}}
+    按采集日期聚合 - 每个 fetch_date 汇总"截至该日的所有产品最新快照"
+    
+    核心逻辑：
+    - 对于每个 fetch_date，取每个产品在该日期或之前的最新一条记录
+    - 这样即使今天只更新了2个产品，也能汇总所有15个产品的完整资产
+    
+    :return: dict {fetch_date: {total_value, total_pnl, total_cost, total_unrealized_pnl, product_codes, stale_products, max_lag_days}}
     """
-    # 先按fetch_date分组
-    grouped = defaultdict(list)
+    # 1. 收集所有 fetch_date 和每个产品的所有记录
+    all_fetch_dates = set()
+    product_records = defaultdict(list)  # {product_code: [records sorted by fetched_at]}
+    
     for idx, record in enumerate(records):
         fetched_at = record.get('fetched_at', '')
         fetch_date = parse_datetime(fetched_at)
+        product_code = record.get('product_code', '')
         
         if not fetch_date:
             logger.warning(f"跳过无法解析fetched_at的记录: '{fetched_at}' (第{idx+1}行)")
             continue
         
-        grouped[fetch_date].append(record)
+        all_fetch_dates.add(fetch_date)
+        product_records[product_code].append({
+            'record': record,
+            'fetch_date': fetch_date
+        })
     
-    # 聚合计算
+    # 2. 对每个产品的记录按 fetch_date 排序
+    for product_code in product_records:
+        product_records[product_code].sort(key=lambda x: x['fetch_date'])
+    
+    # 3. 对每个 fetch_date，汇总所有产品的"最新快照"
     aggregated = {}
-    for fetch_date, group_records in grouped.items():
+    sorted_fetch_dates = sorted(all_fetch_dates)
+    
+    for fetch_date in sorted_fetch_dates:
         total_value = Decimal('0')
         total_pnl = Decimal('0')
-        product_codes = set()  # 用于去重产品
+        total_cost = Decimal('0')
+        total_unrealized_pnl = Decimal('0')
+        product_codes = set()
         stale_products = 0
         max_lag_days = 0
         
-        for record in group_records:
-            product_code = record.get('product_code', '')
+        # 对于每个产品，找到截至 fetch_date 的最新记录
+        for product_code, rec_list in product_records.items():
+            # 找到 <= fetch_date 的最新记录
+            latest_record = None
+            for item in rec_list:
+                if item['fetch_date'] <= fetch_date:
+                    latest_record = item['record']
+                else:
+                    break  # 已排序，后面的都更大
+            
+            if latest_record is None:
+                continue  # 该产品在此日期之前没有记录
+            
             row_info = f"(fetch_date={fetch_date}, 产品{product_code})"
             
             # 安全解析金额
-            value = safe_decimal(record.get('value'), field_name='value', row_info=row_info)
-            pnl = safe_decimal(record.get('pnl'), field_name='pnl', row_info=row_info)
+            value = safe_decimal(latest_record.get('value'), field_name='value', row_info=row_info)
+            pnl = safe_decimal(latest_record.get('pnl'), field_name='pnl', row_info=row_info)
+            cost = safe_decimal(latest_record.get('cost', '0'), field_name='cost', row_info=row_info)
+            unrealized_pnl = safe_decimal(latest_record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
             
-            snapshot_date = parse_date(record.get('snapshot_date', ''))
+            snapshot_date = parse_date(latest_record.get('snapshot_date', ''))
             
             total_value += value
             total_pnl += pnl
-            if product_code:
-                product_codes.add(product_code)
+            total_cost += cost
+            total_unrealized_pnl += unrealized_pnl
+            product_codes.add(product_code)
             
-            # 计算滞后
+            # 计算滞后（相对于当前 fetch_date）
             if snapshot_date and fetch_date:
                 lag_days = (fetch_date - snapshot_date).days
                 if lag_days > 0:
@@ -213,6 +253,8 @@ def aggregate_by_fetch_date(records):
         aggregated[fetch_date] = {
             'total_value': total_value,
             'total_pnl': total_pnl,
+            'total_cost': total_cost,
+            'total_unrealized_pnl': total_unrealized_pnl,
             'product_codes': product_codes,
             'stale_products': stale_products,
             'max_lag_days': max_lag_days
@@ -227,7 +269,7 @@ def write_portfolio_by_nav_date(aggregated, output_path):
     """
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
-    fieldnames = ['snapshot_date', 'total_value', 'total_pnl', 'product_count']
+    fieldnames = ['snapshot_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl', 'product_count']
     
     # 按日期排序
     sorted_dates = sorted(aggregated.keys())
@@ -242,6 +284,8 @@ def write_portfolio_by_nav_date(aggregated, output_path):
                 'snapshot_date': snapshot_date,
                 'total_value': f"{data['total_value']:.2f}",
                 'total_pnl': f"{data['total_pnl']:.2f}",
+                'total_cost': f"{data['total_cost']:.2f}",
+                'total_unrealized_pnl': f"{data['total_unrealized_pnl']:.2f}",
                 'product_count': len(data['product_codes'])  # 去重后的产品数
             })
 
@@ -253,8 +297,8 @@ def write_portfolio_by_fetch_date(aggregated, output_path):
     """
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
-    fieldnames = ['fetch_date', 'total_value', 'total_pnl', 'total_pnl_vs_prev_fetch', 
-                  'product_count', 'stale_products', 'max_lag_days']
+    fieldnames = ['fetch_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl',
+                  'total_pnl_vs_prev_fetch', 'product_count', 'stale_products', 'max_lag_days']
     
     # 按日期排序
     sorted_dates = sorted(aggregated.keys())
@@ -278,6 +322,8 @@ def write_portfolio_by_fetch_date(aggregated, output_path):
                 'fetch_date': fetch_date.strftime('%Y-%m-%d'),
                 'total_value': f"{current_total_value:.2f}",
                 'total_pnl': f"{data['total_pnl']:.2f}",
+                'total_cost': f"{data['total_cost']:.2f}",
+                'total_unrealized_pnl': f"{data['total_unrealized_pnl']:.2f}",
                 'total_pnl_vs_prev_fetch': f"{total_pnl_vs_prev_fetch:.2f}",
                 'product_count': len(data['product_codes']),  # 去重后的产品数
                 'stale_products': data['stale_products'],
@@ -285,6 +331,177 @@ def write_portfolio_by_fetch_date(aggregated, output_path):
             })
             
             prev_total_value = current_total_value
+
+
+def aggregate_by_category(records):
+    """
+    按分类（fund/bank）和采集日期聚合
+    :return: dict {fetch_date: {category: {total_value, total_pnl, total_cost, total_unrealized_pnl, product_count}}}
+    """
+    # 先按fetch_date分组，再按category分组
+    grouped = defaultdict(lambda: defaultdict(list))
+    
+    for idx, record in enumerate(records):
+        fetched_at = record.get('fetched_at', '')
+        fetch_date = parse_datetime(fetched_at)
+        category = record.get('category', 'fund')  # 默认为基金
+        
+        if not fetch_date:
+            continue
+        
+        grouped[fetch_date][category].append(record)
+    
+    # 获取所有 fetch_date 和每个产品的所有记录（用于计算最新快照）
+    all_fetch_dates = set()
+    product_records = defaultdict(list)
+    
+    for idx, record in enumerate(records):
+        fetched_at = record.get('fetched_at', '')
+        fetch_date = parse_datetime(fetched_at)
+        product_code = record.get('product_code', '')
+        category = record.get('category', 'fund')
+        
+        if not fetch_date:
+            continue
+        
+        all_fetch_dates.add(fetch_date)
+        product_records[product_code].append({
+            'record': record,
+            'fetch_date': fetch_date,
+            'category': category
+        })
+    
+    # 对每个产品的记录按 fetch_date 排序
+    for product_code in product_records:
+        product_records[product_code].sort(key=lambda x: x['fetch_date'])
+    
+    # 聚合计算（每个 fetch_date 取每个产品的最新快照）
+    aggregated = {}
+    sorted_fetch_dates = sorted(all_fetch_dates)
+    
+    for fetch_date in sorted_fetch_dates:
+        category_data = defaultdict(lambda: {
+            'total_value': Decimal('0'),
+            'total_pnl': Decimal('0'),
+            'total_cost': Decimal('0'),
+            'total_unrealized_pnl': Decimal('0'),
+            'product_codes': set()
+        })
+        
+        # 对于每个产品，找到截至 fetch_date 的最新记录
+        for product_code, rec_list in product_records.items():
+            latest_item = None
+            for item in rec_list:
+                if item['fetch_date'] <= fetch_date:
+                    latest_item = item
+                else:
+                    break
+            
+            if latest_item is None:
+                continue
+            
+            record = latest_item['record']
+            category = latest_item['category']
+            row_info = f"(fetch_date={fetch_date}, 产品{product_code})"
+            
+            value = safe_decimal(record.get('value'), field_name='value', row_info=row_info)
+            pnl = safe_decimal(record.get('pnl'), field_name='pnl', row_info=row_info)
+            cost = safe_decimal(record.get('cost', '0'), field_name='cost', row_info=row_info)
+            unrealized_pnl = safe_decimal(record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
+            
+            category_data[category]['total_value'] += value
+            category_data[category]['total_pnl'] += pnl
+            category_data[category]['total_cost'] += cost
+            category_data[category]['total_unrealized_pnl'] += unrealized_pnl
+            category_data[category]['product_codes'].add(product_code)
+        
+        aggregated[fetch_date] = dict(category_data)
+    
+    return aggregated
+
+
+def write_portfolio_by_category(aggregated, output_path):
+    """
+    写入按分类汇总的文件
+    每个 fetch_date 输出三行：基金汇总、银行理财汇总、总资产汇总
+    """
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    fieldnames = ['fetch_date', 'category', 'total_value', 'total_cost', 'total_unrealized_pnl', 
+                  'total_pnl_vs_prev', 'product_count']
+    
+    sorted_dates = sorted(aggregated.keys())
+    
+    # 记录上一个日期各分类的 total_value，用于计算日变动
+    prev_values = {'fund': None, 'bank': None, 'total': None}
+    
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for fetch_date in sorted_dates:
+            category_data = aggregated[fetch_date]
+            
+            # 计算各分类数据
+            fund_value = category_data.get('fund', {}).get('total_value', Decimal('0'))
+            fund_cost = category_data.get('fund', {}).get('total_cost', Decimal('0'))
+            fund_unrealized = category_data.get('fund', {}).get('total_unrealized_pnl', Decimal('0'))
+            fund_count = len(category_data.get('fund', {}).get('product_codes', set()))
+            
+            bank_value = category_data.get('bank', {}).get('total_value', Decimal('0'))
+            bank_cost = category_data.get('bank', {}).get('total_cost', Decimal('0'))
+            bank_unrealized = category_data.get('bank', {}).get('total_unrealized_pnl', Decimal('0'))
+            bank_count = len(category_data.get('bank', {}).get('product_codes', set()))
+            
+            total_value = fund_value + bank_value
+            total_cost = fund_cost + bank_cost
+            total_unrealized = fund_unrealized + bank_unrealized
+            total_count = fund_count + bank_count
+            
+            # 计算日变动
+            fund_pnl_vs_prev = fund_value - prev_values['fund'] if prev_values['fund'] is not None else Decimal('0')
+            bank_pnl_vs_prev = bank_value - prev_values['bank'] if prev_values['bank'] is not None else Decimal('0')
+            total_pnl_vs_prev = total_value - prev_values['total'] if prev_values['total'] is not None else Decimal('0')
+            
+            date_str = fetch_date.strftime('%Y-%m-%d')
+            
+            # 写入基金汇总
+            writer.writerow({
+                'fetch_date': date_str,
+                'category': '基金',
+                'total_value': f"{fund_value:.2f}",
+                'total_cost': f"{fund_cost:.2f}",
+                'total_unrealized_pnl': f"{fund_unrealized:.2f}",
+                'total_pnl_vs_prev': f"{fund_pnl_vs_prev:.2f}",
+                'product_count': fund_count
+            })
+            
+            # 写入银行理财汇总
+            writer.writerow({
+                'fetch_date': date_str,
+                'category': '银行理财',
+                'total_value': f"{bank_value:.2f}",
+                'total_cost': f"{bank_cost:.2f}",
+                'total_unrealized_pnl': f"{bank_unrealized:.2f}",
+                'total_pnl_vs_prev': f"{bank_pnl_vs_prev:.2f}",
+                'product_count': bank_count
+            })
+            
+            # 写入总资产汇总
+            writer.writerow({
+                'fetch_date': date_str,
+                'category': '总资产',
+                'total_value': f"{total_value:.2f}",
+                'total_cost': f"{total_cost:.2f}",
+                'total_unrealized_pnl': f"{total_unrealized:.2f}",
+                'total_pnl_vs_prev': f"{total_pnl_vs_prev:.2f}",
+                'product_count': total_count
+            })
+            
+            # 更新上一日数据
+            prev_values['fund'] = fund_value
+            prev_values['bank'] = bank_value
+            prev_values['total'] = total_value
 
 def generate_portfolio_summary(snapshot_path, output_dir):
     """
@@ -308,6 +525,11 @@ def generate_portfolio_summary(snapshot_path, output_dir):
     by_fetch_date = aggregate_by_fetch_date(records)
     output_fetch_date = output_dir / "portfolio_by_fetch_date.csv"
     write_portfolio_by_fetch_date(by_fetch_date, output_fetch_date)
+    
+    # 按分类聚合（基金/银行理财）
+    by_category = aggregate_by_category(records)
+    output_category = output_dir / "portfolio_by_category.csv"
+    write_portfolio_by_category(by_category, output_category)
     
     return len(by_nav_date), len(by_fetch_date)
 

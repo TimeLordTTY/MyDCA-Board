@@ -417,6 +417,134 @@ def test_portfolio_summary():
         print("\n✓✓✓ 测试4通过: 资产汇总功能正确")
         return True
 
+def test_transactions_cost():
+    """测试7: 交易流水与成本计算"""
+    print("\n" + "="*60)
+    print("测试7: 交易流水与成本计算")
+    print("="*60)
+    
+    import csv
+    import tempfile
+    import shutil
+    from decimal import Decimal
+    from holdings_calculator import calc_position_from_transactions, load_transactions
+    from snapshot import create_daily_snapshot, read_all_snapshots
+    
+    # 创建临时目录
+    tmpdir = tempfile.mkdtemp()
+    tmpdir_path = Path(tmpdir)
+    
+    try:
+        # 创建交易流水mock数据
+        transactions_path = tmpdir_path / "transactions.csv"
+        transactions_data = [
+            # 买入100份，花费1000元，手续费5元
+            {'date': '2025-12-10', 'product_code': 'TEST001', 'action': 'BUY', 'amount': '1000', 'shares': '100', 'fee': '5', 'note': '首次买入'},
+            # 再买入50份，花费600元，手续费3元
+            {'date': '2025-12-12', 'product_code': 'TEST001', 'action': 'BUY', 'amount': '600', 'shares': '50', 'fee': '3', 'note': '加仓'},
+            # 卖出30份
+            {'date': '2025-12-14', 'product_code': 'TEST001', 'action': 'SELL', 'amount': '400', 'shares': '30', 'fee': '2', 'note': '减仓'},
+        ]
+        
+        with open(transactions_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=['date', 'product_code', 'action', 'amount', 'shares', 'fee', 'note'])
+            writer.writeheader()
+            writer.writerows(transactions_data)
+        
+        print("\n>>> 创建交易流水mock数据:")
+        print("  - 2025-12-10: 买入100份，花费1000+5=1005元")
+        print("  - 2025-12-12: 买入50份，花费600+3=603元")
+        print("  - 2025-12-14: 卖出30份")
+        
+        # 测试 calc_position_from_transactions
+        shares, cost = calc_position_from_transactions('TEST001', '2025-12-15', transactions_path)
+        
+        # 预期结果：
+        # 买入后：shares = 100 + 50 = 150, cost = 1005 + 603 = 1608
+        # 卖出30份后：shares = 150 - 30 = 120
+        # 成本按比例减少：cost = 1608 * (120/150) = 1608 * 0.8 = 1286.4
+        expected_shares = Decimal('120')
+        expected_cost = Decimal('1608') * Decimal('120') / Decimal('150')  # 1286.4
+        
+        print(f"\n>>> 验证持仓计算:")
+        print(f"  - 计算得到: shares={shares}, cost={cost:.2f}")
+        print(f"  - 预期: shares={expected_shares}, cost={expected_cost:.2f}")
+        
+        assert shares == expected_shares, f"份额计算错误: 预期{expected_shares}, 实际{shares}"
+        assert abs(cost - expected_cost) < Decimal('0.01'), f"成本计算错误: 预期{expected_cost:.2f}, 实际{cost:.2f}"
+        
+        print(f"  ✓ 份额计算正确: {shares}")
+        print(f"  ✓ 成本计算正确: {cost:.2f}")
+        
+        # 测试快照生成 - 创建带成本的快照
+        snapshot_path = tmpdir_path / "daily.csv"
+        
+        # 模拟净值记录
+        nav_records = {
+            'TEST001': {
+                'ISS_DATE': '2025-12-15',
+                'NAV': Decimal('11.00'),  # 当前净值
+                'TOT_NAV': Decimal('11.00'),
+                'INCOME': Decimal('0'),
+                'WEEK_CLIENTRATE': Decimal('0')
+            }
+        }
+        
+        # holdings_map 作为回退（但本测试中不会用到，因为有交易流水）
+        holdings_map = {'TEST001': Decimal('0')}
+        products_map = {'TEST001': 'Test Product A'}
+        
+        # 临时设置 holdings_calculator 的默认路径
+        import holdings_calculator
+        original_load = holdings_calculator.load_transactions
+        holdings_calculator.load_transactions = lambda path=None: load_transactions(transactions_path)
+        
+        # 生成快照
+        count = create_daily_snapshot(nav_records, holdings_map, products_map, 
+                                     snapshot_path=snapshot_path)
+        
+        # 恢复原始函数
+        holdings_calculator.load_transactions = original_load
+        
+        print(f"\n>>> 验证快照生成:")
+        print(f"  - 生成 {count} 条快照")
+        
+        # 读取快照验证
+        snapshots = read_all_snapshots(snapshot_path)
+        assert len(snapshots) == 1, f"预期1条快照，实际{len(snapshots)}条"
+        
+        snap = snapshots[0]
+        snap_shares = Decimal(snap['shares'])
+        snap_cost = Decimal(snap['cost'])
+        snap_value = Decimal(snap['value'])
+        snap_unrealized_pnl = Decimal(snap['unrealized_pnl'])
+        
+        # 验证 value = shares * nav = 120 * 11 = 1320
+        expected_value = expected_shares * Decimal('11.00')
+        # 验证 unrealized_pnl = value - cost = 1320 - 1286.4 = 33.6
+        expected_unrealized_pnl = expected_value - expected_cost
+        
+        print(f"  - 快照内容: shares={snap_shares}, cost={snap_cost:.2f}, value={snap_value:.2f}, unrealized_pnl={snap_unrealized_pnl:.2f}")
+        print(f"  - 预期: value={expected_value:.2f}, unrealized_pnl={expected_unrealized_pnl:.2f}")
+        
+        assert abs(snap_value - expected_value) < Decimal('0.01'), f"value计算错误: 预期{expected_value:.2f}, 实际{snap_value:.2f}"
+        assert abs(snap_unrealized_pnl - expected_unrealized_pnl) < Decimal('0.01'), f"unrealized_pnl计算错误: 预期{expected_unrealized_pnl:.2f}, 实际{snap_unrealized_pnl:.2f}"
+        
+        print(f"  ✓ value正确: {snap_value:.2f}")
+        print(f"  ✓ unrealized_pnl正确: {snap_unrealized_pnl:.2f} (浮盈)")
+        
+        print("\n✓✓✓ 测试7通过: 交易流水与成本计算正确")
+        return True
+        
+    except Exception as e:
+        print(f"\n✗✗✗ 测试7失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        # 清理临时目录
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
 def main():
     """运行所有测试"""
     print("\n" + "█"*60)
@@ -472,6 +600,15 @@ def main():
         import traceback
         traceback.print_exc()
         results.append(("资产汇总功能", False))
+    
+    # 测试7: 交易流水与成本计算
+    try:
+        results.append(("交易流水与成本计算", test_transactions_cost()))
+    except Exception as e:
+        print(f"\n✗✗✗ 测试7异常: {e}")
+        import traceback
+        traceback.print_exc()
+        results.append(("交易流水与成本计算", False))
     
     # 汇总
     print("\n" + "="*60)

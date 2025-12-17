@@ -84,6 +84,7 @@ MyDCA-Board/
 ├── src/                             # 源代码
 │   ├── nav_collector.py             # 【核心】主控协调器
 │   ├── validator.py                 # 【核心】数据校验器
+│   ├── holdings_calculator.py       # 【核心】持仓与成本计算器
 │   ├── portfolio_summary.py         # 资产汇总模块
 │   │
 │   ├── adaptor/                     # 适配器目录
@@ -101,12 +102,14 @@ MyDCA-Board/
 │   └── test_force_rebuild.py        # 覆盖/重建功能测试
 │
 ├── data/                            # 数据目录
+│   ├── transactions.csv             # 交易流水（含确认净值）
 │   ├── nav/                         # 净值CSV文件
 │   │   └── {code}_{name}.csv        # 格式：产品代码_产品名称.csv
 │   └── snapshots/                   # 快照目录
 │       ├── daily.csv                # 日快照（明细）
-│       ├── portfolio_by_nav_date.csv   # 【新增】按净值日期汇总
-│       └── portfolio_by_fetch_date.csv # 【新增】按采集日期汇总
+│       ├── portfolio_by_nav_date.csv   # 按净值日期汇总
+│       ├── portfolio_by_fetch_date.csv # 按采集日期汇总
+│       └── portfolio_by_category.csv   # 按产品类型汇总
 │
 └── README.md                        # 本文件
 ```
@@ -323,7 +326,7 @@ fetch_date汇总会显示：
 ]
 ```
 
-### holdings.json（持仓配置）
+### holdings.json（持仓配置 - 静态份额）
 
 ```json
 [
@@ -334,40 +337,157 @@ fetch_date汇总会显示：
 ]
 ```
 
+> **注意**：如果配置了交易流水（transactions.csv），系统会优先从流水计算份额和成本，holdings.json 作为回退。
+
+### transactions.csv（交易流水）
+
+交易流水文件用于自动计算持仓份额和成本，支持真实的浮动盈亏（unrealized_pnl）和收益率计算。
+
+```csv
+date,product_code,action,amount,shares,fee,nav,nav_date,note
+2023-12-01,163406,BUY,100,50.25,0.12,1.9900,2023-11-30,定投建仓
+2023-12-08,163406,BUY,100,49.75,0.12,2.0100,2023-12-07,每周定投
+2023-12-15,163406,SELL,50,24.50,0.05,2.0408,2023-12-14,部分赎回
+```
+
+**字段说明**：
+
+| 字段 | 必需 | 说明 |
+|------|------|------|
+| `date` | ✅ | 确认日期（份额入账日期，YYYY-MM-DD） |
+| `product_code` | ✅ | 产品代码 |
+| `action` | ✅ | 交易类型：`BUY`(买入) / `SELL`(卖出) |
+| `amount` | ✅ | **确认金额**（扣除手续费后实际买入的金额） |
+| `shares` | ✅ | **确认份额**（实际获得的份额） |
+| `fee` | ⭕ | **手续费**（可选，默认0） |
+| `nav` | ⭕ | **确认净值**（可选，可通过 amount/shares 反推） |
+| `nav_date` | ⭕ | **净值日期**（可选，不知道可留空） |
+| `note` | ⭕ | 备注（可选） |
+
+**💡 历史交易不知道净值日期怎么办？**
+
+如果你只知道确认金额和确认份额，可以这样填写：
+
+```csv
+date,product_code,action,amount,shares,fee,nav,nav_date,note
+2024-03-15,017641,buy,99.88,62.50,0.12,,,历史定投（净值日期未知）
+```
+
+- **nav** 可以通过 `amount / shares = 99.88 / 62.50 = 1.5981` 反推
+- **nav_date** 不知道就留空，不影响成本计算
+- 成本计算只需要 `amount + fee`，与净值/净值日期无关
+
+**💡 如何从支付宝/天天基金录入交易记录**：
+
+以支付宝交易记录为例：
+```
+买入时间：2025-12-15
+确认金额：99.88
+确认份额：63.58
+确认净值：1.5709
+确认时间：2025-12-17
+申购费：0.12元
+```
+
+对应 transactions.csv 填写：
+```csv
+2025-12-17,017641,buy,99.88,63.58,0.12,1.5709,2025-12-15,摩根标普500定投
+```
+
+**关键字段对应**：
+- `date` = 确认时间（份额入账日）
+- `amount` = 确认金额（扣费后）
+- `shares` = 确认份额
+- `fee` = 申购费
+- `nav` = 确认净值
+- `nav_date` = 买入时间（净值使用的日期）
+
+**成本计算公式**：
+```
+实际成本 = 确认金额 + 手续费 = 99.88 + 0.12 = 100.00元
+```
+这样能准确反映你从账户划出了多少钱用于这笔定投。
+
+---
+
+**成本计算逻辑**：
+
+- **买入**：`shares += 确认份额`，`cost += 确认金额 + 手续费`
+- **卖出**：`shares -= 卖出份额`，`cost -= 卖出前cost × (卖出份额/卖出前份额)`（按比例减少成本）
+
+**收益率计算**（需要完整交易流水）：
+- **unrealized_pnl** = 当前市值 - 持仓成本 = `value - cost`
+- **收益率** = (当前市值 - 持仓成本) / 持仓成本 × 100% = `unrealized_pnl / cost × 100%`
+
+---
+
+**🔥 全量交易流水模式（推荐）**：
+
+如果你想要准确计算历史持有收益率，建议从第一笔定投开始完整记录交易流水：
+
+1. **修改 holdings.json**：将所有产品的份额设为 0
+   ```json
+   [
+       {"products_id": "163406", "amount": 0},
+       {"products_id": "017641", "amount": 0}
+   ]
+   ```
+
+2. **完整记录 transactions.csv**：从第一笔定投开始
+   ```csv
+   date,product_code,action,amount,shares,fee,nav,nav_date,note
+   2024-01-08,017641,buy,99.88,67.32,0.12,1.4835,2024-01-05,首次定投
+   2024-01-15,017641,buy,99.88,65.21,0.12,1.5315,2024-01-12,每周定投
+   ...
+   2025-12-17,017641,buy,99.88,63.58,0.12,1.5709,2025-12-15,每周定投
+   ```
+
+3. **系统自动计算**：
+   - 累计份额 = 所有买入份额 - 所有卖出份额
+   - 累计成本 = 所有买入(金额+手续费) - 卖出时按比例减少的成本
+   - 浮动盈亏 = 当前市值 - 累计成本
+   - 收益率 = 浮动盈亏 / 累计成本 × 100%
+
+**使用场景**：
+
+| 场景 | 数据源 | 说明 |
+|------|--------|------|
+| **全量交易流水（推荐）** | holdings.json=0 + 完整transactions.csv | 能计算准确的历史收益率 |
+| 增量交易流水 | holdings.json基础份额 + 新增transactions.csv | 历史成本未知，只能计算增量 |
+| 无交易流水 | 仅 holdings.json 的份额 | cost=0，无法计算收益率 |
+
 ---
 
 ## 🚀 使用方法
 
-### 日常运行（默认模式）
+### 日常运行
 ```bash
-# 采集所有产品净值并生成快照（幂等，去重跳过）
+# 采集所有产品净值并生成快照
 python scripts/run_daily.py
 ```
 
-**默认行为**：
-- ✅ **净值CSV**: 按 `ISS_DATE` 去重跳过
-- ✅ **快照CSV**: 按 `(snapshot_date, product_code)` 去重跳过
-- ✅ **汇总CSV**: 全量覆盖重算
+**智能去重策略（按 snapshot_date + product_code）**：
 
-**幂等性保证**：重复运行不会重复写入同一天的数据
+| 场景 | 处理方式 | 说明 |
+|------|---------|------|
+| 不存在 | ✅ 新增 | 新净值日期的记录 |
+| 存在但 value 变化 | 🔄 覆盖更新 | 份额变化或配置修正 |
+| 存在且 value 相同 | ⏭️ 跳过 | 重复数据，无需记录 |
 
----
-
-### 强制覆盖模式（纠正当天错误）
-```bash
-# 覆盖今天已采集的快照（适用于份额/净值更新纠错）
-python scripts/run_daily.py --force
+**典型场景**：
+```
+时间轴：T-1晚 → T早(份额更新前) → T早(份额更新后) → T下午(净值更新)
+净值日期:  12-16        12-16              12-16              12-17
+份额:      100          100                110                110
+value:     200          200                220                230
+处理:      写入         跳过(重复)          覆盖更新           写入(新日期)
 ```
 
-**适用场景**：
-- 🔧 当天上午采集后，发现份额配置错误，修正后需要重新采集
-- 🔧 当天下午净值更新了，想覆盖上午的快照
-- 🔧 净值日期从 T-1 更新到 T 日，需要覆盖
-
-**覆盖规则**：
-- 主键：`(fetch_date, product_code)` = `(fetched_at的日期, 产品代码)`
-- 覆盖字段：`snapshot_date`, `nav`, `shares`, `value`, `pnl`, `fetched_at`
-- 不影响其他日期的快照
+**好处**：
+- ✅ 每个净值日期只有一条记录（干净）
+- ✅ 份额变化自动更新（不丢失）
+- ✅ 配置错误可直接修正后重新运行
+- ✅ 完全相同的数据自动跳过（高效）
 
 ---
 
@@ -375,9 +495,6 @@ python scripts/run_daily.py --force
 ```bash
 # 从指定日期重建快照（修复链式 PnL）
 python scripts/run_daily.py --rebuild-from 2025-12-01
-
-# 组合使用：重建并启用覆盖模式
-python scripts/run_daily.py --rebuild-from 2025-12-01 --force
 ```
 
 **适用场景**：
@@ -392,7 +509,6 @@ python scripts/run_daily.py --rebuild-from 2025-12-01 --force
 
 **重要提示**：
 - ⚠️ 净值CSV不会被删除，可以复用
-- ⚠️ 重建前会自动备份（覆盖写入）
 - ⚠️ 建议先备份 `daily.csv` 再执行重建
 
 ---
@@ -402,7 +518,7 @@ python scripts/run_daily.py --rebuild-from 2025-12-01 --force
 # 运行核心功能自动化测试
 python scripts/self_test.py
 
-# 测试强制覆盖与重建功能
+# 测试智能去重与重建功能
 python scripts/test_force_rebuild.py
 ```
 
@@ -526,16 +642,26 @@ product_code,product_name,ISS_DATE,NAV,TOT_NAV,INCOME,WEEK_CLIENTRATE,fetched_at
 ### 快照CSV (`data/snapshots/daily.csv`)
 
 ```csv
-snapshot_date,product_code,product_name,nav,shares,value,pnl,fetched_at
-2023-12-14,163406,兴全合润混合,2.1234,1000,2123.40,0,2023-12-15 10:30:00
-2023-12-15,163406,兴全合润混合,2.1345,1000,2134.50,11.10,2023-12-16 10:30:00
+snapshot_date,product_code,product_name,category,nav,shares,value,pnl,cost,unrealized_pnl,fetched_at
+2023-12-14,163406,兴全合润混合,fund,2.1234,1000.00,2123.40,0.00,2000.00,123.40,2023-12-15 10:30:00
+2023-12-15,163406,兴全合润混合,fund,2.1345,1000.00,2134.50,11.10,2000.00,134.50,2023-12-16 10:30:00
 ```
 
 **说明**：
 - 所有产品汇总在一个文件
 - **snapshot_date**: 净值日期（可能滞后）
 - **fetched_at**: 采集时间（系统运行时间）
-- pnl = 当前value - 上次value（同产品）
+- **category**: 产品类型（fund=基金，bank=银行理财）
+- **nav**: 净值（保持原始精度，不做格式化）
+- **shares**: 份额（保留两位小数，与支付宝显示一致）
+- **value**: 市值（保留两位小数）
+- **pnl**: 当日盈亏 = 当前value - 上次value（同产品）
+- **cost**: 持仓成本（从交易流水计算，无流水则为0）
+- **unrealized_pnl**: 浮动盈亏 = value - cost（成本为0时此字段为0）
+
+**数值精度**：
+- 净值（nav）：保持原始精度（如 `1.5709`、`1.040966`）
+- 份额/金额（shares/value/cost/pnl）：保留两位小数（如 `1234.56`）
 
 ---
 
@@ -562,15 +688,17 @@ snapshot_date,product_code,product_name,nav,shares,value,pnl,fetched_at
 #### 2️⃣ 按净值日期汇总 (`portfolio_by_nav_date.csv`) - 【辅助视图】交易日口径
 
 ```csv
-snapshot_date,total_value,total_pnl,product_count
-2023-12-14,8532.50,0.00,10
-2023-12-15,8650.20,117.70,10
+snapshot_date,total_value,total_pnl,total_cost,total_unrealized_pnl,product_count
+2023-12-14,8532.50,0.00,8000.00,532.50,10
+2023-12-15,8650.20,117.70,8000.00,650.20,10
 ```
 
 **字段说明**：
 - `snapshot_date`: 净值日期（产品实际净值的发布日期）
 - `total_value`: 总市值 = sum(所有产品的 value)
 - `total_pnl`: 总盈亏 = sum(所有产品的 pnl)
+- `total_cost`: 总成本（从交易流水计算）
+- `total_unrealized_pnl`: 总浮盈 = total_value - total_cost
 - `product_count`: 参与汇总的产品数量
 
 **使用场景（辅助）**：
@@ -582,16 +710,18 @@ snapshot_date,total_value,total_pnl,product_count
 #### 1️⃣ 按采集日期汇总 (`portfolio_by_fetch_date.csv`) - 【主视图】今日资产汇总
 
 ```csv
-fetch_date,total_value,total_pnl,total_pnl_vs_prev_fetch,product_count,stale_products,max_lag_days
-2023-12-15,8532.50,0.00,0.00,10,3,1
-2023-12-16,8650.20,117.70,117.70,10,0,0
-2023-12-17,8700.00,50.00,49.80,10,2,1
+fetch_date,total_value,total_pnl,total_cost,total_unrealized_pnl,total_pnl_vs_prev_fetch,product_count,stale_products,max_lag_days
+2023-12-15,8532.50,0.00,8000.00,532.50,0.00,10,3,1
+2023-12-16,8650.20,117.70,8000.00,650.20,117.70,10,0,0
+2023-12-17,8700.00,50.00,8000.00,700.00,49.80,10,2,1
 ```
 
 **字段说明**：
 - `fetch_date`: 采集日期（运行系统的日期）
 - `total_value`: 总市值（基于当天能获取到的所有净值计算）
 - `total_pnl`: 总盈亏（= sum(daily.csv 中的 pnl)）
+- `total_cost`: 总成本（从交易流水计算，无流水为0）
+- `total_unrealized_pnl`: 总浮盈（= total_value - total_cost）
 - `total_pnl_vs_prev_fetch`: **真实日变动**（= 今天total_value - 昨天total_value）⭐
 - `product_count`: 参与汇总的产品数量（按product_code去重）
 - `stale_products`: 使用滞后净值的产品数量（snapshot_date < fetch_date）
@@ -700,16 +830,15 @@ fetch_date,total_value,total_pnl,total_pnl_vs_prev_fetch,product_count,stale_pro
 ### 问题6：发现当天快照数据有误？
 1. **修正配置后重新采集**：
    ```bash
-   # 修正 holdings.json 中的份额
-   # 然后使用强制模式覆盖今天的快照
-   python scripts/run_daily.py --force
+   # 修正 holdings.json 中的份额，然后直接重新运行
+   python scripts/run_daily.py
    ```
 
-2. **快照主键说明**：
-   - 默认模式：`(snapshot_date, product_code)` → 同一净值日期不覆盖
-   - 强制模式：`(fetch_date, product_code)` → 同一采集日期会覆盖
+2. **智能去重会自动处理**：
+   - 如果 value 变化了（份额修正导致）→ 自动覆盖更新
+   - 如果 value 没变 → 自动跳过（不产生重复数据）
 
-3. **不影响其他日期**：`--force` 只覆盖今天 (`fetch_date = today`) 的快照
+3. **无需额外参数**：系统会智能判断是否需要更新
 
 ### 问题7：历史 PnL 链断了？
 1. **场景**：修改了某天的份额配置，导致后续 PnL 不准确
@@ -797,5 +926,5 @@ config/*.json → validator → adaptor → storage_csv → snapshot → portfol
 
 ---
 
-**最后更新**: 2024-12-16  
+**最后更新**: 2025-12-17  
 **预计学习时间**: 30分钟掌握核心，1小时完全掌控
