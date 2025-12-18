@@ -96,10 +96,28 @@ MyDCA-Board/
 │   │
 │   ├── storage_csv.py               # CSV存储模块
 │   ├── snapshot.py                  # 快照生成模块
-│   └── config_loader.py             # 配置加载模块
+│   ├── config_loader.py             # 配置加载模块
+│   │
+│   └── backtest/                    # 【策略回测引擎】
+│       ├── __init__.py
+│       ├── engine/                  # 回测核心引擎
+│       │   ├── backtester.py        # 回测主循环
+│       │   ├── data_feed.py         # 行情数据源
+│       │   ├── portfolio.py         # 投资组合管理
+│       │   └── types.py             # 数据结构定义
+│       ├── strategies/              # 策略库
+│       │   ├── base.py              # 策略基类
+│       │   ├── registry.py          # 策略注册表
+│       │   ├── pure_sip.py          # 纯定投策略
+│       │   ├── profit_recycle_v11.py # 利润回收策略 v11
+│       │   ├── profit_recycle.py    # 利润回收策略 v10
+│       │   └── ma_enhanced.py       # MA250均线增强策略
+│       └── utils/                   # 工具模块
+│           └── nav_loader.py        # 净值数据加载器
 │
 ├── scripts/                         # 脚本目录
 │   ├── run_daily.py                 # 日常运行入口
+│   ├── run_backtest.py              # 【策略回测入口】
 │   ├── validate_transactions.py     # 交易流水校验工具
 │   ├── export_nav_history.py        # 净值历史导出工具
 │   ├── self_test.py                 # 自测脚本
@@ -109,11 +127,13 @@ MyDCA-Board/
 │   ├── transactions.csv             # 交易流水（含确认净值）
 │   ├── nav/                         # 净值CSV文件
 │   │   └── {code}_{name}.csv        # 格式：产品代码_产品名称.csv
-│   └── snapshots/                   # 快照目录
-│       ├── daily.csv                # 日快照（含收益率，每天每产品一条）
-│       ├── portfolio_by_nav_date.csv   # 按净值日期汇总
-│       ├── portfolio_by_fetch_date.csv # 按采集日期汇总
-│       └── portfolio_by_category.csv   # 按产品类型汇总
+│   ├── snapshots/                   # 快照目录
+│   │   ├── daily.csv                # 日快照（含收益率，每天每产品一条）
+│   │   ├── portfolio_by_nav_date.csv   # 按净值日期汇总
+│   │   ├── portfolio_by_fetch_date.csv # 按采集日期汇总
+│   │   └── portfolio_by_category.csv   # 按产品类型汇总
+│   └── backtest_results/            # 回测结果目录
+│       └── backtest_{code}_{strategy}_{timestamp}.csv
 │
 └── README.md                        # 本文件
 ```
@@ -330,9 +350,11 @@ fetch_date汇总会显示：
 ```json
 [
     {
-        "id": "163406",                    // 必需：产品代码
-        "name": "兴全合润混合",            // 必需：产品名称
-        "source": "fund"                   // 必需：数据源 (cmbc/fund)
+        "source": "fund",                      // 必需：数据源 (cmbc/fund)
+        "product_name": "兴全合润混合(LOF)A",  // 必需：产品名称
+        "product_code": "163406",              // 必需：产品代码
+        "type": "fund",                        // 产品类型 (fund/nav)
+        "category": "fund"                     // 产品分类 (fund/bank)
     }
 ]
 ```
@@ -569,6 +591,56 @@ python scripts/run_daily.py --rebuild-from 2025-12-01
 
 ---
 
+### 策略回测
+
+回测引擎允许你使用历史净值数据模拟定投策略的表现，验证不同策略的收益率。
+
+```bash
+# 列出可用产品
+python scripts/run_backtest.py --list
+
+# 列出可用策略
+python scripts/run_backtest.py --strategies
+
+# 使用默认配置回测（纯定投策略）
+python scripts/run_backtest.py --product 163406
+
+# 自定义回测配置
+python scripts/run_backtest.py --product 163406 \
+    --initial 2000 \
+    --periodic 500 \
+    --start 2020-01-01 \
+    --end 2025-12-01
+```
+
+**回测参数说明**：
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--product` | 产品代码 | 163406 |
+| `--strategy` | 策略名称 | pure_sip |
+| `--initial` | 初始投入金额 | 1000 |
+| `--periodic` | 定期投入金额 | 500 |
+| `--buy-fee` | 买入费率 | 0.12% |
+| `--sell-fee` | 卖出费率 | 0 |
+| `--start` | 回测起始日期 | 数据起始 |
+| `--end` | 回测结束日期 | 数据结束 |
+| `--rule` | 定投规则 | month_change |
+
+**输出结果**：
+- 回测结果保存到 `data/backtest_results/` 目录
+- 包含 `_details.csv`（每日明细）和 `_summary.csv`（汇总）
+
+**可用策略**：
+
+| 策略名称 | 说明 |
+|---------|------|
+| `pure_sip` | 纯基础定投策略（基准线）：只买不卖，全额买入 |
+
+> 💡 更多策略（如止盈循环、均线增强）可后续扩展
+
+---
+
 ### 自测验证
 ```bash
 # 运行核心功能自动化测试
@@ -636,9 +708,11 @@ ADAPTOR_MAP = {
 ```json
 // config/products.json
 {
-    "source": "xxx",      // 使用新适配器
-    "name": "新产品",
-    "id": "NEW001"
+    "source": "xxx",              // 使用新适配器
+    "product_name": "新产品",     // 产品名称
+    "product_code": "NEW001",     // 产品代码
+    "type": "fund",               // 产品类型
+    "category": "fund"            // 产品分类
 }
 ```
 
