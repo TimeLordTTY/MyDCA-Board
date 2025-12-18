@@ -1,4 +1,4 @@
-﻿nav_date,total_value,total_pnl,total_cost,total_unrealized_pnl,product_count
-净值日期,总市值,总盈亏,总成本,总浮动盈亏,产品数量
-2025-12-16,4585.34,0.00,4627.75,-42.41,5
-2025-12-17,16555.26,0.00,16537.82,17.44,10
+﻿nav_date,total_value,total_pnl,pnl_day,cost,unrealized_pnl,principal_total,product_count
+净值日期,总资产,总盈亏,日变动,成本,浮动盈亏,累计投入本金,产品数量
+2025-12-17,16825.16,-135.00,0.00,16960.16,-135.00,16960.16,8
+2025-12-18,4215.55,-1756.01,0.00,4194.52,21.02,5971.56,7

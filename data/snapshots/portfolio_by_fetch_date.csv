@@ -1,3 +1,3 @@
-﻿fetch_date,total_value,total_pnl,total_cost,total_unrealized_pnl,total_pnl_vs_prev_fetch,product_count,stale_products,max_lag_days
-采集日期,总市值,总盈亏,总成本,总浮动盈亏,真实日变动,产品数量,滞后产品数,最大滞后天数
-2025-12-18,21140.60,0.00,21165.57,-24.97,0.00,15,15,2
+﻿fetch_date,total_value,total_pnl,pnl_day,cost,unrealized_pnl,principal_total,pnl_vs_prev,product_count,stale_products,max_lag_days
+采集日期,总资产,总盈亏,日变动,成本,浮动盈亏,累计投入本金,相对前日变动,产品数量,滞后产品数,最大滞后天数
+2025-12-18,21040.71,-1891.01,0.00,21154.68,-113.98,22931.72,0.00,15,8,1

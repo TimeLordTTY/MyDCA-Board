@@ -1,4 +1,12 @@
-"""资产汇总模块 - 按净值日期和采集日期生成投资组合汇总（健壮性加固版）"""
+"""资产汇总模块 - 按净值日期和采集日期生成投资组合汇总
+
+字段说明（与 daily.csv 统一）：
+- total_value: 总资产（含在途资金）
+- total_pnl: 总盈亏（total_value - principal_total）
+- cost: 持仓成本
+- unrealized_pnl: 浮动盈亏（value - cost）
+- pnl_day: 日变动（只由净值涨跌贡献）
+"""
 import csv
 import logging
 from pathlib import Path
@@ -8,61 +16,41 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+
 def safe_decimal(value, default=Decimal("0"), field_name="unknown", row_info=""):
     """
     安全解析为Decimal，防止脏数据导致程序崩溃
-    :param value: 原始值（可能是None、空字符串、"-"、带逗号的数字、普通数字等）
-    :param default: 解析失败时的默认值
-    :param field_name: 字段名（用于日志）
-    :param row_info: 行信息（用于日志）
-    :return: Decimal对象
     """
-    # 如果已经是Decimal，直接返回
     if isinstance(value, Decimal):
         return value
     
-    # 如果是None或空字符串或"-"，返回默认值
     if value is None or value == "" or value == "-":
-        if value is not None and value != "":
-            logger.warning(f"字段 {field_name} 值为 '{value}' (空值/占位符)，{row_info}，使用默认值 {default}")
         return default
     
-    # 如果是int或float，转换为Decimal
     if isinstance(value, (int, float)):
         return Decimal(str(value))
     
-    # 字符串处理
     try:
-        # 去除空格
         value_str = str(value).strip()
-        
-        # 处理带逗号的数字（如 "12,345.67"）
+        # 处理百分号
+        if value_str.endswith('%'):
+            value_str = value_str[:-1]
+        # 处理带逗号的数字
         if ',' in value_str:
             value_str = value_str.replace(',', '')
-        
-        # 转换为Decimal
         return Decimal(value_str)
     except (ValueError, InvalidOperation) as e:
-        logger.warning(f"字段 {field_name} 无法解析为数字: '{value}' {row_info}，错误: {e}，使用默认值 {default}")
+        logger.warning(f"字段 {field_name} 无法解析: '{value}' {row_info}")
         return default
 
+
 def parse_date(date_str):
-    """
-    解析日期字符串为date对象（增强版，支持多种格式）
-    :param date_str: 日期字符串
-    :return: date对象或None
-    """
+    """解析日期字符串为date对象"""
     if not date_str or date_str.strip() == "":
         return None
     
     date_str = date_str.strip()
-    
-    # 支持的日期格式
-    formats = [
-        '%Y-%m-%d',
-        '%Y/%m/%d',
-        '%Y%m%d',
-    ]
+    formats = ['%Y-%m-%d', '%Y/%m/%d', '%Y%m%d']
     
     for fmt in formats:
         try:
@@ -73,53 +61,42 @@ def parse_date(date_str):
     logger.warning(f"无法解析日期字符串: '{date_str}'")
     return None
 
+
 def parse_datetime(datetime_str):
-    """
-    解析日期时间字符串，返回日期部分（增强版，支持多种格式和时区）
-    :param datetime_str: 日期时间字符串
-    :return: date对象或None
-    """
+    """解析日期时间字符串，返回日期部分"""
     if not datetime_str or datetime_str.strip() == "":
         return None
     
     datetime_str = datetime_str.strip()
-    
-    # 支持的日期时间格式
     formats = [
-        '%Y-%m-%d %H:%M:%S',           # 2025-12-16 22:54:52
-        '%Y-%m-%dT%H:%M:%S',           # 2025-12-16T22:54:52
-        '%Y-%m-%dT%H:%M:%S.%f',        # 2025-12-16T22:54:52.123
-        '%Y-%m-%d %H:%M:%S.%f',        # 2025-12-16 22:54:52.123
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S.%f',
+        '%Y-%m-%d %H:%M:%S.%f',
     ]
     
-    # 处理时区标记（简单处理：直接移除时区部分）
-    if '+' in datetime_str or datetime_str.endswith('Z'):
-        # 移除时区部分
-        if '+' in datetime_str:
-            datetime_str = datetime_str.split('+')[0]
-        elif datetime_str.endswith('Z'):
-            datetime_str = datetime_str[:-1]
+    # 处理时区
+    if '+' in datetime_str:
+        datetime_str = datetime_str.split('+')[0]
+    elif datetime_str.endswith('Z'):
+        datetime_str = datetime_str[:-1]
     
     for fmt in formats:
         try:
-            dt = datetime.strptime(datetime_str, fmt)
-            return dt.date()
+            return datetime.strptime(datetime_str, fmt).date()
         except ValueError:
             continue
     
-    # 如果都失败，尝试只解析日期部分
+    # 尝试只解析日期部分
     if ' ' in datetime_str or 'T' in datetime_str:
         date_part = datetime_str.split(' ')[0] if ' ' in datetime_str else datetime_str.split('T')[0]
         return parse_date(date_part)
     
-    logger.warning(f"无法解析日期时间字符串: '{datetime_str}'")
     return None
 
+
 def read_daily_snapshots(snapshot_path):
-    """
-    读取日快照数据（跳过中文表头行）
-    :return: list of dict
-    """
+    """读取日快照数据（跳过中文表头行）"""
     if not Path(snapshot_path).exists():
         return []
     
@@ -134,60 +111,63 @@ def read_daily_snapshots(snapshot_path):
             records.append(row)
     return records
 
+
 def aggregate_by_nav_date(records):
     """
-    按净值日期（snapshot_date）聚合（健壮性加固版）
-    :return: dict {snapshot_date: {total_value, total_pnl, total_cost, total_unrealized_pnl, product_codes}}
+    按净值日期（nav_date）聚合
+    :return: dict {nav_date: {...}}
     """
     aggregated = defaultdict(lambda: {
         'total_value': Decimal('0'),
         'total_pnl': Decimal('0'),
-        'total_cost': Decimal('0'),
-        'total_unrealized_pnl': Decimal('0'),
-        'product_codes': set()  # 用于去重产品
+        'pnl_day': Decimal('0'),
+        'cost': Decimal('0'),
+        'unrealized_pnl': Decimal('0'),
+        'principal_total': Decimal('0'),
+        'product_codes': set()
     })
     
     for idx, record in enumerate(records):
-        snapshot_date = record.get('nav_date', '')
+        nav_date = record.get('nav_date', '')
         product_code = record.get('product_code', '')
-        
         row_info = f"(第{idx+1}行, 产品{product_code})"
         
-        # 安全解析金额
-        value = safe_decimal(record.get('value'), field_name='value', row_info=row_info)
-        pnl = safe_decimal(record.get('pnl'), field_name='pnl', row_info=row_info)
-        cost = safe_decimal(record.get('cost', '0'), field_name='cost', row_info=row_info)
-        unrealized_pnl = safe_decimal(record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
-        
-        if not snapshot_date:
-            logger.warning(f"跳过缺少snapshot_date的记录 {row_info}")
+        if not nav_date:
             continue
         
-        aggregated[snapshot_date]['total_value'] += value
-        aggregated[snapshot_date]['total_pnl'] += pnl
-        aggregated[snapshot_date]['total_cost'] += cost
-        aggregated[snapshot_date]['total_unrealized_pnl'] += unrealized_pnl
+        # 使用新字段（优先）或旧字段（兼容）
+        total_value = safe_decimal(record.get('total_value') or record.get('value', '0'), 
+                                   field_name='total_value', row_info=row_info)
+        total_pnl = safe_decimal(record.get('total_pnl', '0'), 
+                                 field_name='total_pnl', row_info=row_info)
+        pnl_day = safe_decimal(record.get('pnl_day') or record.get('pnl', '0'), 
+                               field_name='pnl_day', row_info=row_info)
+        cost = safe_decimal(record.get('cost', '0'), field_name='cost', row_info=row_info)
+        unrealized_pnl = safe_decimal(record.get('unrealized_pnl', '0'), 
+                                      field_name='unrealized_pnl', row_info=row_info)
+        principal_total = safe_decimal(record.get('principal_total', '0'), 
+                                       field_name='principal_total', row_info=row_info)
+        
+        aggregated[nav_date]['total_value'] += total_value
+        aggregated[nav_date]['total_pnl'] += total_pnl
+        aggregated[nav_date]['pnl_day'] += pnl_day
+        aggregated[nav_date]['cost'] += cost
+        aggregated[nav_date]['unrealized_pnl'] += unrealized_pnl
+        aggregated[nav_date]['principal_total'] += principal_total
         if product_code:
-            aggregated[snapshot_date]['product_codes'].add(product_code)
+            aggregated[nav_date]['product_codes'].add(product_code)
     
     return aggregated
+
 
 def aggregate_by_fetch_date(records):
     """
     按采集日期聚合 - 每个 fetch_date 汇总"截至该日的所有产品最新快照"
-    
-    核心逻辑：
-    - 对于每个 fetch_date，取每个产品在该日期或之前的最新一条记录
-    - 这样即使今天只更新了2个产品，也能汇总所有15个产品的完整资产
-    
-    :return: dict {fetch_date: {total_value, total_pnl, total_cost, total_unrealized_pnl, product_codes, stale_products, max_lag_days}}
     """
-    # 1. 收集所有 fetch_date 和每个产品的所有记录
     all_fetch_dates = set()
-    product_records = defaultdict(list)  # {product_code: [records sorted by fetched_at]}
+    product_records = defaultdict(list)
     
     for idx, record in enumerate(records):
-        # 优先使用 fetched_date 字段，兼容旧格式从 fetched_at 提取
         if 'fetch_date' in record and record['fetch_date']:
             fetch_date = parse_date(record['fetch_date'])
         else:
@@ -197,7 +177,6 @@ def aggregate_by_fetch_date(records):
         product_code = record.get('product_code', '')
         
         if not fetch_date:
-            logger.warning(f"跳过无法解析fetch_date的记录 (第{idx+1}行)")
             continue
         
         all_fetch_dates.add(fetch_date)
@@ -206,178 +185,83 @@ def aggregate_by_fetch_date(records):
             'fetch_date': fetch_date
         })
     
-    # 2. 对每个产品的记录按 fetch_date 排序
+    # 对每个产品的记录按 fetch_date 排序
     for product_code in product_records:
         product_records[product_code].sort(key=lambda x: x['fetch_date'])
     
-    # 3. 对每个 fetch_date，汇总所有产品的"最新快照"
+    # 聚合
     aggregated = {}
     sorted_fetch_dates = sorted(all_fetch_dates)
     
     for fetch_date in sorted_fetch_dates:
-        total_value = Decimal('0')
-        total_pnl = Decimal('0')
-        total_cost = Decimal('0')
-        total_unrealized_pnl = Decimal('0')
-        product_codes = set()
-        stale_products = 0
-        max_lag_days = 0
+        agg = {
+            'total_value': Decimal('0'),
+            'total_pnl': Decimal('0'),
+            'pnl_day': Decimal('0'),
+            'cost': Decimal('0'),
+            'unrealized_pnl': Decimal('0'),
+            'principal_total': Decimal('0'),
+            'product_codes': set(),
+            'stale_products': 0,
+            'max_lag_days': 0
+        }
         
-        # 对于每个产品，找到截至 fetch_date 的最新记录
         for product_code, rec_list in product_records.items():
-            # 找到 <= fetch_date 的最新记录
             latest_record = None
             for item in rec_list:
                 if item['fetch_date'] <= fetch_date:
                     latest_record = item['record']
                 else:
-                    break  # 已排序，后面的都更大
+                    break
             
             if latest_record is None:
-                continue  # 该产品在此日期之前没有记录
+                continue
             
             row_info = f"(fetch_date={fetch_date}, 产品{product_code})"
             
-            # 安全解析金额
-            value = safe_decimal(latest_record.get('value'), field_name='value', row_info=row_info)
-            pnl = safe_decimal(latest_record.get('pnl'), field_name='pnl', row_info=row_info)
+            # 使用新字段
+            total_value = safe_decimal(latest_record.get('total_value') or latest_record.get('value', '0'),
+                                       field_name='total_value', row_info=row_info)
+            total_pnl = safe_decimal(latest_record.get('total_pnl', '0'),
+                                     field_name='total_pnl', row_info=row_info)
+            pnl_day = safe_decimal(latest_record.get('pnl_day') or latest_record.get('pnl', '0'),
+                                   field_name='pnl_day', row_info=row_info)
             cost = safe_decimal(latest_record.get('cost', '0'), field_name='cost', row_info=row_info)
-            unrealized_pnl = safe_decimal(latest_record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
+            unrealized_pnl = safe_decimal(latest_record.get('unrealized_pnl', '0'),
+                                          field_name='unrealized_pnl', row_info=row_info)
+            principal_total = safe_decimal(latest_record.get('principal_total', '0'),
+                                           field_name='principal_total', row_info=row_info)
             
-            snapshot_date = parse_date(latest_record.get('nav_date', ''))
+            nav_date = parse_date(latest_record.get('nav_date', ''))
             
-            total_value += value
-            total_pnl += pnl
-            total_cost += cost
-            total_unrealized_pnl += unrealized_pnl
-            product_codes.add(product_code)
+            agg['total_value'] += total_value
+            agg['total_pnl'] += total_pnl
+            agg['pnl_day'] += pnl_day
+            agg['cost'] += cost
+            agg['unrealized_pnl'] += unrealized_pnl
+            agg['principal_total'] += principal_total
+            agg['product_codes'].add(product_code)
             
-            # 计算滞后（相对于当前 fetch_date）
-            if snapshot_date and fetch_date:
-                lag_days = (fetch_date - snapshot_date).days
+            # 计算滞后
+            if nav_date and fetch_date:
+                lag_days = (fetch_date - nav_date).days
                 if lag_days > 0:
-                    stale_products += 1
-                    max_lag_days = max(max_lag_days, lag_days)
+                    agg['stale_products'] += 1
+                    agg['max_lag_days'] = max(agg['max_lag_days'], lag_days)
         
-        aggregated[fetch_date] = {
-            'total_value': total_value,
-            'total_pnl': total_pnl,
-            'total_cost': total_cost,
-            'total_unrealized_pnl': total_unrealized_pnl,
-            'product_codes': product_codes,
-            'stale_products': stale_products,
-            'max_lag_days': max_lag_days
-        }
+        aggregated[fetch_date] = agg
     
     return aggregated
-
-def write_portfolio_by_nav_date(aggregated, output_path):
-    """
-    写入按净值日期汇总的文件
-    采用全量重算覆盖写入，确保幂等性
-    """
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    
-    fieldnames = ['nav_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl', 'product_count']
-    chinese_headers = ['净值日期', '总市值', '总盈亏', '总成本', '总浮动盈亏', '产品数量']
-    
-    # 按日期排序
-    sorted_dates = sorted(aggregated.keys())
-    
-    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        # 写入中文表头
-        f.write(','.join(chinese_headers) + '\n')
-        
-        for snapshot_date in sorted_dates:
-            data = aggregated[snapshot_date]
-            writer.writerow({
-                'nav_date': snapshot_date,
-                'total_value': f"{data['total_value']:.2f}",
-                'total_pnl': f"{data['total_pnl']:.2f}",
-                'total_cost': f"{data['total_cost']:.2f}",
-                'total_unrealized_pnl': f"{data['total_unrealized_pnl']:.2f}",
-                'product_count': len(data['product_codes'])  # 去重后的产品数
-            })
-
-def write_portfolio_by_fetch_date(aggregated, output_path):
-    """
-    写入按采集日期汇总的文件
-    采用全量重算覆盖写入，确保幂等性
-    新增 total_pnl_vs_prev_fetch 字段：真实日变动（当天total_value - 前一天total_value）
-    """
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    
-    fieldnames = ['fetch_date', 'total_value', 'total_pnl', 'total_cost', 'total_unrealized_pnl',
-                  'total_pnl_vs_prev_fetch', 'product_count', 'stale_products', 'max_lag_days']
-    chinese_headers = ['采集日期', '总市值', '总盈亏', '总成本', '总浮动盈亏', 
-                       '真实日变动', '产品数量', '滞后产品数', '最大滞后天数']
-    
-    # 按日期排序
-    sorted_dates = sorted(aggregated.keys())
-    
-    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        # 写入中文表头
-        f.write(','.join(chinese_headers) + '\n')
-        
-        prev_total_value = None
-        for fetch_date in sorted_dates:
-            data = aggregated[fetch_date]
-            current_total_value = data['total_value']
-            
-            # 计算相对于上一个采集日的变动
-            if prev_total_value is not None:
-                total_pnl_vs_prev_fetch = current_total_value - prev_total_value
-            else:
-                total_pnl_vs_prev_fetch = Decimal('0')
-            
-            writer.writerow({
-                'fetch_date': fetch_date.strftime('%Y-%m-%d'),
-                'total_value': f"{current_total_value:.2f}",
-                'total_pnl': f"{data['total_pnl']:.2f}",
-                'total_cost': f"{data['total_cost']:.2f}",
-                'total_unrealized_pnl': f"{data['total_unrealized_pnl']:.2f}",
-                'total_pnl_vs_prev_fetch': f"{total_pnl_vs_prev_fetch:.2f}",
-                'product_count': len(data['product_codes']),  # 去重后的产品数
-                'stale_products': data['stale_products'],
-                'max_lag_days': data['max_lag_days']
-            })
-            
-            prev_total_value = current_total_value
 
 
 def aggregate_by_category(records):
     """
     按分类（fund/bank）和采集日期聚合
-    :return: dict {fetch_date: {category: {total_value, total_pnl, total_cost, total_unrealized_pnl, product_count}}}
     """
-    # 先按fetch_date分组，再按category分组
-    grouped = defaultdict(lambda: defaultdict(list))
-    
-    for idx, record in enumerate(records):
-        # 优先使用 fetched_date 字段
-        if 'fetch_date' in record and record['fetch_date']:
-            fetch_date = parse_date(record['fetch_date'])
-        else:
-            fetched_at = record.get('fetched_at', '')
-            fetch_date = parse_datetime(fetched_at)
-        
-        category = record.get('category', 'fund')  # 默认为基金
-        
-        if not fetch_date:
-            continue
-        
-        grouped[fetch_date][category].append(record)
-    
-    # 获取所有 fetch_date 和每个产品的所有记录（用于计算最新快照）
     all_fetch_dates = set()
     product_records = defaultdict(list)
     
     for idx, record in enumerate(records):
-        # 优先使用 fetched_date 字段
         if 'fetch_date' in record and record['fetch_date']:
             fetch_date = parse_date(record['fetch_date'])
         else:
@@ -397,11 +281,9 @@ def aggregate_by_category(records):
             'category': category
         })
     
-    # 对每个产品的记录按 fetch_date 排序
     for product_code in product_records:
         product_records[product_code].sort(key=lambda x: x['fetch_date'])
     
-    # 聚合计算（每个 fetch_date 取每个产品的最新快照）
     aggregated = {}
     sorted_fetch_dates = sorted(all_fetch_dates)
     
@@ -409,12 +291,13 @@ def aggregate_by_category(records):
         category_data = defaultdict(lambda: {
             'total_value': Decimal('0'),
             'total_pnl': Decimal('0'),
-            'total_cost': Decimal('0'),
-            'total_unrealized_pnl': Decimal('0'),
+            'pnl_day': Decimal('0'),
+            'cost': Decimal('0'),
+            'unrealized_pnl': Decimal('0'),
+            'principal_total': Decimal('0'),
             'product_codes': set()
         })
         
-        # 对于每个产品，找到截至 fetch_date 的最新记录
         for product_code, rec_list in product_records.items():
             latest_item = None
             for item in rec_list:
@@ -430,15 +313,24 @@ def aggregate_by_category(records):
             category = latest_item['category']
             row_info = f"(fetch_date={fetch_date}, 产品{product_code})"
             
-            value = safe_decimal(record.get('value'), field_name='value', row_info=row_info)
-            pnl = safe_decimal(record.get('pnl'), field_name='pnl', row_info=row_info)
+            total_value = safe_decimal(record.get('total_value') or record.get('value', '0'),
+                                       field_name='total_value', row_info=row_info)
+            total_pnl = safe_decimal(record.get('total_pnl', '0'),
+                                     field_name='total_pnl', row_info=row_info)
+            pnl_day = safe_decimal(record.get('pnl_day') or record.get('pnl', '0'),
+                                   field_name='pnl_day', row_info=row_info)
             cost = safe_decimal(record.get('cost', '0'), field_name='cost', row_info=row_info)
-            unrealized_pnl = safe_decimal(record.get('unrealized_pnl', '0'), field_name='unrealized_pnl', row_info=row_info)
+            unrealized_pnl = safe_decimal(record.get('unrealized_pnl', '0'),
+                                          field_name='unrealized_pnl', row_info=row_info)
+            principal_total = safe_decimal(record.get('principal_total', '0'),
+                                           field_name='principal_total', row_info=row_info)
             
-            category_data[category]['total_value'] += value
-            category_data[category]['total_pnl'] += pnl
-            category_data[category]['total_cost'] += cost
-            category_data[category]['total_unrealized_pnl'] += unrealized_pnl
+            category_data[category]['total_value'] += total_value
+            category_data[category]['total_pnl'] += total_pnl
+            category_data[category]['pnl_day'] += pnl_day
+            category_data[category]['cost'] += cost
+            category_data[category]['unrealized_pnl'] += unrealized_pnl
+            category_data[category]['principal_total'] += principal_total
             category_data[category]['product_codes'].add(product_code)
         
         aggregated[fetch_date] = dict(category_data)
@@ -446,100 +338,185 @@ def aggregate_by_category(records):
     return aggregated
 
 
-def write_portfolio_by_category(aggregated, output_path):
-    """
-    写入按分类汇总的文件
-    每个 fetch_date 输出三行：基金汇总、银行理财汇总、总资产汇总
-    """
+def write_portfolio_by_nav_date(aggregated, output_path):
+    """写入按净值日期汇总的文件"""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     
-    fieldnames = ['fetch_date', 'category', 'total_value', 'total_cost', 'total_unrealized_pnl', 
-                  'total_pnl_vs_prev', 'product_count']
-    chinese_headers = ['采集日期', '分类', '总市值', '总成本', '总浮动盈亏', '日变动', '产品数量']
+    fieldnames = ['nav_date', 'total_value', 'total_pnl', 'pnl_day', 'cost', 
+                  'unrealized_pnl', 'principal_total', 'product_count']
+    chinese_headers = ['净值日期', '总资产', '总盈亏', '日变动', '成本', 
+                       '浮动盈亏', '累计投入本金', '产品数量']
     
     sorted_dates = sorted(aggregated.keys())
     
-    # 记录上一个日期各分类的 total_value，用于计算日变动
+    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        f.write(','.join(chinese_headers) + '\n')
+        
+        for nav_date in sorted_dates:
+            data = aggregated[nav_date]
+            writer.writerow({
+                'nav_date': nav_date,
+                'total_value': f"{data['total_value']:.2f}",
+                'total_pnl': f"{data['total_pnl']:.2f}",
+                'pnl_day': f"{data['pnl_day']:.2f}",
+                'cost': f"{data['cost']:.2f}",
+                'unrealized_pnl': f"{data['unrealized_pnl']:.2f}",
+                'principal_total': f"{data['principal_total']:.2f}",
+                'product_count': len(data['product_codes'])
+            })
+
+
+def write_portfolio_by_fetch_date(aggregated, output_path):
+    """写入按采集日期汇总的文件"""
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    fieldnames = ['fetch_date', 'total_value', 'total_pnl', 'pnl_day', 'cost',
+                  'unrealized_pnl', 'principal_total', 'pnl_vs_prev',
+                  'product_count', 'stale_products', 'max_lag_days']
+    chinese_headers = ['采集日期', '总资产', '总盈亏', '日变动', '成本',
+                       '浮动盈亏', '累计投入本金', '相对前日变动',
+                       '产品数量', '滞后产品数', '最大滞后天数']
+    
+    sorted_dates = sorted(aggregated.keys())
+    
+    with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        f.write(','.join(chinese_headers) + '\n')
+        
+        prev_total_value = None
+        for fetch_date in sorted_dates:
+            data = aggregated[fetch_date]
+            current_total_value = data['total_value']
+            
+            if prev_total_value is not None:
+                pnl_vs_prev = current_total_value - prev_total_value
+            else:
+                pnl_vs_prev = Decimal('0')
+            
+            writer.writerow({
+                'fetch_date': fetch_date.strftime('%Y-%m-%d'),
+                'total_value': f"{current_total_value:.2f}",
+                'total_pnl': f"{data['total_pnl']:.2f}",
+                'pnl_day': f"{data['pnl_day']:.2f}",
+                'cost': f"{data['cost']:.2f}",
+                'unrealized_pnl': f"{data['unrealized_pnl']:.2f}",
+                'principal_total': f"{data['principal_total']:.2f}",
+                'pnl_vs_prev': f"{pnl_vs_prev:.2f}",
+                'product_count': len(data['product_codes']),
+                'stale_products': data['stale_products'],
+                'max_lag_days': data['max_lag_days']
+            })
+            
+            prev_total_value = current_total_value
+
+
+def write_portfolio_by_category(aggregated, output_path):
+    """写入按分类汇总的文件"""
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    fieldnames = ['fetch_date', 'category', 'total_value', 'total_pnl', 'pnl_day',
+                  'cost', 'unrealized_pnl', 'principal_total', 'pnl_vs_prev', 'product_count']
+    chinese_headers = ['采集日期', '分类', '总资产', '总盈亏', '日变动',
+                       '成本', '浮动盈亏', '累计投入本金', '相对前日变动', '产品数量']
+    
+    sorted_dates = sorted(aggregated.keys())
     prev_values = {'fund': None, 'bank': None, 'total': None}
     
     with open(output_path, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        # 写入中文表头
         f.write(','.join(chinese_headers) + '\n')
         
         for fetch_date in sorted_dates:
             category_data = aggregated[fetch_date]
-            
-            # 计算各分类数据
-            fund_value = category_data.get('fund', {}).get('total_value', Decimal('0'))
-            fund_cost = category_data.get('fund', {}).get('total_cost', Decimal('0'))
-            fund_unrealized = category_data.get('fund', {}).get('total_unrealized_pnl', Decimal('0'))
-            fund_count = len(category_data.get('fund', {}).get('product_codes', set()))
-            
-            bank_value = category_data.get('bank', {}).get('total_value', Decimal('0'))
-            bank_cost = category_data.get('bank', {}).get('total_cost', Decimal('0'))
-            bank_unrealized = category_data.get('bank', {}).get('total_unrealized_pnl', Decimal('0'))
-            bank_count = len(category_data.get('bank', {}).get('product_codes', set()))
-            
-            total_value = fund_value + bank_value
-            total_cost = fund_cost + bank_cost
-            total_unrealized = fund_unrealized + bank_unrealized
-            total_count = fund_count + bank_count
-            
-            # 计算日变动
-            fund_pnl_vs_prev = fund_value - prev_values['fund'] if prev_values['fund'] is not None else Decimal('0')
-            bank_pnl_vs_prev = bank_value - prev_values['bank'] if prev_values['bank'] is not None else Decimal('0')
-            total_pnl_vs_prev = total_value - prev_values['total'] if prev_values['total'] is not None else Decimal('0')
-            
             date_str = fetch_date.strftime('%Y-%m-%d')
             
-            # 写入基金汇总
+            # 基金
+            fund_data = category_data.get('fund', {})
+            fund_value = fund_data.get('total_value', Decimal('0'))
+            fund_pnl = fund_data.get('total_pnl', Decimal('0'))
+            fund_pnl_day = fund_data.get('pnl_day', Decimal('0'))
+            fund_cost = fund_data.get('cost', Decimal('0'))
+            fund_unrealized = fund_data.get('unrealized_pnl', Decimal('0'))
+            fund_principal = fund_data.get('principal_total', Decimal('0'))
+            fund_count = len(fund_data.get('product_codes', set()))
+            fund_pnl_vs_prev = fund_value - prev_values['fund'] if prev_values['fund'] is not None else Decimal('0')
+            
+            # 银行理财
+            bank_data = category_data.get('bank', {})
+            bank_value = bank_data.get('total_value', Decimal('0'))
+            bank_pnl = bank_data.get('total_pnl', Decimal('0'))
+            bank_pnl_day = bank_data.get('pnl_day', Decimal('0'))
+            bank_cost = bank_data.get('cost', Decimal('0'))
+            bank_unrealized = bank_data.get('unrealized_pnl', Decimal('0'))
+            bank_principal = bank_data.get('principal_total', Decimal('0'))
+            bank_count = len(bank_data.get('product_codes', set()))
+            bank_pnl_vs_prev = bank_value - prev_values['bank'] if prev_values['bank'] is not None else Decimal('0')
+            
+            # 总计
+            total_value = fund_value + bank_value
+            total_pnl = fund_pnl + bank_pnl
+            total_pnl_day = fund_pnl_day + bank_pnl_day
+            total_cost = fund_cost + bank_cost
+            total_unrealized = fund_unrealized + bank_unrealized
+            total_principal = fund_principal + bank_principal
+            total_count = fund_count + bank_count
+            total_pnl_vs_prev = total_value - prev_values['total'] if prev_values['total'] is not None else Decimal('0')
+            
+            # 写入三行
             writer.writerow({
                 'fetch_date': date_str,
                 'category': '基金',
                 'total_value': f"{fund_value:.2f}",
-                'total_cost': f"{fund_cost:.2f}",
-                'total_unrealized_pnl': f"{fund_unrealized:.2f}",
-                'total_pnl_vs_prev': f"{fund_pnl_vs_prev:.2f}",
+                'total_pnl': f"{fund_pnl:.2f}",
+                'pnl_day': f"{fund_pnl_day:.2f}",
+                'cost': f"{fund_cost:.2f}",
+                'unrealized_pnl': f"{fund_unrealized:.2f}",
+                'principal_total': f"{fund_principal:.2f}",
+                'pnl_vs_prev': f"{fund_pnl_vs_prev:.2f}",
                 'product_count': fund_count
             })
             
-            # 写入银行理财汇总
             writer.writerow({
                 'fetch_date': date_str,
                 'category': '银行理财',
                 'total_value': f"{bank_value:.2f}",
-                'total_cost': f"{bank_cost:.2f}",
-                'total_unrealized_pnl': f"{bank_unrealized:.2f}",
-                'total_pnl_vs_prev': f"{bank_pnl_vs_prev:.2f}",
+                'total_pnl': f"{bank_pnl:.2f}",
+                'pnl_day': f"{bank_pnl_day:.2f}",
+                'cost': f"{bank_cost:.2f}",
+                'unrealized_pnl': f"{bank_unrealized:.2f}",
+                'principal_total': f"{bank_principal:.2f}",
+                'pnl_vs_prev': f"{bank_pnl_vs_prev:.2f}",
                 'product_count': bank_count
             })
             
-            # 写入总资产汇总
             writer.writerow({
                 'fetch_date': date_str,
                 'category': '总资产',
                 'total_value': f"{total_value:.2f}",
-                'total_cost': f"{total_cost:.2f}",
-                'total_unrealized_pnl': f"{total_unrealized:.2f}",
-                'total_pnl_vs_prev': f"{total_pnl_vs_prev:.2f}",
+                'total_pnl': f"{total_pnl:.2f}",
+                'pnl_day': f"{total_pnl_day:.2f}",
+                'cost': f"{total_cost:.2f}",
+                'unrealized_pnl': f"{total_unrealized:.2f}",
+                'principal_total': f"{total_principal:.2f}",
+                'pnl_vs_prev': f"{total_pnl_vs_prev:.2f}",
                 'product_count': total_count
             })
             
-            # 更新上一日数据
+            # 更新前日数据
             prev_values['fund'] = fund_value
             prev_values['bank'] = bank_value
             prev_values['total'] = total_value
 
+
 def generate_portfolio_summary(snapshot_path, output_dir):
     """
     生成投资组合汇总
-    :param snapshot_path: daily.csv 的路径
-    :param output_dir: 输出目录
-    :return: (nav_date_count, fetch_date_count) 汇总的日期数量
+    :return: (nav_date_count, fetch_date_count)
     """
-    # 读取快照数据
     records = read_daily_snapshots(snapshot_path)
     
     if not records:
@@ -555,21 +532,17 @@ def generate_portfolio_summary(snapshot_path, output_dir):
     output_fetch_date = output_dir / "portfolio_by_fetch_date.csv"
     write_portfolio_by_fetch_date(by_fetch_date, output_fetch_date)
     
-    # 按分类聚合（基金/银行理财）
+    # 按分类聚合
     by_category = aggregate_by_category(records)
     output_category = output_dir / "portfolio_by_category.csv"
     write_portfolio_by_category(by_category, output_category)
     
     return len(by_nav_date), len(by_fetch_date)
 
+
 if __name__ == "__main__":
-    # 配置日志
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
-    # 测试
     from config_loader import get_project_root
     
     root = get_project_root()
@@ -580,4 +553,3 @@ if __name__ == "__main__":
     print(f"✓ 生成投资组合汇总:")
     print(f"  - 按净值日期: {nav_count} 个日期")
     print(f"  - 按采集日期: {fetch_count} 个日期")
-
