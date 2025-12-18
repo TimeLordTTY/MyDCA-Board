@@ -72,7 +72,7 @@ def test_invalid_holdings():
         
         # 添加一个不存在的产品
         holdings.append({
-            "products_id": "INVALID_PRODUCT_999",
+            "product_code": "INVALID_PRODUCT_999",
             "amount": 100
         })
         

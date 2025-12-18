@@ -87,7 +87,7 @@ def load_base_holdings(holdings_path: Path = None) -> Dict[str, Decimal]:
         with open(holdings_path, 'r', encoding='utf-8') as f:
             holdings = json.load(f)
             for item in holdings:
-                product_id = item.get('products_id', '')
+                product_id = item.get('product_code', '')
                 amount = safe_decimal(item.get('amount', 0))
                 if product_id:
                     base_holdings[product_id] = amount
