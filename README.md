@@ -79,12 +79,14 @@ save_nav_record()           # 存储到CSV
 MyDCA-Board/
 ├── config/                          # 配置文件
 │   ├── products.json                # 产品列表
-│   └── holdings.json                # 持仓配置
+│   ├── holdings.json                # 持仓配置（基础份额）
+│   └── nav_range.json               # 净值范围配置（自动更新）
 │
 ├── src/                             # 源代码
 │   ├── nav_collector.py             # 【核心】主控协调器
 │   ├── validator.py                 # 【核心】数据校验器
 │   ├── holdings_calculator.py       # 【核心】持仓与成本计算器
+│   ├── nav_range_manager.py         # 净值范围管理模块
 │   ├── portfolio_summary.py         # 资产汇总模块
 │   │
 │   ├── adaptor/                     # 适配器目录
@@ -347,6 +349,42 @@ fetch_date汇总会显示：
 ```
 
 > **注意**：如果配置了交易流水（transactions.csv），系统会优先从流水计算份额和成本，holdings.json 作为回退。
+
+### nav_range.json（净值范围配置 - 自动维护）
+
+记录每个产品的实际净值日期范围，在执行 `run_daily.py` 和 `export_nav_history.py` 时自动更新。
+
+```json
+{
+    "163406": {
+        "product_name": "兴全合润混合(LOF)A",
+        "earliest_nav_date": "2024-01-02",    // 最早净值日期
+        "latest_nav_date": "2025-12-17",      // 最新净值日期
+        "record_count": 245,                   // 净值记录总数
+        "updated_at": "2025-12-18 10:30:00"   // 最后更新时间
+    }
+}
+```
+
+**字段说明**：
+
+| 字段 | 说明 |
+|------|------|
+| `product_name` | 产品名称 |
+| `earliest_nav_date` | 最早净值日期（基于实际 nav 文件） |
+| `latest_nav_date` | 最新净值日期（基于实际 nav 文件） |
+| `record_count` | 净值记录总数 |
+| `updated_at` | 最后更新时间 |
+
+**使用场景**：
+- 快速查看每个产品有多少历史净值数据
+- 判断是否需要补充历史净值
+- 验证数据完整性
+
+**手动刷新所有产品净值范围**：
+```bash
+python -c "import sys; sys.path.insert(0, 'src'); from nav_range_manager import update_all_nav_ranges, print_nav_range_summary; update_all_nav_ranges(); print_nav_range_summary()"
+```
 
 ### transactions.csv（交易流水）
 

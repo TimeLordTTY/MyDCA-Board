@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 查询指定日期范围内的历史净值并更新到 nav 文件
@@ -36,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from adaptor.fund_client import query_nav_history
 from config_loader import get_project_root
+from nav_range_manager import update_product_nav_range
 
 
 def load_products():
@@ -182,6 +182,10 @@ def update_nav_file(product_code, start_date, end_date):
     print(f"\n[OK] 已更新: {nav_path}")
     print(f"    新增: {new_count}, 覆盖: {updated_count}, 跳过: {skipped_count}")
     print(f"    文件共 {len(sorted_records)} 条记录")
+    
+    # 更新净值范围配置
+    range_info = update_product_nav_range(product_code, product_name)
+    print(f"    净值范围: {range_info['earliest_nav_date']} ~ {range_info['latest_nav_date']}")
     
     return new_count, updated_count, skipped_count
 

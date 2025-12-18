@@ -14,6 +14,7 @@ from validator import (
     validate_adaptor_exists,
     validate_nav_record
 )
+from nav_range_manager import update_product_nav_range
 
 logging.basicConfig(
     level=logging.INFO,
@@ -130,6 +131,8 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     if is_new:
         result['csv'] = 'Y'
         result['status'] = 'OK'
+        # 更新净值范围配置
+        update_product_nav_range(product_code, product_name)
     else:
         result['csv'] = 'SKIP'
         result['status'] = 'EXIST'
