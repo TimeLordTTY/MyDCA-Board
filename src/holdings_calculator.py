@@ -253,28 +253,44 @@ class HoldingsCalculator:
             
             elif action == 'BUY_CONFIRM':
                 # 份额确认事件
+                # 强约束：buy_confirm 必须提供 order_id
                 confirmed_shares = safe_decimal(t.get('shares', 0))
                 
                 if confirmed_shares <= 0:
                     logger.warning(f"buy_confirm 缺少有效份额: {t}")
                     continue
                 
+                if not order_id:
+                    # 坑2修复：buy_confirm 必须有 order_id
+                    logger.error(f"buy_confirm 必须提供 order_id: {t}")
+                    continue
+                
                 # 查找匹配的 debit
-                if order_id and order_id in self._debit_index:
+                if order_id in self._debit_index:
+                    # 正常路径：找到匹配的 debit
                     debit = self._debit_index[order_id]
                     net_amount = debit['net_amount']
                     self._debit_index[order_id]['confirmed'] = True
                 else:
-                    # 没有匹配的 debit，尝试降级处理
+                    # 坑2修复：未找到匹配的 debit，检查是否有降级 amount
                     amount = safe_decimal(t.get('amount', 0))
                     fee = safe_decimal(t.get('fee', 0))
                     if amount > 0:
-                        # 有 amount 字段，可以降级
+                        # 兼容降级：有 amount 字段，可以计算成本
+                        # 但必须打 WARNING 提醒用户这是降级路径
                         net_amount = amount - fee
-                        logger.info(f"buy_confirm 降级处理（无匹配 debit）: order_id={order_id}, amount={amount}")
+                        logger.warning(
+                            f"buy_confirm 降级处理（无匹配 debit）: "
+                            f"order_id={order_id}, amount={amount}, net_amount={net_amount}。"
+                            f"此 amount 将计入 cost 但需确保 principal_total 口径正确！"
+                        )
+                        # 注意：降级时的 principal_total 需要在 _calc_principal_total 中单独处理
                     else:
-                        # 无法计算成本，报错但不崩溃
-                        logger.error(f"buy_confirm 无法计算成本（缺少 debit 或 amount）: {t}")
+                        # 无法计算成本，报错并跳过
+                        logger.error(
+                            f"buy_confirm 找不到匹配的 buy_debit 且无 amount 字段，"
+                            f"无法计算成本: order_id={order_id}, row={t}"
+                        )
                         net_amount = Decimal('0')
                 
                 shares += confirmed_shares
@@ -282,17 +298,19 @@ class HoldingsCalculator:
             
             elif action == 'BUY':
                 # 兼容旧数据：当天既扣款又确认
+                # 成本口径统一：cost = amount - fee（净申购额）
                 trans_shares = safe_decimal(t.get('shares', 0))
                 amount = safe_decimal(t.get('amount', 0))
                 fee = safe_decimal(t.get('fee', 0))
+                net_amount = amount - fee  # 净申购额
                 
                 if trans_shares > 0:
                     shares += trans_shares
-                    cost += amount  # 注意：旧逻辑是 amount + fee，但通常 amount 已是总成本
+                    cost += net_amount  # 统一使用净申购额入账
                 else:
                     # 某些产品（如货基）用 amount 作为份额
                     shares += amount
-                    cost += amount
+                    cost += net_amount  # 统一使用净申购额入账
             
             elif action == 'SELL':
                 # 卖出：份额减少，成本按比例减少
@@ -363,18 +381,24 @@ class HoldingsCalculator:
         - buy_debit: principal += amount（扣款时计入）
         - buy: principal += amount（兼容旧数据）
         - sell: 不减少（卖出回笼不影响累计投入）
-        - buy_confirm: 不增加（只是确认，钱已在 debit 时计入）
+        - buy_confirm: 正常情况不增加（钱已在 debit 时计入）
+                       但若走降级路径（有 amount 且无匹配 debit），则需计入
         """
         product_transactions = [
             t for t in self.transactions
             if t['product_code'] == product_code and t['date'] <= asof_date
         ]
+        product_transactions.sort(key=lambda x: x['date'])
+        
+        # 先构建 debit 索引，用于判断 confirm 是否走降级路径
+        self._build_debit_index(product_code, asof_date)
         
         principal = Decimal('0')
         
         for t in product_transactions:
             action = t.get('action', '').upper()
             amount = safe_decimal(t.get('amount', 0))
+            order_id = t.get('order_id', '').strip()
             
             if action == 'BUY_DEBIT':
                 # 扣款时计入本金（用 amount，即总扣款额）
@@ -384,7 +408,18 @@ class HoldingsCalculator:
                 # 兼容旧数据
                 principal += amount
             
-            # buy_confirm, sell, dividend 都不影响 principal_total
+            elif action == 'BUY_CONFIRM':
+                # 坑2修复：buy_confirm 降级路径时也要计入 principal_total
+                # 只有当 order_id 找不到匹配的 debit 且有 amount 时才计入
+                if order_id and order_id not in self._debit_index and amount > 0:
+                    # 降级路径：没有匹配的 debit，用 amount 补充 principal
+                    principal += amount
+                    logger.warning(
+                        f"buy_confirm 降级路径计入 principal_total: "
+                        f"order_id={order_id}, amount={amount}"
+                    )
+            
+            # sell, dividend 都不影响 principal_total
         
         return principal
 

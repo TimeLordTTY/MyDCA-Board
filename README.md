@@ -118,6 +118,7 @@ MyDCA-Board/
 ├── scripts/                         # 脚本目录
 │   ├── run_daily.py                 # 日常运行入口
 │   ├── run_backtest.py              # 【策略回测入口】
+│   ├── tx_cli.py                    # 【交易记录交互录入器】
 │   ├── verify_debit_confirm.py      # 【扣款/确认分离验证】
 │   ├── validate_transactions.py     # 交易流水校验工具
 │   ├── export_nav_history.py        # 净值历史导出工具
@@ -186,45 +187,49 @@ pnl_day = prev_day_shares × (nav_today - nav_prev)
 
 ## 📋 数据标准
 
-### transactions.csv（交易流水）- 支持扣款/确认分离
+### transactions.csv（交易流水）
 
-交易流水支持**扣款与份额确认分离**，用于准确计算在途资金和持仓成本。
+交易流水记录所有交易事件，支持**扣款/确认分离模式**，同时兼容传统 buy 模式。
 
-**CSV 格式**：
+**CSV 格式（固定 10 列）**：
 ```csv
 date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
+```
+
+**成本口径（统一规则）**：
+```
+cost = amount - fee  （净申购额入账）
 ```
 
 **支持的交易类型 (action)**：
 
 | action | 说明 | 必填字段 | 对持仓影响 |
 |--------|------|---------|-----------|
-| `buy_debit` | 扣款事件（钱已扣，份额未到） | date, product_code, amount, order_id | cash += amount, principal_total += amount |
-| `buy_confirm` | 份额确认事件 | date, product_code, shares, nav, nav_date, order_id | shares += shares, cost += matched_debit_amount, cash -= matched_amount |
-| `buy` | 兼容旧数据（当天既扣款又确认） | date, product_code, amount, shares, nav, nav_date | shares += shares, cost += amount, principal_total += amount |
-| `sell` | 卖出 | date, product_code, shares, nav | shares -= shares, cost按比例减少 |
+| `buy_debit` | 扣款事件（钱已扣，份额未到） | date, product_code, amount, order_id | cash += (amount-fee), principal_total += amount |
+| `buy_confirm` | 份额确认事件（份额到账） | date, product_code, shares, nav, nav_date, order_id | shares += shares, cost += matched_debit_net, cash -= matched |
+| `buy` | 兼容模式（当天扣款+确认） | date, product_code, amount, shares, nav, nav_date | shares += shares, cost += (amount-fee), principal_total += amount |
+| `sell` | 卖出确认 | date, product_code, shares, nav, nav_date | shares -= shares, cost 按比例减少 |
 | `dividend` | 分红 | date, product_code, shares | shares += shares（成本不变） |
 
-**完整示例**：
+**order_id 规则**：
+- `buy_debit`：必须提供 order_id（tx_cli 自动生成）
+- `buy_confirm`：必须提供 order_id（与 debit 匹配）
+- 其他 action：可选
+
+**示例**：
 
 ```csv
 date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
-# 12/18扣款100元
-2025-12-18,017641,buy_debit,100,,,,,ORD20251218001,每周定投扣款
-# 12/19份额确认
-2025-12-19,017641,buy_confirm,,63.58,,1.5709,2025-12-15,ORD20251218001,份额到账
-# 兼容旧格式（当天扣款+确认）
-2025-12-01,017641,buy,99.88,63.58,0.12,1.5709,2025-11-28,,旧格式定投
+# 扣款/确认分离模式
+2025-12-18,017641,buy_debit,100,,0.12,,,ORD20251218A1B2C3,每周定投扣款
+2025-12-19,017641,buy_confirm,,63.58,,1.5709,2025-12-18,ORD20251218A1B2C3,份额到账
+# 兼容模式（当天扣款+确认）
+2025-12-18,163406,buy,99.88,61.37,0.12,1.6274,2025-12-17,,兴全合润混合(LOF)A
+# 卖出
+2025-12-19,163406,sell,1046.40,520.88,5.26,2.0190,2025-12-18,,兴全合润混合(LOF)A
+# 分红
+2025-12-15,020602,dividend,,5.85,,1.0951,2025-12-15,,易方达红利低波ETF联接A
 ```
-
-**💡 order_id 的作用**：
-- 关联同一笔定投的扣款和确认
-- buy_debit 和 buy_confirm 通过 order_id 匹配
-- 确认时从对应的扣款记录获取成本金额
-
-**💡 兼容旧数据**：
-- 旧的 `buy` 类型继续支持，视为"当天既扣款又确认"
-- 如果 buy_confirm 找不到对应的 buy_debit 但有 amount 字段，会降级处理
 
 ---
 
@@ -306,16 +311,26 @@ python scripts/run_daily.py
 - 同一天多次运行会覆盖（保持最新状态）
 - pnl_day 只反映净值变化，不受扣款/确认影响
 
-### 验证扣款/确认分离功能
+### 交易记录录入（推荐）
 ```bash
-python scripts/verify_debit_confirm.py
+# 交互新增一条交易
+python scripts/tx_cli.py add
+
+# 列表展示最近20条
+python scripts/tx_cli.py list
+
+# 校验 transactions.csv（含 debit/confirm 成对检查）
+python scripts/tx_cli.py check
 ```
 
-验证要点：
-- ✅ 扣款后 cash 增加、shares 不变
-- ✅ 份额到账后 shares 增加、cash 减少
-- ✅ pnl_day 不因扣款/确认而跳变
-- ✅ 同日多次统计只保留一条
+**tx_cli.py 功能**：
+- 自动加载产品列表，交互选择
+- 支持 5 种操作：`buy_debit`、`buy_confirm`、`buy`、`sell`、`dividend`
+- `buy_debit` 自动生成 `order_id`
+- `buy_confirm` 必须填写 `order_id`（与扣款记录匹配）
+- 自动校验日期格式、数值范围
+- 固定 10 列输出，确保 CSV 结构一致
+- `check` 命令会检查：列齐全、数值可解析、debit/confirm 是否成对
 
 ### 重建模式（修复历史数据）
 ```bash
@@ -401,26 +416,57 @@ ADAPTOR_MAP = {
 
 ## 🎓 关键设计理念
 
-1. **扣款/确认分离**：真实反映资金流动，总资产不因结算延迟而凭空减少
-2. **pnl_day 只反映净值变化**：`prev_shares × (nav - prev_nav)`，不受扣款/确认影响
+1. **成本口径统一**：`cost = amount - fee`（净申购额），全系统一致
+2. **pnl_day 只反映净值变化**：`prev_shares × (nav - prev_nav)`
 3. **同日覆盖**：同一 (fetch_date, product_code) 只保留一条，保持数据干净
-4. **字段零冗余**：每个字段都有明确用途，不引入无用字段
-5. **向后兼容**：旧的 `buy` 类型继续支持
+4. **原子写入**：daily.csv 重建使用临时文件 + os.replace，防止写坏
+5. **字段零冗余**：每个字段都有明确用途，不引入无用字段
 
 ---
 
 ## 🏷️ 字段命名规范
 
-系统使用统一的字段命名，同一语义只有一个字段名：
+系统使用统一的字段命名（snake_case，小写），同一语义只有一个字段名：
 
+### 日期字段
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `date` | 交易日期（transactions.csv） | 2025-12-18 |
+| `fetch_date` | 采集日期（运行当天） | 2025-12-19 |
+| `nav_date` | 净值日期（可能滞后 T+1） | 2025-12-18 |
+| `fetched_at` | 采集时间（毫秒精度） | 2025-12-19 12:00:00.123 |
+
+### 金额/份额字段
 | 字段 | 说明 | 注意 |
 |------|------|------|
+| `amount` | 交易金额 | 买入金额、卖出到账金额 |
 | `shares` | 已确认份额 | 不使用 units |
-| `value` | 持仓市值 | 不使用 market_value |
-| `cost` | 持仓成本 | 不使用 total_cost |
-| `pnl_day` | 日变动 | 不使用 pnl（已废弃） |
+| `fee` | 手续费 | - |
+| `nav` | 单位净值 | - |
+| `value` | 持仓市值（shares × nav） | 不使用 market_value |
+| `cost` | 持仓成本（净申购额累计） | 不使用 total_cost |
 | `cash` | 在途资金 | 不使用 cash_in_transit |
-| `return_rate` | 收益率 | 不使用 unrealized_pnl_pct |
+| `total_value` | 总资产（value + cash） | - |
+| `principal_total` | 累计投入本金 | 扣款时增加，卖出不减少 |
+
+### 盈亏字段
+| 字段 | 说明 | 公式 |
+|------|------|------|
+| `pnl_day` | 日变动 | prev_shares × (nav_today - nav_prev)；**不使用 pnl** |
+| `unrealized_pnl` | 浮动盈亏 | value - cost |
+| `total_pnl` | 总盈亏 | total_value - principal_total |
+| `return_rate` | 持仓收益率 | unrealized_pnl / cost × 100%；不使用 unrealized_pnl_pct |
+| `real_return` | 真实收益率 | total_pnl / principal_total × 100% |
+
+### 标识字段
+| 字段 | 说明 | 规则 |
+|------|------|------|
+| `product_code` | 产品代码 | 唯一标识 |
+| `product_name` | 产品名称 | - |
+| `category` | 产品分类 | fund / bank |
+| `action` | 交易类型 | buy_debit / buy_confirm / buy / sell / dividend |
+| `order_id` | 订单号 | 关联 debit 和 confirm |
+| `note` | 备注 | - |
 
 ---
 
