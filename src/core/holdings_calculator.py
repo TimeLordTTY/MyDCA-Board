@@ -84,7 +84,7 @@ def load_base_holdings(holdings_path: Path = None) -> Dict[str, Decimal]:
     :param holdings_path: holdings.json 文件路径
     :return: {product_code: base_shares}
     """
-    from config_loader import get_project_root
+    from data.config_loader import get_project_root
     
     if holdings_path is None:
         holdings_path = get_project_root() / "config" / "holdings.json"
@@ -119,7 +119,7 @@ class HoldingsCalculator:
     """
     
     def __init__(self, transactions_path: Path = None, holdings_path: Path = None):
-        from config_loader import get_project_root
+        from data.config_loader import get_project_root
         
         if transactions_path is None:
             transactions_path = get_project_root() / "data" / "transactions.csv"
@@ -312,8 +312,9 @@ class HoldingsCalculator:
                     shares += amount
                     cost += net_amount  # 统一使用净申购额入账
             
-            elif action == 'SELL':
-                # 卖出：份额减少，成本按比例减少
+            elif action == 'SELL' or action == 'SELL_CONFIRM':
+                # 卖出/卖出确认：份额减少，成本按比例减少
+                # SELL_CONFIRM: 赎回发起后的确认事件（来自 orders.csv settle）
                 sell_shares = safe_decimal(t.get('shares', 0))
                 if sell_shares > 0 and shares > 0:
                     cost_reduction = cost * sell_shares / shares
@@ -452,7 +453,7 @@ def has_transactions(product_code: str, transactions_path: Path = None) -> bool:
     """
     检查某产品是否有交易流水
     """
-    from config_loader import get_project_root
+    from data.config_loader import get_project_root
     
     if transactions_path is None:
         transactions_path = get_project_root() / "data" / "transactions.csv"
@@ -483,7 +484,7 @@ def get_holdings_calculator(transactions_path: Path = None, holdings_path: Path 
 
 if __name__ == "__main__":
     # 简单测试
-    from config_loader import get_project_root
+    from data.config_loader import get_project_root
     
     calc = HoldingsCalculator()
     asof = datetime.now().strftime('%Y-%m-%d')

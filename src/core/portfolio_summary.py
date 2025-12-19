@@ -543,7 +543,7 @@ def generate_portfolio_summary(snapshot_path, output_dir):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     
-    from config_loader import get_project_root
+    from data.config_loader import get_project_root
     
     root = get_project_root()
     snapshot_path = root / "data" / "snapshots" / "daily.csv"

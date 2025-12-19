@@ -30,7 +30,7 @@ def save_nav_record(product_code, product_name, nav_record):
     :param nav_record: 单条净值记录 {'nav_date': '2023-12-15', 'nav': '1.0234', ...}
     :return: 是否新增 (1=新增, 0=已存在)
     """
-    from config_loader import get_project_root
+    from data.config_loader import get_project_root
     
     # 文件名格式：产品代码_产品名称.csv（清理特殊字符）
     safe_name = product_name.replace('/', '_').replace('\\', '_').replace(':', '_')

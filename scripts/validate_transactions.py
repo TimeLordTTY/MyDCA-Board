@@ -27,7 +27,7 @@ from decimal import Decimal, ROUND_HALF_UP
 # 添加项目路径
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from config_loader import get_project_root
+from data.config_loader import get_project_root
 
 
 def safe_decimal(value, default=Decimal('0')) -> Decimal:

@@ -4,104 +4,223 @@
         "product_name": "民生理财贵竹固收增利周周盈7天持有期26号理财产品E",
         "product_code": "FBAE41126E",
         "type": "nav",
-        "category": "bank"
+        "category": "bank",
+        "market": "bank_nav",
+        "buy_fee_rate": 0,
+        "sell_fee_tiers": []
     },
     {
         "source": "fund",
         "product_name": "易方达黄金ETF联接A",
         "product_code": "000307",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0007,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 365, "rate": 0.002},
+            {"min_days": 365, "max_days": 730, "rate": 0.0005},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "易方达红利低波ETF联接A",
         "product_code": "020602",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "易方达沪深300ETF联接A",
         "product_code": "110020",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "易方达中证500指数量化增强A",
         "product_code": "012080",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0015,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 30, "rate": 0.0075},
+            {"min_days": 30, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "易方达标普500指数(QDII-LOF)A",
         "product_code": "161125",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "易方达纳斯达克100ETF联接(QDII-LOF)A",
         "product_code": "161130",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "易方达恒生科技ETF联接(QDII)A",
         "product_code": "013308",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0006,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 30, "rate": 0.005},
+            {"min_days": 30, "max_days": 180, "rate": 0.001},
+            {"min_days": 180, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "摩根纳斯达克100指数(QDII)A",
         "product_code": "019172",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "摩根标普500指数(QDII)A",
         "product_code": "017641",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "景顺长城科创50指数增强A",
         "product_code": "019767",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 30, "rate": 0.0075},
+            {"min_days": 30, "max_days": 180, "rate": 0.005},
+            {"min_days": 180, "max_days": 365, "rate": 0.0025},
+            {"min_days": 365, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "南方纳斯达克100指数(QDII)A",
         "product_code": "016452",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "天弘纳斯达克100指数(QDII)A",
         "product_code": "018043",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.001,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 180, "rate": 0.005},
+            {"min_days": 180, "max_days": 365, "rate": 0.0025},
+            {"min_days": 365, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "华夏纳斯达克100ETF联接(QDII)A",
         "product_code": "015299",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "qdii",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": null, "rate": 0}
+        ]
     },
     {
         "source": "fund",
         "product_name": "兴全合润混合(LOF)A",
         "product_code": "163406",
         "type": "fund",
-        "category": "fund"
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0.0012,
+        "sell_fee_tiers": [
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ]
+    },
+    {
+        "source": "fund",
+        "product_name": "建信嘉薪宝货币市场基金A类",
+        "product_code": "000686",
+        "type": "fund",
+        "category": "fund",
+        "market": "cn",
+        "buy_fee_rate": 0,
+        "sell_fee_tiers": []
     }
 ]

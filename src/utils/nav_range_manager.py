@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 
-from config_loader import get_project_root
+from data.config_loader import get_project_root
 
 
 def load_nav_range() -> Dict:

@@ -33,7 +33,7 @@ from datetime import datetime
 from decimal import Decimal
 import logging
 
-from holdings_calculator import HoldingsCalculator, calc_position_incremental, has_transactions
+from core.holdings_calculator import HoldingsCalculator, calc_position_incremental, has_transactions
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +216,7 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     :param products_order: 可选，产品代码列表，用于保持排序顺序
     :param category_map: 可选，{product_code: category}，产品分类
     """
-    from config_loader import get_project_root
+    from data.config_loader import get_project_root
     
     if snapshot_path is None:
         snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"

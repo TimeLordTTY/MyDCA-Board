@@ -77,67 +77,56 @@ save_nav_record()           # 存储到CSV
 
 ```
 MyDCA-Board/
+├── tx_cli.py                        # 【主入口】CLI工具：记账/理财/结算/采集
+├── requirements.txt                 # 依赖包
+│
 ├── config/                          # 配置文件
-│   ├── products.json                # 产品列表
+│   ├── products.json                # 产品配置（含市场类型、费率等）
 │   ├── holdings.json                # 持仓配置（基础份额）
+│   ├── accounts.json                # 账户配置（记账用）
+│   ├── categories.json              # 分类配置（记账用）
 │   └── nav_range.json               # 净值范围配置（自动更新）
 │
-├── src/                             # 源代码
-│   ├── nav_collector.py             # 【核心】主控协调器
-│   ├── validator.py                 # 【核心】数据校验器
-│   ├── holdings_calculator.py       # 【核心】持仓与成本计算器（支持扣款/确认分离）
-│   ├── nav_range_manager.py         # 净值范围管理模块
-│   ├── portfolio_summary.py         # 资产汇总模块
+├── src/                             # 源代码（模块化组织）
+│   ├── core/                        # 核心业务模块
+│   │   ├── nav_collector.py         # 主控协调器
+│   │   ├── snapshot.py              # 快照生成
+│   │   ├── holdings_calculator.py   # 持仓与成本计算器
+│   │   └── portfolio_summary.py     # 资产汇总
 │   │
-│   ├── adaptor/                     # 适配器目录
-│   │   ├── __init__.py              
+│   ├── data/                        # 数据层模块
+│   │   ├── config_loader.py         # 配置加载
+│   │   ├── data_store.py            # 数据存储（transactions/orders/ledger）
+│   │   ├── storage_csv.py           # CSV存储
+│   │   └── nav_reader.py            # 净值读取
+│   │
+│   ├── utils/                       # 工具模块
+│   │   ├── validator.py             # 数据校验器
+│   │   └── nav_range_manager.py     # 净值范围管理
+│   │
+│   ├── adaptor/                     # 数据源适配器
 │   │   ├── cmbc_client.py           # 民生银行适配器
 │   │   └── fund_client.py           # 东方财富基金适配器
 │   │
-│   ├── storage_csv.py               # CSV存储模块
-│   ├── snapshot.py                  # 快照生成模块
-│   ├── config_loader.py             # 配置加载模块
-│   │
-│   └── backtest/                    # 【策略回测引擎】
-│       ├── __init__.py
-│       ├── engine/                  # 回测核心引擎
-│       │   ├── backtester.py        # 回测主循环
-│       │   ├── data_feed.py         # 行情数据源
-│       │   ├── portfolio.py         # 投资组合管理
-│       │   └── types.py             # 数据结构定义
+│   └── backtest/                    # 策略回测引擎
+│       ├── engine/                  # 回测核心
 │       ├── strategies/              # 策略库
-│       │   ├── base.py              # 策略基类
-│       │   ├── registry.py          # 策略注册表
-│       │   ├── pure_sip.py          # 纯定投策略
-│       │   ├── profit_recycle_v11.py # 利润回收策略 v11
-│       │   ├── profit_recycle.py    # 利润回收策略 v10
-│       │   └── ma_enhanced.py       # MA250均线增强策略
-│       └── utils/                   # 工具模块
-│           └── nav_loader.py        # 净值数据加载器
+│       └── utils/                   # 回测工具
 │
-├── scripts/                         # 脚本目录
-│   ├── run_daily.py                 # 日常运行入口
-│   ├── run_backtest.py              # 【策略回测入口】
-│   ├── tx_cli.py                    # 【交易记录交互录入器】
-│   ├── verify_debit_confirm.py      # 【扣款/确认分离验证】
-│   ├── validate_transactions.py     # 交易流水校验工具
-│   ├── export_nav_history.py        # 净值历史导出工具
-│   ├── self_test.py                 # 自测脚本
-│   └── test_force_rebuild.py        # 覆盖/重建功能测试
+├── scripts/                         # 辅助脚本
+│   ├── run_backtest.py              # 策略回测入口
+│   ├── export_nav_history.py        # 净值历史导出
+│   └── validate_transactions.py     # 交易流水校验
 │
 ├── data/                            # 数据目录
-│   ├── transactions.csv             # 交易流水（支持扣款/确认分离）
+│   ├── transactions.csv             # 交易流水
+│   ├── orders.csv                   # 理财任务队列
+│   ├── ledger.csv                   # 生活账本
 │   ├── nav/                         # 净值CSV文件
-│   │   └── {code}_{name}.csv        # 格式：产品代码_产品名称.csv
 │   ├── snapshots/                   # 快照目录
-│   │   ├── daily.csv                # 日快照（每天每产品一条）
-│   │   ├── portfolio_by_nav_date.csv   # 按净值日期汇总
-│   │   ├── portfolio_by_fetch_date.csv # 按采集日期汇总
-│   │   └── portfolio_by_category.csv   # 按产品类型汇总
-│   └── backtest_results/            # 回测结果目录
-│       └── backtest_{code}_{strategy}_{timestamp}.csv
+│   └── backtest_results/            # 回测结果
 │
-└── README.md                        # 本文件
+└── README.md
 ```
 
 ---
@@ -208,7 +197,8 @@ cost = amount - fee  （净申购额入账）
 | `buy_debit` | 扣款事件（钱已扣，份额未到） | date, product_code, amount, order_id | cash += (amount-fee), principal_total += amount |
 | `buy_confirm` | 份额确认事件（份额到账） | date, product_code, shares, nav, nav_date, order_id | shares += shares, cost += matched_debit_net, cash -= matched |
 | `buy` | 兼容模式（当天扣款+确认） | date, product_code, amount, shares, nav, nav_date | shares += shares, cost += (amount-fee), principal_total += amount |
-| `sell` | 卖出确认 | date, product_code, shares, nav, nav_date | shares -= shares, cost 按比例减少 |
+| `sell` | 卖出（兼容模式） | date, product_code, shares, nav, nav_date | shares -= shares, cost 按比例减少 |
+| `sell_confirm` | 赎回确认（自动结算生成） | date, product_code, shares, amount, fee, nav, nav_date, order_id | shares -= shares, cost 按比例减少, amount=到账净额 |
 | `dividend` | 分红 | date, product_code, shares | shares += shares（成本不变） |
 
 **order_id 规则**：
@@ -225,11 +215,62 @@ date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
 2025-12-19,017641,buy_confirm,,63.58,,1.5709,2025-12-18,ORD20251218A1B2C3,份额到账
 # 兼容模式（当天扣款+确认）
 2025-12-18,163406,buy,99.88,61.37,0.12,1.6274,2025-12-17,,兴全合润混合(LOF)A
-# 卖出
-2025-12-19,163406,sell,1046.40,520.88,5.26,2.0190,2025-12-18,,兴全合润混合(LOF)A
+# 卖出（自动结算生成）
+2025-12-19,163406,sell_confirm,1041.14,520.88,5.26,2.0190,2025-12-18,ORD20251219123456,赎回确认
 # 分红
 2025-12-15,020602,dividend,,5.85,,1.0951,2025-12-15,,易方达红利低波ETF联接A
 ```
+
+---
+
+### orders.csv（理财任务队列）
+
+用户只需录入"扣款/赎回发起"，系统通过 `tx_cli settle` 自动生成确认事件写入 transactions.csv。
+
+**CSV 格式（固定 14 列）**：
+```csv
+order_id,product_code,order_type,amount,fee,shares,requested_at,trade_date,nav_date,confirm_date,holding_days,sell_fee_rate,status,note
+```
+
+**字段说明**：
+
+| 字段 | 说明 |
+|------|------|
+| `order_id` | 订单唯一标识（自动生成） |
+| `order_type` | `buy_debit` 或 `redeem_request` |
+| `amount` | 扣款金额（buy_debit）或到账净额（settle 后填充） |
+| `fee` | 手续费（系统根据费率自动计算） |
+| `shares` | 赎回份额（redeem_request）或确认份额（settle 后填充） |
+| `trade_date` | 交易日期 |
+| `nav_date` | 净值日期 |
+| `confirm_date` | 确认日期（根据 T+N 计算） |
+| `holding_days` | 持有天数（赎回时填写，用于确定费率） |
+| `sell_fee_rate` | 赎回费率（根据持有天数查表确定） |
+| `status` | `pending` / `done` / `cancelled` |
+
+**工作流程**：
+```
+1. 买入扣款 -> buy_debit 写入 transactions + orders pending
+2. tx_cli settle -> 读取净值 -> 生成 buy_confirm -> 标记 done
+3. 赎回发起 -> orders pending（不写 transactions）
+4. tx_cli settle -> 读取净值 -> 生成 sell_confirm -> 标记 done
+```
+
+---
+
+### ledger.csv（生活账本）
+
+记录日常收支，与理财交易分离。
+
+**CSV 格式（固定 10 列）**：
+```csv
+event_time,entry_type,amount,category_l1,category_l2,account_from,account_to,discount,reimbursable,note
+```
+
+**entry_type 类型**：
+- `expense`: 支出
+- `income`: 收入
+- `transfer`: 转账（account_from 和 account_to 都必填）
 
 ---
 
@@ -281,10 +322,39 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
         "product_name": "兴全合润混合(LOF)A",  // 产品名称
         "product_code": "163406",              // 产品代码
         "type": "fund",                        // 产品类型 (fund/nav)
-        "category": "fund"                     // 产品分类 (fund/bank)
+        "category": "fund",                    // 产品分类 (fund/bank)
+        "market": "cn",                        // 市场类型 (cn/qdii/bank_nav/cash_like)
+        "buy_fee_rate": 0.0012,                // 申购费率（0.12%）
+        "sell_fee_tiers": [                    // 赎回费率阶梯（按持有天数）
+            {"min_days": 0, "max_days": 7, "rate": 0.015},
+            {"min_days": 7, "max_days": 30, "rate": 0.0075},
+            {"min_days": 30, "max_days": 365, "rate": 0.005},
+            {"min_days": 365, "max_days": 730, "rate": 0.0025},
+            {"min_days": 730, "max_days": null, "rate": 0}
+        ],
+        "buy_confirm_offset": 1,               // 买入确认 T+N（默认 cn=1, qdii=2）
+        "sell_confirm_offset": 1,              // 赎回确认 T+N
+        "cutoff_time": "15:00"                 // 交易截止时间
     }
 ]
 ```
+
+**sell_fee_tiers 赎回费率阶梯**：
+| 持有天数 | 费率 | 说明 |
+|---------|------|------|
+| 0-7天 | 1.5% | 惩罚性费率 |
+| 7-30天 | 0.75% | - |
+| 30-365天 | 0.5% | - |
+| 365-730天 | 0.25% | - |
+| 730天以上 | 0% | 免赎回费 |
+
+**market 类型与默认确认延迟**：
+| market | 说明 | 默认 T+N |
+|--------|------|---------|
+| `cn` | 国内基金 | T+1 |
+| `qdii` | QDII 基金 | T+2 |
+| `bank_nav` | 银行理财 | T+1 |
+| `cash_like` | 货币基金 | T+0 |
 
 ### holdings.json（持仓配置 - 静态份额）
 
@@ -303,7 +373,8 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
 
 ### 日常运行
 ```bash
-python scripts/run_daily.py
+python tx_cli.py              # 交互模式
+python tx_cli.py collect      # 净值采集
 ```
 
 **智能去重策略**：
@@ -311,30 +382,42 @@ python scripts/run_daily.py
 - 同一天多次运行会覆盖（保持最新状态）
 - pnl_day 只反映净值变化，不受扣款/确认影响
 
-### 交易记录录入（推荐）
+### CLI 工具（统一入口）
+
 ```bash
-# 交互新增一条交易
-python scripts/tx_cli.py add
+# 交互模式（推荐）
+python tx_cli.py
 
-# 列表展示最近20条
-python scripts/tx_cli.py list
-
-# 校验 transactions.csv（含 debit/confirm 成对检查）
-python scripts/tx_cli.py check
+# 快速子命令
+python tx_cli.py settle      # 结算确认（处理到期订单）
+python tx_cli.py list-ledger # 查看账本
+python tx_cli.py list-orders # 查看订单
+python tx_cli.py list-tx     # 查看交易
+python tx_cli.py check       # 数据校验
 ```
 
 **tx_cli.py 功能**：
-- 自动加载产品列表，交互选择
-- 支持 5 种操作：`buy_debit`、`buy_confirm`、`buy`、`sell`、`dividend`
-- `buy_debit` 自动生成 `order_id`
-- `buy_confirm` 必须填写 `order_id`（与扣款记录匹配）
-- 自动校验日期格式、数值范围
-- 固定 10 列输出，确保 CSV 结构一致
-- `check` 命令会检查：列齐全、数值可解析、debit/confirm 是否成对
+
+**1. 记账模式**（写入 ledger.csv）
+- 支持 expense/income/transfer 三种类型
+- 从 accounts.json 选择账户
+- 从 categories.json 选择分类
+- 支持优惠金额、是否可报销标记
+
+**2. 理财模式**
+- **买入扣款**：录入扣款金额 -> 系统根据费率计算 fee -> 生成 order_id -> 计算确认日期 -> 写入 transactions + orders
+- **赎回发起**：录入赎回份额 + 持有天数 -> 系统查表确定费率 -> 只写入 orders（不影响持仓）
+- **结算确认**：扫描到期 pending 订单 -> 读取净值 -> 生成 buy_confirm/sell_confirm -> 写入 transactions
+- **补录历史交易**：直接录入已完成的 buy/sell/dividend，不走 orders 流程（适用于历史数据补录）
+
+**3. 结算特性（健壮+幂等）**
+- 缺净值时跳过不崩溃，保持 pending
+- 重复执行不产生重复 confirm
+- 详细日志输出处理结果
 
 ### 重建模式（修复历史数据）
 ```bash
-python scripts/run_daily.py --rebuild-from 2025-12-01
+python tx_cli.py rebuild 2025-12-01
 ```
 
 ### 策略回测
@@ -414,6 +497,22 @@ ADAPTOR_MAP = {
 
 ---
 
+## 📦 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+**主要依赖**：
+- `chinese-calendar`: 中国节假日判断库（用于交易日计算）
+
+**交易日规则**：
+- 使用 `chinese_calendar.is_workday()` 判断交易日（周一~周五，排除法定节假日）
+- 自动获取节假日数据，无需手动维护节假日配置
+- 支持 T+N 确认日期计算（A股 T+1，QDII T+2）
+
+---
+
 ## 🎓 关键设计理念
 
 1. **成本口径统一**：`cost = amount - fee`（净申购额），全系统一致
@@ -421,6 +520,7 @@ ADAPTOR_MAP = {
 3. **同日覆盖**：同一 (fetch_date, product_code) 只保留一条，保持数据干净
 4. **原子写入**：daily.csv 重建使用临时文件 + os.replace，防止写坏
 5. **字段零冗余**：每个字段都有明确用途，不引入无用字段
+6. **交易日自动判断**：使用 `chinese-calendar` 开源库，无需维护节假日配置
 
 ---
 

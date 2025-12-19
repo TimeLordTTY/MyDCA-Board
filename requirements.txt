@@ -1,0 +1,10 @@
+# MyDCA-Board 依赖包
+# 安装命令: pip install -r requirements.txt
+
+# 中国节假日判断（交易日计算）
+chinese-calendar>=1.9.0
+
+# 其他依赖根据需要添加
+# requests   # 如需要网络请求
+# pandas     # 如需要数据处理
+

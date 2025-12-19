@@ -3,18 +3,22 @@ import logging
 import sys
 from datetime import date
 
+# 适配器
 from adaptor import cmbc_client, fund_client
-from storage_csv import save_nav_record
-from snapshot import create_daily_snapshot, get_last_snapshot_value, rebuild_snapshots_from_date
-from portfolio_summary import generate_portfolio_summary
-from config_loader import load_products, get_holdings_map, load_holdings, get_project_root
-from validator import (
+# 数据层
+from data.storage_csv import save_nav_record
+from data.config_loader import load_products, get_holdings_map, load_holdings, get_project_root
+# 核心模块（同目录）
+from core.snapshot import create_daily_snapshot, get_last_snapshot_value, rebuild_snapshots_from_date
+from core.portfolio_summary import generate_portfolio_summary
+# 工具模块
+from utils.validator import (
     validate_product_config, 
     validate_holdings_config,
     validate_adaptor_exists,
     validate_nav_record
 )
-from nav_range_manager import update_product_nav_range
+from utils.nav_range_manager import update_product_nav_range
 
 logging.basicConfig(
     level=logging.INFO,

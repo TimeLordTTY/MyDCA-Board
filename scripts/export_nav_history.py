@@ -34,8 +34,8 @@ from decimal import Decimal
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from adaptor.fund_client import query_nav_history
-from config_loader import get_project_root
-from nav_range_manager import update_product_nav_range
+from data.config_loader import get_project_root
+from utils.nav_range_manager import update_product_nav_range
 
 
 def load_products():
