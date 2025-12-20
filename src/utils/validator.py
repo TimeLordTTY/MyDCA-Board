@@ -66,22 +66,10 @@ def validate_product_config(product):
 
 def validate_holdings_config(holdings, products):
     """
-    校验持仓配置的产品ID是否都存在于产品列表中
-    :param holdings: 持仓配置列表
-    :param products: 产品配置列表
-    :return: (is_valid, error_message)
+    [已废弃] 校验持仓配置 - 持仓现在完全由 transactions.csv 计算
+    
+    保留此函数仅为向后兼容，始终返回 True
     """
-    product_ids = {p['product_code'] for p in products}
-    invalid_ids = []
-    
-    for holding in holdings:
-        holding_id = holding.get('product_code')
-        if holding_id not in product_ids:
-            invalid_ids.append(holding_id)
-    
-    if invalid_ids:
-        return False, f"holdings.json中包含不存在的产品代码: {', '.join(invalid_ids)}"
-    
     return True, None
 
 def validate_adaptor_exists(source, adaptor_map):

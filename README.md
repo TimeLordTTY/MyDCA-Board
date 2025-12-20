@@ -46,9 +46,9 @@ save_nav_record()           # 存储到CSV
    - 校验NAV是数字
    - 校验PRODUCT_CODE一致性
 
-2. **`validate_holdings_config()`** - 持仓配置校验
-   - 确保 holdings.json 中的产品ID都在 products.json 中
-   - 配置错误会立即退出
+2. **持仓计算** - 基于交易流水
+   - 持仓份额完全由 `transactions.csv` 计算
+   - 无需静态配置文件
 
 **读完收获**：知道什么数据能通过，什么会报错
 
@@ -82,7 +82,6 @@ MyDCA-Board/
 │
 ├── config/                          # 配置文件
 │   ├── products.json                # 产品配置（含市场类型、费率等）
-│   ├── holdings.json                # 持仓配置（基础份额）
 │   ├── accounts.json                # 账户配置（记账用）
 │   ├── categories.json              # 分类配置（记账用）
 │   └── nav_range.json               # 净值范围配置（自动更新）
@@ -359,17 +358,6 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
 | `bank_nav` | 银行理财 | T+1 |
 | `cash_like` | 货币基金 | T+0 |
 
-### holdings.json（持仓配置 - 静态份额）
-
-```json
-[
-    {
-        "product_code": "163406",
-        "amount": 0                           // 设为0使用纯交易流水模式
-    }
-]
-```
-
 ---
 
 ## 🚀 使用方法
@@ -494,9 +482,9 @@ python scripts/run_backtest.py --product 163406 --strategy pure_sip
 # src/adaptor/xxx_client.py
 def query_latest_nav(product_code, query_date, retry_num):
     return [{
-        'PRODUCT_CODE': product_code,
-        'ISS_DATE': '2023-12-15',
-        'NAV': '1.2345',
+        'product_code': product_code,
+        'nav_date': '2023-12-15',
+        'nav': '1.2345',
         'fetched_at': datetime.now().isoformat(),
     }]
 ```

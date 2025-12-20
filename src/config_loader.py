@@ -51,7 +51,7 @@ def get_project_root():
     """获取项目根目录
     
     优先使用环境变量 MYDCA_PROJECT_ROOT（用于测试），
-    否则从 src/data/ 向上找到项目根目录
+    否则使用文件所在目录的父目录
     """
     global _project_root
     
@@ -61,8 +61,7 @@ def get_project_root():
         return Path(env_root)
     
     if _project_root is None:
-        # 当前文件在 src/data/，需要向上 3 层到达项目根目录
-        _project_root = Path(__file__).parent.parent.parent
+        _project_root = Path(__file__).parent.parent
     
     return _project_root
 
@@ -163,15 +162,16 @@ def format_sell_fee_tiers(product: Dict) -> str:
 
 
 def load_holdings():
-    """加载持仓配置（已废弃，始终返回空列表）"""
-    # 持仓现在完全由 transactions.csv 计算得出
-    return []
+    """加载持仓配置"""
+    config_path = get_project_root() / "config" / "holdings.json"
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 
 def get_holdings_map():
-    """获取产品代码到持仓份额的映射（已废弃，始终返回空字典）"""
-    # 持仓现在完全由 HoldingsCalculator 计算得出
-    return {}
+    """获取产品代码到持仓份额的映射"""
+    holdings = load_holdings()
+    return {h['product_code']: h['amount'] for h in holdings}
 
 
 def load_json_config(filename: str) -> Any:
@@ -196,40 +196,6 @@ def load_accounts() -> List[Dict]:
             {'id': 'other', 'name': '其他'},
         ]
     return config.get('accounts', [])
-
-
-def load_account_groups() -> Dict:
-    """加载账户组配置"""
-    config = load_json_config('accounts.json')
-    if config is None:
-        return {}
-    return config.get('account_groups', {})
-
-
-def get_account(account_id: str) -> Optional[Dict]:
-    """根据账户ID获取账户配置"""
-    accounts = load_accounts()
-    for acc in accounts:
-        if acc['id'] == account_id:
-            return acc
-    return None
-
-
-def get_accounts_by_group(group_id: str) -> List[Dict]:
-    """获取属于指定组的所有账户"""
-    accounts = load_accounts()
-    return [acc for acc in accounts if acc.get('group') == group_id]
-
-
-def get_wenlibao_accounts() -> List[Dict]:
-    """获取所有稳利宝子账户"""
-    return get_accounts_by_group('wenlibao')
-
-
-def get_account_name(account_id: str) -> str:
-    """获取账户名称"""
-    acc = get_account(account_id)
-    return acc['name'] if acc else account_id
 
 
 def load_categories() -> Dict:

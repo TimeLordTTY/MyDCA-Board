@@ -7,14 +7,13 @@ from datetime import date
 from adaptor import cmbc_client, fund_client
 # 数据层
 from data.storage_csv import save_nav_record
-from data.config_loader import load_products, get_holdings_map, load_holdings, get_project_root
+from data.config_loader import load_products, get_project_root
 # 核心模块（同目录）
 from core.snapshot import create_daily_snapshot, get_last_snapshot_value, rebuild_snapshots_from_date
 from core.daily_balance import create_daily_balance_snapshot
 # 工具模块
 from utils.validator import (
     validate_product_config, 
-    validate_holdings_config,
     validate_adaptor_exists,
     validate_nav_record
 )
@@ -35,15 +34,14 @@ ADAPTOR_MAP = {
 def validate_configs():
     """
     校验配置文件的完整性和正确性
-    :return: (products, holdings, products_map, holdings_map) 或异常退出
+    :return: (products, products_map) 或异常退出
     """
     logger.info("=== 配置校验阶段 ===")
     
     # 加载配置
     products = load_products()
-    holdings = load_holdings()
     
-    # 1. 校验产品配置
+    # 校验产品配置
     for product in products:
         is_valid, error = validate_product_config(product)
         if not is_valid:
@@ -57,18 +55,11 @@ def validate_configs():
             logger.error(f"产品 {product['product_code']} 配置错误: {error}")
             sys.exit(1)
     
-    # 2. 校验持仓配置
-    is_valid, error = validate_holdings_config(holdings, products)
-    if not is_valid:
-        logger.error(f"持仓配置错误: {error}")
-        sys.exit(1)
-    
     # 构建映射
     products_map = {p['product_code']: p['product_name'] for p in products}
-    holdings_map = get_holdings_map()
     
-    logger.info(f"✓ 配置校验通过: {len(products)}个产品, {len(holdings)}个持仓")
-    return products, holdings, products_map, holdings_map
+    logger.info(f"✓ 配置校验通过: {len(products)}个产品")
+    return products, products_map
 
 def fetch_and_validate_nav(adaptor, product_code, product_name, source):
     """
@@ -96,7 +87,7 @@ def fetch_and_validate_nav(adaptor, product_code, product_name, source):
     except Exception as e:
         return None, f"采集异常: {str(e)}"
 
-def process_single_product(product, products_map, holdings_map, nav_records):
+def process_single_product(product, products_map, nav_records):
     """
     处理单个产品的采集、存储和记录
     :return: 处理结果字典（用于日志）
@@ -112,7 +103,6 @@ def process_single_product(product, products_map, holdings_map, nav_records):
         'nav': '-',
         'csv': 'N',
         'snapshot': 'N',
-        'pnl': '-',
         'status': 'FAIL'
     }
     
@@ -144,16 +134,6 @@ def process_single_product(product, products_map, holdings_map, nav_records):
     # 无论净值是否是新的，都要记录用于生成快照
     # 因为份额可能变化（交易流水），即使净值不变，value 也会变
     nav_records[product_code] = nav_record
-    
-    # 计算PNL（如果有持仓）
-    shares = holdings_map.get(product_code, 0)
-    if shares > 0:
-        snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
-        last_value = get_last_snapshot_value(snapshot_path, product_code)
-        current_value = float(shares) * float(nav_record['nav'])
-        if last_value:
-            pnl = current_value - float(last_value)
-            result['pnl'] = f"{pnl:+.2f}"
     result['snapshot'] = 'Y'
     
     return result
@@ -184,7 +164,7 @@ def collect_and_store(rebuild_from=None):
         logger.info(f"✓ 重建准备完成: 保留 {kept} 条, 删除 {deleted} 条")
     
     # 1. 校验配置（失败则退出）
-    products, holdings, products_map, holdings_map = validate_configs()
+    products, products_map = validate_configs()
     
     # 2. 采集净值并存储
     logger.info("=== 净值采集阶段 ===")
@@ -192,7 +172,7 @@ def collect_and_store(rebuild_from=None):
     results = []
     
     for product in products:
-        result = process_single_product(product, products_map, holdings_map, nav_records)
+        result = process_single_product(product, products_map, nav_records)
         results.append(result)
     
     # 3. 生成快照
@@ -205,7 +185,7 @@ def collect_and_store(rebuild_from=None):
         category_map = {p['product_code']: p.get('category', 'fund') for p in products}
         # 构建产品市场类型映射（用于 cash_like 特殊处理）
         market_map = {p['product_code']: p.get('market', 'cn') for p in products}
-        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, 
+        snapshot_count = create_daily_snapshot(nav_records, {}, products_map, 
                                                products_order=products_order, 
                                                category_map=category_map, 
                                                market_map=market_map)
@@ -220,10 +200,10 @@ def collect_and_store(rebuild_from=None):
     
     # 5. 输出汇总日志
     logger.info("=== 执行汇总 ===")
-    logger.info(f"{'产品代码':<12} {'来源':<6} {'净值日期':<12} {'净值':<8} {'CSV':<6} {'快照':<6} {'PNL':<10} {'状态'}")
-    logger.info("-" * 85)
+    logger.info(f"{'产品代码':<12} {'来源':<6} {'净值日期':<12} {'净值':<8} {'CSV':<6} {'快照':<6} {'状态'}")
+    logger.info("-" * 75)
     for r in results:
-        logger.info(f"{r['code']:<12} {r['source']:<6} {r['date']:<12} {r['nav']:<8} {r['csv']:<6} {r['snapshot']:<6} {r['pnl']:<10} {r['status']}")
+        logger.info(f"{r['code']:<12} {r['source']:<6} {r['date']:<12} {r['nav']:<8} {r['csv']:<6} {r['snapshot']:<6} {r['status']}")
     
     success_count = sum(1 for r in results if r['csv'] == 'Y')
     logger.info(f"\n✓ 任务完成: 成功{success_count}/{len(products)}, 快照{snapshot_count}条")
