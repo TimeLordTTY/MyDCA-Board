@@ -8,19 +8,19 @@
 
 ### 第一步：理解核心流程（10分钟）
 
-**先看 `src/nav_collector.py`**
+**先看 `src/core/nav_collector.py`**
 
 1. **`collect_and_store()`** - 主入口函数
 ```python
-validate_configs()          # 校验配置文件
+validate_configs()              # 校验配置文件
 ↓
-process_single_product()    # 处理每个产品
+process_single_product()        # 处理每个产品
 ↓
-create_daily_snapshot()     # 生成快照（含收益率）
+create_daily_snapshot()         # 生成产品快照（daily.csv）
 ↓
-generate_portfolio_summary() # 生成资产汇总
+create_daily_balance_snapshot() # 生成账户余额快照（daily_balance.csv）
 ↓
-输出汇总日志               # 显示执行结果
+输出汇总日志                    # 显示执行结果
 ```
 
 2. **`process_single_product()`** - 单产品处理
@@ -38,13 +38,13 @@ save_nav_record()           # 存储到CSV
 
 ### 第二步：理解数据标准（10分钟）
 
-**再看 `src/validator.py`**
+**再看 `src/utils/validator.py`**
 
 1. **`validate_nav_record()`** - 净值数据校验
-   - 检查必需字段：`PRODUCT_CODE`, `ISS_DATE`, `NAV`, `fetched_at`
+   - 检查必需字段：`product_code`, `nav_date`, `nav`, `fetched_at`
    - 校验日期格式：必须是 `YYYY-MM-DD`
    - 校验NAV是数字
-   - 校验PRODUCT_CODE一致性
+   - 校验product_code一致性
 
 2. **持仓计算** - 基于交易流水
    - 持仓份额完全由 `transactions.csv` 计算
@@ -82,16 +82,19 @@ MyDCA-Board/
 │
 ├── config/                          # 配置文件
 │   ├── products.json                # 产品配置（含市场类型、费率等）
-│   ├── accounts.json                # 账户配置（记账用）
+│   ├── accounts.json                # 账户配置（含 account_groups）
 │   ├── categories.json              # 分类配置（记账用）
 │   └── nav_range.json               # 净值范围配置（自动更新）
+│
+├── docs/                            # 文档
+│   └── field_spec.md                # 字段计算规则合同（对账级规范）
 │
 ├── src/                             # 源代码（模块化组织）
 │   ├── core/                        # 核心业务模块
 │   │   ├── nav_collector.py         # 主控协调器
-│   │   ├── snapshot.py              # 快照生成
-│   │   ├── holdings_calculator.py   # 持仓与成本计算器
-│   │   └── portfolio_summary.py     # 资产汇总
+│   │   ├── snapshot.py              # 产品快照生成（daily.csv）
+│   │   ├── daily_balance.py         # 账户余额快照（daily_balance.csv）
+│   │   └── holdings_calculator.py   # 持仓与成本计算器
 │   │
 │   ├── data/                        # 数据层模块
 │   │   ├── config_loader.py         # 配置加载
@@ -101,6 +104,7 @@ MyDCA-Board/
 │   │
 │   ├── utils/                       # 工具模块
 │   │   ├── validator.py             # 数据校验器
+│   │   ├── trade_calendar.py        # 交易日历（中国节假日）
 │   │   └── nav_range_manager.py     # 净值范围管理
 │   │
 │   ├── adaptor/                     # 数据源适配器
@@ -122,8 +126,7 @@ MyDCA-Board/
 │   ├── orders.csv                   # 理财任务队列
 │   ├── ledger.csv                   # 生活账本
 │   ├── nav/                         # 净值CSV文件
-│   ├── snapshots/                   # 快照目录
-│   └── backtest_results/            # 回测结果
+│   └── snapshots/                   # 快照目录（daily.csv, daily_balance.csv）
 │
 └── README.md
 ```

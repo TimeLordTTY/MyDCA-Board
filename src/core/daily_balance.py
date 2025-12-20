@@ -4,28 +4,40 @@
 
 生成 daily_balance.csv，展示各账户余额和关联产品市值。
 
+核心设计原则：
+- balance 永远来自 ledger 计算（本金分桶余额），不含收益
+- product_value 是展示口径：默认等于 balance；profit_account 额外包含收益
+- diff 仅 profit_account 和汇总行显示收益/亏损
+- 收益分配是纯展示层优化，不写入 ledger，不改变本金口径
+
 账户类型说明：
 - cash：现金账户（余利宝生活费、余利宝理财金等）
-- fund_mapped：映射到基金的账户（小荷包 -> 000686）
-- product_sub：产品子账户（稳利宝子账户）
+- fund_mapped：映射到基金的账户（小荷包 -> 000686），收益自动入账
+- product_sub：产品子账户（稳利宝子账户），收益展示分配到 profit_account
 - fund_total：基金账户汇总
+- summary：汇总行
 
 字段说明：
 - fetch_date：快照日期
 - account_id：账户ID
 - account_name：账户名称  
 - account_type：账户类型
-- balance：账户余额（从ledger计算）
+- balance：账户余额（从ledger计算，本金分桶）
 - related_product：关联产品代码
-- product_value：关联产品市值
-- diff：差异（product_value - balance）
+- product_value：展示市值（profit_account = balance + group_profit）
+- diff：收益/差异（仅 profit_account 和汇总行显示）
 - note：备注
 
-小荷包收益计算规则：
+收益分配展示规则（product_sub）：
+1. group_profit = 父产品 total_value - 子账户 balance 合计
+2. profit_account 查找：account_groups.profit_account 或 receives_profit=true
+3. profit_account 行：product_value = balance + group_profit, diff = group_profit
+4. 其他子账户行：product_value = balance, diff 为空
+
+小荷包收益计算规则（fund_mapped）：
 - 关联货币基金（如 000686 建信嘉薪宝）
 - 收益公式：日收益 = 持有份额 / 10000 * 万份收益
-- 收益发放规则：余额等待下个交易日由基金公司确认份额，份额确认后的次日发放收益
-- 交易日为不含节假日的周一到周五，以15:00为界
+- 余额：balance = 市值 + 当日收益（收益自动入账）
 """
 import csv
 import glob
@@ -267,9 +279,51 @@ def get_account_type(account: Dict) -> str:
         return 'cash'
 
 
+def _find_profit_account(group_id: str, group_config: Dict, accounts: List[Dict]) -> Optional[str]:
+    """
+    查找收益归属账户
+    
+    优先级：
+    1. account_groups[group_id].profit_account
+    2. 该 group 内 receives_profit=true 的子账户
+    3. 找不到返回 None
+    
+    :param group_id: 组ID（如 'wenlibao'）
+    :param group_config: 组配置
+    :param accounts: 所有账户列表
+    :return: profit_account 的 account_id，或 None
+    """
+    # 优先级1：从 group_config 读取 profit_account
+    profit_account = group_config.get('profit_account')
+    if profit_account:
+        return profit_account
+    
+    # 优先级2：在该 group 的子账户中寻找 receives_profit=true
+    for acc in accounts:
+        if acc.get('group') == group_id and acc.get('receives_profit'):
+            return acc.get('id')
+    
+    return None
+
+
+def _get_profit_account_name(profit_account_id: str, accounts: List[Dict]) -> str:
+    """获取 profit_account 的账户名称"""
+    for acc in accounts:
+        if acc.get('id') == profit_account_id:
+            return acc.get('name', profit_account_id)
+    return profit_account_id
+
+
 def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[Dict]:
     """
     生成账户余额快照
+    
+    设计说明：
+    - balance 永远来自 ledger 计算（本金分桶余额），不含收益
+    - product_value 是展示口径：
+      - 默认等于 balance
+      - profit_account 额外包含 group_profit（收益/亏损）
+    - diff 仅 profit_account 显示 group_profit
     
     :param project_root: 项目根目录
     :param fetch_date: 快照日期，None则使用今天
@@ -289,8 +343,6 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
     
     # 统计变量
     fund_total = Decimal('0')
-    wenlibao_total = Decimal('0')
-    wenlibao_sub_total = Decimal('0')  # 子账户余额合计
     ylb_total = Decimal('0')  # 余利宝合计
     
     # 获取所有 fund_mapped 账户关联的产品代码（这些不计入基金总和）
@@ -301,14 +353,21 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
             if linked:
                 fund_mapped_products.add(linked)
     
+    # ========== 第一阶段：收集所有子账户信息（用于后续收益分配） ==========
+    # group_sub_info: {group_id: {account_id: {'balance': Decimal, 'record_idx': int, ...}}}
+    group_sub_info: Dict[str, Dict[str, Dict]] = {}
+    # account_id -> record 索引映射
+    account_record_map: Dict[str, int] = {}
+    
     for account in accounts:
         account_id = account.get('id', '')
         account_name = account.get('name', '')
         linked_product = account.get('linked_product')
         initial_balance = safe_decimal(account.get('initial_balance', '0'))
         account_type = get_account_type(account)
+        group = account.get('group', '')
         
-        # 计算账户余额（从 ledger 计算，不再使用 accounts.json 中的 initial_balance）
+        # 计算账户余额（从 ledger 计算）
         balance = calc_account_balance(account_id, ledger, initial_balance, fetch_date)
         
         # 获取关联产品市值
@@ -324,11 +383,21 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
                     fund_total += info.get('total_value', Decimal('0'))
             balance = fund_total
             product_value = fund_total
-        # 产品子账户（稳利宝）：不显示父产品市值，只显示余额
-        # 父产品市值在汇总行显示
+        
+        # 产品子账户（稳利宝等）：先记录 balance，product_value/diff 在第二阶段设置
         elif account_type == 'product_sub':
-            # 只记录余额，不显示产品市值
-            wenlibao_sub_total += balance
+            # 收集到 group_sub_info
+            if group:
+                if group not in group_sub_info:
+                    group_sub_info[group] = {}
+                group_sub_info[group][account_id] = {
+                    'balance': balance,
+                    'name': account_name,
+                    'linked_product': linked_product,
+                }
+            # 暂时 product_value = balance，后续会更新 profit_account
+            product_value = balance
+        
         # 基金映射账户（小荷包）：余额 = 关联产品市值 + 当日收益
         elif account_type == 'fund_mapped' and linked_product:
             if linked_product in daily_products:
@@ -337,24 +406,23 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
                 shares = product_info.get('shares', Decimal('0'))
                 
                 # 计算货币基金当日收益
-                # 收益公式：日收益 = 持有份额 / 10000 * 万份收益
                 daily_income = Decimal('0')
                 yield_per_10k = load_money_fund_yield(project_root, linked_product)
                 if yield_per_10k and shares > 0:
                     daily_income = calc_money_fund_daily_income(shares, yield_per_10k)
                 
                 # 小荷包余额 = 市值 + 当日收益（收益自动入账）
-                ledger_balance = balance  # 保存 ledger 计算的值用于对比
-                balance = product_value + daily_income  # 余额 = 市值 + 当日收益
-                product_value = balance  # 产品市值也更新为含收益的值
+                ledger_balance = balance
+                balance = product_value + daily_income
+                product_value = balance
                 
                 if daily_income > 0:
                     note = f"万份收益={yield_per_10k}，日收益=+{daily_income}"
                 
-                diff = balance - ledger_balance  # 差异 = 当前余额 - ledger记录值
+                diff = balance - ledger_balance
+        
         # 余利宝账户：统计到余利宝合计
         elif account_type == 'cash':
-            # 检查是否为余利宝账户
             ylb_group = account_groups.get('ylb', {})
             ylb_account_ids = ylb_group.get('accounts', [])
             if account_id in ylb_account_ids:
@@ -372,25 +440,87 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
             'note': note
         }
         records.append(record)
+        account_record_map[account_id] = len(records) - 1
     
-    # 获取稳利宝产品总市值
-    wenlibao_product = daily_products.get('FBAE41126E', {})
-    if wenlibao_product:
-        wenlibao_total = wenlibao_product.get('total_value', Decimal('0'))
+    # ========== 第二阶段：为每个 account_group 分配收益展示 ==========
+    # 存储汇总行信息（稍后添加）
+    summary_rows = []
     
-    # 添加稳利宝汇总行
-    wenlibao_profit = wenlibao_total - wenlibao_sub_total
-    records.append({
-        'fetch_date': fetch_date,
-        'account_id': 'wenlibao_total',
-        'account_name': '稳利宝(合计)',
-        'account_type': 'summary',
-        'balance': f"{wenlibao_sub_total:.2f}",
-        'related_product': 'FBAE41126E',
-        'product_value': f"{wenlibao_total:.2f}",
-        'diff': f"{wenlibao_profit:.2f}",
-        'note': f"收益={wenlibao_profit:.2f}（归入项目资金）"
-    })
+    for group_id, group_config in account_groups.items():
+        linked_product = group_config.get('linked_product')
+        if not linked_product:
+            continue  # 该 group 没有关联产品，跳过
+        
+        # 获取父产品 total_value
+        parent_product = daily_products.get(linked_product, {})
+        parent_total_value = parent_product.get('total_value', Decimal('0'))
+        
+        if parent_total_value == 0:
+            # 父产品数据缺失，不做分配展示
+            continue
+        
+        # 获取该 group 的子账户信息
+        sub_accounts = group_sub_info.get(group_id, {})
+        if not sub_accounts:
+            continue
+        
+        # 计算子账户余额合计
+        sub_total_balance = sum(info['balance'] for info in sub_accounts.values())
+        
+        # 计算 group_profit（收益/亏损）
+        group_profit = parent_total_value - sub_total_balance
+        
+        # 查找 profit_account
+        profit_account_id = _find_profit_account(group_id, group_config, accounts)
+        profit_account_name = _get_profit_account_name(profit_account_id, accounts) if profit_account_id else None
+        
+        # 更新子账户的 product_value 和 diff
+        for acc_id, info in sub_accounts.items():
+            if acc_id not in account_record_map:
+                continue
+            
+            record_idx = account_record_map[acc_id]
+            record = records[record_idx]
+            balance = info['balance']
+            
+            if profit_account_id and acc_id == profit_account_id:
+                # profit_account：product_value = balance + group_profit, diff = group_profit
+                display_value = balance + group_profit
+                record['product_value'] = f"{display_value:.2f}"
+                record['diff'] = f"{group_profit:.2f}"
+                # 更新 note
+                original_note = record.get('note', '')
+                profit_note = f"（含收益展示 {group_profit:+.2f}）"
+                if original_note:
+                    record['note'] = f"{original_note} {profit_note}"
+                else:
+                    record['note'] = profit_note.strip('（）')
+            else:
+                # 其他子账户：product_value = balance, diff 为空
+                record['product_value'] = f"{balance:.2f}"
+                record['diff'] = ''
+        
+        # 添加汇总行
+        summary_note = f"收益={group_profit:.2f}"
+        if profit_account_name:
+            summary_note += f"（展示归入：{profit_account_name}）"
+        else:
+            summary_note += "（未配置 profit_account）"
+        
+        summary_rows.append({
+            'fetch_date': fetch_date,
+            'account_id': f'{group_id}_total',
+            'account_name': f"{group_config.get('name', group_id)}(合计)",
+            'account_type': 'summary',
+            'balance': f"{sub_total_balance:.2f}",
+            'related_product': linked_product,
+            'product_value': f"{parent_total_value:.2f}",
+            'diff': f"{group_profit:.2f}",
+            'note': summary_note
+        })
+    
+    # 添加汇总行（优先添加已处理的 group 汇总）
+    records.extend(summary_rows)
     
     # 添加余利宝汇总行（如果有）
     if ylb_total > 0:
@@ -445,10 +575,8 @@ def write_daily_balance(records: List[Dict], output_path: Path):
             for record in records:
                 writer.writerow(record)
         
-        # 原子替换
-        if output_path.exists():
-            output_path.unlink()
-        tmp_path.rename(output_path)
+        # 原子替换（os.replace 是真正的原子操作）
+        os.replace(str(tmp_path), str(output_path))
         
         logger.info(f"✓ 写入账户余额快照: {output_path} ({len(records)} 条)")
         

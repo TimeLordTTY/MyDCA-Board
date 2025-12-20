@@ -301,20 +301,53 @@ fetch_date,account_id,account_name,account_type,balance,related_product,product_
 | account_id | 账户唯一标识 | 来自 accounts.json | 固定 |
 | account_name | 账户显示名称 | 来自 accounts.json | 固定 |
 | account_type | 账户类型 | 见上表枚举 | 固定 |
-| balance | 账户余额 | 见上表计算规则 | ledger 变动/净值变动 |
+| balance | 账户余额（本金分桶） | 见上表计算规则 | ledger 变动 |
 | related_product | 关联产品代码 | 来自 accounts.json.linked_product | 固定 |
-| product_value | 关联产品市值 | 来自 daily.csv.total_value | 净值变动 |
-| diff | 差异值 | 因账户类型而异（见下） | 净值变动 |
+| product_value | 展示市值 | 见 5.5 说明 | 净值变动 |
+| diff | 收益/差异 | 见 5.5 说明 | 净值变动 |
 | note | 备注 | 来自 accounts.json 或动态生成 | 净值变动 |
 
-### 5.5 diff 字段含义
+### 5.5 product_value 与 diff 字段说明
 
-| account_type | diff 含义 | 公式 |
-|--------------|----------|------|
-| fund_mapped | 相比 ledger 记录的累计收益 | `balance - ledger_balance` |
-| product_sub | 无 | 空 |
-| summary (稳利宝) | 稳利宝收益 | `product_value - 子账户余额合计` |
-| 其他 | 无 | 空 |
+**核心原则**：
+- `balance` **永远**来自 ledger 计算（本金分桶余额），不含收益
+- `product_value` 是**展示口径**，可包含收益
+- `diff` 显示收益/亏损差异
+
+| account_type | balance | product_value | diff |
+|--------------|---------|---------------|------|
+| cash | ledger 余额 | 空 | 空 |
+| fund_mapped | 市值+日收益 | 同 balance | `balance - ledger_balance` |
+| **product_sub（普通）** | ledger 余额 | **= balance** | 空 |
+| **product_sub（profit_account）** | ledger 余额 | **= balance + group_profit** | **group_profit** |
+| summary | 子账户合计 | 父产品市值 | group_profit |
+
+#### product_sub 收益分配展示规则
+
+对于有 `linked_product` 的账户组（如稳利宝），系统会将父产品收益**展示分配**到指定的 `profit_account`：
+
+1. **group_profit 计算**：`父产品 total_value - 子账户 balance 合计`
+2. **profit_account 查找规则**（优先级）：
+   - `account_groups[group_id].profit_account`（如 `wenlibao_project`）
+   - 子账户中 `receives_profit=true` 的账户
+   - 找不到则不分配，仅在汇总行显示
+3. **展示结果**：
+   - 普通子账户：`product_value = balance`，`diff` 为空
+   - profit_account：`product_value = balance + group_profit`，`diff = group_profit`
+
+**重要**：此展示分配**不写入 ledger**，不改变本金口径，仅用于更直观阅读。
+
+**示例**：
+```
+假设：父产品 FBAE41126E 的 total_value = 24322.06
+      子账户 balance 合计 = 24320.87
+      group_profit = 1.19
+
+结果：
+- wenlibao_rent:    balance=4000.00, product_value=4000.00, diff=空
+- wenlibao_project: balance=9475.30, product_value=9476.49, diff=1.19  ← profit_account
+- wenlibao_total:   balance=24320.87, product_value=24322.06, diff=1.19
+```
 
 ### 5.6 fund_mapped 账户收益计算（货币基金）
 
@@ -334,9 +367,11 @@ fetch_date,account_id,account_name,account_type,balance,related_product,product_
 
 | 汇总行 | account_id | 计算规则 |
 |--------|------------|----------|
-| 稳利宝合计 | wenlibao_total | balance = Σ wenlibao_* 子账户余额，diff = 稳利宝产品市值 - balance |
+| 稳利宝合计 | wenlibao_total | balance = Σ 子账户余额，product_value = 父产品市值，diff = group_profit |
 | 余利宝合计 | ylb_total | balance = ylb_life + ylb_finance |
 | 基金合计 | fund_total | balance = Σ daily.csv 基金市值（排除 fund_mapped 关联产品） |
+
+**汇总行 diff 与 profit_account diff 一致**：表示该产品组在该快照日的收益/亏损。
 
 ---
 
