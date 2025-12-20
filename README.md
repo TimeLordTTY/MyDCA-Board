@@ -163,10 +163,12 @@ MyDCA-Board/
 value = shares × nav
 
 # 总资产（含在途资金）
-total_value = value + cash
+total_value = value + cash_in_transit
 
-# 总盈亏
-total_pnl = total_value - principal_total
+# 生命周期总盈亏（核心公式变更 v2）
+total_pnl = total_value + total_redemption - principal_total
+# 直观理解：投了 X 元，现在还有 Y 元在里面，已经拿回了 Z 元，总盈亏 = Y + Z - X
+# 全赎回后：total_pnl = 0 + total_redemption - principal_total = 实际利润（不会反直觉）
 
 # 日变动（核心：只反映净值涨跌，不受扣款/确认影响）
 pnl_day = prev_day_shares × (nav_today - nav_prev)
@@ -286,16 +288,17 @@ event_time,entry_type,amount,category_l1,category_l2,account_from,account_to,dis
 | `category` | 分类 | fund/bank |
 | `nav_date` | 净值日期 | 净值来源日期（可能滞后） |
 | `nav` | 净值 | 单位净值 |
-| `shares` | 份额 | **已确认份额**（只有确认后才计入） |
+| `shares` | 份额 | **已确认份额**（精度≥4位小数） |
 | `value` | 市值 | shares × nav |
 | `pnl_day` | 日变动 | **只由净值涨跌贡献**：prev_shares × (nav - prev_nav) |
-| `cost` | 成本 | 持仓成本（平均成本法，卖出按比例扣减） |
+| `cost` | 成本 | 持仓成本（净申购额口径，卖出按比例扣减） |
 | `unrealized_pnl` | 浮动盈亏 | value - cost |
 | `return_rate` | 收益率 | unrealized_pnl / cost × 100% |
-| `cash` | 在途资金 | 扣款已发生但份额未确认的净额 |
-| `total_value` | 总资产 | value + cash |
+| `cash_in_transit` | 在途资金 | 扣款已发生但份额未确认的净额 |
+| `total_value` | 总资产 | value + cash_in_transit |
 | `principal_total` | 累计投入本金 | 按扣款累计，不因卖出回笼减少 |
-| `total_pnl` | 总盈亏 | total_value - principal_total |
+| `total_redemption` | 累计赎回 | 卖出到账净额累计 |
+| `total_pnl` | 生命周期总盈亏 | **total_value + total_redemption - principal_total** |
 | `real_return` | 真实收益率 | total_pnl / principal_total × 100% |
 | `fetched_at` | 采集时间 | 毫秒精度 |
 
@@ -306,9 +309,9 @@ event_time,entry_type,amount,category_l1,category_l2,account_from,account_to,dis
 
 **示例**：
 ```csv
-fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,cost,unrealized_pnl,return_rate,cash,total_value,principal_total,total_pnl,real_return,fetched_at
-采集日期,产品代码,产品名称,分类,净值日期,净值,份额,市值,日变动,成本,浮动盈亏,收益率,在途资金,总资产,累计投入本金,总盈亏,真实收益率,采集时间
-2025-12-19,017641,摩根标普500指数A,fund,2025-12-18,1.5800,1063.58,1680.46,30.00,1700.00,-19.54,-1.15%,0.00,1680.46,1700.00,-19.54,-1.15%,2025-12-19 12:00:00.000
+fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,cost,unrealized_pnl,return_rate,cash_in_transit,total_value,principal_total,total_redemption,total_pnl,real_return,fetched_at
+采集日期,产品代码,产品名称,分类,净值日期,净值,份额,市值,日变动,成本,浮动盈亏,收益率,在途资金,总资产,累计投入本金,累计赎回,总盈亏,真实收益率,采集时间
+2025-12-20,163406,兴全合润混合A,fund,2025-12-19,2.0279,651.0900,1320.35,0.00,1267.76,52.58,4.15%,0.00,1320.35,3046.33,1855.76,129.78,4.26%,2025-12-20 15:28:05.023
 ```
 
 ---
@@ -373,14 +376,15 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
 
 ### 日常运行
 ```bash
-python tx_cli.py              # 交互模式
-python tx_cli.py collect      # 净值采集
+python tx_cli.py              # 交互模式（推荐）
+python tx_cli.py collect      # 手动同步（一般不需要）
 ```
 
-**智能去重策略**：
-- 同一 (fetch_date, product_code) 只保留一条
+**自动同步特性**：
+- 启动时自动采集净值并更新账户余额
+- 记账/理财操作后自动后台同步（无输出）
 - 同一天多次运行会覆盖（保持最新状态）
-- pnl_day 只反映净值变化，不受扣款/确认影响
+- 历史数据永远不会被删除
 
 ### CLI 工具（统一入口）
 
@@ -396,6 +400,16 @@ python tx_cli.py list-tx     # 查看交易
 python tx_cli.py check       # 数据校验
 ```
 
+**菜单结构**：
+```
+财富中枢 CLI
+==================================================
+  [1] 记账 (生活收支)
+  [2] 理财 (买入/赎回)
+  [3] 工具 (查看/校验)
+  [0] 退出
+```
+
 **tx_cli.py 功能**：
 
 **1. 记账模式**（写入 ledger.csv）
@@ -403,24 +417,26 @@ python tx_cli.py check       # 数据校验
 - 从 accounts.json 选择账户
 - 从 categories.json 选择分类
 - 支持优惠金额、是否可报销标记
+- 记账后自动后台同步数据
 
 **2. 理财模式**
 - **买入扣款**：录入扣款金额 -> 系统根据费率计算 fee -> 生成 order_id -> 计算确认日期 -> 写入 transactions + orders
 - **赎回发起**：录入赎回份额 + 持有天数 -> 系统查表确定费率 -> 只写入 orders（不影响持仓）
 - **结算确认**：扫描到期 pending 订单 -> 读取净值 -> 生成 buy_confirm/sell_confirm -> 写入 transactions
 - **补录历史交易**：直接录入已完成的 buy/sell/dividend，不走 orders 流程（适用于历史数据补录）
+- 每次操作后自动后台同步数据
 
-**3. 结算特性（健壮+幂等）**
+**3. 工具模式**
+- **查看账户余额**：显示所有账户余额（含货币基金收益）
+- **查看账本/订单/交易**：查看历史记录
+- **数据校验**：检查数据完整性
+
+**4. 结算特性（健壮+幂等）**
 - 缺净值时跳过不崩溃，保持 pending
 - 重复执行不产生重复 confirm
 - 详细日志输出处理结果
 
-### 重建模式（修复历史数据）
-```bash
-python tx_cli.py rebuild 2025-12-01
-```
-
-### 策略回测
+### 策略回测（可选）
 ```bash
 # 列出可用产品和策略
 python scripts/run_backtest.py --list
@@ -429,6 +445,18 @@ python scripts/run_backtest.py --strategies
 # 运行回测
 python scripts/run_backtest.py --product 163406 --strategy pure_sip
 ```
+
+### 账户余额快照
+
+系统会在启动时和每次操作后自动生成 `daily_balance.csv`，展示各账户余额：
+
+| 账户类型 | 说明 |
+|---------|------|
+| `cash` | 现金账户（余利宝、银行卡等） |
+| `fund_mapped` | 货币基金映射账户（小荷包 -> 000686），余额=市值+当日收益 |
+| `product_sub` | 产品子账户（稳利宝各子账户） |
+| `fund_total` | 基金账户汇总（不含货币基金） |
+| `summary` | 汇总行（稳利宝合计、余利宝合计、基金合计） |
 
 ---
 
@@ -540,13 +568,13 @@ pip install -r requirements.txt
 | 字段 | 说明 | 注意 |
 |------|------|------|
 | `amount` | 交易金额 | 买入金额、卖出到账金额 |
-| `shares` | 已确认份额 | 不使用 units |
+| `shares` | 已确认份额 | 精度≥4位小数，不使用 units |
 | `fee` | 手续费 | - |
 | `nav` | 单位净值 | - |
 | `value` | 持仓市值（shares × nav） | 不使用 market_value |
 | `cost` | 持仓成本（净申购额累计） | 不使用 total_cost |
-| `cash` | 在途资金 | 不使用 cash_in_transit |
-| `total_value` | 总资产（value + cash） | - |
+| `cash_in_transit` | 在途资金 | 扣款已发生但份额未确认的净额 |
+| `total_value` | 总资产（value + cash_in_transit） | - |
 | `principal_total` | 累计投入本金 | 扣款时增加，卖出不减少 |
 
 ### 盈亏字段
@@ -554,9 +582,24 @@ pip install -r requirements.txt
 |------|------|------|
 | `pnl_day` | 日变动 | prev_shares × (nav_today - nav_prev)；**不使用 pnl** |
 | `unrealized_pnl` | 浮动盈亏 | value - cost |
-| `total_pnl` | 总盈亏 | total_value - principal_total |
-| `return_rate` | 持仓收益率 | unrealized_pnl / cost × 100%；不使用 unrealized_pnl_pct |
+| `total_redemption` | 累计赎回金额 | Σ sell_confirm.amount（到账净额） |
+| `total_pnl` | **生命周期总盈亏** | **total_value + total_redemption - principal_total** |
+| `global_pnl` | 全局盈亏（组合汇总层） | 根据 global_mode 计算，见下 |
+| `return_rate` | 持仓收益率 | unrealized_pnl / cost × 100% |
 | `real_return` | 真实收益率 | total_pnl / principal_total × 100% |
+
+### global_mode 说明（防止双计）
+
+| 模式 | 条件 | global_value 公式 |
+|------|------|------------------|
+| `no_cash_bucket` | 无现金桶产品（当前默认） | Σ total_value + Σ total_redemption |
+| `cash_bucket` | 存在 is_cash_bucket=true 的产品 | Σ total_value（赎回已体现在现金桶中） |
+
+**global_pnl** = global_value - Σ principal_total
+
+> **重要变更 (v2)**：`total_pnl` 现在是**生命周期口径**，包含已赎回收益。
+> 全赎回后 total_pnl = total_redemption - principal_total = 实际利润（不会反直觉变成负数）。
+> 详细字段规范请参阅 [docs/field_spec.md](docs/field_spec.md)
 
 ### 标识字段
 | 字段 | 说明 | 规则 |
@@ -570,5 +613,5 @@ pip install -r requirements.txt
 
 ---
 
-**最后更新**: 2025-12-18  
+**最后更新**: 2025-12-20 (v2.1 - 自动同步版)  
 **预计学习时间**: 30分钟掌握核心，1小时完全掌控

@@ -6,7 +6,11 @@
 统一入口，支持：
 1. 记账 - 生活收支记录 (ledger.csv)
 2. 理财 - 买入扣款/赎回发起/结算确认 (orders.csv + transactions.csv)
-3. 工具 - 查看列表/校验数据
+3. 工具 - 查看账户余额/账本/订单/交易/校验
+
+特性：
+- 启动时自动同步净值和账户余额
+- 记账/理财操作后自动后台同步
 
 用法：
   python tx_cli.py              # 交互模式
@@ -16,8 +20,7 @@
   python tx_cli.py list-orders  # 查看订单
   python tx_cli.py list-tx      # 查看交易
   python tx_cli.py check        # 数据校验
-  python tx_cli.py collect      # 净值采集
-  python tx_cli.py rebuild      # 重建快照
+  python tx_cli.py collect      # 手动同步（一般不需要）
 """
 import sys
 import io
@@ -32,18 +35,16 @@ if sys.stdout.encoding != 'utf-8':
 # 添加 src 目录到路径
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-# 使用开源的 chinese_calendar 库判断节假日
-try:
-    import chinese_calendar
-    HAS_CHINESE_CALENDAR = True
-except ImportError:
-    HAS_CHINESE_CALENDAR = False
-    print("警告: 未安装 chinese-calendar 库，将只按周末判断交易日")
-    print("建议执行: pip install chinese-calendar")
+# 导入统一的交易日历模块
+from utils.trade_calendar import (
+    is_trade_day, next_trade_day, prev_trade_day,
+    add_trade_days, subtract_trade_days
+)
 
 from data.config_loader import (
     get_project_root, load_products, get_product,
-    load_accounts, load_categories,
+    load_accounts, load_categories, load_account_groups,
+    get_account, get_accounts_by_group, get_account_name,
     get_sell_fee_rate, format_sell_fee_tiers
 )
 from data.data_store import (
@@ -64,73 +65,8 @@ from core.nav_collector import collect_and_store
 
 
 # ============================================================
-# 交易日辅助函数（使用 chinese_calendar 开源库）
+# 交易日辅助函数
 # ============================================================
-
-def is_trade_day(d):
-    """
-    判断是否为交易日（A股）
-    使用 chinese_calendar 库判断工作日
-    """
-    if isinstance(d, str):
-        d = datetime.strptime(d, '%Y-%m-%d').date()
-    
-    if HAS_CHINESE_CALENDAR:
-        return chinese_calendar.is_workday(d)
-    else:
-        # 降级：只按周末判断
-        return d.weekday() < 5
-
-
-def next_trade_day(d):
-    """获取下一个交易日（不含当天）"""
-    if isinstance(d, str):
-        d = datetime.strptime(d, '%Y-%m-%d').date()
-    
-    next_d = d + timedelta(days=1)
-    while not is_trade_day(next_d):
-        next_d += timedelta(days=1)
-    return next_d
-
-
-def prev_trade_day(d):
-    """获取上一个交易日（不含当天）"""
-    if isinstance(d, str):
-        d = datetime.strptime(d, '%Y-%m-%d').date()
-    
-    prev_d = d - timedelta(days=1)
-    while not is_trade_day(prev_d):
-        prev_d -= timedelta(days=1)
-    return prev_d
-
-
-def add_trade_days(d, n):
-    """计算 n 个交易日后的日期"""
-    if isinstance(d, str):
-        d = datetime.strptime(d, '%Y-%m-%d').date()
-    
-    if n <= 0:
-        return d
-    
-    result = d
-    for _ in range(n):
-        result = next_trade_day(result)
-    return result
-
-
-def subtract_trade_days(d, n):
-    """计算 n 个交易日前的日期"""
-    if isinstance(d, str):
-        d = datetime.strptime(d, '%Y-%m-%d').date()
-    
-    if n <= 0:
-        return d
-    
-    result = d
-    for _ in range(n):
-        result = prev_trade_day(result)
-    return result
-
 
 def calc_trade_date(requested_at, cutoff_time='15:00'):
     """
@@ -612,7 +548,7 @@ def add_redeem_request():
         'order_type': 'redeem_request',
         'amount': '',
         'fee': '',
-        'shares': format_decimal(shares, 2),
+        'shares': format_decimal(shares, 4),  # 份额精度至少4位
         'requested_at': requested_at.strftime('%Y-%m-%d %H:%M:%S'),
         'trade_date': str(trade_date),
         'nav_date': str(nav_date),
@@ -796,7 +732,7 @@ def _do_history_trade(action: str):
         'product_code': product_code,
         'action': action,
         'amount': format_decimal(amount, 2) if amount > 0 else '',
-        'shares': format_decimal(shares, 2),
+        'shares': format_decimal(shares, 4),  # 份额精度至少4位
         'fee': format_decimal(fee, 2) if fee > 0 else '',
         'nav': format_decimal(nav, 4) if nav > 0 else '',
         'nav_date': nav_date if nav > 0 else '',
@@ -909,11 +845,11 @@ def settle_orders():
             fee = parse_decimal(order.get('fee', 0))
             net_amount = amount - fee
             
-            # 计算份额
-            shares = (net_amount / nav).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            # 计算份额（精度至少 4 位小数）
+            shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
             
             print(f"  净申购额: {format_decimal(net_amount, 2)}")
-            print(f"  确认份额: {format_decimal(shares, 2)}")
+            print(f"  确认份额: {format_decimal(shares, 4)}")
             
             # 写入 buy_confirm（fee=0，避免重复扣费）
             tx_record = {
@@ -921,7 +857,7 @@ def settle_orders():
                 'product_code': product_code,
                 'action': 'buy_confirm',
                 'amount': '',  # confirm 不需要 amount
-                'shares': format_decimal(shares, 2),
+                'shares': format_decimal(shares, 4),  # 份额精度至少4位
                 'fee': '0',    # 费用已在 buy_debit 扣除
                 'nav': str(nav),
                 'nav_date': nav_date,
@@ -944,7 +880,7 @@ def settle_orders():
             fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             amount = gross - fee
             
-            print(f"  赎回份额: {format_decimal(shares, 2)}")
+            print(f"  赎回份额: {format_decimal(shares, 4)}")
             if holding_days:
                 print(f"  持有天数: {holding_days}，费率: {sell_fee_rate * 100:.2f}%")
             print(f"  总金额: {format_decimal(gross, 2)}")
@@ -957,7 +893,7 @@ def settle_orders():
                 'product_code': product_code,
                 'action': 'sell_confirm',
                 'amount': format_decimal(amount, 2),  # 到账净额
-                'shares': format_decimal(shares, 2),
+                'shares': format_decimal(shares, 4),  # 份额精度至少4位
                 'fee': format_decimal(fee, 2),
                 'nav': str(nav),
                 'nav_date': nav_date,
@@ -1065,6 +1001,270 @@ def list_transactions(n: int = 20):
         print(f"{i:<4} {date:<12} {product_code:<12} {action:<12} {amount:>10} {shares:>10} {nav:>8}")
     
     print(f"\n共 {len(transactions)} 条记录")
+
+
+# ============================================================
+# 账户余额
+# ============================================================
+
+def get_fund_total_from_daily() -> tuple:
+    """
+    从 daily.csv 获取基金总市值
+    
+    Returns:
+        (基金总市值, 稳利宝市值, 稳利宝收益, 记录详情字典)
+    """
+    import csv
+    daily_path = get_project_root() / "data" / "snapshots" / "daily.csv"
+    
+    if not daily_path.exists():
+        return Decimal('0'), Decimal('0'), Decimal('0'), {}
+    
+    # 读取最新一天的数据
+    records = []
+    with open(daily_path, 'r', encoding='utf-8-sig') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            # 跳过中文表头行
+            if row.get('fetch_date', '').startswith('采集'):
+                continue
+            records.append(row)
+    
+    if not records:
+        return Decimal('0'), Decimal('0'), Decimal('0'), {}
+    
+    # 找到最新的 fetch_date
+    latest_date = max(r.get('fetch_date', '') for r in records)
+    latest_records = [r for r in records if r.get('fetch_date') == latest_date]
+    
+    fund_total = Decimal('0')
+    wenlibao_value = Decimal('0')
+    wenlibao_pnl = Decimal('0')
+    details = {}
+    
+    for r in latest_records:
+        product_code = r.get('product_code', '')
+        value_str = r.get('value', '0')
+        pnl_str = r.get('unrealized_pnl', '0')
+        try:
+            value = Decimal(value_str)
+        except:
+            value = Decimal('0')
+        try:
+            pnl = Decimal(pnl_str)
+        except:
+            pnl = Decimal('0')
+        
+        # 稳利宝（民生理财）
+        if product_code == 'FBAE41126E':
+            wenlibao_value = value
+            wenlibao_pnl = pnl
+        # 建信嘉薪宝是货币基金，特殊处理（不计入基金总额）
+        elif product_code == '000686':
+            pass  # 货币基金收益计入小荷包
+        else:
+            fund_total += value
+        
+        details[product_code] = {
+            'name': r.get('product_name', ''),
+            'value': value,
+            'shares': r.get('shares', '0'),
+            'nav': r.get('nav', '0'),
+            'nav_date': r.get('nav_date', ''),
+            'pnl': pnl_str,
+            'return_rate': r.get('return_rate', '0'),
+        }
+    
+    return fund_total, wenlibao_value, wenlibao_pnl, details
+
+
+def calc_account_balance(account: dict, ledger_data: list) -> dict:
+    """
+    计算单个账户的当前余额
+    
+    余额 = 收入 - 支出 + 转入 - 转出
+    （初始余额已作为 income 记录在 ledger.csv 中）
+    """
+    account_id = account['id']
+    # 注：initial_balance 已移至 ledger.csv 作为 income 记录
+    initial = Decimal('0')
+    
+    income = Decimal('0')
+    expense = Decimal('0')
+    transfer_in = Decimal('0')
+    transfer_out = Decimal('0')
+    
+    for entry in ledger_data:
+        entry_type = entry.get('entry_type', '')
+        amount_str = entry.get('amount', '0')
+        try:
+            amount = Decimal(amount_str)
+        except:
+            amount = Decimal('0')
+        
+        account_from = entry.get('account_from', '')
+        account_to = entry.get('account_to', '')
+        
+        if entry_type == 'expense' and account_from == account_id:
+            expense += amount
+        elif entry_type == 'income' and account_to == account_id:
+            income += amount
+        elif entry_type == 'transfer':
+            if account_from == account_id:
+                transfer_out += amount
+            if account_to == account_id:
+                transfer_in += amount
+    
+    balance = initial + income - expense + transfer_in - transfer_out
+    
+    return {
+        'initial': initial,
+        'income': income,
+        'expense': expense,
+        'transfer_in': transfer_in,
+        'transfer_out': transfer_out,
+        'balance': balance,
+    }
+
+
+def show_account_balances():
+    """显示所有账户余额"""
+    print("\n" + "=" * 70)
+    print("账户余额总览")
+    print("=" * 70)
+    
+    accounts = load_accounts()
+    account_groups = load_account_groups()
+    ledger = load_ledger()
+    
+    # 获取基金和稳利宝市值（包含实际收益）
+    fund_total, wenlibao_value, wenlibao_profit, product_details = get_fund_total_from_daily()
+    
+    # 获取稳利宝子账户
+    wenlibao_accounts = get_accounts_by_group('wenlibao')
+    wenlibao_initial_total = sum(
+        Decimal(str(acc.get('initial_balance', 0))) 
+        for acc in wenlibao_accounts
+    )
+    
+    # 找到收益归属账户（项目资金）
+    profit_account_id = account_groups.get('wenlibao', {}).get('profit_account', 'wenlibao_project')
+    
+    grand_total = Decimal('0')
+    
+    # ==================== 余利宝账户 ====================
+    print("\n【余利宝】")
+    print("-" * 70)
+    print(f"{'账户名称':<20} {'初始余额':>12} {'收入':>10} {'支出':>10} {'转入':>10} {'转出':>10} {'当前余额':>12}")
+    print("-" * 70)
+    
+    ylb_total = Decimal('0')
+    for acc in accounts:
+        if acc['id'] in ['ylb_life', 'ylb_finance']:
+            result = calc_account_balance(acc, ledger)
+            name = acc['name']
+            print(f"{name:<20} {result['initial']:>12.2f} {result['income']:>10.2f} {result['expense']:>10.2f} {result['transfer_in']:>10.2f} {result['transfer_out']:>10.2f} {result['balance']:>12.2f}")
+            ylb_total += result['balance']
+    
+    print("-" * 70)
+    print(f"{'余利宝小计':<20} {'':<12} {'':<10} {'':<10} {'':<10} {'':<10} {ylb_total:>12.2f}")
+    grand_total += ylb_total
+    
+    # ==================== 情侣小荷包 ====================
+    print("\n【情侣小荷包】")
+    print("-" * 70)
+    
+    couple_acc = get_account('couple_pocket')
+    if couple_acc:
+        result = calc_account_balance(couple_acc, ledger)
+        # 从 daily.csv 获取 000686 的市值
+        xiaohebao_detail = product_details.get('000686', {})
+        xiaohebao_value = xiaohebao_detail.get('value', Decimal('0'))
+        print(f"{couple_acc['name']:<20} {result['initial']:>12.2f} {result['income']:>10.2f} {result['expense']:>10.2f} {result['transfer_in']:>10.2f} {result['transfer_out']:>10.2f} {result['balance']:>12.2f}")
+        if xiaohebao_value > 0:
+            diff = xiaohebao_value - result['balance']
+            if diff != 0:
+                print(f"  (关联货基 000686 市值: {xiaohebao_value:.2f}，差异: {diff:+.2f})")
+            else:
+                print(f"  (关联货基 000686 市值: {xiaohebao_value:.2f}，一致 ✓)")
+        else:
+            print(f"  (关联货基 000686，需同步产品快照)")
+        grand_total += result['balance']
+    
+    # ==================== 稳利宝子账户 ====================
+    print("\n【稳利宝】")
+    print("-" * 70)
+    print(f"{'账户名称':<24} {'初始金额':>12} {'当前市值':>12} {'备注':<20}")
+    print("-" * 70)
+    
+    # 用户给的分配已经是当前市值分配，收益已包含在内
+    for acc in wenlibao_accounts:
+        initial = Decimal(str(acc.get('initial_balance', 0)))
+        note = acc.get('note', '')[:18]
+        
+        # 标记收益归属账户
+        profit_mark = ""
+        if acc['id'] == profit_account_id:
+            profit_mark = " ★"
+        
+        print(f"{acc['name']:<22}{profit_mark:<2} {initial:>12.2f} {initial:>12.2f} {note:<18}")
+    
+    print("-" * 70)
+    print(f"{'稳利宝小计':<24} {wenlibao_initial_total:>12.2f} {wenlibao_value:>12.2f}")
+    if wenlibao_profit != 0:
+        print(f"{'(累计收益)':<24} {'':<12} {wenlibao_profit:>+12.2f} (归入 ★ 项目资金)")
+    grand_total += wenlibao_value
+    
+    # ==================== 基金账户 ====================
+    print("\n【基金账户】")
+    print("-" * 70)
+    print(f"基金持仓总市值: {fund_total:>12.2f}")
+    grand_total += fund_total
+    
+    # 显示基金明细
+    if product_details:
+        print("\n基金持仓明细:")
+        print(f"{'代码':<12} {'名称':<30} {'市值':>12} {'盈亏':>10} {'收益率':>10}")
+        print("-" * 70)
+        for code, detail in sorted(product_details.items()):
+            if code in ['FBAE41126E', '000686']:
+                continue  # 跳过稳利宝和货基
+            value = detail.get('value', Decimal('0'))
+            if value > 0:
+                name = detail.get('name', '')[:28]
+                pnl = detail.get('pnl', '0')
+                rate = detail.get('return_rate', '0')
+                print(f"{code:<12} {name:<30} {value:>12.2f} {pnl:>10} {rate:>10}")
+    
+    # ==================== 其他账户 ====================
+    other_accounts = [acc for acc in accounts if acc['id'] in ['bank_card', 'wechat', 'alipay', 'cash', 'other']]
+    other_with_balance = []
+    
+    for acc in other_accounts:
+        result = calc_account_balance(acc, ledger)
+        if result['balance'] != 0 or result['initial'] != 0:
+            other_with_balance.append((acc, result))
+    
+    if other_with_balance:
+        print("\n【其他账户】")
+        print("-" * 70)
+        for acc, result in other_with_balance:
+            print(f"{acc['name']:<20} {result['initial']:>12.2f} {result['income']:>10.2f} {result['expense']:>10.2f} {result['transfer_in']:>10.2f} {result['transfer_out']:>10.2f} {result['balance']:>12.2f}")
+            grand_total += result['balance']
+    
+    # ==================== 总计 ====================
+    print("\n" + "=" * 70)
+    print(f"{'资产总计':<20} {grand_total:>50.2f}")
+    print("=" * 70)
+    
+    # 显示分类汇总
+    print(f"\n分类汇总:")
+    print(f"  余利宝总额:     {ylb_total:>12.2f}")
+    print(f"  稳利宝总额:     {wenlibao_value:>12.2f}")
+    print(f"  基金总额:       {fund_total:>12.2f}")
+    if couple_acc:
+        couple_result = calc_account_balance(couple_acc, ledger)
+        print(f"  小荷包:         {couple_result['balance']:>12.2f}")
 
 
 # ============================================================
@@ -1181,82 +1381,44 @@ def check_data():
 # 采集与快照
 # ============================================================
 
-def run_collect():
-    """运行净值采集"""
-    print("\n" + "=" * 50)
-    print("净值采集")
-    print("=" * 50)
-    print("将采集所有产品的最新净值并生成快照")
-    
-    confirm = input("\n确认执行? (y/n): ").strip().lower()
-    if confirm != 'y':
-        print("已取消")
-        return
-    
-    print("\n开始采集...\n")
-    collect_and_store()
-    print("\n✓ 采集完成")
-
-
-def run_rebuild():
-    """重建快照"""
-    print("\n" + "=" * 50)
-    print("重建快照")
-    print("=" * 50)
-    print("从指定日期重建快照（会删除该日期及之后的快照，并重新生成 PnL 链）")
-    
-    rebuild_date = input("\n请输入重建起始日期 (YYYY-MM-DD): ").strip()
-    
-    # 验证日期格式
-    import re
-    if not re.match(r'^\d{4}-\d{2}-\d{2}$', rebuild_date):
-        print(f"✗ 日期格式错误，应为 YYYY-MM-DD")
-        return
-    
-    print(f"\n⚠ 将删除 {rebuild_date} 及之后的所有快照并重建")
-    confirm = input("确认执行? (y/n): ").strip().lower()
-    if confirm != 'y':
-        print("已取消")
-        return
-    
-    print("\n开始重建...\n")
-    collect_and_store(rebuild_from=rebuild_date)
-    print("\n✓ 重建完成")
-
-
 # ============================================================
 # 主入口
 # ============================================================
 
-def auto_collect_nav():
-    """启动时自动采集净值（静默模式）"""
-    print("\n正在同步最新净值...", end=" ", flush=True)
+def silent_sync():
+    """静默同步：采集净值并更新账户余额（完全无输出）"""
+    import logging
+    import sys
+    from io import StringIO
+    
+    # 保存原始状态
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    logger = logging.getLogger()
+    old_level = logger.level
+    
+    # 重定向输出
+    sys.stdout = StringIO()
+    sys.stderr = StringIO()
+    logger.setLevel(logging.CRITICAL)  # 只显示严重错误
     
     try:
-        # 静默采集：抑制所有输出
-        import logging
-        import sys
-        from io import StringIO
-        
-        # 保存原始状态
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        logger = logging.getLogger()
-        old_level = logger.level
-        
-        # 重定向输出
-        sys.stdout = StringIO()
-        sys.stderr = StringIO()
-        logger.setLevel(logging.CRITICAL)  # 只显示严重错误
-        
-        try:
-            collect_and_store()
-        finally:
-            # 恢复原始状态
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
-            logger.setLevel(old_level)
-        
+        collect_and_store()
+        from core.daily_balance import create_daily_balance_snapshot
+        create_daily_balance_snapshot(get_project_root())
+    finally:
+        # 恢复原始状态
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+        logger.setLevel(old_level)
+
+
+def auto_collect_nav():
+    """启动时自动采集净值并更新账户余额（静默模式，显示简短提示）"""
+    print("\n正在同步数据...", end=" ", flush=True)
+    
+    try:
+        silent_sync()
         print("✓ 完成")
     except Exception as e:
         print(f"⚠ 失败: {e}")
@@ -1264,7 +1426,7 @@ def auto_collect_nav():
 
 def interactive_mode():
     """交互模式"""
-    # 启动时自动采集净值
+    # 启动时自动采集净值并更新账户余额
     auto_collect_nav()
     
     while True:
@@ -1274,7 +1436,6 @@ def interactive_mode():
         print("  [1] 记账 (生活收支)")
         print("  [2] 理财 (买入/赎回)")
         print("  [3] 工具 (查看/校验)")
-        print("  [4] 数据管理 (采集/重建)")
         print("  [0] 退出")
         
         choice = input("\n请选择: ").strip()
@@ -1285,6 +1446,7 @@ def interactive_mode():
             # 记账模式：循环录入直到退出
             while True:
                 add_ledger_entry()
+                silent_sync()  # 记账后静默同步
                 print("\n" + "-" * 30)
                 cont = input("继续记账? (回车继续 / 0退出): ").strip()
                 if cont == '0':
@@ -1306,6 +1468,7 @@ def interactive_mode():
                     # 买入扣款循环
                     while True:
                         add_buy_debit()
+                        silent_sync()  # 操作后静默同步
                         print("\n" + "-" * 30)
                         cont = input("继续买入扣款? (回车继续 / 0退出): ").strip()
                         if cont == '0':
@@ -1314,44 +1477,43 @@ def interactive_mode():
                     # 赎回发起循环
                     while True:
                         add_redeem_request()
+                        silent_sync()  # 操作后静默同步
                         print("\n" + "-" * 30)
                         cont = input("继续赎回发起? (回车继续 / 0退出): ").strip()
                         if cont == '0':
                             break
                 elif sub == '3':
                     settle_orders()
+                    silent_sync()  # 结算后静默同步
                 elif sub == '4':
                     add_history_trade()  # 内部已有循环
+                    silent_sync()  # 补录后静默同步
         elif choice == '3':
-            # 工具菜单
-            print("\n=== 工具 ===")
-            print("  [1] 查看账本")
-            print("  [2] 查看订单")
-            print("  [3] 查看交易")
-            print("  [4] 数据校验")
-            print("  [0] 返回")
-            
-            sub = input("\n请选择: ").strip()
-            if sub == '1':
-                list_ledger()
-            elif sub == '2':
-                list_orders()
-            elif sub == '3':
-                list_transactions()
-            elif sub == '4':
-                check_data()
-        elif choice == '4':
-            # 数据管理菜单
-            print("\n=== 数据管理 ===")
-            print("  [1] 净值采集")
-            print("  [2] 重建快照")
-            print("  [0] 返回")
-            
-            sub = input("\n请选择: ").strip()
-            if sub == '1':
-                run_collect()
-            elif sub == '2':
-                run_rebuild()
+            # 工具菜单：循环操作直到退出
+            while True:
+                print("\n=== 工具 ===")
+                print("  [1] 查看账户余额")
+                print("  [2] 查看账本")
+                print("  [3] 查看订单")
+                print("  [4] 查看交易")
+                print("  [5] 数据校验")
+                print("  [0] 返回主菜单")
+                
+                sub = input("\n请选择: ").strip()
+                if sub == '0':
+                    break
+                elif sub == '1':
+                    # 显示账户余额（数据已在启动时/操作后同步）
+                    from core.daily_balance import display_account_balances
+                    display_account_balances(get_project_root())
+                elif sub == '2':
+                    list_ledger()
+                elif sub == '3':
+                    list_orders()
+                elif sub == '4':
+                    list_transactions()
+                elif sub == '5':
+                    check_data()
 
 
 def main():
@@ -1379,22 +1541,15 @@ def main():
     elif cmd == 'collect':
         print("开始采集...\n")
         collect_and_store()
-        print("\n✓ 采集完成")
-    elif cmd == 'rebuild':
-        if len(sys.argv) < 3:
-            print("用法: python tx_cli.py rebuild YYYY-MM-DD")
-            sys.exit(1)
-        rebuild_date = sys.argv[2]
-        import re
-        if not re.match(r'^\d{4}-\d{2}-\d{2}$', rebuild_date):
-            print(f"日期格式错误，应为 YYYY-MM-DD")
-            sys.exit(1)
-        print(f"开始从 {rebuild_date} 重建...\n")
-        collect_and_store(rebuild_from=rebuild_date)
-        print("\n✓ 重建完成")
+        print("\n✓ 净值采集完成")
+        # 自动更新账户余额快照
+        print("\n正在更新账户余额快照...")
+        from core.daily_balance import create_daily_balance_snapshot
+        count = create_daily_balance_snapshot(get_project_root())
+        print(f"✓ 账户余额快照已更新: {count} 条")
     else:
         print(f"未知命令: {cmd}")
-        print("可用命令: add | settle | list-ledger | list-orders | list-tx | check | collect | rebuild")
+        print("可用命令: add | settle | list-ledger | list-orders | list-tx | check | collect")
         sys.exit(1)
 
 

@@ -199,6 +199,40 @@ def load_accounts() -> List[Dict]:
     return config.get('accounts', [])
 
 
+def load_account_groups() -> Dict:
+    """加载账户组配置"""
+    config = load_json_config('accounts.json')
+    if config is None:
+        return {}
+    return config.get('account_groups', {})
+
+
+def get_account(account_id: str) -> Optional[Dict]:
+    """根据账户ID获取账户配置"""
+    accounts = load_accounts()
+    for acc in accounts:
+        if acc['id'] == account_id:
+            return acc
+    return None
+
+
+def get_accounts_by_group(group_id: str) -> List[Dict]:
+    """获取属于指定组的所有账户"""
+    accounts = load_accounts()
+    return [acc for acc in accounts if acc.get('group') == group_id]
+
+
+def get_wenlibao_accounts() -> List[Dict]:
+    """获取所有稳利宝子账户"""
+    return get_accounts_by_group('wenlibao')
+
+
+def get_account_name(account_id: str) -> str:
+    """获取账户名称"""
+    acc = get_account(account_id)
+    return acc['name'] if acc else account_id
+
+
 def load_categories() -> Dict:
     """加载分类配置 (categories.json)"""
     config = load_json_config('categories.json')

@@ -1,2 +1,9 @@
 ﻿event_time,entry_type,amount,category_l1,category_l2,account_from,account_to,discount,reimbursable,note
-2025-12-19 22:17:00,expense,0.91,购物消费,日常家具,ylb_life,,0.09,0,卫生纸
+2025-12-20 00:00:00,income,2232.49,初始余额,,other,ylb_life,0,0,余利宝生活费初始余额
+2025-12-20 00:00:00,income,1043.31,初始余额,,other,ylb_finance,0,0,余利宝理财金初始余额
+2025-12-20 00:00:00,income,348.25,初始余额,,other,couple_pocket,0,0,情侣小荷包初始余额
+2025-12-20 00:00:00,income,4000.00,初始余额,,other,wenlibao_rent,0,0,稳利宝-房租预备金初始余额
+2025-12-20 00:00:00,income,3250.00,初始余额,,other,wenlibao_safe,0,0,稳利宝-安全金初始余额
+2025-12-20 00:00:00,income,9475.30,初始余额,,other,wenlibao_project,0,0,稳利宝-项目资金初始余额
+2025-12-20 00:00:00,income,5739.81,初始余额,,other,wenlibao_finance,0,0,稳利宝-理财金初始余额
+2025-12-20 00:00:00,income,1855.76,初始余额,,other,wenlibao_active,0,0,稳利宝-理财金主动投入初始余额

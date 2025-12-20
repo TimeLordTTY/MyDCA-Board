@@ -10,7 +10,7 @@ from data.storage_csv import save_nav_record
 from data.config_loader import load_products, get_holdings_map, load_holdings, get_project_root
 # 核心模块（同目录）
 from core.snapshot import create_daily_snapshot, get_last_snapshot_value, rebuild_snapshots_from_date
-from core.portfolio_summary import generate_portfolio_summary
+from core.daily_balance import create_daily_balance_snapshot
 # 工具模块
 from utils.validator import (
     validate_product_config, 
@@ -203,18 +203,20 @@ def collect_and_store(rebuild_from=None):
         products_order = [p['product_code'] for p in products]
         # 构建产品分类映射
         category_map = {p['product_code']: p.get('category', 'fund') for p in products}
-        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, products_order=products_order, category_map=category_map)
+        # 构建产品市场类型映射（用于 cash_like 特殊处理）
+        market_map = {p['product_code']: p.get('market', 'cn') for p in products}
+        snapshot_count = create_daily_snapshot(nav_records, holdings_map, products_map, 
+                                               products_order=products_order, 
+                                               category_map=category_map, 
+                                               market_map=market_map)
     
-    # 4. 生成投资组合汇总
-    logger.info("=== 投资组合汇总阶段 ===")
+    # 4. 生成账户余额快照
+    logger.info("=== 账户余额快照阶段 ===")
     try:
-        snapshot_path = get_project_root() / "data" / "snapshots" / "daily.csv"
-        output_dir = get_project_root() / "data" / "snapshots"
-        nav_count, fetch_count = generate_portfolio_summary(snapshot_path, output_dir)
-        logger.info(f"✓ 按采集日期汇总: {fetch_count} 个采集日")
-        logger.info(f"✓ 按净值日期汇总: {nav_count} 个净值日")
+        balance_count = create_daily_balance_snapshot(get_project_root())
+        logger.info(f"✓ 账户余额快照: {balance_count} 条")
     except Exception as e:
-        logger.error(f"✗ 投资组合汇总失败: {e}")
+        logger.error(f"✗ 账户余额快照失败: {e}")
     
     # 5. 输出汇总日志
     logger.info("=== 执行汇总 ===")

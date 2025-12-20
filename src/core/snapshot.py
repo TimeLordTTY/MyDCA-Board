@@ -18,12 +18,19 @@
 - cost: 持仓成本（平均成本法，卖出按比例扣减）
 - unrealized_pnl: 浮动盈亏（value - cost）
 - return_rate: 持仓收益率（unrealized_pnl / cost）
-- cash: 在途资金（扣款已发生但份额未确认的净申购金额）
-- total_value: 产品总资产（value + cash）
-- principal_total: 累计投入本金（按扣款净额累计，含在途；不因卖出回笼减少）
-- total_pnl: 总盈亏（total_value - principal_total）
+- cash_in_transit: 在途资金（扣款已发生但份额未确认的净申购金额）
+- total_value: 产品总资产（value + cash_in_transit）
+- principal_total: 累计投入本金（按扣款额累计；不因卖出回笼减少）
+- total_redemption: 累计赎回金额（卖出到账净额，已扣除赎回费）
+- total_pnl: 生命周期总盈亏（total_value + total_redemption - principal_total）
 - real_return: 真实收益率（total_pnl / principal_total）
 - fetched_at: 采集时间（毫秒精度）
+
+盈亏计算说明：
+- unrealized_pnl（浮动盈亏）= 当前市值 - 当前持仓成本（不考虑已卖出部分）
+- total_pnl（生命周期总盈亏）= total_value + total_redemption - principal_total
+  - 直观理解：我投了 X 元，现在还有 Y 元在里面，已经拿回了 Z 元，总盈亏 = Y + Z - X
+  - 全赎回后：total_pnl = 0 + total_redemption - principal_total = 实际利润
 """
 import csv
 import os
@@ -42,7 +49,7 @@ FIELDNAMES = [
     'fetch_date', 'product_code', 'product_name', 'category',
     'nav_date', 'nav', 'shares', 'value', 'pnl_day',
     'cost', 'unrealized_pnl', 'return_rate',
-    'cash', 'total_value', 'principal_total', 'total_pnl', 'real_return',
+    'cash_in_transit', 'total_value', 'principal_total', 'total_redemption', 'total_pnl', 'real_return',
     'fetched_at'
 ]
 
@@ -60,9 +67,10 @@ CHINESE_HEADERS = {
     'cost': '成本',
     'unrealized_pnl': '浮动盈亏',
     'return_rate': '收益率',
-    'cash': '在途资金',
+    'cash_in_transit': '在途资金',
     'total_value': '总资产',
     'principal_total': '累计投入本金',
+    'total_redemption': '累计赎回',
     'total_pnl': '总盈亏',
     'real_return': '真实收益率',
     'fetched_at': '采集时间'
@@ -148,58 +156,46 @@ def read_all_snapshots(snapshot_path):
                 fetched_at = row.get('fetched_at', '')
                 if fetched_at and len(fetched_at) >= 10:
                     row['fetch_date'] = fetched_at[:10]
+            # 兼容旧字段名：cash -> cash_in_transit
+            if 'cash' in row and 'cash_in_transit' not in row:
+                row['cash_in_transit'] = row['cash']
             snapshots.append(row)
     return snapshots
 
 
 def rebuild_snapshots_from_date(snapshot_path, rebuild_from_date):
     """
-    从指定日期重建快照（删除 fetch_date >= rebuild_from_date 的记录）
-    使用原子写入：先写临时文件，再 os.replace 替换
+    重建快照（保护历史数据版本）
+    
+    设计原则：
+    - 永远不删除历史数据（任何 fetch_date < today 的记录都会保留）
+    - 只允许覆盖当天的数据，由 create_daily_snapshot 自动处理
+    - rebuild 操作仅用于触发重新计算，不会删除任何已有快照
+    
+    :param snapshot_path: 快照文件路径
+    :param rebuild_from_date: 重建起始日期（已忽略，不再用于删除）
+    :return: (保留数量, 0)  # 不再删除任何记录
     """
     if not Path(snapshot_path).exists():
-        logger.info(f"快照文件不存在，无需重建")
+        logger.info(f"快照文件不存在，将创建新快照")
         return 0, 0
     
     all_snapshots = read_all_snapshots(snapshot_path)
-    kept_snapshots = []
-    deleted_count = 0
+    today = datetime.now().strftime('%Y-%m-%d')
     
-    for row in all_snapshots:
-        fetch_date = row.get('fetch_date', row['fetched_at'][:10])
-        if fetch_date >= rebuild_from_date:
-            deleted_count += 1
-        else:
-            kept_snapshots.append(row)
+    # 检查是否有历史数据（早于今天的数据）
+    history_count = sum(1 for row in all_snapshots 
+                       if row.get('fetch_date', row.get('fetched_at', '')[:10]) < today)
     
-    # 原子写入：先写临时文件
-    snapshot_path = Path(snapshot_path)
-    tmp_path = snapshot_path.parent / f"daily.csv.tmp.{uuid.uuid4().hex[:8]}"
+    logger.info(f"保护历史快照: 共 {len(all_snapshots)} 条记录, 其中历史数据 {history_count} 条（不会被删除）")
+    logger.info(f"提示: rebuild 操作现在只会覆盖当天数据，不会删除任何历史记录")
     
-    try:
-        with open(tmp_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore')
-            writer.writeheader()
-            # 写入中文表头行
-            f.write(','.join([CHINESE_HEADERS.get(field, field) for field in FIELDNAMES]) + '\n')
-            for row in kept_snapshots:
-                writer.writerow(row)
-            f.flush()
-        
-        # 原子替换
-        os.replace(str(tmp_path), str(snapshot_path))
-        logger.info(f"重建快照: 保留 {len(kept_snapshots)} 条, 删除 {deleted_count} 条")
-    except Exception as e:
-        # 清理临时文件
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise e
-    
-    return len(kept_snapshots), deleted_count
+    # 不删除任何数据，直接返回
+    return len(all_snapshots), 0
 
 
 def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path=None, 
-                          products_order=None, category_map=None):
+                          products_order=None, category_map=None, market_map=None):
     """
     生成日快照
     
@@ -208,6 +204,7 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     - 同一采集日，同一产品只有一条记录
     - 同一天多次运行会覆盖（保持最新状态）
     - pnl_day = prev_shares * (nav_today - nav_prev)（只由净值变化贡献）
+    - total_pnl = total_value + total_redemption - principal_total（生命周期口径）
     
     :param nav_records: {product_code: nav_dict}
     :param holdings_map: {product_code: shares} (备用，优先用 HoldingsCalculator)
@@ -215,6 +212,7 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     :param snapshot_path: 可选，指定快照文件路径（主要用于测试）
     :param products_order: 可选，产品代码列表，用于保持排序顺序
     :param category_map: 可选，{product_code: category}，产品分类
+    :param market_map: 可选，{product_code: market}，产品市场类型（用于 cash_like 特殊处理）
     """
     from data.config_loader import get_project_root
     
@@ -226,17 +224,18 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     if category_map is None:
         category_map = {}
     
+    if market_map is None:
+        market_map = {}
+    
     Path(snapshot_path).parent.mkdir(parents=True, exist_ok=True)
     
     # 当前采集时间
     fetched_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:23]  # 毫秒精度
     fetch_date = fetched_at[:10]  # YYYY-MM-DD
     
-    # 创建持仓计算器
+    # 创建持仓计算器，获取所有持仓数据
     calc = HoldingsCalculator()
-    all_holdings = calc.get_holdings_as_of(fetch_date)
-    all_cash_in_transit = calc.get_cash_in_transit_as_of(fetch_date)
-    all_principal = calc.get_principal_total_as_of(fetch_date)
+    all_holdings_data = calc.get_all_holdings_data_as_of(fetch_date)
     
     # 读取所有现有快照，按 (fetch_date, product_code) 索引
     all_snapshots = read_all_snapshots(snapshot_path)
@@ -257,31 +256,43 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
         nav_date = nav_record['nav_date']  # 净值日期
         key = (fetch_date, product_code)  # 唯一键：采集日期 + 产品
         
-        # 获取份额和成本
-        if product_code in all_holdings:
-            shares = all_holdings[product_code]["shares"]
-            cost = all_holdings[product_code]["cost"]
+        # 获取持仓数据
+        if product_code in all_holdings_data:
+            h = all_holdings_data[product_code]
+            shares = h["shares"]
+            cost = h["cost"]
+            cash_in_transit = h["cash_in_transit"]
+            principal_total = h["principal_total"]
+            total_redemption = h["total_redemption"]
         else:
             # 回退到 holdings_map
             shares = Decimal(str(holdings_map.get(product_code, 0)))
             cost = Decimal('0')
+            cash_in_transit = Decimal('0')
+            principal_total = Decimal('0')
+            total_redemption = Decimal('0')
         
-        nav = Decimal(str(nav_record['nav']))
+        # 检查是否为 cash_like 产品（如货币基金）
+        # 对于 cash_like 产品，NAV 显示的是万份收益，计算市值时使用 NAV=1
+        market = market_map.get(product_code, 'cn')
+        if market == 'cash_like':
+            nav = Decimal('1')  # 货币基金按 1:1 计算市值
+        else:
+            nav = Decimal(str(nav_record['nav']))
         value = shares * nav
         
-        # 获取在途资金
-        cash = all_cash_in_transit.get(product_code, Decimal('0'))
-        
-        # 获取累计投入本金
-        principal_total = all_principal.get(product_code, Decimal('0'))
-        
         # 计算总资产
-        total_value = value + cash
+        total_value = value + cash_in_transit
         
-        # 计算总盈亏
-        total_pnl = total_value - principal_total if principal_total > 0 else Decimal('0')
+        # 计算生命周期总盈亏（核心公式变更）
+        # total_pnl = total_value + total_redemption - principal_total
+        # 直观：投了 principal_total，现在还有 total_value 在里面，已拿回 total_redemption
+        if principal_total > 0:
+            total_pnl = total_value + total_redemption - principal_total
+        else:
+            total_pnl = Decimal('0')
         
-        # 计算真实收益率
+        # 计算真实收益率（生命周期口径）
         if principal_total > 0:
             real_return = (total_pnl / principal_total * 100)
         else:
@@ -314,15 +325,16 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
             'category': category_map.get(product_code, 'fund'),
             'nav_date': nav_date,
             'nav': str(nav),
-            'shares': f"{shares:.2f}",
+            'shares': f"{shares:.4f}",  # 份额精度至少4位
             'value': f"{value:.2f}",
             'pnl_day': f"{pnl_day:.2f}",
             'cost': f"{cost:.2f}",
             'unrealized_pnl': f"{unrealized_pnl:.2f}",
             'return_rate': f"{return_rate:.2f}%",
-            'cash': f"{cash:.2f}",
+            'cash_in_transit': f"{cash_in_transit:.2f}",
             'total_value': f"{total_value:.2f}",
             'principal_total': f"{principal_total:.2f}",
+            'total_redemption': f"{total_redemption:.2f}",
             'total_pnl': f"{total_pnl:.2f}",
             'real_return': f"{real_return:.2f}%",
             'fetched_at': fetched_at

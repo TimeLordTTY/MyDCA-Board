@@ -3,23 +3,24 @@
 设计理念：
 - 扣款（buy_debit）：钱已从余利宝/稳利宝扣除，但份额未到账
 - 份额确认（buy_confirm）：份额正式进入持仓
-- 兼容旧数据：buy 视为"当天既扣款又确认"
+- 兼容旧数据：buy 视为"当天既扣款又确认"（复用 buy_debit + buy_confirm 逻辑）
 
 支持的交易类型 (action):
   - buy_debit: 扣款事件（钱已扣，份额未到）
   - buy_confirm: 份额确认事件（份额正式进入持仓）
   - buy: 兼容旧数据，当天既扣款又确认
   - sell: 卖出，份额减少，成本按比例减少
+  - sell_confirm: 赎回确认，份额减少，成本按比例减少
   - dividend: 分红，份额增加，成本不变
 
 CSV 格式 (data/transactions.csv):
   date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
   
-  - buy_debit: date, product_code, action=buy_debit, amount, fee, order_id(建议必填)
-  - buy_confirm: date, product_code, action=buy_confirm, shares, nav, nav_date, order_id(必须匹配debit)
-  - buy: 所有字段都需要（兼容旧数据）
-  - sell: date, product_code, action, shares, nav, fee（可选）
-  - dividend: date, product_code, action, shares
+口径说明：
+  - cost: 净申购额累计（amount - fee），卖出时按比例结转减少
+  - principal_total: 真实扣款本金累计（buy_debit/buy 的 amount），卖出不减少
+  - cash_in_transit: 在途资金（已扣款未确认的净额）
+  - total_redemption: 累计赎回到账净额（sell/sell_confirm 的 amount）
 """
 import csv
 import json
@@ -56,6 +57,13 @@ def safe_decimal(value, default=Decimal('0')) -> Decimal:
     except Exception as e:
         logger.warning(f"Decimal 解析失败: '{value}' -> 使用默认值 {default}")
         return default
+
+
+def normalize_action(action: str) -> str:
+    """
+    标准化 action 字段：strip + 小写
+    """
+    return action.strip().lower() if action else ''
 
 
 def load_transactions(transactions_path: Path) -> List[Dict]:
@@ -113,9 +121,10 @@ class HoldingsCalculator:
     
     核心概念：
     - shares: 已确认份额（只有 buy_confirm/buy/dividend 才增加）
-    - cost: 持仓成本（平均成本法，卖出按比例减少）
+    - cost: 持仓成本（净申购额口径，卖出按比例减少）
     - cash_in_transit: 在途资金（buy_debit 增加，buy_confirm 减少）
-    - principal_total: 累计投入本金（buy_debit/buy 增加，sell 回笼不减少）
+    - principal_total: 累计投入本金（buy_debit/buy 增加，卖出不减少）
+    - total_redemption: 累计赎回到账净额
     """
     
     def __init__(self, transactions_path: Path = None, holdings_path: Path = None):
@@ -147,10 +156,10 @@ class HoldingsCalculator:
             if t['date'] > asof_date:
                 continue
             
-            action = t.get('action', '').upper()
+            action = normalize_action(t.get('action', ''))
             order_id = t.get('order_id', '').strip()
             
-            if action == 'BUY_DEBIT' and order_id:
+            if action == 'buy_debit' and order_id:
                 amount = safe_decimal(t.get('amount', 0))
                 fee = safe_decimal(t.get('fee', 0))
                 net_amount = amount - fee  # 净申购金额（可用于买入份额的金额）
@@ -221,11 +230,69 @@ class HoldingsCalculator:
         
         return result
     
+    def get_total_redemption_as_of(self, asof_date: str) -> Dict[str, Decimal]:
+        """
+        获取截至某日期的所有产品累计赎回金额
+        
+        :param asof_date: 截止日期 (YYYY-MM-DD)
+        :return: {product_code: total_redemption}
+        """
+        product_codes = set(t['product_code'] for t in self.transactions if t['date'] <= asof_date)
+        
+        result = {}
+        for product_code in product_codes:
+            redemption = self._calc_total_redemption(product_code, asof_date)
+            result[product_code] = redemption
+        
+        return result
+    
+    def get_all_holdings_data_as_of(self, asof_date: str) -> Dict[str, Dict]:
+        """
+        获取截至某日期的所有产品完整持仓数据
+        
+        :param asof_date: 截止日期 (YYYY-MM-DD)
+        :return: {product_code: {
+            "shares": Decimal,
+            "cost": Decimal,
+            "cash_in_transit": Decimal,
+            "principal_total": Decimal,
+            "total_redemption": Decimal
+        }}
+        """
+        # 获取所有相关产品
+        product_codes = set()
+        for t in self.transactions:
+            if t['date'] <= asof_date:
+                product_codes.add(t['product_code'])
+        for code in self.base_holdings:
+            product_codes.add(code)
+        
+        result = {}
+        for product_code in product_codes:
+            shares, cost = self._calc_position_for_product(product_code, asof_date)
+            cash_in_transit = self._calc_cash_in_transit(product_code, asof_date)
+            principal_total = self._calc_principal_total(product_code, asof_date)
+            total_redemption = self._calc_total_redemption(product_code, asof_date)
+            
+            result[product_code] = {
+                "shares": shares,
+                "cost": cost,
+                "cash_in_transit": cash_in_transit,
+                "principal_total": principal_total,
+                "total_redemption": total_redemption
+            }
+        
+        return result
+    
     def _calc_position_for_product(self, product_code: str, asof_date: str) -> Tuple[Decimal, Decimal]:
         """
         计算单个产品的已确认持仓（份额和成本）
         
         返回: (shares, cost)
+        
+        buy 兼容模式说明：
+        buy 等价于同日 buy_debit + buy_confirm 的原子组合，
+        复用同一套计算逻辑，不写两套分叉。
         """
         # 基础份额
         base_shares = self.base_holdings.get(product_code, Decimal('0'))
@@ -244,16 +311,15 @@ class HoldingsCalculator:
         cost = Decimal('0')
         
         for t in product_transactions:
-            action = t.get('action', '').upper()
+            action = normalize_action(t.get('action', ''))
             order_id = t.get('order_id', '').strip()
             
-            if action == 'BUY_DEBIT':
+            if action == 'buy_debit':
                 # 扣款事件：不改变 shares/cost，只记录到 debit_index（已在 _build_debit_index 处理）
                 pass
             
-            elif action == 'BUY_CONFIRM':
+            elif action == 'buy_confirm':
                 # 份额确认事件
-                # 强约束：buy_confirm 必须提供 order_id
                 confirmed_shares = safe_decimal(t.get('shares', 0))
                 
                 if confirmed_shares <= 0:
@@ -261,67 +327,59 @@ class HoldingsCalculator:
                     continue
                 
                 if not order_id:
-                    # 坑2修复：buy_confirm 必须有 order_id
                     logger.error(f"buy_confirm 必须提供 order_id: {t}")
                     continue
                 
                 # 查找匹配的 debit
                 if order_id in self._debit_index:
-                    # 正常路径：找到匹配的 debit
                     debit = self._debit_index[order_id]
                     net_amount = debit['net_amount']
                     self._debit_index[order_id]['confirmed'] = True
                 else:
-                    # 坑2修复：未找到匹配的 debit，检查是否有降级 amount
+                    # 降级路径：未找到匹配的 debit
                     amount = safe_decimal(t.get('amount', 0))
                     fee = safe_decimal(t.get('fee', 0))
                     if amount > 0:
-                        # 兼容降级：有 amount 字段，可以计算成本
-                        # 但必须打 WARNING 提醒用户这是降级路径
                         net_amount = amount - fee
                         logger.warning(
                             f"buy_confirm 降级处理（无匹配 debit）: "
-                            f"order_id={order_id}, amount={amount}, net_amount={net_amount}。"
-                            f"此 amount 将计入 cost 但需确保 principal_total 口径正确！"
+                            f"order_id={order_id}, amount={amount}, net_amount={net_amount}"
                         )
-                        # 注意：降级时的 principal_total 需要在 _calc_principal_total 中单独处理
                     else:
-                        # 无法计算成本，报错并跳过
                         logger.error(
                             f"buy_confirm 找不到匹配的 buy_debit 且无 amount 字段，"
-                            f"无法计算成本: order_id={order_id}, row={t}"
+                            f"无法计算成本: order_id={order_id}"
                         )
                         net_amount = Decimal('0')
                 
                 shares += confirmed_shares
                 cost += net_amount
             
-            elif action == 'BUY':
+            elif action == 'buy':
                 # 兼容旧数据：当天既扣款又确认
-                # 成本口径统一：cost = amount - fee（净申购额）
+                # 等价于 buy_debit + buy_confirm 的原子组合
                 trans_shares = safe_decimal(t.get('shares', 0))
                 amount = safe_decimal(t.get('amount', 0))
                 fee = safe_decimal(t.get('fee', 0))
-                net_amount = amount - fee  # 净申购额
+                net_amount = amount - fee  # 净申购额（与 buy_debit + buy_confirm 逻辑一致）
                 
                 if trans_shares > 0:
                     shares += trans_shares
-                    cost += net_amount  # 统一使用净申购额入账
+                    cost += net_amount
                 else:
                     # 某些产品（如货基）用 amount 作为份额
                     shares += amount
-                    cost += net_amount  # 统一使用净申购额入账
+                    cost += net_amount
             
-            elif action == 'SELL' or action == 'SELL_CONFIRM':
+            elif action in ('sell', 'sell_confirm'):
                 # 卖出/卖出确认：份额减少，成本按比例减少
-                # SELL_CONFIRM: 赎回发起后的确认事件（来自 orders.csv settle）
                 sell_shares = safe_decimal(t.get('shares', 0))
                 if sell_shares > 0 and shares > 0:
                     cost_reduction = cost * sell_shares / shares
                     cost -= cost_reduction
                     shares -= sell_shares
             
-            elif action == 'DIVIDEND':
+            elif action == 'dividend':
                 # 分红：份额增加，成本不变
                 div_shares = safe_decimal(t.get('shares', 0))
                 if div_shares > 0:
@@ -339,6 +397,11 @@ class HoldingsCalculator:
     def _calc_cash_in_transit(self, product_code: str, asof_date: str) -> Decimal:
         """
         计算单个产品的在途资金（已扣款但未确认的净额合计）
+        
+        规则：
+        - buy_debit: cash_in_transit += (amount - fee)
+        - buy_confirm: cash_in_transit -= 对应 debit 的 net_amount
+        - buy: 不产生在途（当天确认）
         """
         product_transactions = [
             t for t in self.transactions
@@ -350,10 +413,10 @@ class HoldingsCalculator:
         debit_pool: Dict[str, Decimal] = {}  # order_id -> net_amount
         
         for t in product_transactions:
-            action = t.get('action', '').upper()
+            action = normalize_action(t.get('action', ''))
             order_id = t.get('order_id', '').strip()
             
-            if action == 'BUY_DEBIT':
+            if action == 'buy_debit':
                 amount = safe_decimal(t.get('amount', 0))
                 fee = safe_decimal(t.get('fee', 0))
                 net_amount = amount - fee
@@ -365,11 +428,11 @@ class HoldingsCalculator:
                     temp_key = f"_auto_{t['date']}_{amount}"
                     debit_pool[temp_key] = net_amount
             
-            elif action == 'BUY_CONFIRM':
+            elif action == 'buy_confirm':
                 if order_id and order_id in debit_pool:
                     del debit_pool[order_id]
             
-            # 注意：兼容旧 buy 不产生在途，因为它是"当天确认"
+            # buy 不产生在途（当天确认）
         
         # 在途资金 = 所有未确认 debit 的净额合计
         return sum(debit_pool.values(), Decimal('0'))
@@ -380,10 +443,9 @@ class HoldingsCalculator:
         
         规则：
         - buy_debit: principal += amount（扣款时计入）
-        - buy: principal += amount（兼容旧数据）
+        - buy: principal += amount（兼容旧数据，等价于 buy_debit 的逻辑）
         - sell: 不减少（卖出回笼不影响累计投入）
-        - buy_confirm: 正常情况不增加（钱已在 debit 时计入）
-                       但若走降级路径（有 amount 且无匹配 debit），则需计入
+        - buy_confirm: 正常情况不增加，降级路径除外
         """
         product_transactions = [
             t for t in self.transactions
@@ -391,38 +453,62 @@ class HoldingsCalculator:
         ]
         product_transactions.sort(key=lambda x: x['date'])
         
-        # 先构建 debit 索引，用于判断 confirm 是否走降级路径
+        # 构建 debit 索引
         self._build_debit_index(product_code, asof_date)
         
         principal = Decimal('0')
         
         for t in product_transactions:
-            action = t.get('action', '').upper()
+            action = normalize_action(t.get('action', ''))
             amount = safe_decimal(t.get('amount', 0))
             order_id = t.get('order_id', '').strip()
             
-            if action == 'BUY_DEBIT':
-                # 扣款时计入本金（用 amount，即总扣款额）
+            if action == 'buy_debit':
+                # 扣款时计入本金
                 principal += amount
             
-            elif action == 'BUY':
-                # 兼容旧数据
+            elif action == 'buy':
+                # 兼容旧数据，等价于 buy_debit 的逻辑
                 principal += amount
             
-            elif action == 'BUY_CONFIRM':
-                # 坑2修复：buy_confirm 降级路径时也要计入 principal_total
-                # 只有当 order_id 找不到匹配的 debit 且有 amount 时才计入
+            elif action == 'buy_confirm':
+                # 降级路径时也要计入
                 if order_id and order_id not in self._debit_index and amount > 0:
-                    # 降级路径：没有匹配的 debit，用 amount 补充 principal
                     principal += amount
                     logger.warning(
                         f"buy_confirm 降级路径计入 principal_total: "
                         f"order_id={order_id}, amount={amount}"
                     )
             
-            # sell, dividend 都不影响 principal_total
+            # sell, sell_confirm, dividend 都不影响 principal_total
         
         return principal
+    
+    def _calc_total_redemption(self, product_code: str, asof_date: str) -> Decimal:
+        """
+        计算单个产品的累计赎回金额（到账净额）
+        
+        用于计算生命周期总盈亏：
+        total_pnl = total_value + total_redemption - principal_total
+        
+        sell/sell_confirm 的 amount 是到账净额（已扣除赎回费）
+        """
+        total_redemption = Decimal('0')
+        
+        for t in self.transactions:
+            if t.get('product_code') != product_code:
+                continue
+            if t.get('date', '') > asof_date:
+                continue
+            
+            action = normalize_action(t.get('action', ''))
+            
+            if action in ('sell', 'sell_confirm'):
+                amount = safe_decimal(t.get('amount', 0))
+                if amount > 0:
+                    total_redemption += amount
+        
+        return total_redemption
 
 
 # ============ 兼容旧 API ============
@@ -490,16 +576,11 @@ if __name__ == "__main__":
     asof = datetime.now().strftime('%Y-%m-%d')
     
     print(f"截至 {asof} 的持仓:")
-    holdings = calc.get_holdings_as_of(asof)
+    holdings = calc.get_all_holdings_data_as_of(asof)
     for code, data in holdings.items():
-        print(f"  {code}: 份额={data['shares']:.2f}, 成本={data['cost']:.2f}")
-    
-    print(f"\n在途资金:")
-    cash_in_transit = calc.get_cash_in_transit_as_of(asof)
-    for code, cash in cash_in_transit.items():
-        print(f"  {code}: {cash:.2f}")
-    
-    print(f"\n累计投入本金:")
-    principal = calc.get_principal_total_as_of(asof)
-    for code, p in principal.items():
-        print(f"  {code}: {p:.2f}")
+        print(f"  {code}:")
+        print(f"    份额={data['shares']:.4f}")
+        print(f"    成本={data['cost']:.2f}")
+        print(f"    在途={data['cash_in_transit']:.2f}")
+        print(f"    本金={data['principal_total']:.2f}")
+        print(f"    赎回={data['total_redemption']:.2f}")

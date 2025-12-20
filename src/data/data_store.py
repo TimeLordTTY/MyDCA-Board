@@ -242,13 +242,43 @@ def append_ledger(record: Dict) -> None:
 # 工具函数
 # ============================================================
 
-def generate_order_id(product_code: str, seq: int = 1) -> str:
+def generate_order_id(product_code: str) -> str:
     """生成订单号
     
-    格式：YYYYMMDDHHMMSS_productcode_seq
+    格式：YYYYMMDDHHMMSS_{product_code}_{seq}
+    
+    seq 规则：从现有 orders/transactions 中同秒同产品的最大 seq + 1
     """
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    return f"{timestamp}_{product_code}_{seq}"
+    prefix = f"{timestamp}_{product_code}_"
+    
+    # 查找现有最大 seq
+    max_seq = 0
+    
+    # 从 orders.csv 查找
+    orders = load_orders()
+    for order in orders:
+        order_id = order.get('order_id', '')
+        if order_id.startswith(prefix):
+            try:
+                seq = int(order_id.split('_')[-1])
+                max_seq = max(max_seq, seq)
+            except ValueError:
+                pass
+    
+    # 从 transactions.csv 查找
+    transactions = load_transactions()
+    for tx in transactions:
+        order_id = tx.get('order_id', '')
+        if order_id.startswith(prefix):
+            try:
+                seq = int(order_id.split('_')[-1])
+                max_seq = max(max_seq, seq)
+            except ValueError:
+                pass
+    
+    new_seq = max_seq + 1
+    return f"{prefix}{new_seq:03d}"
 
 
 def format_decimal(d: Decimal, places: int = 2) -> str:

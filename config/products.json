@@ -219,8 +219,10 @@
         "product_code": "000686",
         "type": "fund",
         "category": "fund",
-        "market": "cn",
+        "market": "cash_like",
+        "nav_is_yield": true,
         "buy_fee_rate": 0,
-        "sell_fee_tiers": []
+        "sell_fee_tiers": [],
+        "note": "货币基金，NAV显示万份收益，计算市值时使用 NAV=1"
     }
 ]
