@@ -1519,30 +1519,8 @@ def check_data():
 
 def silent_sync():
     """静默同步：采集净值并更新账户余额（完全无输出）"""
-    import logging
-    import sys
-    from io import StringIO
-    
-    # 保存原始状态
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    logger = logging.getLogger()
-    old_level = logger.level
-    
-    # 重定向输出
-    sys.stdout = StringIO()
-    sys.stderr = StringIO()
-    logger.setLevel(logging.CRITICAL)  # 只显示严重错误
-    
-    try:
-        collect_and_store()
-        from core.daily_balance import create_daily_balance_snapshot
-        create_daily_balance_snapshot(get_project_root())
-    finally:
-        # 恢复原始状态
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-        logger.setLevel(old_level)
+    from core.snapshot_service import collect_nav_and_build_snapshots
+    collect_nav_and_build_snapshots(silent=True)
 
 
 def auto_collect_nav():

@@ -343,6 +343,8 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
     
     # 统计变量
     fund_total = Decimal('0')
+    fund_value = Decimal('0')  # 纯市值（份额×净值）
+    fund_transit = Decimal('0')  # 在途资金
     ylb_total = Decimal('0')  # 余利宝合计
     
     # 获取所有 fund_mapped 账户关联的产品代码（这些不计入基金总和）
@@ -380,7 +382,9 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
             for code, info in daily_products.items():
                 # 只计入 category='fund' 且不是 fund_mapped 关联产品的基金
                 if info.get('category') == 'fund' and code not in fund_mapped_products:
-                    fund_total += info.get('total_value', Decimal('0'))
+                    fund_value += info.get('value', Decimal('0'))
+                    fund_transit += info.get('cash_in_transit', Decimal('0'))
+            fund_total = fund_value + fund_transit
             balance = fund_total
             product_value = fund_total
         
@@ -538,6 +542,12 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
     
     # 添加基金汇总行（如果有）
     if fund_total > 0:
+        # 构建备注，展示市值和在途资金分解
+        if fund_transit > 0:
+            fund_note = f"市值{fund_value:.2f} + 在途{fund_transit:.2f}（不含货币基金）"
+        else:
+            fund_note = f"市值{fund_value:.2f}（不含货币基金）"
+        
         records.append({
             'fetch_date': fetch_date,
             'account_id': 'fund_total',
@@ -547,7 +557,7 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
             'related_product': '',
             'product_value': f"{fund_total:.2f}",
             'diff': '',
-            'note': '所有基金市值合计（不含货币基金）'
+            'note': fund_note
         })
     
     return records

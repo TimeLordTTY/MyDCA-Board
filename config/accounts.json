@@ -83,27 +83,6 @@
             "account_type": "cash",
             "linked_product": null,
             "note": "微信零钱"
-        },
-        {
-            "id": "alipay",
-            "name": "支付宝余额",
-            "account_type": "cash",
-            "linked_product": null,
-            "note": "支付宝余额"
-        },
-        {
-            "id": "cash",
-            "name": "现金",
-            "account_type": "cash",
-            "linked_product": null,
-            "note": "现金"
-        },
-        {
-            "id": "other",
-            "name": "其他",
-            "account_type": "cash",
-            "linked_product": null,
-            "note": "其他来源"
         }
     ],
     "account_groups": {
