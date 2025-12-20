@@ -305,8 +305,20 @@ def add_ledger_entry():
     print("  [1] expense - 支出")
     print("  [2] income - 收入")
     print("  [3] transfer - 转账")
+    print("  [0] 返回")
     
-    entry_type = input_choice("请输入序号", ['expense', 'income', 'transfer'])
+    choice = input("\n请输入序号: ").strip()
+    if choice == '0':
+        return
+    elif choice == '1':
+        entry_type = 'expense'
+    elif choice == '2':
+        entry_type = 'income'
+    elif choice == '3':
+        entry_type = 'transfer'
+    else:
+        print("✗ 无效选择")
+        return
     print(f"✓ 类型: {entry_type}")
     
     # 输入时间
@@ -382,6 +394,126 @@ def add_ledger_entry():
     
     append_ledger(record)
     print(f"\n✓ 已写入账本")
+
+
+def add_refund_entry():
+    """添加退款记录"""
+    print("\n" + "=" * 50)
+    print("退款记录")
+    print("=" * 50)
+    
+    # 加载最近的支出记录
+    ledger = load_ledger()
+    expenses = [e for e in ledger if e.get('entry_type') == 'expense']
+    
+    if not expenses:
+        print("暂无支出记录")
+        return
+    
+    # 显示最近 20 条支出
+    recent = expenses[-20:]
+    print("\n=== 选择要退款的支出记录 ===")
+    print(f"{'#':<4} {'时间':<20} {'金额':>10} {'分类':<15} {'账户':<12} {'备注':<20}")
+    print("-" * 85)
+    
+    for i, e in enumerate(recent, 1):
+        event_time = e.get('event_time', '')[:16]
+        amount = e.get('amount', '')
+        cat = e.get('category_l1', '')
+        if e.get('category_l2'):
+            cat += f">{e['category_l2']}"
+        account = e.get('account_from', '')
+        note = e.get('note', '')[:18]
+        print(f"{i:<4} {event_time:<20} {amount:>10} {cat:<15} {account:<12} {note:<20}")
+    
+    # 选择记录
+    while True:
+        choice = input("\n请输入序号 (0取消): ").strip()
+        if choice == '0':
+            print("已取消")
+            return
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(recent):
+                original = recent[idx]
+                break
+        except ValueError:
+            pass
+        print("✗ 无效选择")
+    
+    # 显示原记录信息
+    orig_amount = Decimal(original.get('amount', '0'))
+    orig_account = original.get('account_from', '')
+    orig_cat = original.get('category_l1', '')
+    orig_note = original.get('note', '')
+    
+    print(f"\n原记录：")
+    print(f"  时间: {original.get('event_time', '')}")
+    print(f"  金额: {orig_amount}")
+    print(f"  分类: {orig_cat}")
+    print(f"  账户: {orig_account} ({get_account_name(orig_account)})")
+    if orig_note:
+        print(f"  备注: {orig_note}")
+    
+    # 输入退款金额（默认原金额）
+    print(f"\n退款金额 (默认 {orig_amount}，可输入部分退款金额)")
+    refund_amount = input_decimal("退款金额", required=False, default=orig_amount)
+    
+    if refund_amount > orig_amount:
+        print(f"⚠ 退款金额 {refund_amount} 大于原金额 {orig_amount}")
+        cont = input("继续? (Y/n): ").strip().lower()
+        if cont == 'n':
+            print("已取消")
+            return
+    
+    # 退款账户（默认原账户）
+    print(f"\n退款账户 (默认 {orig_account})")
+    change_account = input("回车使用原账户 / 输入 c 更换: ").strip().lower()
+    if change_account == 'c':
+        refund_account = select_account("选择退款账户")
+    else:
+        refund_account = orig_account
+    
+    # 退款时间
+    event_time = input_datetime("退款时间")
+    
+    # 备注
+    default_note = f"退款: {orig_note}" if orig_note else "退款"
+    note_input = input(f"备注 (默认: {default_note}): ").strip()
+    note = note_input if note_input else default_note
+    
+    # 确认
+    print("\n" + "-" * 50)
+    print("请确认：")
+    print(f"  类型: income (退款)")
+    print(f"  时间: {event_time}")
+    print(f"  退款金额: {format_decimal(refund_amount, 2)}")
+    print(f"  原金额: {format_decimal(orig_amount, 2)}")
+    print(f"  退款账户: {refund_account} ({get_account_name(refund_account)})")
+    print(f"  分类: 退款")
+    print(f"  备注: {note}")
+    
+    confirm = input("\n确认写入? (Y/n): ").strip().lower()
+    if confirm == 'n':
+        print("已取消")
+        return
+    
+    # 写入（作为 income）
+    record = {
+        'event_time': event_time,
+        'entry_type': 'income',
+        'amount': format_decimal(refund_amount, 2),
+        'category_l1': '退款',
+        'category_l2': orig_cat,  # 用二级分类记录原分类
+        'account_from': '',
+        'account_to': refund_account,
+        'discount': '0',
+        'reimbursable': '0',
+        'note': note
+    }
+    
+    append_ledger(record)
+    print(f"\n✓ 已写入退款记录")
 
 
 # ============================================================
@@ -1443,14 +1575,34 @@ def interactive_mode():
         if choice == '0':
             break
         elif choice == '1':
-            # 记账模式：循环录入直到退出
+            # 记账模式
             while True:
-                add_ledger_entry()
-                silent_sync()  # 记账后静默同步
-                print("\n" + "-" * 30)
-                cont = input("继续记账? (回车继续 / 0退出): ").strip()
-                if cont == '0':
+                print("\n=== 记账 ===")
+                print("  [1] 新增记录 (收入/支出/转账)")
+                print("  [2] 退款")
+                print("  [0] 返回主菜单")
+                
+                sub = input("\n请选择: ").strip()
+                if sub == '0':
                     break
+                elif sub == '1':
+                    # 普通记账循环
+                    while True:
+                        add_ledger_entry()
+                        silent_sync()
+                        print("\n" + "-" * 30)
+                        cont = input("继续记账? (回车继续 / 0退出): ").strip()
+                        if cont == '0':
+                            break
+                elif sub == '2':
+                    # 退款循环
+                    while True:
+                        add_refund_entry()
+                        silent_sync()
+                        print("\n" + "-" * 30)
+                        cont = input("继续退款? (回车继续 / 0退出): ").strip()
+                        if cont == '0':
+                            break
         elif choice == '2':
             # 理财模式：循环操作直到退出
             while True:
