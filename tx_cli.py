@@ -337,7 +337,7 @@ def add_ledger_entry():
     
     # 优惠/报销
     discount = input_decimal("优惠金额", required=False, default=Decimal('0'))
-    reimbursable_str = input("是否可报销 (y/n) [默认n]: ").strip().lower()
+    reimbursable_str = input("是否可报销 (y/N): ").strip().lower()
     reimbursable = 1 if reimbursable_str == 'y' else 0
     
     # 备注
@@ -361,8 +361,8 @@ def add_ledger_entry():
     if note:
         print(f"  备注: {note}")
     
-    confirm = input("\n确认写入? (y/n): ").strip().lower()
-    if confirm != 'y':
+    confirm = input("\n确认写入? (Y/n): ").strip().lower()
+    if confirm == 'n':
         print("已取消")
         return
     
@@ -439,8 +439,8 @@ def add_buy_debit():
     note = product_name  # 直接使用产品名称
     
     # 确认
-    confirm = input("\n确认写入? (y/n): ").strip().lower()
-    if confirm != 'y':
+    confirm = input("\n确认写入? (Y/n): ").strip().lower()
+    if confirm == 'n':
         print("已取消")
         return
     
@@ -536,8 +536,8 @@ def add_redeem_request():
     note = product_name  # 直接使用产品名称
     
     # 确认
-    confirm = input("\n确认写入? (y/n): ").strip().lower()
-    if confirm != 'y':
+    confirm = input("\n确认写入? (Y/n): ").strip().lower()
+    if confirm == 'n':
         print("已取消")
         return
     
@@ -721,8 +721,8 @@ def _do_history_trade(action: str):
     note = product_name  # 直接使用产品名称
     
     # 确认
-    confirm = input("\n确认写入? (y/n): ").strip().lower()
-    if confirm != 'y':
+    confirm = input("\n确认写入? (Y/n): ").strip().lower()
+    if confirm == 'n':
         print("已取消")
         return
     
