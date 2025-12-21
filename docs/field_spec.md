@@ -140,7 +140,7 @@ order_id,product_code,order_type,amount,fee,shares,requested_at,trade_date,nav_d
 
 ---
 
-## 3. ledger.csv（生活记账流水表）
+## 3. ledger（生活记账流水表）
 
 ### 3.1 列顺序（固定）
 
@@ -170,6 +170,31 @@ event_time,entry_type,amount,category_l1,category_l2,account_from,account_to,dis
 | discount | 优惠金额 | Decimal（默认0） |
 | reimbursable | 是否可报销 | 0/1（默认0） |
 | note | 备注 | string |
+
+### 3.4 账户余额计算（动态计算，不存储）
+
+为便于对账，UI 显示时会动态计算以下字段：
+
+| 字段 | 定义 | 计算方式 |
+|------|------|----------|
+| balance_after | 操作后账户余额 | 截止当前时间该账户的所有入账 - 出账 |
+| parent_balance_after | 操作后父账户余额 | 若账户属于某账户组（如 ylb_life 属于余利宝），则为组内所有账户余额之和 |
+
+**设计原则**：
+- 余额**不存储**在数据库中，而是**查询时动态计算**
+- 这样做的好处是：修改任何历史记录后，后续所有记录的余额会**自动正确**
+- 无需手动更新历史余额，避免数据不一致问题
+
+**账户组定义**（来自 `accounts.json`）：
+- 余利宝组：ylb_life（生活费）、ylb_project（项目资金）
+- 稳利宝组：wlb_life（生活费）、wlb_project（项目资金）
+
+**示例**：
+```
+记录：从 ylb_life 支出 100 元
+balance_after: ylb_life 的余额（截止该时间）
+parent_balance_after: ylb_life + ylb_project 的总余额（截止该时间）
+```
 
 ---
 

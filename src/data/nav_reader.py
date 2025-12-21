@@ -3,9 +3,8 @@
 """
 净值读取模块
 
-从 data/nav/{product_code}_{product_name}.csv 读取历史净值数据
+仅支持 MySQL 数据库存储：nav 表
 """
-import csv
 from pathlib import Path
 from datetime import date
 from decimal import Decimal
@@ -13,22 +12,9 @@ from typing import Optional, Dict, List
 import logging
 
 from data.config_loader import get_project_root, load_products
+from data.db_connector import execute_query, execute_one, execute_insert, execute_many
 
 logger = logging.getLogger(__name__)
-
-
-def get_nav_file_path(product_code: str) -> Optional[Path]:
-    """获取产品的净值文件路径"""
-    nav_dir = get_project_root() / "data" / "nav"
-    
-    if not nav_dir.exists():
-        return None
-    
-    # 查找匹配 product_code 的文件
-    for nav_file in nav_dir.glob(f"{product_code}_*.csv"):
-        return nav_file
-    
-    return None
 
 
 def load_nav_history(product_code: str) -> Dict[str, Decimal]:
@@ -37,33 +23,23 @@ def load_nav_history(product_code: str) -> Dict[str, Decimal]:
     Returns:
         Dict[str, Decimal]: {nav_date: nav}
     """
-    nav_file = get_nav_file_path(product_code)
-    if nav_file is None or not nav_file.exists():
-        return {}
+    sql = """
+        SELECT DATE_FORMAT(nav_date, '%%Y-%%m-%%d') as nav_date, nav
+        FROM nav
+        WHERE product_code = %s
+        ORDER BY nav_date
+    """
+    rows = execute_query(sql, (product_code,))
     
     nav_map = {}
-    
-    try:
-        with open(nav_file, 'r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            
-            for row in reader:
-                # 跳过中文表头行
-                nav_date = row.get('nav_date', '')
-                if nav_date.startswith('净值') or not nav_date:
-                    continue
-                
-                nav_str = row.get('nav', '')
-                if not nav_str:
-                    continue
-                
-                try:
-                    nav = Decimal(str(nav_str).strip())
-                    nav_map[nav_date] = nav
-                except Exception:
-                    continue
-    except Exception as e:
-        logger.warning(f"读取净值文件失败 {nav_file}: {e}")
+    for row in rows:
+        nav_date = row.get('nav_date')
+        nav_str = row.get('nav')
+        if nav_date and nav_str:
+            try:
+                nav_map[nav_date] = Decimal(str(nav_str))
+            except:
+                pass
     
     return nav_map
 
@@ -78,8 +54,15 @@ def get_nav(product_code: str, nav_date: str) -> Optional[Decimal]:
     Returns:
         Optional[Decimal]: 净值，如果不存在返回 None
     """
-    nav_map = load_nav_history(product_code)
-    return nav_map.get(nav_date)
+    sql = "SELECT nav FROM nav WHERE product_code = %s AND nav_date = %s"
+    result = execute_one(sql, (product_code, nav_date))
+    
+    if result and result.get('nav'):
+        try:
+            return Decimal(str(result['nav']))
+        except:
+            pass
+    return None
 
 
 def get_latest_nav(product_code: str) -> Optional[tuple]:
@@ -88,18 +71,82 @@ def get_latest_nav(product_code: str) -> Optional[tuple]:
     Returns:
         Optional[tuple]: (nav_date, nav) 或 None
     """
-    nav_map = load_nav_history(product_code)
+    sql = """
+        SELECT DATE_FORMAT(nav_date, '%%Y-%%m-%%d') as nav_date, nav
+        FROM nav
+        WHERE product_code = %s
+        ORDER BY nav_date DESC
+        LIMIT 1
+    """
+    result = execute_one(sql, (product_code,))
     
-    if not nav_map:
-        return None
+    if result and result.get('nav_date') and result.get('nav'):
+        try:
+            return (result['nav_date'], Decimal(str(result['nav'])))
+        except:
+            pass
+    return None
+
+
+def save_nav(product_code: str, nav_date: str, nav: Decimal, 
+             acc_nav: Decimal = None, daily_return: Decimal = None) -> None:
+    """保存净值数据"""
+    sql = """
+        INSERT INTO nav (product_code, nav_date, nav, acc_nav, daily_return)
+        VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE 
+            nav = VALUES(nav),
+            acc_nav = VALUES(acc_nav),
+            daily_return = VALUES(daily_return),
+            fetched_at = CURRENT_TIMESTAMP
+    """
+    execute_insert(sql, (
+        product_code, 
+        nav_date, 
+        str(nav),
+        str(acc_nav) if acc_nav else None,
+        str(daily_return) if daily_return else None
+    ))
+
+
+def batch_save_nav(records: List[Dict]) -> int:
+    """批量保存净值数据
     
-    latest_date = max(nav_map.keys())
-    return (latest_date, nav_map[latest_date])
+    Args:
+        records: [{'product_code': str, 'nav_date': str, 'nav': Decimal, ...}, ...]
+    
+    Returns:
+        int: 保存的记录数
+    """
+    if not records:
+        return 0
+    
+    sql = """
+        INSERT INTO nav (product_code, nav_date, nav, acc_nav, daily_return)
+        VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE 
+            nav = VALUES(nav),
+            acc_nav = VALUES(acc_nav),
+            daily_return = VALUES(daily_return),
+            fetched_at = CURRENT_TIMESTAMP
+    """
+    
+    params_list = []
+    for r in records:
+        params_list.append((
+            r.get('product_code'),
+            r.get('nav_date'),
+            str(r.get('nav', 0)),
+            str(r.get('acc_nav')) if r.get('acc_nav') else None,
+            str(r.get('daily_return')) if r.get('daily_return') else None
+        ))
+    
+    return execute_many(sql, params_list)
 
 
 if __name__ == "__main__":
     # 简单测试
-    from data.config_loader import load_products
+    logging.basicConfig(level=logging.INFO)
     
     products = load_products()
     for p in products[:3]:
@@ -110,4 +157,3 @@ if __name__ == "__main__":
             print(f"{code} ({name}): 最新净值 {latest[0]} = {latest[1]}")
         else:
             print(f"{code} ({name}): 无净值数据")
-

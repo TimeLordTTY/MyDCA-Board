@@ -111,13 +111,14 @@ def add_buy_debit(
     nav_date = trade_date
     confirm_date = calc_confirm_date(trade_date, buy_confirm_offset)
     
-    # 生成订单号
-    order_id = generate_order_id(product_code)
+    # 生成订单号（包含请求时间）
+    requested_at_str = requested_at.strftime('%Y-%m-%d %H:%M:%S')
+    order_id = generate_order_id(product_code) + '_' + requested_at_str
     
     if note is None:
         note = product_name
     
-    # 写入 transactions.csv (buy_debit)
+    # 写入 transactions (buy_debit)，使用请求时间作为 created_at
     tx_record = {
         'date': str(trade_date),
         'product_code': product_code,
@@ -128,7 +129,8 @@ def add_buy_debit(
         'nav': '',
         'nav_date': '',
         'order_id': order_id,
-        'note': note
+        'note': note,
+        'created_at': requested_at_str  # 使用请求时间作为记录时间
     }
     append_transaction(tx_record)
     
@@ -233,7 +235,8 @@ def add_history_trade(
     fee: Decimal = None,
     nav: Decimal = None,
     nav_date: str = None,
-    note: str = None
+    note: str = None,
+    confirm_time: str = None  # 新增：确认时间 HH:MM:SS
 ) -> Dict:
     """
     补录历史交易（已完成的 buy/sell/dividend）
@@ -241,13 +244,14 @@ def add_history_trade(
     Args:
         product_code: 产品代码
         action: 交易类型 (buy/sell/dividend)
-        confirm_date: 确认日期
+        confirm_date: 确认日期 (YYYY-MM-DD)
         shares: 份额
         amount: 金额（buy=扣款金额，sell=到账净额，dividend不需要）
         fee: 手续费
         nav: 净值
         nav_date: 净值日期
         note: 备注
+        confirm_time: 确认时间 (HH:MM:SS)，可选，默认 09:30:00
     
     Returns:
         写入的交易记录
@@ -265,6 +269,13 @@ def add_history_trade(
     if note is None:
         note = product['product_name']
     
+    # 确认时间默认为 09:30:00
+    if confirm_time is None:
+        confirm_time = '09:30:00'
+    
+    # 构造完整的 created_at
+    created_at = f"{confirm_date} {confirm_time}"
+    
     tx_record = {
         'date': confirm_date,
         'product_code': product_code,
@@ -275,7 +286,8 @@ def add_history_trade(
         'nav': format_decimal(nav, 4) if nav and nav > 0 else '',
         'nav_date': nav_date if nav and nav > 0 else '',
         'order_id': '',  # 补录不需要 order_id
-        'note': note
+        'note': note,
+        'created_at': created_at  # 使用确认日期+时间作为记录时间
     }
     
     append_transaction(tx_record)
@@ -299,6 +311,35 @@ def list_all_orders() -> List[Dict]:
     """获取所有订单"""
     from data.data_store import load_orders
     return load_orders()
+
+
+def list_recent_transactions(n: int = 20) -> List[Dict]:
+    """
+    获取最近的交易记录（优化版，直接在数据库排序和限制）
+    
+    Args:
+        n: 返回条数
+    
+    Returns:
+        交易记录列表（按时间倒序）
+    """
+    from data.data_store import load_recent_transactions
+    return load_recent_transactions(n)
+
+
+def update_transaction_entry(record_id: int, record: Dict) -> bool:
+    """
+    更新交易记录
+    
+    Args:
+        record_id: 记录 ID
+        record: 更新后的记录数据
+    
+    Returns:
+        是否更新成功
+    """
+    from data.data_store import update_transaction
+    return update_transaction(record_id, record)
 
 
 def settle_orders(target_date: str = None) -> SettleResult:

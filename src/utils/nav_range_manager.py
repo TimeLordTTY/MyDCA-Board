@@ -4,15 +4,17 @@
 
 用于管理和更新每个产品的净值日期范围配置。
 在 export_nav_history.py 和 run_daily.py 执行后自动更新。
+
+已从 CSV 迁移到 MySQL 数据库。
 """
 
 import json
-import csv
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 
 from data.config_loader import get_project_root
+from data.db_connector import execute_query, execute_one
 
 
 def load_nav_range() -> Dict:
@@ -40,74 +42,55 @@ def save_nav_range(nav_range: Dict) -> None:
         json.dump(nav_range, f, ensure_ascii=False, indent=4)
 
 
-def scan_nav_file(nav_path: Path) -> Dict:
+def scan_nav_db(product_code: str) -> Dict:
     """
-    扫描单个净值文件，获取日期范围和记录数
-    :param nav_path: 净值文件路径
+    从数据库扫描产品的净值日期范围
+    :param product_code: 产品代码
     :return: {earliest_nav_date, latest_nav_date, record_count}
     """
-    if not nav_path.exists():
+    sql = """
+        SELECT MIN(DATE_FORMAT(nav_date, '%%Y-%%m-%%d')) as earliest,
+               MAX(DATE_FORMAT(nav_date, '%%Y-%%m-%%d')) as latest,
+               COUNT(*) as cnt
+        FROM nav
+        WHERE product_code = %s
+    """
+    result = execute_one(sql, (product_code,))
+    
+    if result and result.get('cnt', 0) > 0:
         return {
-            'earliest_nav_date': None,
-            'latest_nav_date': None,
-            'record_count': 0
+            'earliest_nav_date': result.get('earliest'),
+            'latest_nav_date': result.get('latest'),
+            'record_count': int(result.get('cnt', 0))
         }
     
-    dates = []
-    with open(nav_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            nav_date = row.get('nav_date', '')
-            # 跳过中文表头行和空行
-            if nav_date and not nav_date.startswith('净值') and nav_date.strip():
-                dates.append(nav_date)
-    
-    if not dates:
-        return {
-            'earliest_nav_date': None,
-            'latest_nav_date': None,
-            'record_count': 0
-        }
-    
-    dates.sort()
     return {
-        'earliest_nav_date': dates[0],
-        'latest_nav_date': dates[-1],
-        'record_count': len(dates)
+        'earliest_nav_date': None,
+        'latest_nav_date': None,
+        'record_count': 0
     }
 
 
 def update_product_nav_range(product_code: str, product_name: str = None) -> Dict:
     """
-    更新单个产品的净值范围
+    更新单个产品的净值范围（从数据库读取）
     :param product_code: 产品代码
     :param product_name: 产品名称（可选）
     :return: 更新后的产品净值范围信息
     """
     nav_range = load_nav_range()
     
-    # 查找对应的净值文件
-    nav_dir = get_project_root() / "data" / "nav"
-    nav_files = list(nav_dir.glob(f"{product_code}_*.csv"))
+    # 从数据库获取日期范围
+    range_info = scan_nav_db(product_code)
     
-    if nav_files:
-        nav_path = nav_files[0]
-        range_info = scan_nav_file(nav_path)
-        
-        # 如果没有提供 product_name，尝试从文件名提取
-        if not product_name:
-            # 文件名格式: {product_code}_{product_name}.csv
-            filename = nav_path.stem
-            if '_' in filename:
-                product_name = filename.split('_', 1)[1]
-            else:
-                product_name = product_code
-    else:
-        range_info = {
-            'earliest_nav_date': None,
-            'latest_nav_date': None,
-            'record_count': 0
-        }
+    # 如果没有提供 product_name，从配置获取
+    if not product_name:
+        from data.config_loader import load_products
+        products = load_products()
+        for p in products:
+            if p.get('product_code') == product_code:
+                product_name = p.get('product_name', product_code)
+                break
         if not product_name:
             product_name = product_code
     
@@ -127,26 +110,28 @@ def update_product_nav_range(product_code: str, product_name: str = None) -> Dic
 
 def update_all_nav_ranges() -> Dict:
     """
-    更新所有产品的净值范围（基于实际的净值文件）
+    更新所有产品的净值范围（从数据库读取）
     :return: 完整的净值范围配置
     """
     nav_range = load_nav_range()
-    nav_dir = get_project_root() / "data" / "nav"
     
-    if not nav_dir.exists():
-        return nav_range
+    # 从数据库获取所有产品代码
+    sql = "SELECT DISTINCT product_code FROM nav"
+    products = execute_query(sql)
     
-    # 扫描所有净值文件
-    for nav_file in nav_dir.glob("*.csv"):
-        filename = nav_file.stem
-        if '_' in filename:
-            product_code = filename.split('_')[0]
-            product_name = filename.split('_', 1)[1]
-        else:
-            product_code = filename
-            product_name = filename
+    # 获取产品名称映射
+    from data.config_loader import load_products
+    product_names = {}
+    for p in load_products():
+        product_names[p.get('product_code')] = p.get('product_name', '')
+    
+    for row in products:
+        product_code = row.get('product_code')
+        if not product_code:
+            continue
         
-        range_info = scan_nav_file(nav_file)
+        range_info = scan_nav_db(product_code)
+        product_name = product_names.get(product_code, product_code)
         
         nav_range[product_code] = {
             'product_name': product_name,
@@ -200,4 +185,3 @@ if __name__ == "__main__":
     print("扫描并更新所有产品的净值范围...")
     update_all_nav_ranges()
     print_nav_range_summary()
-

@@ -66,24 +66,14 @@ def normalize_action(action: str) -> str:
     return action.strip().lower() if action else ''
 
 
-def load_transactions(transactions_path: Path) -> List[Dict]:
+def load_transactions(transactions_path: Path = None) -> List[Dict]:
     """
-    加载交易流水
-    :param transactions_path: 交易流水文件路径
+    加载交易流水（从数据库读取）
+    :param transactions_path: 交易流水文件路径（已忽略）
     :return: 交易记录列表
     """
-    if not transactions_path.exists():
-        return []
-    
-    transactions = []
-    with open(transactions_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            # 跳过空行或缺少必要字段的行
-            if row.get('date') and row.get('product_code'):
-                transactions.append(row)
-    
-    return transactions
+    from data.data_store import load_transactions as db_load_transactions
+    return db_load_transactions()
 
 
 def load_base_holdings(holdings_path: Path = None) -> Dict[str, Decimal]:

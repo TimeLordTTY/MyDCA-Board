@@ -2,6 +2,10 @@
 """
 账户余额快照模块
 
+支持两种存储模式：
+1. CSV 文件存储（默认）
+2. MySQL 数据库存储（配置 use_database=true）
+
 生成 daily_balance.csv，展示各账户余额和关联产品市值。
 
 核心设计原则：
@@ -52,6 +56,14 @@ from utils.trade_calendar import is_trade_day, prev_trade_day
 
 logger = logging.getLogger(__name__)
 
+# 导入数据库模块（强制使用数据库）
+from data.db_connector import execute_query, execute_one, execute_insert, execute_many
+
+
+def _use_database() -> bool:
+    """始终使用数据库"""
+    return True
+
 # 字段顺序
 FIELDNAMES = [
     'fetch_date', 'account_id', 'account_name', 'account_type',
@@ -85,49 +97,28 @@ def safe_decimal(value, default=Decimal('0')) -> Decimal:
 
 def load_money_fund_yield(project_root: Path, product_code: str, nav_date: str = None) -> Optional[Decimal]:
     """
-    加载货币基金的万份收益
+    加载货币基金的万份收益（从数据库读取）
     
-    :param project_root: 项目根目录
+    :param project_root: 项目根目录（已忽略）
     :param product_code: 产品代码（如 000686）
     :param nav_date: 净值日期，None则取最新
     :return: 万份收益，或 None（如果找不到）
     """
-    nav_dir = project_root / "data" / "nav"
-    if not nav_dir.exists():
-        return None
+    if nav_date:
+        sql = "SELECT nav FROM nav WHERE product_code = %s AND nav_date = %s"
+        result = execute_one(sql, (product_code, nav_date))
+    else:
+        sql = """
+            SELECT nav FROM nav 
+            WHERE product_code = %s 
+            ORDER BY nav_date DESC 
+            LIMIT 1
+        """
+        result = execute_one(sql, (product_code,))
     
-    # 查找对应产品的 NAV 文件
-    pattern = str(nav_dir / f"{product_code}_*.csv")
-    files = glob.glob(pattern)
-    if not files:
-        return None
-    
-    nav_file = Path(files[0])
-    if not nav_file.exists():
-        return None
-    
-    latest_yield = None
-    latest_date = None
-    
-    with open(nav_file, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            # 跳过中文表头行
-            row_date = row.get('nav_date', '')
-            if row_date.startswith('净值') or row_date.startswith('产品'):
-                continue
-            
-            # 如果指定日期，只读取该日期
-            if nav_date and row_date != nav_date:
-                continue
-            
-            # 取最新日期的万份收益（nav 字段存储万份收益）
-            if not latest_date or row_date >= latest_date:
-                latest_date = row_date
-                nav_value = row.get('nav', '0')
-                latest_yield = safe_decimal(nav_value)
-    
-    return latest_yield
+    if result and result.get('nav'):
+        return safe_decimal(result['nav'])
+    return None
 
 
 def calc_money_fund_daily_income(shares: Decimal, yield_per_10k: Decimal) -> Decimal:
@@ -159,64 +150,62 @@ def load_accounts(project_root: Path) -> Dict:
 
 
 def load_ledger(project_root: Path) -> List[Dict]:
-    """加载账本记录"""
-    ledger_path = project_root / "data" / "ledger.csv"
-    if not ledger_path.exists():
-        return []
-    
-    records = []
-    with open(ledger_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            records.append(row)
-    return records
+    """加载账本记录（从数据库）"""
+    sql = """
+        SELECT DATE_FORMAT(event_time, '%%Y-%%m-%%d %%H:%%i:%%s') as event_time,
+               entry_type, amount, category_l1, category_l2,
+               account_from, account_to, discount,
+               CASE WHEN reimbursable = 1 THEN 'y' ELSE '' END as reimbursable,
+               note
+        FROM ledger
+        ORDER BY event_time, id
+    """
+    return execute_query(sql)
 
 
 def load_daily_csv(project_root: Path, fetch_date: str = None) -> Dict[str, Dict]:
     """
-    加载daily.csv，返回产品市值信息
+    加载 daily 数据（从数据库），返回产品市值信息
     
-    :param project_root: 项目根目录
+    :param project_root: 项目根目录（已忽略）
     :param fetch_date: 指定日期，None则取最新
     :return: {product_code: {value, shares, nav, ...}}
     """
-    daily_path = project_root / "data" / "snapshots" / "daily.csv"
-    if not daily_path.exists():
-        return {}
+    # 如果没有指定日期，获取最新日期
+    if not fetch_date:
+        date_sql = "SELECT MAX(fetch_date) as latest_date FROM daily_snapshot"
+        date_result = execute_one(date_sql)
+        if not date_result or not date_result.get('latest_date'):
+            return {}
+        fetch_date = date_result['latest_date']
+        if hasattr(fetch_date, 'strftime'):
+            fetch_date = fetch_date.strftime('%Y-%m-%d')
+    
+    sql = """
+        SELECT DATE_FORMAT(fetch_date, '%%Y-%%m-%%d') as fetch_date,
+               product_code, product_name, category,
+               `value`, total_value, shares, nav, cash_in_transit
+        FROM daily_snapshot
+        WHERE fetch_date = %s
+    """
+    rows = execute_query(sql, (fetch_date,))
     
     products = {}
-    target_date = fetch_date
-    
-    with open(daily_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            # 跳过中文表头行
-            if row.get('fetch_date', '').startswith('采集'):
-                continue
-            
-            row_date = row.get('fetch_date', '')
-            product_code = row.get('product_code', '')
-            
-            if not product_code:
-                continue
-            
-            # 如果指定日期，只读取该日期
-            if fetch_date and row_date != fetch_date:
-                continue
-            
-            # 记录最新日期
-            if not target_date or row_date >= target_date:
-                target_date = row_date
-            
-            products[product_code] = {
-                'fetch_date': row_date,
-                'product_name': row.get('product_name', ''),
-                'value': safe_decimal(row.get('value', '0')),
-                'total_value': safe_decimal(row.get('total_value', '0')),
-                'shares': safe_decimal(row.get('shares', '0')),
-                'nav': safe_decimal(row.get('nav', '0')),
-                'category': row.get('category', 'fund')
-            }
+    for row in rows:
+        product_code = row.get('product_code', '')
+        if not product_code:
+            continue
+        
+        products[product_code] = {
+            'fetch_date': row.get('fetch_date', ''),
+            'product_name': row.get('product_name', ''),
+            'value': safe_decimal(row.get('value', '0')),
+            'total_value': safe_decimal(row.get('total_value', '0')),
+            'shares': safe_decimal(row.get('shares', '0')),
+            'nav': safe_decimal(row.get('nav', '0')),
+            'cash_in_transit': safe_decimal(row.get('cash_in_transit', '0')),
+            'category': row.get('category', 'fund')
+        }
     
     return products
 
@@ -568,6 +557,7 @@ def write_daily_balance(records: List[Dict], output_path: Path):
     写入账户余额快照文件
     
     使用原子写入：先写临时文件，再替换
+    同时同步到数据库（如果启用）
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -594,6 +584,56 @@ def write_daily_balance(records: List[Dict], output_path: Path):
         if tmp_path.exists():
             tmp_path.unlink()
         raise e
+    
+    # 同步到数据库
+    if _use_database():
+        _db_sync_daily_balance(records)
+
+
+def _db_sync_daily_balance(records: List[Dict]):
+    """同步账户余额到数据库"""
+    if not records:
+        return
+    
+    # 获取 fetch_date
+    fetch_date = records[0].get('fetch_date') if records else None
+    if not fetch_date:
+        return
+    
+    # 先删除当天的数据
+    from data.db_connector import execute_update
+    execute_update("DELETE FROM daily_balance WHERE fetch_date = %s", (fetch_date,))
+    
+    # 批量插入
+    sql = """
+        INSERT INTO daily_balance 
+        (fetch_date, account_id, account_name, account_type, balance,
+         related_product, product_value, diff, note)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+    """
+    
+    params_list = []
+    for r in records:
+        # 解析数值字段
+        balance = r.get('balance', '0').replace(',', '') or None
+        product_value = r.get('product_value', '').replace(',', '') or None
+        diff = r.get('diff', '').replace(',', '') or None
+        
+        params_list.append((
+            r.get('fetch_date'),
+            r.get('account_id'),
+            r.get('account_name'),
+            r.get('account_type'),
+            balance,
+            r.get('related_product') or None,
+            product_value,
+            diff,
+            r.get('note') or None
+        ))
+    
+    if params_list:
+        affected = execute_many(sql, params_list)
+        logger.info(f"✓ 数据库同步: {affected} 条账户余额")
 
 
 def create_daily_balance_snapshot(project_root: Path = None, fetch_date: str = None) -> int:

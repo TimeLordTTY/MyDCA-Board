@@ -148,86 +148,76 @@ def collect_nav_and_build_snapshots(fetch_date: str = None, silent: bool = False
 
 def read_latest_daily(project_root: Path = None) -> List[Dict]:
     """
-    读取最新 daily.csv 数据
+    读取最新 daily 数据（从数据库）
     
     Args:
-        project_root: 项目根目录
+        project_root: 项目根目录（已忽略，直接从数据库读取）
     
     Returns:
         最新日期的 daily 记录列表
     """
-    if project_root is None:
-        project_root = get_project_root()
+    from data.db_connector import execute_query, execute_one
     
-    daily_path = project_root / "data" / "snapshots" / "daily.csv"
+    # 获取最新日期
+    date_sql = "SELECT MAX(fetch_date) as latest_date FROM daily_snapshot"
+    date_result = execute_one(date_sql)
     
-    if not daily_path.exists():
+    if not date_result or not date_result.get('latest_date'):
         return []
     
-    records = []
-    latest_date = None
+    latest_date = date_result['latest_date']
+    if hasattr(latest_date, 'strftime'):
+        latest_date = latest_date.strftime('%Y-%m-%d')
     
-    with open(daily_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        all_records = []
-        for row in reader:
-            # 跳过中文表头行
-            if row.get('fetch_date', '').startswith('采集'):
-                continue
-            all_records.append(row)
-            
-            # 找最新日期
-            row_date = row.get('fetch_date', '')
-            if latest_date is None or row_date > latest_date:
-                latest_date = row_date
-    
-    # 只返回最新日期的记录
-    if latest_date:
-        records = [r for r in all_records if r.get('fetch_date') == latest_date]
-    
-    return records
+    # 获取该日期的所有记录
+    sql = """
+        SELECT DATE_FORMAT(fetch_date, '%%Y-%%m-%%d') as fetch_date,
+               product_code, product_name, category,
+               DATE_FORMAT(nav_date, '%%Y-%%m-%%d') as nav_date,
+               nav, shares, `value`, pnl_day, cost,
+               unrealized_pnl, return_rate, cash_in_transit,
+               total_value, principal_total, total_redemption,
+               total_pnl, real_return, fetched_at
+        FROM daily_snapshot
+        WHERE fetch_date = %s
+        ORDER BY product_code
+    """
+    return execute_query(sql, (latest_date,))
 
 
 def read_latest_daily_balance(project_root: Path = None) -> List[Dict]:
     """
-    读取最新 daily_balance.csv 数据
+    读取最新 daily_balance 数据（从数据库）
     
     Args:
-        project_root: 项目根目录
+        project_root: 项目根目录（已忽略，直接从数据库读取）
     
     Returns:
         最新日期的 daily_balance 记录列表
     """
-    if project_root is None:
-        project_root = get_project_root()
+    from data.db_connector import execute_query, execute_one
     
-    balance_path = project_root / "data" / "snapshots" / "daily_balance.csv"
+    # 获取最新日期
+    date_sql = "SELECT MAX(fetch_date) as latest_date FROM daily_balance"
+    date_result = execute_one(date_sql)
     
-    if not balance_path.exists():
+    if not date_result or not date_result.get('latest_date'):
         return []
     
-    records = []
-    latest_date = None
+    latest_date = date_result['latest_date']
+    if hasattr(latest_date, 'strftime'):
+        latest_date = latest_date.strftime('%Y-%m-%d')
     
-    with open(balance_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        all_records = []
-        for row in reader:
-            # 跳过中文表头行
-            if row.get('fetch_date', '').startswith('采集'):
-                continue
-            all_records.append(row)
-            
-            # 找最新日期
-            row_date = row.get('fetch_date', '')
-            if latest_date is None or row_date > latest_date:
-                latest_date = row_date
-    
-    # 只返回最新日期的记录
-    if latest_date:
-        records = [r for r in all_records if r.get('fetch_date') == latest_date]
-    
-    return records
+    # 获取该日期的所有记录
+    sql = """
+        SELECT DATE_FORMAT(fetch_date, '%%Y-%%m-%%d') as fetch_date,
+               account_id, account_name, account_type,
+               balance, related_product, product_value, diff, note
+        FROM daily_balance
+        WHERE fetch_date = %s
+        ORDER BY account_id
+    """
+    return execute_query(sql, (latest_date,))
 
 
 def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:

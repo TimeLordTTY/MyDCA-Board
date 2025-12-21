@@ -1,0 +1,11 @@
+{
+    "host": "*",
+    "port": *,
+    "user": "*",
+    "password": "*",
+    "database": "dca",
+    "charset": "utf8mb4",
+    "pool_size": 5,
+    "use_database": true
+}
+

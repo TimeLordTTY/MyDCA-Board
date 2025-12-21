@@ -6,8 +6,9 @@ from datetime import date
 # 适配器
 from adaptor import cmbc_client, fund_client
 # 数据层
-from data.storage_csv import save_nav_record
+from data.nav_reader import save_nav
 from data.config_loader import load_products, get_project_root
+from data.db_connector import execute_one
 # 核心模块（同目录）
 from core.snapshot import create_daily_snapshot, get_last_snapshot_value, rebuild_snapshots_from_date
 from core.daily_balance import create_daily_balance_snapshot
@@ -120,10 +121,23 @@ def process_single_product(product, products_map, nav_records):
     result['date'] = nav_record['nav_date']
     result['nav'] = nav_record['nav']
     
-    # 存储到CSV
-    is_new = save_nav_record(product_code, product_name, nav_record)
-    if is_new:
-        result['csv'] = 'Y'
+    # 检查是否已存在该日期的净值
+    check_sql = "SELECT COUNT(*) as cnt FROM nav WHERE product_code = %s AND nav_date = %s"
+    check_result = execute_one(check_sql, (product_code, nav_record['nav_date']))
+    already_exists = check_result and int(check_result.get('cnt', 0)) > 0
+    
+    # 存储到数据库
+    from decimal import Decimal
+    save_nav(
+        product_code=product_code,
+        nav_date=nav_record['nav_date'],
+        nav=Decimal(str(nav_record['nav'])),
+        acc_nav=Decimal(str(nav_record.get('total_nav', '0'))) if nav_record.get('total_nav') else None,
+        daily_return=Decimal(str(nav_record.get('income', '0'))) if nav_record.get('income') else None
+    )
+    
+    if not already_exists:
+        result['csv'] = 'Y'  # 兼容旧字段名
         result['status'] = 'OK'
         # 更新净值范围配置
         update_product_nav_range(product_code, product_name)

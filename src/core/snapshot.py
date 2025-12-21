@@ -1,5 +1,7 @@
 """快照生成模块
 
+仅支持 MySQL 数据库存储。
+
 设计理念：
 - daily.csv 是"日快照"，记录每个采集日的资产状态
 - 唯一键：(fetch_date, product_code)，每天每产品一条记录
@@ -41,8 +43,10 @@ from decimal import Decimal
 import logging
 
 from core.holdings_calculator import HoldingsCalculator, calc_position_incremental, has_transactions
+from data.db_connector import execute_query, execute_one, execute_insert, execute_many
 
 logger = logging.getLogger(__name__)
+
 
 # 字段顺序（固定）
 FIELDNAMES = [
@@ -81,7 +85,7 @@ def get_last_snapshot_value(snapshot_path, product_code, before_fetch_date=None)
     """
     获取上一个采集日的 value（兼容旧 API，用于 nav_collector.py）
     
-    :param snapshot_path: 快照文件路径
+    :param snapshot_path: 快照文件路径（已忽略，从数据库读取）
     :param product_code: 产品代码
     :param before_fetch_date: 可选，仅获取此日期之前的快照
     :return: 上一条value或None
@@ -96,71 +100,46 @@ def get_prev_snapshot(snapshot_path, product_code, before_fetch_date):
     """
     获取上一个采集日的快照（用于计算 pnl_day）
     
-    :param snapshot_path: 快照文件路径
+    :param snapshot_path: 快照文件路径（已忽略，从数据库读取）
     :param product_code: 产品代码
     :param before_fetch_date: 仅获取此日期之前的快照
     :return: {shares, nav, value} 或 None
     """
-    if not Path(snapshot_path).exists():
-        return None
+    sql = """
+        SELECT shares, nav, `value`
+        FROM daily_snapshot
+        WHERE product_code = %s AND fetch_date < %s
+        ORDER BY fetch_date DESC
+        LIMIT 1
+    """
+    result = execute_one(sql, (product_code, before_fetch_date))
     
-    prev_snapshot = None
-    prev_fetch_date = None
-    
-    with open(snapshot_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            # 跳过中文表头行
-            row_fetch_date = row.get('fetch_date', '')
-            if row_fetch_date and row_fetch_date.startswith('采集'):
-                continue
-            
-            if row['product_code'] == product_code:
-                if not row_fetch_date:
-                    row_fetch_date = row['fetched_at'][:10] if row.get('fetched_at') else ''
-                
-                # 仅取 before_fetch_date 之前的记录
-                if row_fetch_date >= before_fetch_date:
-                    continue
-                
-                # 取最新的（按 fetch_date 排序）
-                if prev_fetch_date is None or row_fetch_date > prev_fetch_date:
-                    prev_fetch_date = row_fetch_date
-                    try:
-                        prev_snapshot = {
-                            'shares': Decimal(row.get('shares', '0').replace(',', '')),
-                            'nav': Decimal(row.get('nav', '0').replace(',', '')),
-                            'value': Decimal(row.get('value', '0').replace(',', ''))
-                        }
-                    except:
-                        prev_snapshot = None
-    
-    return prev_snapshot
+    if result:
+        try:
+            return {
+                'shares': Decimal(str(result.get('shares', '0') or '0')),
+                'nav': Decimal(str(result.get('nav', '0') or '0')),
+                'value': Decimal(str(result.get('value', '0') or '0'))
+            }
+        except:
+            pass
+    return None
 
 
-def read_all_snapshots(snapshot_path):
-    """读取所有快照记录（跳过中文表头行）"""
-    if not Path(snapshot_path).exists():
-        return []
-    
-    snapshots = []
-    with open(snapshot_path, 'r', encoding='utf-8-sig') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            # 跳过中文表头行（第一个字段值是中文"采集日期"）
-            first_value = row.get('fetch_date', row.get('nav_date', ''))
-            if first_value and (first_value.startswith('采集') or first_value.startswith('净值')):
-                continue
-            # 兼容旧格式：如果没有 fetch_date 字段，从 fetched_at 提取
-            if 'fetch_date' not in row or not row['fetch_date']:
-                fetched_at = row.get('fetched_at', '')
-                if fetched_at and len(fetched_at) >= 10:
-                    row['fetch_date'] = fetched_at[:10]
-            # 兼容旧字段名：cash -> cash_in_transit
-            if 'cash' in row and 'cash_in_transit' not in row:
-                row['cash_in_transit'] = row['cash']
-            snapshots.append(row)
-    return snapshots
+def read_all_snapshots(snapshot_path=None):
+    """读取所有快照记录"""
+    sql = """
+        SELECT DATE_FORMAT(fetch_date, '%%Y-%%m-%%d') as fetch_date,
+               product_code, product_name, category,
+               DATE_FORMAT(nav_date, '%%Y-%%m-%%d') as nav_date,
+               nav, shares, `value`, pnl_day, cost,
+               unrealized_pnl, return_rate, cash_in_transit,
+               total_value, principal_total, total_redemption,
+               total_pnl, real_return, fetched_at
+        FROM daily_snapshot
+        ORDER BY fetch_date, product_code
+    """
+    return execute_query(sql)
 
 
 def rebuild_snapshots_from_date(snapshot_path, rebuild_from_date):
@@ -172,20 +151,16 @@ def rebuild_snapshots_from_date(snapshot_path, rebuild_from_date):
     - 只允许覆盖当天的数据，由 create_daily_snapshot 自动处理
     - rebuild 操作仅用于触发重新计算，不会删除任何已有快照
     
-    :param snapshot_path: 快照文件路径
+    :param snapshot_path: 快照文件路径（已忽略）
     :param rebuild_from_date: 重建起始日期（已忽略，不再用于删除）
     :return: (保留数量, 0)  # 不再删除任何记录
     """
-    if not Path(snapshot_path).exists():
-        logger.info(f"快照文件不存在，将创建新快照")
-        return 0, 0
-    
-    all_snapshots = read_all_snapshots(snapshot_path)
+    all_snapshots = read_all_snapshots()
     today = datetime.now().strftime('%Y-%m-%d')
     
     # 检查是否有历史数据（早于今天的数据）
     history_count = sum(1 for row in all_snapshots 
-                       if row.get('fetch_date', row.get('fetched_at', '')[:10]) < today)
+                       if row.get('fetch_date', '')[:10] < today)
     
     logger.info(f"保护历史快照: 共 {len(all_snapshots)} 条记录, 其中历史数据 {history_count} 条（不会被删除）")
     logger.info(f"提示: rebuild 操作现在只会覆盖当天数据，不会删除任何历史记录")
@@ -209,7 +184,7 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     :param nav_records: {product_code: nav_dict}
     :param holdings_map: {product_code: shares} (备用，优先用 HoldingsCalculator)
     :param products_map: {product_code: product_name}
-    :param snapshot_path: 可选，指定快照文件路径（主要用于测试）
+    :param snapshot_path: 可选，指定快照文件路径（主要用于 CSV 兼容）
     :param products_order: 可选，产品代码列表，用于保持排序顺序
     :param category_map: 可选，{product_code: category}，产品分类
     :param market_map: 可选，{product_code: market}，产品市场类型（用于 cash_like 特殊处理）
@@ -238,10 +213,10 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     all_holdings_data = calc.get_all_holdings_data_as_of(fetch_date)
     
     # 读取所有现有快照，按 (fetch_date, product_code) 索引
-    all_snapshots = read_all_snapshots(snapshot_path)
+    all_snapshots = read_all_snapshots()
     existing_map = {}
     for row in all_snapshots:
-        row_fetch_date = row.get('fetch_date', row['fetched_at'][:10])
+        row_fetch_date = row.get('fetch_date', '')[:10]
         key = (row_fetch_date, row['product_code'])
         existing_map[key] = row
     
@@ -353,15 +328,31 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
             new_count += 1
             logger.debug(f"[新增] {product_code} @ {fetch_date}")
     
-    # 重写整个文件（按 fetch_date, 产品顺序 排序）
-    # 使用原子写入：先写临时文件，再 os.replace 替换
+    # 同步到数据库
+    _db_sync_daily_snapshots(existing_map, fetch_date)
+    
+    # 同时写入 CSV 文件（保持兼容）
+    _write_csv_snapshots(existing_map, snapshot_path, products_order)
+    
+    # 汇总日志
+    if updated_count > 0:
+        logger.info(f"✓ 快照更新: 新增 {new_count}, 覆盖 {updated_count}")
+    elif new_count > 0:
+        logger.info(f"✓ 快照新增: {new_count} 条")
+    else:
+        logger.info(f"✓ 快照无变化")
+    
+    return new_count + updated_count
+
+
+def _write_csv_snapshots(snapshots_map, snapshot_path, products_order=None):
+    """写入 CSV 快照文件（保持兼容）"""
     if products_order:
         order_index = {code: idx for idx, code in enumerate(products_order)}
     else:
         order_index = {}
     
     def sort_key(x):
-        # 先按 fetch_date 排序，再按 products.json 中的顺序排序
         product_idx = order_index.get(x['product_code'], 9999)
         return (x['fetch_date'], product_idx)
     
@@ -374,7 +365,7 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
             # 写入中文表头行
             f.write(','.join([CHINESE_HEADERS.get(field, field) for field in FIELDNAMES]) + '\n')
             
-            sorted_snapshots = sorted(existing_map.values(), key=sort_key)
+            sorted_snapshots = sorted(snapshots_map.values(), key=sort_key)
             for snapshot in sorted_snapshots:
                 writer.writerow(snapshot)
             f.flush()
@@ -386,13 +377,75 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
         if tmp_path.exists():
             tmp_path.unlink()
         raise e
+
+
+def _db_sync_daily_snapshots(snapshots_map, fetch_date):
+    """同步快照到数据库"""
+    # 获取当天的快照
+    today_snapshots = [
+        row for row in snapshots_map.values() 
+        if row.get('fetch_date') == fetch_date
+    ]
     
-    # 汇总日志
-    if updated_count > 0:
-        logger.info(f"✓ 快照更新: 新增 {new_count}, 覆盖 {updated_count}")
-    elif new_count > 0:
-        logger.info(f"✓ 快照新增: {new_count} 条")
-    else:
-        logger.info(f"✓ 快照无变化")
+    if not today_snapshots:
+        return
     
-    return new_count + updated_count
+    # 使用 INSERT ... ON DUPLICATE KEY UPDATE
+    sql = """
+        INSERT INTO daily_snapshot 
+        (fetch_date, product_code, product_name, category, nav_date, nav,
+         shares, `value`, pnl_day, cost, unrealized_pnl, return_rate,
+         cash_in_transit, total_value, principal_total, total_redemption,
+         total_pnl, real_return, fetched_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            product_name = VALUES(product_name),
+            category = VALUES(category),
+            nav_date = VALUES(nav_date),
+            nav = VALUES(nav),
+            shares = VALUES(shares),
+            `value` = VALUES(`value`),
+            pnl_day = VALUES(pnl_day),
+            cost = VALUES(cost),
+            unrealized_pnl = VALUES(unrealized_pnl),
+            return_rate = VALUES(return_rate),
+            cash_in_transit = VALUES(cash_in_transit),
+            total_value = VALUES(total_value),
+            principal_total = VALUES(principal_total),
+            total_redemption = VALUES(total_redemption),
+            total_pnl = VALUES(total_pnl),
+            real_return = VALUES(real_return),
+            fetched_at = VALUES(fetched_at)
+    """
+    
+    params_list = []
+    for row in today_snapshots:
+        # 清理百分号
+        return_rate = row.get('return_rate', '0').replace('%', '')
+        real_return = row.get('real_return', '0').replace('%', '')
+        
+        params_list.append((
+            row.get('fetch_date'),
+            row.get('product_code'),
+            row.get('product_name'),
+            row.get('category'),
+            row.get('nav_date'),
+            row.get('nav'),
+            row.get('shares'),
+            row.get('value'),
+            row.get('pnl_day'),
+            row.get('cost'),
+            row.get('unrealized_pnl'),
+            return_rate or None,
+            row.get('cash_in_transit'),
+            row.get('total_value'),
+            row.get('principal_total'),
+            row.get('total_redemption'),
+            row.get('total_pnl'),
+            real_return or None,
+            row.get('fetched_at')
+        ))
+    
+    if params_list:
+        affected = execute_many(sql, params_list)
+        logger.info(f"✓ 数据库同步: {affected} 条快照")
