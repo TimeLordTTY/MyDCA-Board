@@ -286,12 +286,14 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
 
 ---
 
-## 5. daily_balance.csv（账户余额快照表）
+## 5. daily_balance（账户余额快照表）
+
+**注意**：账户余额快照数据存储在 MySQL 数据库中，不再写入 CSV 文件。
 
 ### 5.1 列顺序（固定）
 
 ```
-fetch_date,account_id,account_name,account_type,balance,related_product,product_value,diff,note
+fetch_date,account_id,account_name,account_type,balance,related_product,product_value,diff,yesterday_pnl,unrealized_pnl,total_pnl,note
 ```
 
 ### 5.2 中文表头映射
@@ -306,6 +308,9 @@ fetch_date,account_id,account_name,account_type,balance,related_product,product_
 | related_product | 关联产品 |
 | product_value | 产品市值 |
 | diff | 差异 |
+| yesterday_pnl | 昨日收益 |
+| unrealized_pnl | 持有收益 |
+| total_pnl | 累计收益 |
 | note | 备注 |
 
 ### 5.3 account_type 枚举
@@ -330,6 +335,9 @@ fetch_date,account_id,account_name,account_type,balance,related_product,product_
 | related_product | 关联产品代码 | 来自 accounts.json.linked_product | 固定 |
 | product_value | 展示市值 | 见 5.5 说明 | 净值变动 |
 | diff | 收益/差异 | 见 5.5 说明 | 净值变动 |
+| yesterday_pnl | 昨日收益 | 前一天的 pnl_day（仅基金、余利宝生活费、稳利宝） | 净值变动 |
+| unrealized_pnl | 持有收益 | 浮动盈亏（仅基金、余利宝生活费、稳利宝） | 净值变动 |
+| total_pnl | 累计收益 | 生命周期总盈亏（仅基金、余利宝生活费、稳利宝） | 净值变动 |
 | note | 备注 | 来自 accounts.json 或动态生成 | 净值变动 |
 
 ### 5.5 product_value 与 diff 字段说明
@@ -649,7 +657,7 @@ real_return=1.36% (=6.79/500)
 | real_return | 真实收益率 |
 | fetched_at | 采集时间 |
 
-### daily_balance.csv
+### daily_balance
 
 | 英文 | 中文 |
 |------|------|
@@ -661,4 +669,7 @@ real_return=1.36% (=6.79/500)
 | related_product | 关联产品 |
 | product_value | 产品市值 |
 | diff | 差异 |
+| yesterday_pnl | 昨日收益 |
+| unrealized_pnl | 持有收益 |
+| total_pnl | 累计收益 |
 | note | 备注 |

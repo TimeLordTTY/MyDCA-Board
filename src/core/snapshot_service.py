@@ -418,6 +418,12 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
     """
     获取资产汇总信息
     
+    总资产计算规则：
+    - 余利宝合计：从 daily_balance.csv 读取 ylb_life + ylb_finance 的 balance
+    - 稳利宝产品市值：从 daily.csv 读取 FBAE41126E 的 total_value（产品市值）
+    - 基金市值合计：从 daily.csv 读取所有 fund 产品的 value（市值，不含货币基金）
+    - 小荷包金额：从 daily_balance.csv 读取 couple_pocket 的 product_value（包含收益）
+    
     Args:
         project_root: 项目根目录
     
@@ -430,7 +436,7 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
     fetch_date = date.today().strftime('%Y-%m-%d')
     summary = PortfolioSummary(fetch_date=fetch_date)
     
-    # 从 daily.csv 计算基金总值（使用 value 而不是 total_value，与 daily_balance.csv 一致）
+    # 从 daily.csv 读取产品市值
     daily_records = read_latest_daily(project_root)
     
     for record in daily_records:
@@ -443,18 +449,20 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
         except:
             continue
         
-        # 稳利宝
+        # 稳利宝：使用 total_value（产品市值，包含在途资金）
         if product_code == 'FBAE41126E':
             summary.wenlibao_total = total_value
         # 货币基金不计入基金总额（已映射到小荷包）
         elif product_code == '000686':
             pass
-        # 其他基金：使用 value（纯市值）而不是 total_value
+        # 其他基金：使用 value（纯市值）
         elif category == 'fund':
             summary.fund_total += value
     
-    # 从 daily_balance.csv 计算账户总值
+    # 从 daily_balance.csv 读取账户余额
     balance_records = read_latest_daily_balance(project_root)
+    
+    couple_pocket_value = Decimal('0')
     
     for record in balance_records:
         account_id = record.get('account_id', '')
@@ -466,17 +474,20 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
         except:
             continue
         
-        # 余利宝
+        # 余利宝：使用 balance（账户余额）
         if account_id in ['ylb_life', 'ylb_finance']:
             summary.ylb_total += balance
+        # 小荷包：使用 product_value（包含收益的市值）
+        elif account_id == 'couple_pocket':
+            couple_pocket_value = product_value
         
         # 更新最新日期
         row_date = record.get('fetch_date', '')
         if row_date:
             summary.fetch_date = row_date
     
-    # 计算全局汇总
-    summary.global_value = summary.fund_total + summary.wenlibao_total + summary.ylb_total
+    # 计算全局汇总：余利宝合计 + 稳利宝产品市值 + 基金市值 + 小荷包金额
+    summary.global_value = summary.ylb_total + summary.wenlibao_total + summary.fund_total + couple_pocket_value
     
     # 计算全局盈亏（从 daily.csv 汇总）
     for record in daily_records:

@@ -43,10 +43,7 @@
 - 收益公式：日收益 = 持有份额 / 10000 * 万份收益
 - 余额：balance = 市值 + 当日收益（收益自动入账）
 """
-import csv
-import glob
 import logging
-import os
 from datetime import datetime, date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -67,7 +64,8 @@ def _use_database() -> bool:
 # 字段顺序
 FIELDNAMES = [
     'fetch_date', 'account_id', 'account_name', 'account_type',
-    'balance', 'related_product', 'product_value', 'diff', 'note'
+    'balance', 'related_product', 'product_value', 'diff', 
+    'yesterday_pnl', 'unrealized_pnl', 'total_pnl', 'note'
 ]
 
 CHINESE_HEADERS = {
@@ -79,6 +77,9 @@ CHINESE_HEADERS = {
     'related_product': '关联产品',
     'product_value': '产品市值',
     'diff': '差异',
+    'yesterday_pnl': '昨日收益',
+    'unrealized_pnl': '持有收益',
+    'total_pnl': '累计收益',
     'note': '备注'
 }
 
@@ -421,6 +422,33 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
             if account_id in ylb_account_ids:
                 ylb_total += balance
         
+        # 计算收益字段（针对基金、余利宝生活费、稳利宝）
+        yesterday_pnl = Decimal('0')
+        unrealized_pnl = Decimal('0')
+        total_pnl = Decimal('0')
+        
+        # 基金账户：汇总所有基金产品的收益
+        if account_type == 'fund_total':
+            for code, info in daily_products.items():
+                if info.get('category') == 'fund' and code not in fund_mapped_products:
+                    yesterday_pnl += safe_decimal(info.get('pnl_day', '0'))
+                    unrealized_pnl += safe_decimal(info.get('unrealized_pnl', '0'))
+                    total_pnl += safe_decimal(info.get('total_pnl', '0'))
+        # 产品子账户（稳利宝）：从关联产品获取收益
+        elif account_type == 'product_sub' and linked_product:
+            if linked_product in daily_products:
+                product_info = daily_products[linked_product]
+                yesterday_pnl = safe_decimal(product_info.get('pnl_day', '0'))
+                unrealized_pnl = safe_decimal(product_info.get('unrealized_pnl', '0'))
+                total_pnl = safe_decimal(product_info.get('total_pnl', '0'))
+        # 余利宝生活费：如果有关联产品，从产品获取收益
+        elif account_id == 'ylb_life' and linked_product:
+            if linked_product in daily_products:
+                product_info = daily_products[linked_product]
+                yesterday_pnl = safe_decimal(product_info.get('pnl_day', '0'))
+                unrealized_pnl = safe_decimal(product_info.get('unrealized_pnl', '0'))
+                total_pnl = safe_decimal(product_info.get('total_pnl', '0'))
+        
         record = {
             'fetch_date': fetch_date,
             'account_id': account_id,
@@ -430,6 +458,9 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
             'related_product': linked_product or '',
             'product_value': f"{product_value:.2f}" if product_value > 0 else '',
             'diff': f"{diff:.2f}" if diff != 0 else '',
+            'yesterday_pnl': f"{yesterday_pnl:.2f}" if yesterday_pnl != 0 else '',
+            'unrealized_pnl': f"{unrealized_pnl:.2f}" if unrealized_pnl != 0 else '',
+            'total_pnl': f"{total_pnl:.2f}" if total_pnl != 0 else '',
             'note': note
         }
         records.append(record)
@@ -554,40 +585,14 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
 
 def write_daily_balance(records: List[Dict], output_path: Path):
     """
-    写入账户余额快照文件
+    同步账户余额快照到数据库
     
-    使用原子写入：先写临时文件，再替换
-    同时同步到数据库（如果启用）
+    注意：不再写入CSV文件，只同步到数据库
     """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    tmp_path = output_path.parent / f"{output_path.stem}.tmp"
-    
-    try:
-        with open(tmp_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDNAMES)
-            writer.writeheader()
-            
-            # 写入中文表头行
-            chinese_row = {field: CHINESE_HEADERS.get(field, field) for field in FIELDNAMES}
-            writer.writerow(chinese_row)
-            
-            for record in records:
-                writer.writerow(record)
-        
-        # 原子替换（os.replace 是真正的原子操作）
-        os.replace(str(tmp_path), str(output_path))
-        
-        logger.info(f"✓ 写入账户余额快照: {output_path} ({len(records)} 条)")
-        
-    except Exception as e:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise e
-    
     # 同步到数据库
     if _use_database():
         _db_sync_daily_balance(records)
+        logger.info(f"✓ 同步账户余额快照到数据库: {len(records)} 条")
 
 
 def _db_sync_daily_balance(records: List[Dict]):

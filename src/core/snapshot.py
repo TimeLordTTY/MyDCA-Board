@@ -34,9 +34,6 @@
   - 直观理解：我投了 X 元，现在还有 Y 元在里面，已经拿回了 Z 元，总盈亏 = Y + Z - X
   - 全赎回后：total_pnl = 0 + total_redemption - principal_total = 实际利润
 """
-import csv
-import os
-import uuid
 from pathlib import Path
 from datetime import datetime
 from decimal import Decimal
@@ -331,9 +328,6 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     # 同步到数据库
     _db_sync_daily_snapshots(existing_map, fetch_date)
     
-    # 同时写入 CSV 文件（保持兼容）
-    _write_csv_snapshots(existing_map, snapshot_path, products_order)
-    
     # 汇总日志
     if updated_count > 0:
         logger.info(f"✓ 快照更新: 新增 {new_count}, 覆盖 {updated_count}")
@@ -343,40 +337,6 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
         logger.info(f"✓ 快照无变化")
     
     return new_count + updated_count
-
-
-def _write_csv_snapshots(snapshots_map, snapshot_path, products_order=None):
-    """写入 CSV 快照文件（保持兼容）"""
-    if products_order:
-        order_index = {code: idx for idx, code in enumerate(products_order)}
-    else:
-        order_index = {}
-    
-    def sort_key(x):
-        product_idx = order_index.get(x['product_code'], 9999)
-        return (x['fetch_date'], product_idx)
-    
-    tmp_path = snapshot_path.parent / f"daily.csv.tmp.{uuid.uuid4().hex[:8]}"
-    
-    try:
-        with open(tmp_path, 'w', newline='', encoding='utf-8-sig') as f:
-            writer = csv.DictWriter(f, fieldnames=FIELDNAMES, extrasaction='ignore')
-            writer.writeheader()
-            # 写入中文表头行
-            f.write(','.join([CHINESE_HEADERS.get(field, field) for field in FIELDNAMES]) + '\n')
-            
-            sorted_snapshots = sorted(snapshots_map.values(), key=sort_key)
-            for snapshot in sorted_snapshots:
-                writer.writerow(snapshot)
-            f.flush()
-        
-        # 原子替换
-        os.replace(str(tmp_path), str(snapshot_path))
-    except Exception as e:
-        # 清理临时文件
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise e
 
 
 def _db_sync_daily_snapshots(snapshots_map, fetch_date):

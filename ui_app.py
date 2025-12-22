@@ -207,6 +207,55 @@ ACTION_DISPLAY_MAP = {
 # 待确认类型（白色显示，不带+/-号）
 PENDING_ACTIONS = ['buy_debit', 'redeem_request']
 
+# fund_mapped 账户到产品代码的映射
+FUND_MAPPED_ACCOUNTS = {
+    'couple_pocket': '000686',  # 小荷包 -> 建信嘉薪宝货币基金
+}
+
+
+def sync_fund_mapped_transaction(account_id: str, amount: Decimal, is_expense: bool, 
+                                  event_time: str, note: str = ''):
+    """
+    同步 fund_mapped 账户的支出交易到对应产品的 transactions 表
+    
+    对于货币基金，金额 = 份额（净值固定为1）
+    注意：只处理支出（卖出），收入在单独的逻辑中处理
+    
+    Args:
+        account_id: 账户ID
+        amount: 金额
+        is_expense: 是否为支出（True=卖出/减少）
+        event_time: 事件时间
+        note: 备注
+    """
+    if not is_expense:
+        # 收入的同步在调用处单独处理
+        return
+    
+    product_code = FUND_MAPPED_ACCOUNTS.get(account_id)
+    if not product_code:
+        return  # 不是 fund_mapped 账户，不需要同步
+    
+    from data.data_store import append_transaction
+    
+    # 货币基金：金额 = 份额（净值固定为1）
+    shares = amount
+    
+    tx_record = {
+        'date': event_time[:10],  # 只取日期部分
+        'product_code': product_code,
+        'action': 'sell',  # 支出 = 卖出
+        'amount': str(amount),
+        'shares': str(shares),
+        'fee': '0',
+        'nav': '1',  # 货币基金净值固定为1
+        'nav_date': event_time[:10],
+        'order_id': '',
+        'note': f"同步自记账: {note}" if note else "同步自记账",
+        'created_at': event_time
+    }
+    append_transaction(tx_record)
+
 
 def get_account_name(account_id: str) -> str:
     """获取账户中文名称"""
@@ -280,10 +329,10 @@ def merge_account_column(record):
 
 
 def format_colored_amount(amount, is_expense: bool, is_pending: bool = False) -> str:
-    """格式化带符号的金额
+    """格式化带符号的金额（生活记账）
     Args:
         amount: 金额
-        is_expense: 是否为支出（红色）
+        is_expense: 是否为支出（红色 -）
         is_pending: 是否为待确认（白色，无+/-号）
     """
     try:
@@ -298,8 +347,32 @@ def format_colored_amount(amount, is_expense: bool, is_pending: bool = False) ->
         return str(amount) if amount else ''
 
 
+def format_invest_amount(amount, is_shares_increase: bool, is_pending: bool = False) -> str:
+    """格式化带符号的金额（理财记录）
+    
+    理财视角 - 按份额变化：
+    - 份额增加（买入/买入确认/分红）= + 红色
+    - 份额减少（卖出/卖出确认）= - 绿色
+    
+    Args:
+        amount: 金额
+        is_shares_increase: 是否为份额增加（买入/分红），显示 + 红色
+        is_pending: 是否为待确认（白色，无+/-号）
+    """
+    try:
+        val = float(amount) if amount else 0
+        if is_pending:
+            return f"{abs(val):.2f}"  # 待确认：无+/-号
+        elif is_shares_increase:
+            return f"+{abs(val):.2f}"  # 份额增加：+ 红色
+        else:
+            return f"-{abs(val):.2f}"  # 份额减少：- 绿色
+    except:
+        return str(amount) if amount else ''
+
+
 def color_amount(val, is_pending: bool = False):
-    """为金额列着色：负数红色，正数绿色，待确认白色"""
+    """为金额列着色（生活记账）：负数红色（支出），正数绿色（收入），待确认白色"""
     if pd.isna(val) or val == '':
         return ''
     if is_pending:
@@ -309,6 +382,25 @@ def color_amount(val, is_pending: bool = False):
         return 'color: #dc3545'  # 红色
     elif val_str.startswith('+'):
         return 'color: #28a745'  # 绿色
+    return ''
+
+
+def color_invest_amount(val, is_pending: bool = False):
+    """为金额列着色（理财记录）：+号红色（份额增加），-号绿色（份额减少），待确认白色
+    
+    理财视角 - 按份额变化：
+    - 份额增加（买入/分红）= + 红色
+    - 份额减少（卖出）= - 绿色
+    """
+    if pd.isna(val) or val == '':
+        return ''
+    if is_pending:
+        return ''  # 待确认：默认颜色（白色）
+    val_str = str(val)
+    if val_str.startswith('+'):
+        return 'color: #dc3545'  # 红色（份额增加：买入/分红）
+    elif val_str.startswith('-'):
+        return 'color: #28a745'  # 绿色（份额减少：卖出）
     return ''
 
 
@@ -354,16 +446,6 @@ def page_dashboard():
                     st.error(f"❌ 同步失败: {e}")
     
     with col2:
-        if st.button("📸 仅生成快照", use_container_width=True):
-            with st.spinner("正在生成快照..."):
-                try:
-                    count = build_all_snapshots()
-                    st.success(f"✅ 快照生成完成！{count} 条记录")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ 生成失败: {e}")
-    
-    with col3:
         if st.button("✅ 运行校验", use_container_width=True):
             with st.spinner("正在校验..."):
                 ledger_result = validate_ledger()
@@ -439,8 +521,9 @@ def page_dashboard():
         # 转换为 DataFrame
         df_balance = pd.DataFrame(balance_data)
         
-        # 选择显示的列
-        display_cols = ['account_name', 'account_type', 'balance', 'product_value', 'diff', 'note']
+        # 选择显示的列（添加收益字段）
+        display_cols = ['account_name', 'account_type', 'balance', 'product_value', 'diff', 
+                       'yesterday_pnl', 'unrealized_pnl', 'total_pnl', 'note']
         display_cols = [c for c in display_cols if c in df_balance.columns]
         
         # 重命名列
@@ -450,6 +533,9 @@ def page_dashboard():
             'balance': '余额',
             'product_value': '产品市值',
             'diff': '差异',
+            'yesterday_pnl': '昨日收益',
+            'unrealized_pnl': '持有收益',
+            'total_pnl': '累计收益',
             'note': '备注'
         }
         
@@ -532,9 +618,12 @@ def page_ledger():
         if st.button("提交支出", type="primary", key="submit_expense"):
             try:
                 event_time = f"{expense_time} {expense_time_str}"
+                account_id = account_dict[expense_account]
+                amount = Decimal(str(expense_amount))
+                
                 result = add_expense(
-                    account_from=account_dict[expense_account],
-                    amount=Decimal(str(expense_amount)),
+                    account_from=account_id,
+                    amount=amount,
                     category_l1=expense_cat_l1,
                     category_l2=expense_cat_l2 or '',
                     event_time=event_time,
@@ -542,6 +631,16 @@ def page_ledger():
                     discount=Decimal(str(expense_discount)),
                     reimbursable=expense_reimbursable
                 )
+                
+                # 如果是 fund_mapped 账户，同步到对应产品
+                sync_fund_mapped_transaction(
+                    account_id=account_id,
+                    amount=amount,
+                    is_expense=True,
+                    event_time=event_time,
+                    note=expense_note
+                )
+                
                 # 显示余额信息
                 balance_msg = f"💰 {expense_account} 余额: {result.get('balance_after', '-')}"
                 if result.get('parent_balance_after'):
@@ -579,14 +678,44 @@ def page_ledger():
         if st.button("提交收入", type="primary", key="submit_income"):
             try:
                 event_time = f"{income_date} {income_time}"
+                account_id = account_dict[income_account]
+                amount = Decimal(str(income_amount))
+                
                 result = add_income(
-                    account_to=account_dict[income_account],
-                    amount=Decimal(str(income_amount)),
+                    account_to=account_id,
+                    amount=amount,
                     category_l1=income_cat_l1,
                     category_l2=income_cat_l2 or '',
                     event_time=event_time,
                     note=income_note
                 )
+                
+                # 如果是 fund_mapped 账户，同步到对应产品
+                # 对于利息收益，同步为 dividend；其他收入同步为 buy
+                # 检查是否需要跳过同步（防止循环：补录历史时已手动创建交易）
+                skip_sync = st.session_state.get('_skip_ledger_tx_sync', False)
+                if account_id in FUND_MAPPED_ACCOUNTS and not skip_sync:
+                    from data.data_store import append_transaction
+                    product_code = FUND_MAPPED_ACCOUNTS[account_id]
+                    
+                    # 利息收益 -> dividend，其他 -> buy
+                    is_dividend = (income_cat_l1 == '理财盈利' and income_cat_l2 == '利息收益')
+                    
+                    tx_record = {
+                        'date': str(income_date),
+                        'product_code': product_code,
+                        'action': 'dividend' if is_dividend else 'buy',
+                        'amount': str(amount) if not is_dividend else '',
+                        'shares': str(amount),  # 货币基金：金额 = 份额
+                        'fee': '0',
+                        'nav': '1',
+                        'nav_date': str(income_date),
+                        'order_id': '',
+                        'note': f"同步自记账: {income_note}" if income_note else "同步自记账",
+                        'created_at': event_time
+                    }
+                    append_transaction(tx_record)
+                
                 # 显示余额信息
                 balance_msg = f"💰 {income_account} 余额: {result.get('balance_after', '-')}"
                 if result.get('parent_balance_after'):
@@ -1084,6 +1213,8 @@ def page_invest():
                         dividend_nav = Decimal(str(history_nav)) if history_nav else Decimal('1')
                         dividend_amount = Decimal(str(history_shares)) * dividend_nav
                         event_time = f"{history_confirm_date} {history_confirm_time}"
+                        # 设置标志位，防止 add_income 触发重复的交易同步
+                        st.session_state['_skip_ledger_tx_sync'] = True
                         add_income(
                             account_to='couple_pocket',  # 情侣小荷包账户
                             amount=dividend_amount,
@@ -1092,6 +1223,7 @@ def page_invest():
                             event_time=event_time,
                             note=f"货币基金利息: {product['name']}"
                         )
+                        st.session_state['_skip_ledger_tx_sync'] = False
                     
                     st.success("✅ 历史交易已补录！")
                     try:
@@ -1119,9 +1251,6 @@ def page_invest():
         recent_tx = [r for r in recent_tx if r.get('product_code') == filter_code]
     
     if recent_tx:
-        # 支出类（红色）：只有 buy_debit 是扣款
-        expense_actions = ['buy_debit']
-        
         # 计算每个产品的当前份额，用于倒推
         from core.holdings_calculator import get_all_product_positions
         from datetime import date as date_cls
@@ -1151,12 +1280,15 @@ def page_invest():
                     pass
         
         # 处理数据（按原来的倒序显示）
+        # 理财视角（按份额变化）：买入/分红 = 份额增加（红色+），卖出 = 份额减少（绿色-）
+        shares_increase_actions = ['buy', 'buy_confirm', 'dividend']  # 份额增加类（红色）
+        
         rows = []
         raw_records = []
         for r in recent_tx:
             action = r.get('action', '')
             is_pending = action in PENDING_ACTIONS  # 待确认类型（白色，无+/-号）
-            is_expense = action in expense_actions and not is_pending  # 红色（支出/扣款），但待确认不算
+            is_shares_increase = action in shares_increase_actions  # 份额增加类 = 红色
             amount = r.get('amount', '') or ''
             product_code = r.get('product_code', '')
             shares = r.get('shares', '')
@@ -1164,6 +1296,14 @@ def page_invest():
             
             # buy 和 buy_confirm 需要计算金额：shares × nav
             if action in ['buy', 'buy_confirm'] and shares and nav:
+                try:
+                    calc_amount = float(shares) * float(nav)
+                    amount = f"{calc_amount:.2f}"
+                except:
+                    pass
+            
+            # sell 和 sell_confirm 也需要计算金额
+            if action in ['sell', 'sell_confirm'] and shares and nav:
                 try:
                     calc_amount = float(shares) * float(nav)
                     amount = f"{calc_amount:.2f}"
@@ -1186,7 +1326,7 @@ def page_invest():
                 '时间': time_str,
                 '产品': product_code,
                 '类型': ACTION_DISPLAY_MAP.get(action, action),
-                '金额': format_colored_amount(amount, is_expense, is_pending),
+                '金额': format_invest_amount(amount, is_shares_increase, is_pending),
                 '份额': shares,
                 '产品份额': f"{product_shares_after:.2f}",  # 该产品在此交易后的累计份额
                 '备注': r.get('note', ''),
@@ -1207,9 +1347,10 @@ def page_invest():
             display_cols = ['ID', '时间', '产品', '类型', '金额', '份额', '产品份额', '备注']
             
             # 为金额列着色，待确认类型使用白色
+            # 理财视角（按份额）：份额增加（买入/分红）红色，份额减少（卖出）绿色
             def color_tx_amount(row):
                 is_pending = df_page.loc[row.name, '_is_pending'] if '_is_pending' in df_page.columns else False
-                return [color_amount(val, is_pending) if col == '金额' else '' for col, val in row.items()]
+                return [color_invest_amount(val, is_pending) if col == '金额' else '' for col, val in row.items()]
             
             # 显示带颜色和行选择的表格（不显示原始索引列）
             styled_df = df_page[display_cols].style.apply(color_tx_amount, axis=1)

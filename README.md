@@ -162,7 +162,6 @@ streamlit run ui_app.py
 - **产品持仓表格**：显示各产品的净值、份额、市值、盈亏
 - **操作按钮**：
   - `一键日更`：采集净值 + 结算到期订单 + 生成快照
-  - `仅生成快照`：不采集净值，只更新快照
   - `运行校验`：检查数据一致性
 
 #### 2. 生活记账（📝）
@@ -523,7 +522,7 @@ python scripts/run_backtest.py --product 163406 --strategy pure_sip
 
 ### 账户余额快照
 
-系统会在启动时和每次操作后自动生成 `daily_balance.csv`，展示各账户余额：
+系统会在启动时和每次操作后自动生成账户余额快照（存储在数据库中），展示各账户余额和收益信息：
 
 | 账户类型 | 说明 |
 |---------|------|
@@ -533,31 +532,10 @@ python scripts/run_backtest.py --product 163406 --strategy pure_sip
 | `fund_total` | 基金账户汇总（不含货币基金） |
 | `summary` | 汇总行（稳利宝合计、余利宝合计、基金合计） |
 
----
-
-## 📊 资产汇总文件
-
-### portfolio_by_fetch_date.csv - 主视图
-
-按采集日期汇总，显示"今天的总资产"。
-
-| 字段 | 说明 |
-|------|------|
-| `fetch_date` | 采集日期 |
-| `total_value` | 总资产 |
-| `total_pnl` | 总盈亏 |
-| `pnl_day` | 日变动合计 |
-| `cost` | 总成本 |
-| `unrealized_pnl` | 总浮动盈亏 |
-| `principal_total` | 累计投入本金 |
-| `pnl_vs_prev` | 相对前日变动 |
-| `product_count` | 产品数量 |
-| `stale_products` | 滞后产品数 |
-| `max_lag_days` | 最大滞后天数 |
-
-### portfolio_by_category.csv - 分类视图
-
-每个采集日输出三行：基金汇总、银行理财汇总、总资产汇总。
+**收益字段**（针对基金、余利宝生活费、稳利宝）：
+- `yesterday_pnl`：昨日收益（前一天的 pnl_day）
+- `unrealized_pnl`：持有收益（浮动盈亏）
+- `total_pnl`：累计收益（生命周期总盈亏）
 
 ---
 
@@ -621,7 +599,7 @@ pip install -r requirements.txt
 1. **成本口径统一**：`cost = amount - fee`（净申购额），全系统一致
 2. **pnl_day 只反映净值变化**：`prev_shares × (nav - prev_nav)`
 3. **同日覆盖**：同一 (fetch_date, product_code) 只保留一条，保持数据干净
-4. **原子写入**：daily.csv 重建使用临时文件 + os.replace，防止写坏
+4. **数据库存储**：所有快照数据存储在 MySQL 数据库中，不再写入 CSV 文件
 5. **字段零冗余**：每个字段都有明确用途，不引入无用字段
 6. **交易日自动判断**：使用 `chinese-calendar` 开源库，无需维护节假日配置
 
