@@ -32,6 +32,7 @@ from core.ledger_service import (
 from core.invest_service import (
     add_buy_debit, add_redeem_request, add_history_trade,
     list_pending_orders, list_all_orders, settle_orders,
+    settle_single_order, preview_settle, get_order_by_id,
     validate_transactions_orders, get_product_options,
     calc_buy_fee, calc_trade_dates, list_recent_transactions,
     update_transaction_entry
@@ -82,6 +83,78 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ============ 分页组件 ============
+def paginate_dataframe(df: pd.DataFrame, key: str, page_size: int = 50) -> pd.DataFrame:
+    """
+    通用分页组件
+    
+    Args:
+        df: 要分页的 DataFrame
+        key: 唯一标识符，用于 session_state 存储页码
+        page_size: 每页显示条数，默认50条
+    
+    Returns:
+        当前页的 DataFrame
+    """
+    if df.empty:
+        return df
+    
+    total_rows = len(df)
+    total_pages = (total_rows + page_size - 1) // page_size  # 向上取整
+    
+    # 初始化页码
+    page_key = f"page_{key}"
+    if page_key not in st.session_state:
+        st.session_state[page_key] = 1
+    
+    # 确保页码在有效范围内
+    current_page = st.session_state[page_key]
+    if current_page > total_pages:
+        current_page = total_pages
+        st.session_state[page_key] = current_page
+    if current_page < 1:
+        current_page = 1
+        st.session_state[page_key] = current_page
+    
+    # 计算当前页数据范围
+    start_idx = (current_page - 1) * page_size
+    end_idx = min(start_idx + page_size, total_rows)
+    
+    # 分页控件
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+    
+    with col1:
+        if st.button("⏮ 首页", key=f"first_{key}", disabled=(current_page == 1)):
+            st.session_state[page_key] = 1
+            st.rerun()
+    
+    with col2:
+        if st.button("◀ 上一页", key=f"prev_{key}", disabled=(current_page == 1)):
+            st.session_state[page_key] = current_page - 1
+            st.rerun()
+    
+    with col3:
+        st.markdown(
+            f"<div style='text-align: center; padding: 0.5rem;'>"
+            f"第 {current_page} / {total_pages} 页 (共 {total_rows} 条)"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+    
+    with col4:
+        if st.button("下一页 ▶", key=f"next_{key}", disabled=(current_page == total_pages)):
+            st.session_state[page_key] = current_page + 1
+            st.rerun()
+    
+    with col5:
+        if st.button("末页 ⏭", key=f"last_{key}", disabled=(current_page == total_pages)):
+            st.session_state[page_key] = total_pages
+            st.rerun()
+    
+    # 返回当前页数据
+    return df.iloc[start_idx:end_idx].reset_index(drop=True)
+
+
 # 账户组过滤选项
 ACCOUNT_GROUP_FILTERS = {
     '全部': None,
@@ -90,12 +163,19 @@ ACCOUNT_GROUP_FILTERS = {
     '小荷包': ['couple_pocket']
 }
 
-# 产品到支付账户的映射（基金定投默认从余利宝理财金扣）
-PRODUCT_ACCOUNT_MAP = {
-    'FBAE41126E': 'wenlibao_finance',  # 稳利宝 -> 稳利宝理财金
+# 产品到扣款账户的映射（定投扣款来源）
+PRODUCT_DEBIT_ACCOUNT_MAP = {
+    'FBAE41126E': 'wenlibao_finance',  # 稳利宝 -> 从稳利宝理财金扣款
     '000686': 'couple_pocket',  # 小荷包货币基金
 }
-DEFAULT_FUND_ACCOUNT = 'ylb_finance'  # 其他基金默认从余利宝理财金
+DEFAULT_FUND_DEBIT_ACCOUNT = 'ylb_finance'  # 其他基金默认从余利宝理财金扣款
+
+# 产品到到账账户的映射（份额确认后增加到哪个账户）
+PRODUCT_CONFIRM_ACCOUNT_MAP = {
+    'FBAE41126E': 'wenlibao_finance',  # 稳利宝 -> 稳利宝相关账户
+    '000686': 'couple_pocket',  # 小荷包货币基金
+}
+DEFAULT_FUND_CONFIRM_ACCOUNT = 'fund_account'  # 基金确认后增加到基金账户
 
 # 账户ID到中文名称的映射
 ACCOUNT_NAME_MAP = {
@@ -129,9 +209,31 @@ def get_account_name(account_id: str) -> str:
     return ACCOUNT_NAME_MAP.get(account_id, account_id or '')
 
 
-def get_tx_account(product_code: str) -> str:
-    """获取理财交易对应的支付账户"""
-    return PRODUCT_ACCOUNT_MAP.get(product_code, DEFAULT_FUND_ACCOUNT)
+def get_tx_account(product_code: str, action: str = 'buy_debit') -> str:
+    """
+    获取理财交易对应的账户
+    
+    Args:
+        product_code: 产品代码
+        action: 交易类型
+            - buy_debit: 扣款账户（钱从哪里扣，如余利宝理财金）
+            - buy: 旧模式买入，视为已确认，返回到账账户（基金账户）
+            - buy_confirm: 到账账户（份额确认后增加到哪里，基金账户）
+            - sell/sell_confirm: 卖出到账账户（基金账户减少，资金回到扣款账户）
+    
+    Returns:
+        账户ID
+    """
+    # 买入确认 或 旧模式buy（已确认）-> 资产增加到对应账户
+    if action in ['buy_confirm', 'buy']:
+        return PRODUCT_CONFIRM_ACCOUNT_MAP.get(product_code, DEFAULT_FUND_CONFIRM_ACCOUNT)
+    
+    # 卖出 -> 从对应账户减少
+    if action in ['sell', 'sell_confirm']:
+        return PRODUCT_CONFIRM_ACCOUNT_MAP.get(product_code, DEFAULT_FUND_CONFIRM_ACCOUNT)
+    
+    # 扣款类型 (buy_debit) -> 返回扣款账户
+    return PRODUCT_DEBIT_ACCOUNT_MAP.get(product_code, DEFAULT_FUND_DEBIT_ACCOUNT)
 
 
 def get_account_group_name(account_id: str) -> str:
@@ -374,109 +476,6 @@ def page_dashboard():
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.info("暂无产品持仓数据")
-    
-    st.divider()
-    
-    # 最近记录（记账 + 理财 合并）
-    st.subheader("📋 最近记录")
-    st.caption("🔴 支出/买入  🟢 收入/赎回")
-    
-    # 过滤器
-    filter_col1, filter_col2 = st.columns([1, 3])
-    with filter_col1:
-        dash_group_filter = st.selectbox(
-            "筛选账户组",
-            list(ACCOUNT_GROUP_FILTERS.keys()),
-            key="dash_account_filter"
-        )
-    
-    # 获取最近记账记录
-    recent_ledger = list_recent_ledger(20, with_balances=True)
-    
-    # 获取最近理财记录
-    recent_tx = list_recent_transactions(20)
-    
-    # 合并记录
-    combined_rows = []
-    
-    # 处理记账记录
-    for r in recent_ledger:
-        entry_type = r.get('entry_type', '')
-        is_expense = entry_type in ['expense', 'transfer']
-        account = merge_account_column(r)
-        
-        combined_rows.append({
-            'sort_time': r.get('event_time', ''),
-            '时间': r.get('event_time', ''),
-            '金额': format_colored_amount(r.get('amount', ''), is_expense),
-            '分类': f"{r.get('category_l1', '')} > {r.get('category_l2', '')}" if r.get('category_l2') else r.get('category_l1', ''),
-            '账户': get_account_name(account),
-            '账户组': get_account_group_name(account),
-            '余额': r.get('balance_after', ''),
-            '父账户余额': r.get('parent_balance_after', '') or '',
-            '备注': r.get('note', ''),
-            'account': account  # 用于过滤
-        })
-    
-    # 处理理财记录（买入红色，卖出绿色）
-    from core.ledger_service import calc_account_balance, calc_group_balance, get_account_parent_group
-    buy_actions = ['buy_debit', 'buy_confirm', 'buy']
-    
-    # 预先计算各账户的当前余额（理财记录显示当前余额更有意义）
-    account_balances = {}
-    
-    for r in recent_tx:
-        action = r.get('action', '')
-        is_buy = action in buy_actions
-        product_code = r.get('product_code', '')
-        account = get_tx_account(product_code)
-        
-        # 使用 created_at 作为时间（如果有的话）
-        tx_time = r.get('created_at')
-        if tx_time:
-            time_str = str(tx_time)[:19]  # 取到秒
-        else:
-            time_str = str(r.get('date', '')) + ' 00:00:00'
-        
-        # 计算当前账户余额（如果还没计算过）
-        if account not in account_balances:
-            balance = calc_account_balance(account)  # 当前余额
-            parent_group = get_account_parent_group(account)
-            if parent_group:
-                parent_balance = calc_group_balance(parent_group['accounts'])
-            else:
-                parent_balance = balance
-            account_balances[account] = (balance, parent_balance)
-        
-        balance, parent_balance = account_balances[account]
-        
-        combined_rows.append({
-            'sort_time': time_str,
-            '时间': time_str,
-            '金额': format_colored_amount(r.get('amount', ''), is_buy),
-            '分类': f"理财 > {ACTION_DISPLAY_MAP.get(action, action)}",
-            '账户': get_account_name(account),
-            '账户组': get_account_group_name(account),
-            '余额': format_decimal(balance),
-            '父账户余额': format_decimal(parent_balance),
-            '备注': f"{product_code} {r.get('note', '')}",
-            'account': account
-        })
-    
-    # 按时间倒序排序
-    combined_rows.sort(key=lambda x: x['sort_time'], reverse=True)
-    
-    # 过滤
-    combined_rows = filter_records_by_account_group(combined_rows, dash_group_filter)
-    
-    if combined_rows:
-        df = pd.DataFrame(combined_rows)
-        display_cols = ['时间', '金额', '分类', '账户', '账户组', '余额', '父账户余额', '备注']
-        # 只对金额列着色
-        styled_df = df[display_cols].style.map(color_amount, subset=['金额'])
-        st.dataframe(styled_df, use_container_width=True, hide_index=True)
-    else:
-        st.info("暂无记录")
 
 
 # ============================================================
@@ -713,7 +712,7 @@ def page_ledger():
             key="ledger_account_filter"
         )
     
-    recent = list_recent_ledger(30, with_balances=True)
+    recent = list_recent_ledger(200, with_balances=True)  # 加载更多记录用于分页
     recent = filter_records_by_account_group(recent, ledger_group_filter)
     
     if recent:
@@ -739,9 +738,16 @@ def page_ledger():
             })
         
         df = pd.DataFrame(rows)
+        # 保存原始索引供分页后使用
+        df['_original_idx'] = range(len(df))
         
-        # 显示带颜色和行选择的表格
-        styled_df = df.style.map(color_amount, subset=['金额'])
+        # 分页
+        df_page = paginate_dataframe(df, "ledger_records", page_size=50)
+        original_indices = df_page['_original_idx'].tolist()
+        
+        # 显示带颜色和行选择的表格（不显示原始索引列）
+        display_cols = ['ID', '时间', '金额', '分类', '账户', '余额', '父账户余额', '备注']
+        styled_df = df_page[display_cols].style.map(color_amount, subset=['金额'])
         event = st.dataframe(
             styled_df, 
             use_container_width=True, 
@@ -755,7 +761,9 @@ def page_ledger():
         selected_rows = event.selection.rows if event.selection else []
         
         if selected_rows:
-            selected_idx = selected_rows[0]
+            page_idx = selected_rows[0]
+            # 获取原始记录索引
+            selected_idx = original_indices[page_idx] if page_idx < len(original_indices) else page_idx
             selected_record = raw_records[selected_idx]
             entry_type = selected_record.get('entry_type', '')
             
@@ -1029,14 +1037,10 @@ def page_invest():
     st.caption('💡 点击表格中的任意行可编辑')
     
     # 过滤器
-    filter_col1, filter_col2 = st.columns(2)
-    with filter_col1:
-        tx_group_filter = st.selectbox("筛选账户组", list(ACCOUNT_GROUP_FILTERS.keys()), key="tx_group_filter")
-    with filter_col2:
-        product_filter_options = ['全部'] + [f"{p['code']} - {p['name']}" for p in product_options]
-        tx_product_filter = st.selectbox("筛选产品", product_filter_options, key="tx_product_filter")
+    product_filter_options = ['全部'] + [f"{p['code']} - {p['name']}" for p in product_options]
+    tx_product_filter = st.selectbox("筛选产品", product_filter_options, key="tx_product_filter")
     
-    recent_tx = list_recent_transactions(30)
+    recent_tx = list_recent_transactions(200)  # 显示更多记录
     
     # 产品过滤
     if tx_product_filter != '全部' and recent_tx:
@@ -1044,34 +1048,65 @@ def page_invest():
         recent_tx = [r for r in recent_tx if r.get('product_code') == filter_code]
     
     if recent_tx:
-        from core.ledger_service import calc_account_balance, calc_group_balance, get_account_parent_group
+        # 支出类（红色）：只有 buy_debit 是扣款
+        expense_actions = ['buy_debit']
         
-        buy_actions = ['buy_debit', 'buy_confirm', 'buy']
+        # 计算每个产品的当前份额，用于倒推
+        from core.holdings_calculator import get_all_product_positions
+        from datetime import date as date_cls
+        current_positions = get_all_product_positions(date_cls.today().strftime('%Y-%m-%d'))
+        # {product_code: (shares, cost)}
+        product_shares = {code: pos[0] for code, pos in current_positions.items()}
         
-        # 处理数据
+        # recent_tx 已经是按时间倒序的，从最新开始倒推份额
+        for r in recent_tx:
+            action = r.get('action', '')
+            product_code = r.get('product_code', '')
+            shares = r.get('shares', '')
+            
+            # 当前记录后的产品份额
+            r['_product_shares_after'] = product_shares.get(product_code, Decimal('0'))
+            
+            # 倒推：计算这笔交易前的份额
+            if action in ['buy', 'buy_confirm'] and shares:
+                try:
+                    product_shares[product_code] = product_shares.get(product_code, Decimal('0')) - Decimal(str(shares))
+                except:
+                    pass
+            elif action in ['sell', 'sell_confirm'] and shares:
+                try:
+                    product_shares[product_code] = product_shares.get(product_code, Decimal('0')) + Decimal(str(shares))
+                except:
+                    pass
+        
+        # 处理数据（按原来的倒序显示）
         rows = []
         raw_records = []
         for r in recent_tx:
             action = r.get('action', '')
-            is_buy = action in buy_actions
+            is_expense = action in expense_actions  # 红色（支出/扣款）
             amount = r.get('amount', '') or ''
             product_code = r.get('product_code', '')
+            shares = r.get('shares', '')
+            nav = r.get('nav', '')
             
-            account = get_tx_account(product_code)
+            # buy 和 buy_confirm 需要计算金额：shares × nav
+            if action in ['buy', 'buy_confirm'] and shares and nav:
+                try:
+                    calc_amount = float(shares) * float(nav)
+                    amount = f"{calc_amount:.2f}"
+                except:
+                    pass
+            
+            account = get_tx_account(product_code, action)
             account_group = get_account_group_name(account)
             
             # 时间（使用 created_at）
             tx_time = r.get('created_at')
             time_str = str(tx_time)[:19] if tx_time else str(r.get('date', '')) + ' 00:00:00'
             
-            # 计算当前账户余额（理财记录显示当前余额更有意义）
-            balance = calc_account_balance(account)  # 当前余额
-            parent_group = get_account_parent_group(account)
-            if parent_group:
-                parent_balance = calc_group_balance(parent_group['accounts'])
-            else:
-                # 没有父账户组的（如小荷包），显示自己的余额
-                parent_balance = balance
+            # 获取该产品在此交易后的份额
+            product_shares_after = r.get('_product_shares_after', Decimal('0'))
             
             raw_records.append(r)
             rows.append({
@@ -1079,35 +1114,27 @@ def page_invest():
                 '时间': time_str,
                 '产品': product_code,
                 '类型': ACTION_DISPLAY_MAP.get(action, action),
-                '金额': format_colored_amount(amount, is_buy),
-                '份额': r.get('shares', ''),
-                '账户': get_account_name(account),
-                '账户组': account_group,
-                '余额': format_decimal(balance),
-                '父账户余额': format_decimal(parent_balance),
+                '金额': format_colored_amount(amount, is_expense),
+                '份额': shares,
+                '产品份额': f"{product_shares_after:.2f}",  # 该产品在此交易后的累计份额
                 '备注': r.get('note', ''),
                 '_account': account,
                 '_action': action
             })
         
-        # 账户组过滤
-        if tx_group_filter != '全部':
-            filtered_rows = []
-            filtered_records = []
-            for i, row in enumerate(rows):
-                if row['账户组'] == tx_group_filter:
-                    filtered_rows.append(row)
-                    filtered_records.append(raw_records[i])
-            rows = filtered_rows
-            raw_records = filtered_records
-        
         if rows:
             df_tx = pd.DataFrame(rows)
+            # 保存原始索引供分页后使用
+            df_tx['_original_idx'] = range(len(df_tx))
             
-            display_cols = ['ID', '时间', '产品', '类型', '金额', '份额', '账户', '账户组', '余额', '父账户余额', '备注']
+            # 分页
+            df_page = paginate_dataframe(df_tx, "invest_tx_records", page_size=50)
+            original_indices = df_page['_original_idx'].tolist()
             
-            # 显示带颜色和行选择的表格
-            styled_df = df_tx[display_cols].style.map(color_amount, subset=['金额'])
+            display_cols = ['ID', '时间', '产品', '类型', '金额', '份额', '产品份额', '备注']
+            
+            # 显示带颜色和行选择的表格（不显示原始索引列）
+            styled_df = df_page[display_cols].style.map(color_amount, subset=['金额'])
             event = st.dataframe(
                 styled_df, 
                 use_container_width=True, 
@@ -1121,7 +1148,9 @@ def page_invest():
             selected_rows = event.selection.rows if event.selection else []
             
             if selected_rows:
-                selected_idx = selected_rows[0]
+                page_idx = selected_rows[0]
+                # 获取原始记录索引
+                selected_idx = original_indices[page_idx] if page_idx < len(original_indices) else page_idx
                 selected_record = raw_records[selected_idx]
                 
                 st.markdown("### 📝 编辑记录")
@@ -1177,101 +1206,233 @@ def page_invest():
 def page_orders():
     st.markdown('<p class="main-header">📋 订单结算</p>', unsafe_allow_html=True)
     
-    # 结算按钮
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("⚡ 结算今日可结算", use_container_width=True, type="primary"):
-            with st.spinner("正在结算..."):
-                try:
-                    today = date.today().strftime('%Y-%m-%d')
-                    result = settle_orders(today)
-                    
-                    if result.settled:
-                        st.success(f"✅ 成功结算 {len(result.settled)} 个订单")
-                        for item in result.settled:
-                            order = item['order']
-                            st.write(f"  - {order['order_id']}: {order['order_type']} {order['product_code']}")
-                    
-                    if result.skipped:
-                        st.info(f"ℹ️ 跳过 {len(result.skipped)} 个订单（已存在确认记录）")
-                    
-                    if result.errors:
-                        st.warning(f"⚠️ 失败 {len(result.errors)} 个订单")
-                        for item in result.errors:
-                            order = item['order']
-                            reason = item['reason']
-                            st.write(f"  - {order['order_id']}: {reason}")
-                    
-                    if not result.settled and not result.skipped and not result.errors:
-                        st.info("没有需要结算的订单")
-                    
-                    # 刷新快照
-                    try:
-                        collect_nav_and_build_snapshots(silent=True)
-                    except:
-                        pass
-                        
-                except Exception as e:
-                    st.error(f"❌ 结算失败: {e}")
-    
-    with col2:
-        if st.button("📋 结算全部到期", use_container_width=True):
-            with st.spinner("正在结算..."):
-                try:
-                    result = settle_orders()
-                    
-                    if result.settled:
-                        st.success(f"✅ 成功结算 {len(result.settled)} 个订单")
-                    
-                    if result.skipped:
-                        st.info(f"ℹ️ 跳过 {len(result.skipped)} 个订单")
-                    
-                    if result.errors:
-                        st.warning(f"⚠️ 失败 {len(result.errors)} 个订单")
-                        for item in result.errors:
-                            st.write(f"  - {item['order']['order_id']}: {item['reason']}")
-                    
-                    try:
-                        collect_nav_and_build_snapshots(silent=True)
-                    except:
-                        pass
-                        
-                except Exception as e:
-                    st.error(f"❌ 结算失败: {e}")
-    
-    with col3:
-        st.write("")  # 占位
-    
     st.divider()
     
-    # 待结算订单
+    # 待结算订单（带单个确认功能）
     st.subheader("📋 待结算订单")
+    st.caption("💡 选择订单可单独确认，到期订单份额已按净值计算")
     
     pending = list_pending_orders()
     
     if pending:
-        df = pd.DataFrame(pending)
-        display_cols = ['order_id', 'product_code', 'order_type', 'amount', 'shares', 'confirm_date', 'status', 'note']
-        display_cols = [c for c in display_cols if c in df.columns]
+        # 构建显示数据
+        rows = []
+        raw_orders = []
+        for order in pending:
+            product_code = order.get('product_code', '')
+            order_type = order.get('order_type', '')
+            confirm_date = order.get('confirm_date', '')
+            
+            # 预览结算结果
+            preview = preview_settle(order['order_id'])
+            
+            # 如果有净值，直接显示计算出的份额；否则显示订单原有份额
+            if preview.get('success') and preview.get('shares'):
+                display_shares = f"{preview.get('shares'):.2f}"
+            else:
+                # 格式化原有份额
+                orig_shares = order.get('shares', '')
+                display_shares = f"{float(orig_shares):.2f}" if orig_shares else '-'
+            
+            # 格式化金额（两位小数）
+            orig_amount = order.get('amount', '')
+            display_amount = f"{float(orig_amount):.2f}" if orig_amount else '-'
+            
+            rows.append({
+                '订单号': order.get('order_id', ''),
+                '产品代码': product_code,
+                '类型': '买入扣款' if order_type == 'buy_debit' else '赎回发起',
+                '金额': display_amount,
+                '份额': display_shares,
+                '确认日期': confirm_date,
+                '状态': order.get('status', ''),
+                '净值': preview.get('nav', '-') if preview.get('success') else '-',
+                '备注': order.get('note', '')
+            })
+            raw_orders.append(order)
         
-        col_names = {
-            'order_id': '订单号',
-            'product_code': '产品代码',
-            'order_type': '类型',
-            'amount': '金额',
-            'shares': '份额',
-            'confirm_date': '确认日期',
-            'status': '状态',
-            'note': '备注'
-        }
+        df_pending = pd.DataFrame(rows)
+        # 保存原始索引供分页后使用
+        df_pending['_original_idx'] = range(len(df_pending))
         
-        df_display = df[display_cols].copy()
-        df_display = df_display.rename(columns=col_names)
+        # 分页
+        df_page = paginate_dataframe(df_pending, "pending_orders", page_size=50)
+        original_indices = df_page['_original_idx'].tolist()
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        # 显示表格（带行选择，不显示原始索引列）
+        display_cols = ['订单号', '产品代码', '类型', '金额', '份额', '确认日期', '状态', '净值', '备注']
+        event = st.dataframe(
+            df_page[display_cols],
+            use_container_width=True,
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="pending_orders_table"
+        )
+        
+        # 检查是否选中了某行
+        selected_rows = event.selection.rows if event.selection else []
+        
+        if selected_rows:
+            page_idx = selected_rows[0]
+            # 获取原始记录索引
+            selected_idx = original_indices[page_idx] if page_idx < len(original_indices) else page_idx
+            selected_order = raw_orders[selected_idx]
+            order_id = selected_order['order_id']
+            product_code = selected_order['product_code']
+            order_type = selected_order['order_type']
+            
+            st.markdown("### 📝 确认订单")
+            
+            # 获取净值预览
+            preview = preview_settle(order_id)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.info(f"**订单号**: {order_id}")
+                st.info(f"**产品**: {product_code}")
+                st.info(f"**类型**: {'买入扣款' if order_type == 'buy_debit' else '赎回发起'}")
+                
+                if order_type == 'buy_debit':
+                    st.info(f"**扣款金额**: ¥{selected_order.get('amount', 0)}")
+                    st.info(f"**手续费**: ¥{selected_order.get('fee', 0)}")
+                else:
+                    st.info(f"**赎回份额**: {selected_order.get('shares', 0)}")
+            
+            with col2:
+                if preview.get('success'):
+                    st.success(f"**当前净值**: {preview.get('nav', '-')}")
+                    if order_type == 'buy_debit':
+                        st.success(f"**预计获得份额**: {preview.get('shares', 0):.4f}")
+                        st.success(f"**净申购额**: ¥{preview.get('net_amount', 0):.2f}")
+                    else:
+                        st.success(f"**预计到账**: ¥{preview.get('amount', 0):.2f}")
+                        st.success(f"**赎回费**: ¥{preview.get('fee', 0):.2f}")
+                else:
+                    st.warning(f"⚠️ {preview.get('message', '无法预览')}")
+            
+            # 结算时间输入
+            st.markdown("#### ⏰ 结算时间")
+            time_col1, time_col2 = st.columns(2)
+            
+            # 默认使用订单的确认日期
+            default_confirm_date = selected_order.get('confirm_date', date.today().strftime('%Y-%m-%d'))
+            try:
+                default_date = datetime.strptime(default_confirm_date, '%Y-%m-%d').date()
+            except:
+                default_date = date.today()
+            
+            with time_col1:
+                settle_date = st.date_input(
+                    "确认日期", 
+                    value=default_date, 
+                    key="settle_confirm_date"
+                )
+            
+            with time_col2:
+                settle_time = st.text_input(
+                    "确认时间 (HH:MM:SS)", 
+                    value=datetime.now().strftime('%H:%M:%S'), 
+                    key="settle_confirm_time",
+                    help="份额确认的时间，精确到秒"
+                )
+            
+            # 组合成完整的确认时间
+            confirm_datetime = f"{settle_date} {settle_time}"
+            
+            # 确认按钮
+            if st.button(f"✅ 确认此订单 ({order_id})", type="primary", key="confirm_single_order"):
+                with st.spinner("正在确认..."):
+                    try:
+                        result = settle_single_order(order_id, confirm_datetime=confirm_datetime)
+                        
+                        if result.success:
+                            st.success(f"✅ {result.message}")
+                            # 刷新快照
+                            try:
+                                collect_nav_and_build_snapshots(silent=True)
+                            except:
+                                pass
+                            st.rerun()
+                        else:
+                            st.error(f"❌ 确认失败: {result.message}")
+                    except Exception as e:
+                        st.error(f"❌ 确认失败: {e}")
     else:
         st.info("暂无待结算订单")
+    
+    st.divider()
+    
+    # 批量结算按钮（移到底部，不常用）
+    with st.expander("📋 批量结算（高级）", expanded=False):
+        st.caption("⚠️ 批量结算会一次性处理所有到期订单，建议使用上方的单个确认功能")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("⚡ 结算今日可结算", use_container_width=True):
+                with st.spinner("正在结算..."):
+                    try:
+                        today = date.today().strftime('%Y-%m-%d')
+                        result = settle_orders(today)
+                        
+                        if result.settled:
+                            st.success(f"✅ 成功结算 {len(result.settled)} 个订单")
+                            for item in result.settled:
+                                order = item['order']
+                                st.write(f"  - {order['order_id']}: {order['order_type']} {order['product_code']}")
+                        
+                        if result.skipped:
+                            st.info(f"ℹ️ 跳过 {len(result.skipped)} 个订单（已存在确认记录）")
+                        
+                        if result.errors:
+                            st.warning(f"⚠️ 失败 {len(result.errors)} 个订单")
+                            for item in result.errors:
+                                order = item['order']
+                                reason = item['reason']
+                                st.write(f"  - {order['order_id']}: {reason}")
+                        
+                        if not result.settled and not result.skipped and not result.errors:
+                            st.info("没有需要结算的订单")
+                        
+                        # 刷新快照
+                        try:
+                            collect_nav_and_build_snapshots(silent=True)
+                        except:
+                            pass
+                        
+                        st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"❌ 结算失败: {e}")
+        
+        with col2:
+            if st.button("📋 结算全部到期", use_container_width=True):
+                with st.spinner("正在结算..."):
+                    try:
+                        result = settle_orders()
+                        
+                        if result.settled:
+                            st.success(f"✅ 成功结算 {len(result.settled)} 个订单")
+                        
+                        if result.skipped:
+                            st.info(f"ℹ️ 跳过 {len(result.skipped)} 个订单")
+                        
+                        if result.errors:
+                            st.warning(f"⚠️ 失败 {len(result.errors)} 个订单")
+                            for item in result.errors:
+                                st.write(f"  - {item['order']['order_id']}: {item['reason']}")
+                        
+                        try:
+                            collect_nav_and_build_snapshots(silent=True)
+                        except:
+                            pass
+                        
+                        st.rerun()
+                            
+                    except Exception as e:
+                        st.error(f"❌ 结算失败: {e}")
     
     st.divider()
     
@@ -1282,29 +1443,74 @@ def page_orders():
     
     if all_orders:
         # 筛选器
-        status_filter = st.selectbox("状态筛选", ["全部", "pending", "done", "cancelled"], key="order_status_filter")
+        status_filter = st.selectbox(
+            "状态筛选", 
+            ["全部", "pending", "done", "cancelled"],
+            format_func=lambda x: {"全部": "全部", "pending": "待处理", "done": "已完成", "cancelled": "已取消"}.get(x, x),
+            key="order_status_filter"
+        )
         
         if status_filter != "全部":
             all_orders = [o for o in all_orders if o.get('status') == status_filter]
         
-        df = pd.DataFrame(all_orders[-50:])  # 只显示最近 50 条
-        display_cols = ['order_id', 'product_code', 'order_type', 'amount', 'shares', 'confirm_date', 'status']
-        display_cols = [c for c in display_cols if c in df.columns]
+        # 构建显示数据（与待结算订单保持一致）
+        rows = []
+        for order in all_orders:  # 显示全部，用分页控制
+            product_code = order.get('product_code', '')
+            order_type = order.get('order_type', '')
+            status = order.get('status', '')
+            
+            # 已完成的订单，从交易记录中获取份额和净值
+            display_shares = order.get('shares', '') or ''
+            display_nav = ''
+            
+            if status == 'done':
+                # 从 transactions 中查找对应的 buy_confirm 记录
+                from core.invest_service import list_recent_transactions
+                order_id = order.get('order_id', '')
+                txs = list_recent_transactions(100)
+                for tx in txs:
+                    if tx.get('order_id') == order_id and tx.get('action') in ['buy_confirm', 'sell_confirm']:
+                        display_shares = tx.get('shares', '') or display_shares
+                        display_nav = tx.get('nav', '') or ''
+                        break
+            elif status == 'pending':
+                # 待处理的订单，预览计算份额
+                preview = preview_settle(order['order_id'])
+                if preview.get('success') and preview.get('shares'):
+                    display_shares = f"{preview.get('shares'):.2f}"
+                    display_nav = preview.get('nav', '')
+            
+            # 格式化份额（两位小数）
+            if display_shares and display_shares != '-':
+                try:
+                    display_shares = f"{float(display_shares):.2f}"
+                except:
+                    pass
+            
+            # 格式化金额（两位小数）
+            orig_amount = order.get('amount', '')
+            display_amount = f"{float(orig_amount):.2f}" if orig_amount else '-'
+            
+            # 状态中文化
+            status_map = {'pending': '待处理', 'done': '已完成', 'cancelled': '已取消'}
+            
+            rows.append({
+                '订单号': order.get('order_id', ''),
+                '产品代码': product_code,
+                '类型': '买入扣款' if order_type == 'buy_debit' else ('赎回发起' if order_type == 'redeem_request' else order_type),
+                '金额': display_amount,
+                '份额': display_shares or '-',
+                '确认日期': order.get('confirm_date', ''),
+                '状态': status_map.get(status, status),
+                '净值': display_nav,
+                '备注': order.get('note', '')
+            })
         
-        col_names = {
-            'order_id': '订单号',
-            'product_code': '产品代码',
-            'order_type': '类型',
-            'amount': '金额',
-            'shares': '份额',
-            'confirm_date': '确认日期',
-            'status': '状态'
-        }
-        
-        df_display = df[display_cols].copy()
-        df_display = df_display.rename(columns=col_names)
-        
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        df_all = pd.DataFrame(rows)
+        # 分页
+        df_page = paginate_dataframe(df_all, "all_orders", page_size=50)
+        st.dataframe(df_page, use_container_width=True, hide_index=True)
     else:
         st.info("暂无订单")
 

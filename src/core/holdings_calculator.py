@@ -129,8 +129,8 @@ class HoldingsCalculator:
             if t['date'] > asof_date:
                 continue
             
-            action = normalize_action(t.get('action', ''))
-            order_id = t.get('order_id', '').strip()
+            action = normalize_action(t.get('action') or '')
+            order_id = (t.get('order_id') or '').strip()
             
             if action == 'buy_debit' and order_id:
                 amount = safe_decimal(t.get('amount', 0))
@@ -284,8 +284,8 @@ class HoldingsCalculator:
         cost = Decimal('0')
         
         for t in product_transactions:
-            action = normalize_action(t.get('action', ''))
-            order_id = t.get('order_id', '').strip()
+            action = normalize_action(t.get('action') or '')
+            order_id = (t.get('order_id') or '').strip()
             
             if action == 'buy_debit':
                 # 扣款事件：不改变 shares/cost，只记录到 debit_index（已在 _build_debit_index 处理）
@@ -386,8 +386,8 @@ class HoldingsCalculator:
         debit_pool: Dict[str, Decimal] = {}  # order_id -> net_amount
         
         for t in product_transactions:
-            action = normalize_action(t.get('action', ''))
-            order_id = t.get('order_id', '').strip()
+            action = normalize_action(t.get('action') or '')
+            order_id = (t.get('order_id') or '').strip()
             
             if action == 'buy_debit':
                 amount = safe_decimal(t.get('amount', 0))
@@ -432,9 +432,9 @@ class HoldingsCalculator:
         principal = Decimal('0')
         
         for t in product_transactions:
-            action = normalize_action(t.get('action', ''))
+            action = normalize_action(t.get('action') or '')
             amount = safe_decimal(t.get('amount', 0))
-            order_id = t.get('order_id', '').strip()
+            order_id = (t.get('order_id') or '').strip()
             
             if action == 'buy_debit':
                 # 扣款时计入本金

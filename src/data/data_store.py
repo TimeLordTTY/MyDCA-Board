@@ -273,6 +273,33 @@ def update_order_status(order_id: str, new_status: str) -> bool:
     return affected > 0
 
 
+def update_order(order_id: str, updates: Dict) -> bool:
+    """
+    更新订单字段
+    
+    Args:
+        order_id: 订单ID
+        updates: 要更新的字段字典，如 {'shares': '10.0000', 'status': 'done'}
+    
+    Returns:
+        是否更新成功
+    """
+    if not updates:
+        return False
+    
+    # 构建 SET 子句
+    set_parts = []
+    values = []
+    for key, value in updates.items():
+        set_parts.append(f"{key} = %s")
+        values.append(value)
+    
+    values.append(order_id)
+    sql = f"UPDATE orders SET {', '.join(set_parts)} WHERE order_id = %s"
+    affected = execute_update(sql, tuple(values))
+    return affected > 0
+
+
 def order_exists(order_id: str) -> bool:
     """检查订单是否存在"""
     sql = "SELECT COUNT(*) as cnt FROM orders WHERE order_id = %s"
@@ -421,7 +448,7 @@ def generate_order_id(product_code: str) -> str:
     # 从 orders 查找
     orders = load_orders()
     for order in orders:
-        order_id = order.get('order_id', '')
+        order_id = order.get('order_id') or ''
         if order_id.startswith(prefix):
             try:
                 seq = int(order_id.split('_')[-1])
@@ -432,7 +459,7 @@ def generate_order_id(product_code: str) -> str:
     # 从 transactions 查找
     transactions = load_transactions()
     for tx in transactions:
-        order_id = tx.get('order_id', '')
+        order_id = tx.get('order_id') or ''
         if order_id.startswith(prefix):
             try:
                 seq = int(order_id.split('_')[-1])

@@ -1,19 +1,12 @@
-# MyDCA-Board 依赖包
-# 安装命令: pip install -r requirements.txt
 
-# 中国节假日判断（交易日计算）
 chinese-calendar>=1.9.0
 
-# 数据处理
 pandas>=2.0.0
 
-# 本地 UI
 streamlit>=1.28.0
 
-# 网络请求（净值采集）
 requests>=2.28.0
 
-# MySQL 数据库
 pymysql>=1.1.0
 dbutils>=3.0.0
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from data.data_store import (
     load_transactions, append_transaction, transaction_exists,
-    load_orders, append_order, get_pending_orders, update_order_status,
+    load_orders, append_order, get_pending_orders, update_order_status, update_order,
     generate_order_id, format_decimal, parse_decimal,
     VALID_ACTIONS
 )
@@ -465,6 +465,257 @@ def settle_orders(target_date: str = None) -> SettleResult:
     return result
 
 
+@dataclass
+class SingleSettleResult:
+    """单订单结算结果"""
+    success: bool
+    order_id: str
+    nav: Optional[Decimal] = None
+    shares: Optional[Decimal] = None
+    amount: Optional[Decimal] = None
+    message: str = ''
+
+
+def settle_single_order(
+    order_id: str, 
+    nav_override: Decimal = None,
+    confirm_datetime: str = None
+) -> SingleSettleResult:
+    """
+    结算单个订单
+    
+    Args:
+        order_id: 订单ID
+        nav_override: 可选，手动指定净值（用于测试或特殊场景）
+        confirm_datetime: 可选，确认时间（格式：YYYY-MM-DD HH:MM:SS），默认使用订单的确认日期
+    
+    Returns:
+        SingleSettleResult 包含结算结果
+    """
+    # 查找订单
+    orders = load_orders()
+    order = None
+    for o in orders:
+        if o.get('order_id') == order_id:
+            order = o
+            break
+    
+    if order is None:
+        return SingleSettleResult(
+            success=False,
+            order_id=order_id,
+            message=f'找不到订单: {order_id}'
+        )
+    
+    if order.get('status') != 'pending':
+        return SingleSettleResult(
+            success=False,
+            order_id=order_id,
+            message=f'订单状态不是 pending: {order.get("status")}'
+        )
+    
+    order_type = order['order_type']
+    product_code = order['product_code']
+    nav_date = order.get('nav_date', '')
+    
+    # 幂等性检查
+    confirm_action = 'buy_confirm' if order_type == 'buy_debit' else 'sell_confirm'
+    if transaction_exists(order_id, confirm_action):
+        update_order_status(order_id, 'done')
+        return SingleSettleResult(
+            success=False,
+            order_id=order_id,
+            message='已存在确认记录'
+        )
+    
+    # 获取净值
+    nav = nav_override
+    if nav is None:
+        nav = get_nav(product_code, nav_date)
+    
+    if nav is None:
+        return SingleSettleResult(
+            success=False,
+            order_id=order_id,
+            message=f'缺少净值: {product_code} @ {nav_date}'
+        )
+    
+    # 获取产品配置
+    product = get_product(product_code)
+    if product is None:
+        return SingleSettleResult(
+            success=False,
+            order_id=order_id,
+            message=f'找不到产品配置: {product_code}'
+        )
+    
+    # 处理确认时间
+    if confirm_datetime:
+        # 从 confirm_datetime 提取日期和完整时间
+        confirm_date_str = confirm_datetime[:10]  # YYYY-MM-DD
+        created_at = confirm_datetime
+    else:
+        # 使用订单的确认日期，时间默认 09:30:00
+        confirm_date_str = order.get('confirm_date', date.today().strftime('%Y-%m-%d'))
+        created_at = f"{confirm_date_str} 09:30:00"
+    
+    try:
+        if order_type == 'buy_debit':
+            # 买入确认
+            amount = parse_decimal(order.get('amount', 0))
+            fee = parse_decimal(order.get('fee', 0))
+            net_amount = amount - fee
+            
+            # 计算份额
+            shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+            
+            # 写入 buy_confirm
+            tx_record = {
+                'date': confirm_date_str,
+                'product_code': product_code,
+                'action': 'buy_confirm',
+                'amount': '',
+                'shares': format_decimal(shares, 4),
+                'fee': '0',
+                'nav': str(nav),
+                'nav_date': nav_date,
+                'order_id': order_id,
+                'note': order.get('note', ''),
+                'created_at': created_at
+            }
+            append_transaction(tx_record)
+            
+            # 更新订单（份额和状态）
+            update_order(order_id, {
+                'shares': format_decimal(shares, 4),
+                'status': 'done'
+            })
+            
+            return SingleSettleResult(
+                success=True,
+                order_id=order_id,
+                nav=nav,
+                shares=shares,
+                amount=net_amount,
+                message=f'买入确认成功: {shares:.4f} 份 @ {nav}'
+            )
+            
+        elif order_type == 'redeem_request':
+            # 赎回确认
+            shares = parse_decimal(order.get('shares', 0))
+            sell_fee_rate_str = order.get('sell_fee_rate', '0')
+            sell_fee_rate = Decimal(str(sell_fee_rate_str)) if sell_fee_rate_str else Decimal('0')
+            
+            # 计算到账金额
+            gross = shares * nav
+            fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            amount = gross - fee
+            
+            # 写入 sell_confirm
+            tx_record = {
+                'date': confirm_date_str,
+                'product_code': product_code,
+                'action': 'sell_confirm',
+                'amount': format_decimal(amount, 2),
+                'shares': format_decimal(shares, 4),
+                'fee': format_decimal(fee, 2),
+                'nav': str(nav),
+                'nav_date': nav_date,
+                'order_id': order_id,
+                'note': order.get('note', ''),
+                'created_at': created_at
+            }
+            append_transaction(tx_record)
+            
+            # 标记订单完成
+            update_order_status(order_id, 'done')
+            
+            return SingleSettleResult(
+                success=True,
+                order_id=order_id,
+                nav=nav,
+                shares=shares,
+                amount=amount,
+                message=f'赎回确认成功: {shares:.4f} 份 @ {nav}，到账 {amount:.2f}'
+            )
+        
+        else:
+            return SingleSettleResult(
+                success=False,
+                order_id=order_id,
+                message=f'不支持的订单类型: {order_type}'
+            )
+            
+    except Exception as e:
+        return SingleSettleResult(
+            success=False,
+            order_id=order_id,
+            message=str(e)
+        )
+
+
+def get_order_by_id(order_id: str) -> Optional[Dict]:
+    """根据订单ID获取订单"""
+    orders = load_orders()
+    for o in orders:
+        if o.get('order_id') == order_id:
+            return o
+    return None
+
+
+def preview_settle(order_id: str) -> Dict:
+    """
+    预览订单结算结果（不实际执行）
+    
+    Returns:
+        包含计算结果的字典: {nav, shares, amount, message}
+    """
+    order = get_order_by_id(order_id)
+    if order is None:
+        return {'success': False, 'message': f'找不到订单: {order_id}'}
+    
+    product_code = order['product_code']
+    nav_date = order.get('nav_date', '')
+    order_type = order['order_type']
+    
+    # 获取净值
+    nav = get_nav(product_code, nav_date)
+    if nav is None:
+        return {'success': False, 'message': f'缺少净值: {product_code} @ {nav_date}', 'nav': None}
+    
+    if order_type == 'buy_debit':
+        amount = parse_decimal(order.get('amount', 0))
+        fee = parse_decimal(order.get('fee', 0))
+        net_amount = amount - fee
+        shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        
+        return {
+            'success': True,
+            'nav': float(nav),
+            'shares': float(shares),
+            'net_amount': float(net_amount),
+            'message': f'预计获得 {shares:.4f} 份（净值 {nav}）'
+        }
+    
+    elif order_type == 'redeem_request':
+        shares = parse_decimal(order.get('shares', 0))
+        sell_fee_rate = Decimal(order.get('sell_fee_rate', '0') or '0')
+        gross = shares * nav
+        fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        amount = gross - fee
+        
+        return {
+            'success': True,
+            'nav': float(nav),
+            'shares': float(shares),
+            'amount': float(amount),
+            'fee': float(fee),
+            'message': f'预计到账 {amount:.2f}（扣费 {fee:.2f}）'
+        }
+    
+    return {'success': False, 'message': f'不支持的订单类型: {order_type}'}
+
+
 def validate_transactions_orders() -> ValidationResult:
     """
     校验交易和订单数据
@@ -480,8 +731,8 @@ def validate_transactions_orders() -> ValidationResult:
     order_ids_tx = {}  # {(order_id, action): row_num}
     
     for i, tx in enumerate(transactions, 1):
-        action = tx.get('action', '').lower()
-        order_id = tx.get('order_id', '')
+        action = (tx.get('action') or '').lower()
+        order_id = tx.get('order_id') or ''
         
         # action 必须有效
         if action not in [a.lower() for a in VALID_ACTIONS]:
@@ -503,8 +754,8 @@ def validate_transactions_orders() -> ValidationResult:
     order_ids_orders = set()
     
     for i, order in enumerate(orders, 1):
-        order_id = order.get('order_id', '')
-        status = order.get('status', '')
+        order_id = order.get('order_id') or ''
+        status = order.get('status') or ''
         
         # order_id 唯一性
         if order_id in order_ids_orders:
@@ -517,11 +768,11 @@ def validate_transactions_orders() -> ValidationResult:
     
     # 检查 buy_confirm 是否有匹配的 buy_debit
     buy_debits = {tx['order_id'] for tx in transactions 
-                  if tx.get('action', '').lower() == 'buy_debit' and tx.get('order_id')}
+                  if (tx.get('action') or '').lower() == 'buy_debit' and tx.get('order_id')}
     
     for tx in transactions:
-        action = tx.get('action', '').lower()
-        order_id = tx.get('order_id', '')
+        action = (tx.get('action') or '').lower()
+        order_id = tx.get('order_id') or ''
         
         if action == 'buy_confirm' and order_id:
             if order_id not in buy_debits:

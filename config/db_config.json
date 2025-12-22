@@ -1,11 +1,10 @@
 {
-    "host": "*",
-    "port": *,
-    "user": "*",
-    "password": "*",
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "dca",
+    "password": "FW5GxWai5Shyrekb",
     "database": "dca",
     "charset": "utf8mb4",
     "pool_size": 5,
     "use_database": true
 }
-

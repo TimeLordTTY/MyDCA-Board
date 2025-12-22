@@ -78,18 +78,47 @@ def build_all_snapshots(fetch_date: str = None, project_root: Path = None) -> in
     
     # 生成 daily.csv（通过 snapshot 模块）
     from core.snapshot import create_daily_snapshot
+    from data.nav_reader import get_latest_nav
     
     products = load_products()
+    
+    # 构建 nav_records 和 products_map
+    nav_records = {}
+    products_map = {}
+    products_order = []
+    category_map = {}
+    market_map = {}
+    
     for product in products:
-        try:
-            create_daily_snapshot(
-                project_root=project_root,
-                product_code=product['product_code'],
-                product_name=product['product_name'],
-                fetch_date=fetch_date
-            )
-        except Exception as e:
-            logger.warning(f"生成 {product['product_code']} 快照失败: {e}")
+        product_code = product['product_code']
+        product_name = product['product_name']
+        
+        products_map[product_code] = product_name
+        products_order.append(product_code)
+        category_map[product_code] = product.get('category', 'fund')
+        market_map[product_code] = product.get('market', 'cn')
+        
+        # 获取最新 NAV
+        latest_nav = get_latest_nav(product_code)
+        if latest_nav:
+            nav_date, nav = latest_nav
+            nav_records[product_code] = {
+                'nav_date': nav_date,
+                'nav': nav
+            }
+    
+    # 调用 create_daily_snapshot 生成快照
+    try:
+        create_daily_snapshot(
+            nav_records, 
+            {}, 
+            products_map,
+            products_order=products_order,
+            category_map=category_map,
+            market_map=market_map
+        )
+    except Exception as e:
+        logger.warning(f"生成快照失败: {e}")
     
     # 生成 daily_balance.csv
     from core.daily_balance import create_daily_balance_snapshot
@@ -366,3 +395,65 @@ def read_balance_by_group(group_keyword: str = None, project_root: Path = None) 
     
     return records
 
+
+def get_fund_account_balance(project_root: Path = None) -> Decimal:
+    """
+    计算基金账户的总余额（从交易记录累计）
+    
+    基金账户余额 = 买入增加 - 赎回减少
+    - buy: 增加（旧模式，shares × nav，表示买入的市值）
+    - buy_confirm: 增加（shares × nav）
+    - sell / sell_confirm: 减少（amount，赎回到账金额）
+    
+    只计算 category=fund 的产品
+    
+    Args:
+        project_root: 项目根目录（已忽略）
+    
+    Returns:
+        基金账户总余额
+    """
+    from data.db_connector import execute_query
+    from data.config_loader import load_products
+    
+    # 获取所有基金产品代码
+    products = load_products()
+    fund_codes = [p['product_code'] for p in products if p.get('category') == 'fund']
+    
+    if not fund_codes:
+        return Decimal('0')
+    
+    # 从交易记录计算
+    placeholders = ','.join(['%s'] * len(fund_codes))
+    sql = f"""
+        SELECT action, product_code, amount, shares, nav
+        FROM transactions
+        WHERE product_code IN ({placeholders})
+    """
+    
+    transactions = execute_query(sql, tuple(fund_codes))
+    
+    total = Decimal('0')
+    for tx in transactions:
+        action = (tx.get('action') or '').lower()
+        shares = tx.get('shares')
+        nav = tx.get('nav')
+        
+        if action in ['buy', 'buy_confirm']:
+            # 买入：增加（shares × nav，表示买入的市值）
+            if shares and nav:
+                try:
+                    calc_amount = Decimal(str(shares)) * Decimal(str(nav))
+                    total += calc_amount
+                except:
+                    pass
+        elif action in ['sell', 'sell_confirm']:
+            # 赎回：减少（amount，赎回到账金额）
+            amount = tx.get('amount')
+            if amount:
+                try:
+                    total -= Decimal(str(amount))
+                except:
+                    pass
+    
+    return total
