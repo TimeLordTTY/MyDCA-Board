@@ -30,7 +30,8 @@ class PortfolioSummary:
     """资产汇总"""
     fetch_date: str
     global_value: Decimal = Decimal('0')
-    global_pnl: Decimal = Decimal('0')
+    global_pnl: Decimal = Decimal('0')  # 生命周期总盈亏
+    unrealized_pnl: Decimal = Decimal('0')  # 浮动盈亏
     global_return: Decimal = Decimal('0')
     fund_total: Decimal = Decimal('0')
     wenlibao_total: Decimal = Decimal('0')
@@ -41,6 +42,7 @@ class PortfolioSummary:
             'fetch_date': self.fetch_date,
             'global_value': str(self.global_value),
             'global_pnl': str(self.global_pnl),
+            'unrealized_pnl': str(self.unrealized_pnl),
             'global_return': f"{self.global_return:.2%}" if self.global_return else '0%',
             'fund_total': str(self.fund_total),
             'wenlibao_total': str(self.wenlibao_total),
@@ -381,13 +383,13 @@ def read_latest_daily(project_root: Path = None) -> List[Dict]:
 
 def read_latest_daily_balance(project_root: Path = None) -> List[Dict]:
     """
-    读取最新 daily_balance 数据（从数据库）
+    读取最新 daily_balance 数据（从数据库），并动态添加收益字段
     
     Args:
         project_root: 项目根目录（已忽略，直接从数据库读取）
     
     Returns:
-        最新日期的 daily_balance 记录列表
+        最新日期的 daily_balance 记录列表（包含收益字段）
     """
     from data.db_connector import execute_query, execute_one
     
@@ -411,7 +413,56 @@ def read_latest_daily_balance(project_root: Path = None) -> List[Dict]:
         WHERE fetch_date = %s
         ORDER BY account_id
     """
-    return execute_query(sql, (latest_date,))
+    records = execute_query(sql, (latest_date,))
+    
+    # 动态添加收益字段：从 daily 数据计算
+    daily_records = read_latest_daily(project_root)
+    daily_map = {r.get('product_code'): r for r in daily_records}
+    
+    # 获取所有 fund_mapped 账户关联的产品代码（这些不计入基金总和）
+    fund_mapped_products = set()
+    for r in records:
+        if r.get('account_type') == 'fund_mapped':
+            linked = r.get('related_product')
+            if linked:
+                fund_mapped_products.add(linked)
+    
+    for record in records:
+        account_id = record.get('account_id', '')
+        account_type = record.get('account_type', '')
+        related_product = record.get('related_product', '')
+        
+        yesterday_pnl = Decimal('0')
+        unrealized_pnl = Decimal('0')
+        total_pnl = Decimal('0')
+        
+        # 基金账户：汇总所有基金产品的收益
+        if account_type == 'fund_total':
+            for code, info in daily_map.items():
+                if info.get('category') == 'fund' and code not in fund_mapped_products:
+                    yesterday_pnl += Decimal(str(info.get('pnl_day', '0') or '0'))
+                    unrealized_pnl += Decimal(str(info.get('unrealized_pnl', '0') or '0'))
+                    total_pnl += Decimal(str(info.get('total_pnl', '0') or '0'))
+        # 产品子账户（稳利宝）：从关联产品获取收益
+        elif account_type == 'product_sub' and related_product:
+            if related_product in daily_map:
+                product_info = daily_map[related_product]
+                yesterday_pnl = Decimal(str(product_info.get('pnl_day', '0') or '0'))
+                unrealized_pnl = Decimal(str(product_info.get('unrealized_pnl', '0') or '0'))
+                total_pnl = Decimal(str(product_info.get('total_pnl', '0') or '0'))
+        # 余利宝生活费：如果有关联产品，从产品获取收益
+        elif account_id == 'ylb_life' and related_product:
+            if related_product in daily_map:
+                product_info = daily_map[related_product]
+                yesterday_pnl = Decimal(str(product_info.get('pnl_day', '0') or '0'))
+                unrealized_pnl = Decimal(str(product_info.get('unrealized_pnl', '0') or '0'))
+                total_pnl = Decimal(str(product_info.get('total_pnl', '0') or '0'))
+        
+        record['yesterday_pnl'] = f"{yesterday_pnl:.2f}" if yesterday_pnl != 0 else ''
+        record['unrealized_pnl'] = f"{unrealized_pnl:.2f}" if unrealized_pnl != 0 else ''
+        record['total_pnl'] = f"{total_pnl:.2f}" if total_pnl != 0 else ''
+    
+    return records
 
 
 def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
@@ -489,27 +540,41 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
     # 计算全局汇总：余利宝合计 + 稳利宝产品市值 + 基金市值 + 小荷包金额
     summary.global_value = summary.ylb_total + summary.wenlibao_total + summary.fund_total + couple_pocket_value
     
-    # 计算全局盈亏（从 daily.csv 汇总）
+    # 计算两个盈亏指标
+    total_principal = Decimal('0')
+    total_cost = Decimal('0')
+    
     for record in daily_records:
+        product_code = record.get('product_code', '')
+        category = record.get('category', '')
+        
         try:
+            # 生命周期总盈亏（包含已赎回收益）
             total_pnl = Decimal(record.get('total_pnl', '0') or '0')
             summary.global_pnl += total_pnl
+            
+            # 浮动盈亏（仅当前持仓）
+            unrealized = Decimal(record.get('unrealized_pnl', '0') or '0')
+            principal = Decimal(record.get('principal_total', '0') or '0')
+            cost = Decimal(record.get('cost', '0') or '0')
+            
+            # 只计算基金和稳利宝的浮动盈亏（排除货币基金）
+            if product_code == 'FBAE41126E':
+                # 稳利宝
+                summary.unrealized_pnl += unrealized
+                total_principal += principal
+                total_cost += cost
+            elif product_code != '000686' and category == 'fund':
+                # 其他基金（排除货币基金）
+                summary.unrealized_pnl += unrealized
+                total_principal += principal
+                total_cost += cost
         except:
             pass
     
-    # 计算收益率
-    if summary.global_value > 0:
-        # 简化计算：使用汇总的 principal_total
-        total_principal = Decimal('0')
-        for record in daily_records:
-            try:
-                principal = Decimal(record.get('principal_total', '0') or '0')
-                total_principal += principal
-            except:
-                pass
-        
-        if total_principal > 0:
-            summary.global_return = summary.global_pnl / total_principal
+    # 计算收益率（使用生命周期总盈亏）
+    if total_principal > 0:
+        summary.global_return = summary.global_pnl / total_principal
     
     return summary
 

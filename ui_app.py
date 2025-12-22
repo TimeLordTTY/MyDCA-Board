@@ -467,7 +467,7 @@ def page_dashboard():
     # 资产总览
     summary = get_portfolio_summary()
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric(
@@ -476,6 +476,13 @@ def page_dashboard():
         )
     
     with col2:
+        unrealized_delta = f"¥ {format_decimal(summary.unrealized_pnl)}"
+        st.metric(
+            label="📊 浮动盈亏",
+            value=unrealized_delta
+        )
+    
+    with col3:
         pnl_delta = f"¥ {format_decimal(summary.global_pnl)}"
         st.metric(
             label="📈 总盈亏",
@@ -483,13 +490,13 @@ def page_dashboard():
             delta=format_percent(summary.global_return) if summary.global_return else None
         )
     
-    with col3:
+    with col4:
         st.metric(
             label="🏦 基金总值",
             value=f"¥ {format_decimal(summary.fund_total)}"
         )
     
-    with col4:
+    with col5:
         st.metric(
             label="📅 数据日期",
             value=summary.fetch_date
@@ -521,9 +528,9 @@ def page_dashboard():
         # 转换为 DataFrame
         df_balance = pd.DataFrame(balance_data)
         
-        # 选择显示的列（添加收益字段）
+        # 选择显示的列（添加收益字段，去掉备注）
         display_cols = ['account_name', 'account_type', 'balance', 'product_value', 'diff', 
-                       'yesterday_pnl', 'unrealized_pnl', 'total_pnl', 'note']
+                       'yesterday_pnl', 'unrealized_pnl', 'total_pnl']
         display_cols = [c for c in display_cols if c in df_balance.columns]
         
         # 重命名列
@@ -535,8 +542,7 @@ def page_dashboard():
             'diff': '差异',
             'yesterday_pnl': '昨日收益',
             'unrealized_pnl': '持有收益',
-            'total_pnl': '累计收益',
-            'note': '备注'
+            'total_pnl': '累计收益'
         }
         
         df_display = df_balance[display_cols].copy()
