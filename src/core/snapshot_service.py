@@ -127,6 +127,163 @@ def build_all_snapshots(fetch_date: str = None, project_root: Path = None) -> in
     return count
 
 
+def auto_generate_couple_pocket_income(fetch_date: str = None) -> int:
+    """
+    自动生成情侣小荷包(000686)的利息收益记录
+    
+    逻辑：
+    1. 查询 000686 最近一次 dividend 记录的日期
+    2. 从该日期的下一天到今天，每天生成一笔收益记录
+    3. 收益金额 = 持有份额 × 万份收益 / 10000
+    4. 同时生成 transactions 表的 dividend 记录和 ledger 表的利息收益记录
+    
+    Args:
+        fetch_date: 截止日期（默认今天）
+    
+    Returns:
+        生成的记录数
+    """
+    from datetime import datetime, timedelta
+    from decimal import Decimal
+    from data.data_store import load_transactions, append_transaction, append_ledger
+    from adaptor.fund_client import query_nav_history
+    from core.holdings_calculator import HoldingsCalculator
+    
+    if fetch_date is None:
+        fetch_date = date.today().strftime('%Y-%m-%d')
+    
+    product_code = '000686'
+    couple_pocket_account = 'couple_pocket'
+    
+    # 1. 查询最近一次 000686 的 dividend 记录日期
+    all_transactions = load_transactions()
+    dividend_records = [
+        t for t in all_transactions 
+        if t.get('product_code') == product_code and t.get('action') == 'dividend'
+    ]
+    
+    if dividend_records:
+        # 按日期排序，取最新的
+        dividend_records.sort(key=lambda x: x.get('date', ''), reverse=True)
+        last_dividend_date = dividend_records[0].get('date', '')
+        # 从下一天开始
+        start_date = (datetime.strptime(last_dividend_date, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+    else:
+        # 如果没有 dividend 记录，从最早的交易记录开始
+        product_transactions = [t for t in all_transactions if t.get('product_code') == product_code]
+        if product_transactions:
+            product_transactions.sort(key=lambda x: x.get('date', ''))
+            start_date = product_transactions[0].get('date', fetch_date)
+        else:
+            # 没有任何交易记录，不需要生成
+            return 0
+    
+    # 如果开始日期已经超过截止日期，不需要生成
+    if start_date > fetch_date:
+        return 0
+    
+    # 2. 获取日期范围内的历史净值数据（包含万份收益）
+    try:
+        nav_history = query_nav_history(product_code, start_date, fetch_date)
+    except Exception as e:
+        logger.warning(f"获取 {product_code} 历史净值失败: {e}")
+        return 0
+    
+    if not nav_history:
+        return 0
+    
+    # 3. 获取持仓份额计算器
+    calc = HoldingsCalculator()
+    
+    # 4. 为每一天生成收益记录
+    generated_count = 0
+    for nav_record in nav_history:
+        nav_date = nav_record.get('nav_date', '')
+        if nav_date < start_date or nav_date > fetch_date:
+            continue
+        
+        # 检查是否已经存在该日期的 dividend 记录
+        existing = [
+            t for t in all_transactions 
+            if t.get('product_code') == product_code 
+            and t.get('action') == 'dividend' 
+            and t.get('date') == nav_date
+        ]
+        if existing:
+            continue  # 跳过已存在的记录
+        
+        # 获取该日期前一天的持仓份额（因为收益是基于前一天的份额）
+        prev_date = (datetime.strptime(nav_date, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+        holdings = calc.get_holdings_as_of(prev_date)
+        product_holding = holdings.get(product_code, {})
+        shares = product_holding.get('shares', Decimal('0'))
+        
+        if shares <= 0:
+            continue  # 没有持仓，不生成收益
+        
+        # 计算收益：货币基金的 nav 字段实际返回的是万份收益（单位：元）
+        # 例如：nav=0.3250 表示每万份每天收益 0.3250 元
+        daily_income_per_10k_str = nav_record.get('nav', '0')
+        try:
+            daily_income_per_10k = Decimal(daily_income_per_10k_str)
+        except:
+            daily_income_per_10k = Decimal('0')
+        
+        if daily_income_per_10k <= 0:
+            continue
+        
+        # 万份收益计算：收益 = 份额 × 万份收益 / 10000
+        income_amount = shares * daily_income_per_10k / Decimal('10000')
+        income_amount = income_amount.quantize(Decimal('0.0001'))  # 保留4位小数
+        
+        if income_amount <= 0:
+            continue
+        
+        # 事件时间固定为 03:00:00
+        event_time = f"{nav_date} 03:00:00"
+        
+        # 5. 生成 dividend 交易记录
+        tx_record = {
+            'date': nav_date,
+            'product_code': product_code,
+            'action': 'dividend',
+            'amount': '',
+            'shares': str(income_amount),  # 货币基金分红以份额形式增加
+            'fee': '0',
+            'nav': '1',
+            'nav_date': nav_date,
+            'order_id': '',
+            'note': f'货币基金每日收益',
+            'created_at': event_time
+        }
+        append_transaction(tx_record)
+        
+        # 6. 生成 ledger 利息收益记录
+        ledger_record = {
+            'event_time': event_time,
+            'entry_type': 'income',
+            'amount': str(income_amount),
+            'category_l1': '理财盈利',
+            'category_l2': '利息收益',
+            'account_from': '',
+            'account_to': couple_pocket_account,
+            'discount': '0',
+            'reimbursable': '0',
+            'note': f'小荷包利息收益 ({nav_date})'
+        }
+        append_ledger(ledger_record)
+        
+        generated_count += 1
+        
+        # 更新 all_transactions 以便后续检查
+        all_transactions.append(tx_record)
+    
+    if generated_count > 0:
+        logger.info(f"自动生成 {product_code} 利息收益记录 {generated_count} 条")
+    
+    return generated_count
+
+
 def collect_nav_and_build_snapshots(fetch_date: str = None, silent: bool = False) -> SyncResult:
     """
     采集净值并生成快照（一键日更）
@@ -160,6 +317,14 @@ def collect_nav_and_build_snapshots(fetch_date: str = None, silent: bool = False
         # 采集净值
         from core.nav_collector import collect_and_store
         collect_and_store()
+        
+        # 自动生成小荷包利息收益（在生成快照之前）
+        try:
+            income_count = auto_generate_couple_pocket_income(fetch_date)
+            if income_count > 0:
+                logger.info(f"自动生成小荷包利息收益 {income_count} 条")
+        except Exception as e:
+            logger.warning(f"自动生成小荷包利息收益失败: {e}")
         
         # 生成快照
         result.balance_records = build_all_snapshots(fetch_date, project_root)

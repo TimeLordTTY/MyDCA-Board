@@ -15,8 +15,9 @@ from .config_loader import (
 )
 from .data_store import (
     load_transactions, append_transaction, transaction_exists,
+    delete_transaction,
     load_orders, append_order, get_pending_orders, update_order_status, update_order,
-    load_ledger, append_ledger,
+    load_ledger, append_ledger, delete_ledger,
     generate_order_id, format_decimal, parse_decimal
 )
 from .nav_reader import get_nav, get_latest_nav

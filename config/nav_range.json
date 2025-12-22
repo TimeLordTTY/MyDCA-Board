@@ -37,16 +37,16 @@
     "161125": {
         "product_name": "易方达标普500指数(QDII-LOF)A",
         "earliest_nav_date": "2016-12-02",
-        "latest_nav_date": "2025-12-18",
-        "record_count": 2183,
-        "updated_at": "2025-12-19 21:55:11"
+        "latest_nav_date": "2025-12-19",
+        "record_count": 2184,
+        "updated_at": "2025-12-22 16:57:14"
     },
     "161130": {
         "product_name": "易方达纳斯达克100ETF联接(QDII-LOF)A",
         "earliest_nav_date": "2017-06-23",
-        "latest_nav_date": "2025-12-18",
-        "record_count": 2046,
-        "updated_at": "2025-12-19 21:55:12"
+        "latest_nav_date": "2025-12-19",
+        "record_count": 2047,
+        "updated_at": "2025-12-22 16:57:14"
     },
     "013308": {
         "product_name": "易方达恒生科技ETF联接(QDII)A",

@@ -157,6 +157,13 @@ def update_transaction(record_id: int, record: Dict) -> bool:
     return affected > 0
 
 
+def delete_transaction(record_id: int) -> bool:
+    """删除交易记录"""
+    sql = "DELETE FROM transactions WHERE id = %s"
+    affected = execute_update(sql, (record_id,))
+    return affected > 0
+
+
 # ============================================================
 # orders - 理财任务队列
 # ============================================================
@@ -428,6 +435,13 @@ def update_ledger(record_id: int, record: Dict) -> bool:
         record_id
     )
     affected = execute_update(sql, params)
+    return affected > 0
+
+
+def delete_ledger(record_id: int) -> bool:
+    """删除账本记录"""
+    sql = "DELETE FROM ledger WHERE id = %s"
+    affected = execute_update(sql, (record_id,))
     return affected > 0
 
 

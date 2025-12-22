@@ -195,13 +195,17 @@ ACCOUNT_NAME_MAP = {
 
 # 理财操作类型映射（统一显示）
 ACTION_DISPLAY_MAP = {
-    'buy_debit': '买入',
+    'buy_debit': '买入待确认',
     'buy_confirm': '买入确认', 
     'buy': '买入',
     'sell': '卖出',
     'sell_confirm': '卖出确认',
+    'redeem_request': '卖出待确认',
     'dividend': '分红'
 }
+
+# 待确认类型（白色显示，不带+/-号）
+PENDING_ACTIONS = ['buy_debit', 'redeem_request']
 
 
 def get_account_name(account_id: str) -> str:
@@ -275,11 +279,18 @@ def merge_account_column(record):
         return record.get('account_to', '') or ''
 
 
-def format_colored_amount(amount, is_expense: bool) -> str:
-    """格式化带符号的金额"""
+def format_colored_amount(amount, is_expense: bool, is_pending: bool = False) -> str:
+    """格式化带符号的金额
+    Args:
+        amount: 金额
+        is_expense: 是否为支出（红色）
+        is_pending: 是否为待确认（白色，无+/-号）
+    """
     try:
         val = float(amount) if amount else 0
-        if is_expense:
+        if is_pending:
+            return f"{abs(val):.2f}"  # 待确认：无+/-号
+        elif is_expense:
             return f"-{abs(val):.2f}"
         else:
             return f"+{abs(val):.2f}"
@@ -287,10 +298,12 @@ def format_colored_amount(amount, is_expense: bool) -> str:
         return str(amount) if amount else ''
 
 
-def color_amount(val):
-    """为金额列着色：负数红色，正数绿色"""
+def color_amount(val, is_pending: bool = False):
+    """为金额列着色：负数红色，正数绿色，待确认白色"""
     if pd.isna(val) or val == '':
         return ''
+    if is_pending:
+        return ''  # 待确认：默认颜色（白色）
     val_str = str(val)
     if val_str.startswith('-'):
         return 'color: #dc3545'  # 红色
@@ -821,22 +834,47 @@ def page_ledger():
                 
                 edit_note = st.text_input("备注", value=selected_record.get('note', ''), key="ledger_edit_note")
             
-            if st.button("💾 保存修改", type="primary", key="save_ledger_edit"):
-                updated_record = {
-                    'event_time': edit_time,
-                    'entry_type': entry_type,
-                    'amount': str(edit_amount),
-                    'category_l1': edit_cat_l1,
-                    'category_l2': edit_cat_l2 if edit_cat_l2 else '',
-                    'account_from': edit_account_from,
-                    'account_to': edit_account_to,
-                    'note': edit_note
-                }
-                if update_ledger_entry(selected_record['id'], updated_record):
-                    st.success("✅ 保存成功！")
-                    st.rerun()
-                else:
-                    st.error("❌ 保存失败")
+            col_save, col_delete = st.columns([3, 1])
+            
+            with col_save:
+                if st.button("💾 保存修改", type="primary", key="save_ledger_edit", use_container_width=True):
+                    updated_record = {
+                        'event_time': edit_time,
+                        'entry_type': entry_type,
+                        'amount': str(edit_amount),
+                        'category_l1': edit_cat_l1,
+                        'category_l2': edit_cat_l2 if edit_cat_l2 else '',
+                        'account_from': edit_account_from,
+                        'account_to': edit_account_to,
+                        'note': edit_note
+                    }
+                    if update_ledger_entry(selected_record['id'], updated_record):
+                        st.success("✅ 保存成功！")
+                        st.rerun()
+                    else:
+                        st.error("❌ 保存失败")
+            
+            with col_delete:
+                if st.button("🗑️ 删除", type="secondary", key="delete_ledger_edit", use_container_width=True):
+                    st.session_state['pending_delete_ledger_id'] = selected_record['id']
+            
+            # 删除确认
+            if st.session_state.get('pending_delete_ledger_id') == selected_record['id']:
+                st.warning(f"⚠️ 确定要删除这条记录吗？（{selected_record.get('event_time', '')} - {edit_cat_l1} - ¥{edit_amount}）")
+                col_confirm, col_cancel = st.columns(2)
+                with col_confirm:
+                    if st.button("✅ 确认删除", type="primary", key="do_delete_ledger"):
+                        from data.data_store import delete_ledger
+                        if delete_ledger(selected_record['id']):
+                            st.success("✅ 删除成功！")
+                            st.session_state.pop('pending_delete_ledger_id', None)
+                            st.rerun()
+                        else:
+                            st.error("❌ 删除失败")
+                with col_cancel:
+                    if st.button("❌ 取消", key="cancel_delete_ledger"):
+                        st.session_state.pop('pending_delete_ledger_id', None)
+                        st.rerun()
     else:
         st.info("暂无记录")
 
@@ -880,6 +918,10 @@ def page_invest():
                     st.info(f"📅 净值日期: {dates['nav_date']}")
                     st.info(f"📅 确认日期: {dates['confirm_date']}")
             
+            # 二级分类选择
+            buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
+            buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
+            
             # 请求时间（时分秒），默认当前时间
             buy_time = st.text_input(
                 "请求时间（HH:MM:SS）", 
@@ -913,6 +955,19 @@ def page_invest():
                         requested_at=requested_at,
                         note=buy_note or None
                     )
+                    
+                    # 同时在生活记账中添加一笔支出记录
+                    debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
+                    event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
+                    add_expense(
+                        account_from=debit_account,
+                        amount=Decimal(str(buy_amount)),
+                        category_l1="理财投资",
+                        category_l2=buy_category_l2,
+                        event_time=event_time,
+                        note=f"{product['name']} (订单号: {order_id})"
+                    )
+                    
                     st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
                     try:
                         collect_nav_and_build_snapshots(silent=True)
@@ -1022,6 +1077,22 @@ def page_invest():
                         note=history_note or None,
                         confirm_time=history_confirm_time  # 传递确认时间
                     )
+                    
+                    # 对于情侣小荷包(000686)的分红，自动添加利息收益记录
+                    if product['code'] == '000686' and history_action == 'dividend':
+                        # 货币基金分红按份额*净值计算金额
+                        dividend_nav = Decimal(str(history_nav)) if history_nav else Decimal('1')
+                        dividend_amount = Decimal(str(history_shares)) * dividend_nav
+                        event_time = f"{history_confirm_date} {history_confirm_time}"
+                        add_income(
+                            account_to='couple_pocket',  # 情侣小荷包账户
+                            amount=dividend_amount,
+                            category_l1="理财盈利",
+                            category_l2="利息收益",
+                            event_time=event_time,
+                            note=f"货币基金利息: {product['name']}"
+                        )
+                    
                     st.success("✅ 历史交易已补录！")
                     try:
                         collect_nav_and_build_snapshots(silent=True)
@@ -1084,7 +1155,8 @@ def page_invest():
         raw_records = []
         for r in recent_tx:
             action = r.get('action', '')
-            is_expense = action in expense_actions  # 红色（支出/扣款）
+            is_pending = action in PENDING_ACTIONS  # 待确认类型（白色，无+/-号）
+            is_expense = action in expense_actions and not is_pending  # 红色（支出/扣款），但待确认不算
             amount = r.get('amount', '') or ''
             product_code = r.get('product_code', '')
             shares = r.get('shares', '')
@@ -1114,12 +1186,13 @@ def page_invest():
                 '时间': time_str,
                 '产品': product_code,
                 '类型': ACTION_DISPLAY_MAP.get(action, action),
-                '金额': format_colored_amount(amount, is_expense),
+                '金额': format_colored_amount(amount, is_expense, is_pending),
                 '份额': shares,
                 '产品份额': f"{product_shares_after:.2f}",  # 该产品在此交易后的累计份额
                 '备注': r.get('note', ''),
                 '_account': account,
-                '_action': action
+                '_action': action,
+                '_is_pending': is_pending
             })
         
         if rows:
@@ -1133,8 +1206,13 @@ def page_invest():
             
             display_cols = ['ID', '时间', '产品', '类型', '金额', '份额', '产品份额', '备注']
             
+            # 为金额列着色，待确认类型使用白色
+            def color_tx_amount(row):
+                is_pending = df_page.loc[row.name, '_is_pending'] if '_is_pending' in df_page.columns else False
+                return [color_amount(val, is_pending) if col == '金额' else '' for col, val in row.items()]
+            
             # 显示带颜色和行选择的表格（不显示原始索引列）
-            styled_df = df_page[display_cols].style.map(color_amount, subset=['金额'])
+            styled_df = df_page[display_cols].style.apply(color_tx_amount, axis=1)
             event = st.dataframe(
                 styled_df, 
                 use_container_width=True, 
@@ -1179,21 +1257,47 @@ def page_invest():
                     edit_nav = st.number_input("净值", value=float(selected_record.get('nav', 0) or 0), step=0.0001, format="%.4f", key="tx_edit_nav")
                     edit_note = st.text_input("备注", value=selected_record.get('note', '') or '', key="tx_edit_note")
                 
-                if st.button("💾 保存修改", type="primary", key="save_tx_edit"):
-                    updated_record = {
-                        'date': str(edit_date),
-                        'product_code': edit_product,
-                        'action': selected_record.get('action'),
-                        'amount': str(edit_amount) if edit_amount else None,
-                        'shares': str(edit_shares) if edit_shares else None,
-                        'nav': str(edit_nav) if edit_nav else None,
-                        'note': edit_note
-                    }
-                    if update_transaction_entry(selected_record['id'], updated_record):
-                        st.success("✅ 保存成功！")
-                        st.rerun()
-                    else:
-                        st.error("❌ 保存失败")
+                col_save, col_delete = st.columns([3, 1])
+                
+                with col_save:
+                    if st.button("💾 保存修改", type="primary", key="save_tx_edit", use_container_width=True):
+                        updated_record = {
+                            'date': str(edit_date),
+                            'product_code': edit_product,
+                            'action': selected_record.get('action'),
+                            'amount': str(edit_amount) if edit_amount else None,
+                            'shares': str(edit_shares) if edit_shares else None,
+                            'nav': str(edit_nav) if edit_nav else None,
+                            'note': edit_note
+                        }
+                        if update_transaction_entry(selected_record['id'], updated_record):
+                            st.success("✅ 保存成功！")
+                            st.rerun()
+                        else:
+                            st.error("❌ 保存失败")
+                
+                with col_delete:
+                    if st.button("🗑️ 删除", type="secondary", key="delete_tx_edit", use_container_width=True):
+                        st.session_state['pending_delete_tx_id'] = selected_record['id']
+                
+                # 删除确认
+                if st.session_state.get('pending_delete_tx_id') == selected_record['id']:
+                    action_display = ACTION_DISPLAY_MAP.get(selected_record.get('action', ''), selected_record.get('action', ''))
+                    st.warning(f"⚠️ 确定要删除这条记录吗？（{selected_record.get('date', '')} - {action_display} - {edit_product}）")
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        if st.button("✅ 确认删除", type="primary", key="do_delete_tx"):
+                            from data.data_store import delete_transaction
+                            if delete_transaction(selected_record['id']):
+                                st.success("✅ 删除成功！")
+                                st.session_state.pop('pending_delete_tx_id', None)
+                                st.rerun()
+                            else:
+                                st.error("❌ 删除失败")
+                    with col_cancel:
+                        if st.button("❌ 取消", key="cancel_delete_tx"):
+                            st.session_state.pop('pending_delete_tx_id', None)
+                            st.rerun()
         else:
             st.info("暂无匹配的理财记录")
     else:
@@ -1403,10 +1507,10 @@ def page_orders():
                             pass
                         
                         st.rerun()
-                            
+                        
                     except Exception as e:
                         st.error(f"❌ 结算失败: {e}")
-        
+    
         with col2:
             if st.button("📋 结算全部到期", use_container_width=True):
                 with st.spinner("正在结算..."):
@@ -1430,7 +1534,7 @@ def page_orders():
                             pass
                         
                         st.rerun()
-                            
+                        
                     except Exception as e:
                         st.error(f"❌ 结算失败: {e}")
     
