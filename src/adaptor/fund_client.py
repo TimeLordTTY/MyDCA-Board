@@ -51,6 +51,20 @@ def _normalize_nav_record(raw_record, product_code, query_date):
     
     fetched_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:23]  # 毫秒精度
     
+    # 处理累计净值：货币基金的 ljjz 可能是百分比（如 '1.1560%'），需要过滤
+    ljjz = raw_record.get('ljjz', '')
+    # 如果包含百分号或不是有效数字，则使用单位净值作为累计净值
+    try:
+        if '%' in str(ljjz):
+            total_nav = str(raw_record.get('dwjz', '0'))
+        else:
+            # 尝试转换为 Decimal 验证是否为有效数字
+            from decimal import Decimal, InvalidOperation
+            Decimal(str(ljjz))
+            total_nav = str(ljjz)
+    except (InvalidOperation, ValueError):
+        total_nav = str(raw_record.get('dwjz', '0'))
+    
     return {
         # 必需字段（统一小写命名）
         'product_code': product_code,
@@ -58,7 +72,7 @@ def _normalize_nav_record(raw_record, product_code, query_date):
         'nav': str(raw_record.get('dwjz', '0')),
         'fetched_at': fetched_at,
         # 扩展字段
-        'total_nav': str(raw_record.get('ljjz', raw_record.get('dwjz', '0'))),
+        'total_nav': total_nav,
         'income': '0',
         'weekly_rate': str(raw_record.get('jzzzl', '0')),
     }
