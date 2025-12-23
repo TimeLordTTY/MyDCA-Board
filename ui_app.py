@@ -15,7 +15,7 @@
 import sys
 from pathlib import Path
 from datetime import datetime, date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 import streamlit as st
 import pandas as pd
@@ -562,12 +562,33 @@ def page_dashboard():
     if daily_data:
         df_daily = pd.DataFrame(daily_data)
         
-        # 选择显示的列
-        display_cols = ['product_name', 'nav', 'shares', 'value', 'total_pnl', 'real_return']
+        # 统一数值精度：份额、市值、盈亏都按两位小数计算并展示
+        def _round_2(value: Any) -> Decimal:
+            try:
+                return Decimal(str(value or "0")).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+            except Exception:
+                return Decimal("0.00")
+        
+        def _recalc_row(row: pd.Series) -> pd.Series:
+            nav = _round_2(row.get("nav"))
+            shares = _round_2(row.get("shares"))
+            value = (nav * shares).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+            total_pnl = _round_2(row.get("total_pnl"))
+            
+            row["shares"] = f"{shares:.2f}"
+            row["value"] = f"{value:.2f}"
+            row["total_pnl"] = f"{total_pnl:.2f}"
+            return row
+        
+        df_daily = df_daily.apply(_recalc_row, axis=1)
+        
+        # 选择显示的列（增加净值日期）
+        display_cols = ['product_name', 'nav_date', 'nav', 'shares', 'value', 'total_pnl', 'real_return']
         display_cols = [c for c in display_cols if c in df_daily.columns]
         
         col_names = {
             'product_name': '产品名称',
+            'nav_date': '净值日期',
             'nav': '净值',
             'shares': '份额',
             'value': '市值',
