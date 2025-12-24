@@ -87,6 +87,153 @@ date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
 
 代码应复用 buy_debit/buy_confirm 的同一套计算路径，而不是写两套分叉逻辑。
 
+### 1.7 交易动作对状态变量的影响（P0-2 核算规则）
+
+每个资产维度维护以下状态变量：
+
+| 状态变量 | 定义 | 精度 |
+|---------|------|------|
+| shares | 当前份额 | DECIMAL(20,6) |
+| cost | 持仓成本（仅针对持仓部分，净申购额口径） | DECIMAL(20,2) |
+| cash_in_transit | 在途资金（扣款未确认/赎回未到账） | DECIMAL(20,2) |
+| realized_pnl | 已实现盈亏（卖出确认时结转） | DECIMAL(20,2) |
+| fees_total | 累计费用（可选，若已有字段则复用） | DECIMAL(20,2) |
+| principal_total | 累计投入本金（扣款时增加，卖出不减少） | DECIMAL(20,2) |
+
+#### 1.7.1 buy_debit（买入扣款）
+
+**含义**：钱已从资金账户扣除，但份额尚未确认到账。
+
+**状态变化**：
+- `principal_total += amount`（扣款金额，含手续费）
+- `cash_in_transit += (amount - fee)`（净申购额进入在途）
+- `fees_total += fee`（累计费用增加）
+- `shares` 不变
+- `cost` 不变
+
+**硬约束**：
+- 必须有 `order_id`
+- `amount > 0`
+- `fee >= 0`
+- `amount - fee > 0`（净申购额必须为正）
+
+#### 1.7.2 buy_confirm（买入确认）
+
+**含义**：份额正式到账，成本入账。
+
+**状态变化**：
+- `shares += confirmed_shares`（份额增加）
+- `cost += net_amount`（净申购额入账，`net_amount = 对应 buy_debit 的 amount - fee`）
+- `cash_in_transit -= net_amount`（在途资金减少）
+- `principal_total` 不变（已在 buy_debit 时计入）
+- `fees_total` 不变（已在 buy_debit 时计入）
+
+**硬约束**：
+- 必须有 `order_id`，且必须能找到对应的 `buy_debit`
+- `shares > 0`
+- `fee = 0`（申购费已在 buy_debit 时扣除）
+- 必须提供 `nav` 和 `nav_date`
+
+**成本口径统一规则（A）**：
+- `cost` 永远使用"净申购额"（`amount - fee`）入账
+- 严禁同一系统里一部分用毛额、一部分用净额
+
+#### 1.7.3 buy（兼容/原子模式）
+
+**含义**：同日扣款+确认的原子组合。
+
+**状态变化**：
+- 等价于先执行 `buy_debit`，再执行 `buy_confirm`（同日）
+- 最终结果：`shares += shares`，`cost += (amount - fee)`，`principal_total += amount`
+- `cash_in_transit` 不变（当天确认，不产生在途）
+
+**硬约束**：
+- 必须提供 `amount`、`shares`、`fee`、`nav`、`nav_date`
+- 必须遵循净申购额口径
+
+#### 1.7.4 sell_request（赎回发起）
+
+**含义**：赎回/卖出发起（如系统已有 orders 状态机）。
+
+**状态变化**：
+- 不改变任何状态变量（仅记录订单）
+- 等待 `sell_confirm` 时再处理
+
+#### 1.7.5 sell_confirm（卖出确认）
+
+**含义**：卖出确认，份额减少，成本按比例减少，已实现盈亏结转，现金回笼。
+
+**状态变化**：
+- `shares -= sold_shares`（份额减少）
+- `sold_cost = cost * (sold_shares / prev_shares)`（按比例计算卖出成本）
+- `cost -= sold_cost`（成本按比例减少）
+- `realized_pnl += (sell_amount_net - sold_cost - sell_fee - sell_tax)`（已实现盈亏）
+- `cash_in_transit` 不变（或根据系统设计，回笼现金进入目标账户/池）
+- `principal_total` 不变（卖出不减少累计投入本金）
+- `fees_total += sell_fee`（累计费用增加）
+
+**卖出成本结转规则（B）**：
+- 使用平均成本法：`sold_cost = avg_cost * sold_shares`
+- 其中 `avg_cost = cost / shares`（卖出前的平均成本）
+- `realized_pnl = sell_amount_net - sold_cost - sell_fee - sell_tax`
+
+**现金回笼闭环规则（C）**：
+- 卖出回笼的现金必须有归属（进入 `cash_pool`/目标账户/资金池）
+- 不能"凭空消失"导致总资产下降
+- 若系统暂时没有账户系统闭环，至少在产品维度保留 `cash_pool` 并写清楚它属于资产的一部分
+
+**硬约束**：
+- 必须有 `order_id`
+- `shares > 0`（卖出份额必须为正）
+- `shares <= prev_shares`（不能卖出超过持有份额）
+- `cost >= 0`（卖出后成本不能为负）
+- 必须提供 `nav`、`nav_date`、`amount`（到账净额）
+
+#### 1.7.6 dividend_cash（现金分红）
+
+**含义**：现金分红，不改份额，现金增加。
+
+**状态变化**：
+- `shares` 不变
+- `cost` 不变
+- `cash_in_transit` 或目标现金账户增加 `dividend_amount`
+- `principal_total` 不变
+- `realized_pnl` 不变（现金分红不计入已实现盈亏，属于收益分配）
+
+#### 1.7.7 dividend_reinvest（红利再投）
+
+**含义**：红利再投，份额增加，成本按净申购额入账。
+
+**状态变化**：
+- `shares += dividend_shares`（份额增加）
+- `cost += net_dividend_amount`（净分红额入账，若分红有税费则扣除）
+- `cash_in_transit` 不变（红利再投不涉及现金流动）
+- `principal_total` 不变（红利再投不增加本金）
+- `fees_total` 不变（红利再投通常无费用）
+
+**硬约束**：
+- `shares > 0`
+- 必须提供 `nav`、`nav_date`
+- 成本口径必须与 `buy_confirm` 一致（净额）
+
+#### 1.7.8 fee / tax / other_fee（费用拆分）
+
+**含义**：如系统拆分费用类型，必须说明归集口径。
+
+**状态变化**：
+- `fees_total += fee_amount`（累计费用增加）
+- 其他状态变量根据费用类型决定（如申购费在 `buy_debit` 时扣除，赎回费在 `sell_confirm` 时扣除）
+
+#### 1.7.9 硬约束汇总
+
+**D) order_id/订单状态硬约束**：
+- `buy_confirm` 必须能找到对应 `buy_debit`（有 `order_id`）或走明确的兼容分支
+- 兼容分支必须同时补齐本金/成本统计，不能吞导致收益率虚高
+
+**E) 不允许负份额/负成本**：
+- 任意时刻 `shares < 0` 或 `cost < 0` 必须抛错并提示"流水不一致"
+- 系统应在 `holdings_calculator` 和 `invariants` 中检查
+
 ---
 
 ## 2. orders.csv（清算任务队列）
@@ -280,9 +427,19 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
 **公式**：`pnl_day = prev_shares × (nav - prev_nav)`
 
 **说明**：
-- 不受当日扣款/确认/赎回影响
-- prev_day 指上一条同 product_code 的快照记录
-- 如果 nav_date 未推进或缺前日 nav，则 pnl_day = 0
+- 不受当日扣款/确认/赎回影响（必须剔除资金流）
+- `prev_shares` 和 `prev_nav` 来自上一交易日快照
+- 若缺失上一交易日快照，则 `pnl_day = 0`，并标记 `data_status = 'missing'`
+- 若当天无净值/行情，可延用上一交易日价格并标记 `data_status = 'carried_forward'`（不得默默当0）
+
+**缺数据兜底规则**：
+- 交易日判断：节假日/周末不生成交易快照或标 `data_status = 'holiday'`
+- 若当天无净值/行情：可延用上一交易日价格并标记 `data_status = 'carried_forward'`（不得默默当0）
+- `data_status` 枚举：`ok`（正常）、`carried_forward`（延用前日价格）、`missing`（缺数据）、`holiday`（节假日）
+
+**关键特性**：
+- 资金流入日不把"投入金额"算成当日收益
+- 例如：D1 投入 1000 元，D2 净值上涨 1%，`pnl_day` 应基于 D1 的份额计算，而不是把 1000 元算成收益
 
 ---
 

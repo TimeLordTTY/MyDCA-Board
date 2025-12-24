@@ -431,6 +431,22 @@ def format_percent(value):
 def page_dashboard():
     st.markdown('<p class="main-header">📊 Dashboard</p>', unsafe_allow_html=True)
     
+    # P0-6: 口径说明
+    with st.expander("ℹ️ 系统口径说明", expanded=False):
+        st.info("""
+        **系统以交易流水+净值/行情为唯一真值；平台显示可能因舍入/口径存在差异。**
+        
+        **精度规范**：
+        - 份额 (shares): 保留 6 位小数
+        - 金额 (amount/cost/value/pnl/fee): 保留 2 位小数
+        - 净值 (nav): 保留 4 位小数
+        
+        **计算口径**：
+        - 成本使用"净申购额"口径（amount - fee）
+        - 日变动 (pnl_day) 仅反映市场波动，剔除资金流影响
+        - 总盈亏 (total_pnl) = 总资产 + 累计赎回 - 累计投入本金
+        """)
+    
     # 操作按钮区
     col1, col2, col3, col4 = st.columns(4)
     
@@ -612,13 +628,18 @@ def page_dashboard():
                 except:
                     value = Decimal("0.00")
             
-            # 显示时四舍五入到两位小数
-            shares_display = _round_2(row.get("shares"))
-            total_pnl = _round_2(row.get("total_pnl"))
+            # P0-6: 统一精度展示
+            # 份额保留6位，金额保留2位，净值保留4位
+            from src.utils.decimal_utils import format_shares, format_money, format_nav
             
-            row["shares"] = f"{shares_display:.2f}"
-            row["value"] = f"{value:.2f}"
-            row["total_pnl"] = f"{total_pnl:.2f}"
+            shares_display = format_shares(row.get("shares"), places=6)
+            nav_display = format_nav(row.get("nav"), places=4)
+            total_pnl = format_money(row.get("total_pnl"), places=2)
+            
+            row["shares"] = shares_display
+            row["nav"] = nav_display
+            row["value"] = format_money(value, places=2)
+            row["total_pnl"] = total_pnl
             return row
         
         df_daily = df_daily.apply(_recalc_row, axis=1)

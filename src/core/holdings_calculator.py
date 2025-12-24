@@ -25,38 +25,22 @@ CSV 格式 (data/transactions.csv):
 import csv
 import json
 from pathlib import Path
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from datetime import datetime
 import logging
 from typing import Tuple, Optional, List, Dict
+
+from utils.decimal_utils import to_dec, q_money, q_shares, q_nav
 
 logger = logging.getLogger(__name__)
 
 
 def safe_decimal(value, default=Decimal('0')) -> Decimal:
     """
-    安全地将值转换为Decimal
+    安全地将值转换为Decimal（兼容旧 API，内部使用 to_dec）
     支持：None、空字符串、'-'、带逗号的数字、普通数字
     """
-    if value is None:
-        return default
-    if isinstance(value, Decimal):
-        return value
-    if isinstance(value, (int, float)):
-        return Decimal(str(value))
-    
-    s = str(value).strip()
-    if s == '' or s == '-':
-        return default
-    
-    # 移除千分位逗号
-    s = s.replace(',', '')
-    
-    try:
-        return Decimal(s)
-    except Exception as e:
-        logger.warning(f"Decimal 解析失败: '{value}' -> 使用默认值 {default}")
-        return default
+    return to_dec(value, default)
 
 
 def normalize_action(action: str) -> str:

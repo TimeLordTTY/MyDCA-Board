@@ -41,6 +41,7 @@ import logging
 
 from core.holdings_calculator import HoldingsCalculator, calc_position_incremental, has_transactions
 from data.db_connector import execute_query, execute_one, execute_insert, execute_many
+from utils.decimal_utils import to_dec, q_money, q_shares, q_nav, format_money, format_shares, format_nav
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +115,9 @@ def get_prev_snapshot(snapshot_path, product_code, before_fetch_date):
     if result:
         try:
             return {
-                'shares': Decimal(str(result.get('shares', '0') or '0')),
-                'nav': Decimal(str(result.get('nav', '0') or '0')),
-                'value': Decimal(str(result.get('value', '0') or '0'))
+                'shares': to_dec(result.get('shares', '0')),
+                'nav': to_dec(result.get('nav', '0')),
+                'value': to_dec(result.get('value', '0'))
             }
         except:
             pass
@@ -244,13 +245,22 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
             principal_total = Decimal('0')
             total_redemption = Decimal('0')
         
+        # 确保所有输入都是 Decimal
+        shares = to_dec(shares)
+        cost = to_dec(cost)
+        cash_in_transit = to_dec(cash_in_transit)
+        principal_total = to_dec(principal_total)
+        total_redemption = to_dec(total_redemption)
+        
         # 检查是否为 cash_like 产品（如货币基金）
         # 对于 cash_like 产品，NAV 显示的是万份收益，计算市值时使用 NAV=1
         market = market_map.get(product_code, 'cn')
         if market == 'cash_like':
             nav = Decimal('1')  # 货币基金按 1:1 计算市值
         else:
-            nav = Decimal(str(nav_record['nav']))
+            nav = q_nav(to_dec(nav_record['nav']))  # 净值保留4位
+        
+        # 计算市值（内部保留高精度，输出时再舍入）
         value = shares * nav
         
         # 计算总资产
@@ -281,35 +291,41 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
         
         # 计算 pnl_day（核心：只由净值变化贡献）
         # pnl_day = prev_shares * (nav_today - nav_prev)
+        # 必须剔除资金流影响，只反映市场波动
         prev_snapshot = get_prev_snapshot(snapshot_path, product_code, fetch_date)
+        data_status = 'ok'  # 默认状态正常
         if prev_snapshot is not None:
-            prev_shares = prev_snapshot['shares']
-            prev_nav = prev_snapshot['nav']
+            prev_shares = to_dec(prev_snapshot['shares'])
+            prev_nav = to_dec(prev_snapshot['nav'])
             pnl_day = prev_shares * (nav - prev_nav)
         else:
+            # 没有上一交易日快照，pnl_day = 0
             pnl_day = Decimal('0')
+            # 检查是否是因为节假日/周末（这里简化处理，实际可以结合交易日历）
+            data_status = 'missing'  # 标记为缺数据
         
-        # 构建新记录
+        # 构建新记录（输出时使用舍入函数）
         new_row = {
             'fetch_date': fetch_date,
             'product_code': product_code,
             'product_name': product_name,
             'category': category_map.get(product_code, 'fund'),
             'nav_date': nav_date,
-            'nav': str(nav),
-            'shares': f"{shares:.6f}",  # 份额精度6位（与数据库 DECIMAL(18,6) 匹配）
-            'value': f"{value:.2f}",
-            'pnl_day': f"{pnl_day:.2f}",
-            'cost': f"{cost:.2f}",
-            'unrealized_pnl': f"{unrealized_pnl:.2f}",
-            'return_rate': f"{return_rate:.2f}%",
-            'cash_in_transit': f"{cash_in_transit:.2f}",
-            'total_value': f"{total_value:.2f}",
-            'principal_total': f"{principal_total:.2f}",
-            'total_redemption': f"{total_redemption:.2f}",
-            'total_pnl': f"{total_pnl:.2f}",
-            'real_return': f"{real_return:.2f}%",
-            'fetched_at': fetched_at
+            'nav': format_nav(nav),  # 净值保留4位
+            'shares': format_shares(shares),  # 份额保留6位
+            'value': format_money(value),  # 金额保留2位
+            'pnl_day': format_money(pnl_day),  # 金额保留2位
+            'cost': format_money(cost),  # 金额保留2位
+            'unrealized_pnl': format_money(unrealized_pnl),  # 金额保留2位
+            'return_rate': f"{q_money(return_rate):.2f}%",  # 收益率保留2位
+            'cash_in_transit': format_money(cash_in_transit),  # 金额保留2位
+            'total_value': format_money(total_value),  # 金额保留2位
+            'principal_total': format_money(principal_total),  # 金额保留2位
+            'total_redemption': format_money(total_redemption),  # 金额保留2位
+            'total_pnl': format_money(total_pnl),  # 金额保留2位
+            'real_return': f"{q_money(real_return):.2f}%",  # 收益率保留2位
+            'fetched_at': fetched_at,
+            'data_status': data_status  # 数据状态（用于缺数据兜底）
         }
         
         # 检查是否已存在（同一采集日同一产品）
@@ -356,8 +372,8 @@ def _db_sync_daily_snapshots(snapshots_map, fetch_date):
         (fetch_date, product_code, product_name, category, nav_date, nav,
          shares, `value`, pnl_day, cost, unrealized_pnl, return_rate,
          cash_in_transit, total_value, principal_total, total_redemption,
-         total_pnl, real_return, fetched_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+         total_pnl, real_return, data_status, fetched_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             product_name = VALUES(product_name),
             category = VALUES(category),
@@ -375,6 +391,7 @@ def _db_sync_daily_snapshots(snapshots_map, fetch_date):
             total_redemption = VALUES(total_redemption),
             total_pnl = VALUES(total_pnl),
             real_return = VALUES(real_return),
+            data_status = VALUES(data_status),
             fetched_at = VALUES(fetched_at)
     """
     
@@ -403,6 +420,7 @@ def _db_sync_daily_snapshots(snapshots_map, fetch_date):
             row.get('total_redemption'),
             row.get('total_pnl'),
             real_return or None,
+            row.get('data_status', 'ok'),  # 默认 ok
             row.get('fetched_at')
         ))
     
