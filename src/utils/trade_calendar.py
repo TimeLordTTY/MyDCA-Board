@@ -135,3 +135,4 @@ def get_trade_day_or_next(d: Union[str, date, datetime]) -> date:
         return d
     return next_trade_day(d)
 
+
