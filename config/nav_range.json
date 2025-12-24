@@ -1,0 +1,86 @@
+{
+    "000307": {
+        "product_name": "易方达黄金ETF联接A",
+        "earliest_nav_date": "2016-05-26",
+        "latest_nav_date": "2025-12-24",
+        "record_count": 2337,
+        "updated_at": "2025-12-25 02:34:30"
+    },
+    "000686": {
+        "product_name": "建信嘉薪宝货币市场基金A类",
+        "earliest_nav_date": "2025-12-20",
+        "latest_nav_date": "2025-12-24",
+        "record_count": 5,
+        "updated_at": "2025-12-25 02:34:30"
+    },
+    "015299": {
+        "product_name": "华夏纳斯达克100ETF联接(QDII)A",
+        "earliest_nav_date": "2022-04-14",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 899,
+        "updated_at": "2025-12-25 02:34:30"
+    },
+    "016452": {
+        "product_name": "南方纳斯达克100指数(QDII)A",
+        "earliest_nav_date": "2022-11-29",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 720,
+        "updated_at": "2025-12-25 02:34:31"
+    },
+    "017641": {
+        "product_name": "摩根标普500指数(QDII)A",
+        "earliest_nav_date": "2023-04-06",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 644,
+        "updated_at": "2025-12-25 02:34:31"
+    },
+    "018043": {
+        "product_name": "天弘纳斯达克100指数(QDII)A",
+        "earliest_nav_date": "2023-04-11",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 656,
+        "updated_at": "2025-12-25 02:34:31"
+    },
+    "019172": {
+        "product_name": "摩根纳斯达克100指数(QDII)A",
+        "earliest_nav_date": "2023-09-25",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 537,
+        "updated_at": "2025-12-25 02:34:31"
+    },
+    "019767": {
+        "product_name": "景顺长城科创50指数增强A",
+        "earliest_nav_date": "2024-05-28",
+        "latest_nav_date": "2025-12-24",
+        "record_count": 363,
+        "updated_at": "2025-12-25 02:34:31"
+    },
+    "020602": {
+        "product_name": "易方达红利低波ETF联接A",
+        "earliest_nav_date": "2024-03-12",
+        "latest_nav_date": "2025-12-24",
+        "record_count": 436,
+        "updated_at": "2025-12-25 02:34:31"
+    },
+    "110020": {
+        "product_name": "易方达沪深300ETF联接A",
+        "earliest_nav_date": "2009-08-26",
+        "latest_nav_date": "2025-12-24",
+        "record_count": 3970,
+        "updated_at": "2025-12-25 02:34:32"
+    },
+    "161125": {
+        "product_name": "易方达标普500指数(QDII-LOF)A",
+        "earliest_nav_date": "2016-12-02",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 2186,
+        "updated_at": "2025-12-25 02:34:32"
+    },
+    "161130": {
+        "product_name": "易方达纳斯达克100ETF联接(QDII-LOF)A",
+        "earliest_nav_date": "2017-06-23",
+        "latest_nav_date": "2025-12-23",
+        "record_count": 2049,
+        "updated_at": "2025-12-25 02:34:32"
+    }
+}
