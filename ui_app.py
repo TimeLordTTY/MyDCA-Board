@@ -571,12 +571,20 @@ def page_dashboard():
                 return Decimal("0.00")
         
         def _recalc_row(row: pd.Series) -> pd.Series:
-            nav = _round_2(row.get("nav"))
-            shares = _round_2(row.get("shares"))
-            value = (nav * shares).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+            # 使用原始精度计算市值，避免先四舍五入导致的误差
+            try:
+                nav = Decimal(str(row.get("nav") or "0"))
+                shares = Decimal(str(row.get("shares") or "0"))
+                # 先计算市值，再四舍五入到两位小数
+                value = (nav * shares).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+            except Exception:
+                value = Decimal("0.00")
+            
+            # 显示时四舍五入到两位小数
+            shares_display = _round_2(row.get("shares"))
             total_pnl = _round_2(row.get("total_pnl"))
             
-            row["shares"] = f"{shares:.2f}"
+            row["shares"] = f"{shares_display:.2f}"
             row["value"] = f"{value:.2f}"
             row["total_pnl"] = f"{total_pnl:.2f}"
             return row
