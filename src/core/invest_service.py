@@ -402,9 +402,19 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 # 买入确认
                 amount = parse_decimal(order.get('amount', 0))
                 fee = parse_decimal(order.get('fee', 0))
+                
+                # 如果手续费为空或0，尝试从产品配置重新计算
+                if fee == 0:
+                    product = get_product(product_code)
+                    if product:
+                        buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
+                        if buy_fee_rate > 0:
+                            fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                
+                # 计算净申购金额（金额 - 手续费）
                 net_amount = amount - fee
                 
-                # 计算份额
+                # 计算份额：净申购金额 / 净值
                 shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
                 
                 # 写入 buy_confirm
@@ -564,9 +574,19 @@ def settle_single_order(
             # 买入确认
             amount = parse_decimal(order.get('amount', 0))
             fee = parse_decimal(order.get('fee', 0))
+            
+            # 如果手续费为空或0，尝试从产品配置重新计算
+            if fee == 0:
+                product = get_product(product_code)
+                if product:
+                    buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
+                    if buy_fee_rate > 0:
+                        fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            
+            # 计算净申购金额（金额 - 手续费）
             net_amount = amount - fee
             
-            # 计算份额
+            # 计算份额：净申购金额 / 净值
             shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
             
             # 写入 buy_confirm
@@ -686,7 +706,19 @@ def preview_settle(order_id: str) -> Dict:
     if order_type == 'buy_debit':
         amount = parse_decimal(order.get('amount', 0))
         fee = parse_decimal(order.get('fee', 0))
+        
+        # 如果手续费为空或0，尝试从产品配置重新计算
+        if fee == 0:
+            product = get_product(product_code)
+            if product:
+                buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
+                if buy_fee_rate > 0:
+                    fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        
+        # 计算净申购金额（金额 - 手续费）
         net_amount = amount - fee
+        
+        # 计算份额：净申购金额 / 净值
         shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
         
         return {
