@@ -78,19 +78,35 @@ def load_recent_transactions(n: int = 30) -> List[Dict]:
 
 
 def append_transaction(record: Dict) -> None:
-    """追加一条交易记录"""
+    """
+    追加一条交易记录
+    
+    自动关联 product_id：如果提供了 product_id 则使用，否则通过 product_code 查找
+    """
+    # 获取 product_id
+    product_id = record.get('product_id')
+    product_code = record.get('product_code')
+    
+    if not product_id and product_code:
+        # 通过 product_code 查找 product_id（优先场外，兼容旧数据）
+        from data.product_service import get_product_by_code
+        product = get_product_by_code(product_code, channel='OTC')
+        if product:
+            product_id = product.get('id')
+    
     # 如果有 created_at 字段，使用它；否则数据库自动设置
     created_at = record.get('created_at')
     
     if created_at:
         sql = """
             INSERT INTO transactions 
-            (`date`, product_code, action, amount, shares, fee, nav, nav_date, order_id, note, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (`date`, product_id, product_code, action, amount, shares, fee, nav, nav_date, order_id, note, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             record.get('date'),
-            record.get('product_code'),
+            product_id,
+            product_code,
             record.get('action'),
             record.get('amount') or None,
             record.get('shares') or None,
@@ -104,12 +120,13 @@ def append_transaction(record: Dict) -> None:
     else:
         sql = """
             INSERT INTO transactions 
-            (`date`, product_code, action, amount, shares, fee, nav, nav_date, order_id, note)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (`date`, product_id, product_code, action, amount, shares, fee, nav, nav_date, order_id, note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         params = (
             record.get('date'),
-            record.get('product_code'),
+            product_id,
+            product_code,
             record.get('action'),
             record.get('amount') or None,
             record.get('shares') or None,
@@ -216,17 +233,33 @@ def save_orders(orders: List[Dict]) -> None:
 
 
 def append_order(record: Dict) -> None:
-    """追加一条订单"""
+    """
+    追加一条订单
+    
+    自动关联 product_id：如果提供了 product_id 则使用，否则通过 product_code 查找
+    """
+    # 获取 product_id
+    product_id = record.get('product_id')
+    product_code = record.get('product_code')
+    
+    if not product_id and product_code:
+        # 通过 product_code 查找 product_id（优先场外，兼容旧数据）
+        from data.product_service import get_product_by_code
+        product = get_product_by_code(product_code, channel='OTC')
+        if product:
+            product_id = product.get('id')
+    
     sql = """
         INSERT INTO orders 
-        (order_id, product_code, order_type, amount, fee, shares,
+        (order_id, product_id, product_code, order_type, amount, fee, shares,
          requested_at, trade_date, nav_date, confirm_date,
          holding_days, sell_fee_rate, status, note)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """
     params = (
         record.get('order_id'),
-        record.get('product_code'),
+        product_id,
+        product_code,
         record.get('order_type'),
         record.get('amount') or None,
         record.get('fee') or None,

@@ -426,6 +426,227 @@ def format_percent(value):
 
 
 # ============================================================
+# 产品行情组件
+# ============================================================
+def render_product_quote():
+    """渲染产品行情组件（支持场内和场外）"""
+    from data.product_service import get_products
+    from core.market_quote_service import get_latest_realtime_quote, get_latest_qdii_premium, fetch_and_save_realtime_quote, fetch_and_save_qdii_premium
+    from data.nav_reader import get_latest_nav
+    from core.snapshot_service import read_latest_daily
+    from datetime import datetime
+    import time
+    
+    # 获取所有产品
+    all_products = get_products(is_active=True)
+    
+    if not all_products:
+        st.info("暂无产品，请先在产品管理中添加产品")
+        return
+    
+    # 产品选择
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        product_options = {p['id']: f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')} ({'场内' if p.get('channel') == 'EXCHANGE' else '场外'})" 
+                          for p in all_products}
+        selected_product_id = st.selectbox("选择产品", 
+                                         options=list(product_options.keys()),
+                                         format_func=lambda x: product_options[x],
+                                         key="product_quote_select")
+    
+    with col2:
+        auto_refresh = st.checkbox("🔄 自动刷新（交易时间每分钟）", value=False, key="auto_refresh_quote")
+    
+    if selected_product_id:
+        product = next((p for p in all_products if p['id'] == selected_product_id), None)
+        if not product:
+            return
+        
+        channel = product.get('channel', 'OTC')
+        product_code = product.get('code', '')
+        product_name = product.get('name') or product.get('product_name', '')
+        
+        # 自动刷新逻辑（交易时间段内每分钟）
+        if auto_refresh and channel == 'EXCHANGE':
+            now = datetime.now()
+            hour = now.hour
+            minute = now.minute
+            # 交易时间：9:00-11:30, 13:00-15:00（周一至周五）
+            is_trading_hours = (9 <= hour < 11) or (hour == 11 and minute <= 30) or (13 <= hour < 15)
+            is_weekday = now.weekday() < 5
+            
+            if is_trading_hours and is_weekday:
+                # 检查是否需要刷新（每分钟刷新一次）
+                last_refresh_key = f"last_quote_refresh_{selected_product_id}"
+                if last_refresh_key not in st.session_state:
+                    st.session_state[last_refresh_key] = None
+                
+                last_refresh = st.session_state[last_refresh_key]
+                should_refresh = False
+                
+                if last_refresh is None:
+                    should_refresh = True
+                else:
+                    time_diff = (now - last_refresh).total_seconds()
+                    if time_diff >= 60:  # 超过60秒，需要刷新
+                        should_refresh = True
+                
+                if should_refresh:
+                    try:
+                        fetch_and_save_realtime_quote(selected_product_id, product_code)
+                        if product.get('is_qdii'):
+                            fetch_and_save_qdii_premium(selected_product_id, product_code)
+                        st.session_state[last_refresh_key] = now
+                    except Exception as e:
+                        pass  # 静默失败，避免干扰用户
+                
+                # 使用 Streamlit 的自动刷新（每60秒）
+                time.sleep(60)
+                st.rerun()
+        
+        # 手动刷新按钮
+        if st.button("🔄 刷新行情", key="manual_refresh_quote"):
+            with st.spinner("正在获取最新行情..."):
+                try:
+                    if channel == 'EXCHANGE':
+                        fetch_and_save_realtime_quote(selected_product_id, product_code)
+                        if product.get('is_qdii'):
+                            fetch_and_save_qdii_premium(selected_product_id, product_code)
+                    else:
+                        # 场外产品触发净值采集
+                        from core.nav_collector import collect_and_store
+                        collect_and_store()
+                    st.success("✅ 行情已更新")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 刷新失败: {e}")
+        
+        st.divider()
+        
+        if channel == 'EXCHANGE':
+            # 场内产品：显示实时行情
+            _render_exchange_quote(product, selected_product_id)
+        else:
+            # 场外产品：显示净值行情
+            _render_otc_quote(product, product_code)
+        
+
+
+def _render_exchange_quote(product, product_id):
+    """渲染场内产品行情"""
+    from core.market_quote_service import get_latest_realtime_quote, get_latest_qdii_premium
+    from core.premium_brake import apply_premium_brake
+    
+    st.markdown(f"**{product.get('name') or product.get('product_name', '')}** ({product.get('code', '')}) - 场内实时行情")
+    
+    # 实时行情
+    latest_quote = get_latest_realtime_quote(product_id)
+    
+    if latest_quote:
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            price = float(latest_quote.get('price', 0))
+            st.metric("最新价", f"{price:.4f}")
+        with col2:
+            pct_chg_val = latest_quote.get('pct_chg')
+            if pct_chg_val is not None:
+                pct_chg = float(pct_chg_val) * 100
+                st.metric("涨跌幅", f"{pct_chg:.2f}%", delta=f"{pct_chg:.2f}%")
+            else:
+                st.metric("涨跌幅", "N/A")
+        with col3:
+            prev_close = float(latest_quote.get('prev_close', 0))
+            st.metric("昨收价", f"{prev_close:.4f}")
+        with col4:
+            quote_time = latest_quote.get('quote_time', '')
+            if isinstance(quote_time, str):
+                st.metric("行情时间", quote_time[:19] if len(quote_time) > 19 else quote_time)
+            else:
+                st.metric("行情时间", str(quote_time))
+        
+        # 成交量/成交额
+        col1, col2 = st.columns(2)
+        with col1:
+            volume = float(latest_quote.get('volume', 0))
+            st.metric("成交量", f"{volume:,.0f}")
+        with col2:
+            amount = float(latest_quote.get('amount', 0))
+            st.metric("成交额", f"{amount:,.2f}")
+    else:
+        st.warning("暂无实时行情数据，请点击刷新按钮获取")
+    
+    # QDII溢价率
+    if product.get('is_qdii'):
+        st.divider()
+        st.markdown("**💰 QDII溢价率**")
+        latest_premium = get_latest_qdii_premium(product_id)
+        
+        if latest_premium:
+            premium_rate = float(latest_premium.get('premium_rate', 0)) * 100
+            iopv = float(latest_premium.get('iopv', 0))
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("溢价率", f"{premium_rate:.2f}%")
+            with col2:
+                st.metric("IOPV", f"{iopv:.4f}")
+            with col3:
+                # 买入建议
+                from decimal import Decimal
+                brake_result = apply_premium_brake(Decimal('100'), Decimal(str(premium_rate / 100)))
+                if premium_rate <= 1:
+                    st.metric("买入建议", "✅ 正常买入", delta="100%")
+                elif premium_rate <= 2:
+                    st.metric("买入建议", "⚠️ 买入一半", delta="50%")
+                else:
+                    st.metric("买入建议", "❌ 暂停买入", delta="0%")
+        else:
+            st.info("暂无溢价率数据")
+
+
+def _render_otc_quote(product, product_code):
+    """渲染场外产品行情"""
+    from data.nav_reader import get_latest_nav
+    from core.snapshot_service import read_latest_daily
+    
+    st.markdown(f"**{product.get('name') or product.get('product_name', '')}** ({product_code}) - 净值行情")
+    
+    # 最新净值
+    nav_data = get_latest_nav(product_code)
+    if nav_data:
+        nav_date, nav = nav_data
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("最新净值", f"{float(nav):.4f}")
+        with col2:
+            st.metric("净值日期", nav_date)
+    else:
+        st.warning("暂无净值数据")
+    
+    # 持仓信息（从快照获取）
+    daily_data = read_latest_daily()
+    product_snapshot = next((d for d in daily_data if d.get('product_code') == product_code), None)
+    
+    if product_snapshot:
+        st.divider()
+        st.markdown("**📊 持仓信息**")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            shares = float(product_snapshot.get('shares', 0))
+            st.metric("持有份额", f"{shares:,.4f}")
+        with col2:
+            value = float(product_snapshot.get('value', 0))
+            st.metric("持仓市值", f"¥{value:,.2f}")
+        with col3:
+            cost = float(product_snapshot.get('cost', 0))
+            st.metric("持仓成本", f"¥{cost:,.2f}")
+        with col4:
+            unrealized_pnl = float(product_snapshot.get('unrealized_pnl', 0))
+            return_rate = float(product_snapshot.get('return_rate', 0)) * 100
+            st.metric("浮动盈亏", f"¥{unrealized_pnl:,.2f}", delta=f"{return_rate:.2f}%")
+
+
+# ============================================================
 # Page 1: Dashboard
 # ============================================================
 def page_dashboard():
@@ -568,6 +789,12 @@ def page_dashboard():
         st.dataframe(df_display, use_container_width=True, hide_index=True)
     else:
         st.info("暂无账户余额数据，请点击「一键日更」生成快照")
+    
+    st.divider()
+    
+    # 产品行情
+    st.subheader("📈 产品行情")
+    render_product_quote()
     
     st.divider()
     
@@ -1122,7 +1349,8 @@ def page_invest():
             if buy_product and buy_amount > 0:
                 product = product_dict[buy_product]
                 fee = calc_buy_fee(product['code'], Decimal(str(buy_amount)))
-                st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {product['buy_fee_rate']*100:.2f}%）")
+                buy_fee_rate = float(product.get('buy_fee_rate') or 0)
+                st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {buy_fee_rate*100:.2f}%）")
                 st.info(f"💡 净申购额: ¥{Decimal(str(buy_amount)) - fee:.2f}")
                 
                 buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee")
@@ -1920,6 +2148,457 @@ def page_orders():
 
 
 # ============================================================
+# 产品管理页面
+# ============================================================
+def page_product_management():
+    st.title("🏷️ 产品管理")
+    
+    from data.product_service import get_products, get_product_by_id, create_product, update_product, delete_product
+    
+    tab1, tab2 = st.tabs(["📋 产品列表", "➕ 新增产品"])
+    
+    with tab1:
+        st.subheader("产品列表")
+        
+        # 筛选选项
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            channel_filter = st.selectbox("渠道筛选", ["全部", "场内", "场外"], key="prod_channel")
+        with col2:
+            asset_type_filter = st.selectbox("资产类型", ["全部", "ETF", "LOF", "FUND", "MMF", "BANK_WM_NAV"], key="prod_asset")
+        with col3:
+            show_inactive = st.checkbox("显示已停用", key="prod_show_inactive")
+        
+        # 获取产品列表
+        channel = None if channel_filter == "全部" else ("EXCHANGE" if channel_filter == "场内" else "OTC")
+        asset_type = None if asset_type_filter == "全部" else asset_type_filter
+        products = get_products(channel=channel, asset_type=asset_type, is_active=not show_inactive)
+        
+        if products:
+            # 构建显示数据
+            display_data = []
+            for p in products:
+                display_data.append({
+                    'ID': p.get('id'),
+                    '代码': p.get('code', ''),
+                    '名称': p.get('name') or p.get('product_name', ''),
+                    '渠道': p.get('channel', 'OTC'),
+                    '市场': p.get('market', 'NA'),
+                    '类型': p.get('asset_type', 'FUND'),
+                    'QDII': '是' if p.get('is_qdii') else '否',
+                    '申购费率': f"{float(p.get('buy_fee_rate', 0)) * 100:.4f}%",
+                    '赎回费率': f"{float(p.get('sell_fee_rate', 0)) * 100:.4f}%",
+                    '状态': '启用' if p.get('is_active', 1) else '停用'
+                })
+            
+            df = pd.DataFrame(display_data)
+            
+            # 选择要编辑的产品（使用产品ID作为选项值，确保唯一性）
+            product_options = {p.get('id'): f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')}" for p in products}
+            selected_product_id = st.selectbox("选择产品进行编辑", 
+                                             options=list(product_options.keys()),
+                                             format_func=lambda x: product_options[x],
+                                             key="select_product_edit")
+            
+            if selected_product_id:
+                # 根据ID查找产品
+                product = next((p for p in products if p.get('id') == selected_product_id), None)
+                
+                if product:
+                    st.divider()
+                    st.subheader(f"编辑产品: {product.get('code', '')} - {product.get('name') or product.get('product_name', '')}")
+                    
+                    # 使用产品ID作为key的一部分，确保每个产品的输入框是独立的
+                    edit_key_suffix = f"_{selected_product_id}"
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        new_name = st.text_input("产品名称", 
+                                                value=product.get('name') or product.get('product_name', ''), 
+                                                key=f"edit_name{edit_key_suffix}")
+                        buy_fee_rate = float(product.get('buy_fee_rate') or 0) * 100
+                        new_buy_fee = st.number_input("申购费率 (%)", 
+                                                      value=buy_fee_rate, 
+                                                      min_value=0.0, max_value=10.0, step=0.0001, 
+                                                      key=f"edit_buy_fee{edit_key_suffix}")
+                        sell_fee_rate = float(product.get('sell_fee_rate') or 0) * 100
+                        new_sell_fee = st.number_input("赎回费率 (%)", 
+                                                      value=sell_fee_rate, 
+                                                      min_value=0.0, max_value=10.0, step=0.0001, 
+                                                      key=f"edit_sell_fee{edit_key_suffix}")
+                    with col2:
+                        new_is_qdii = st.checkbox("是否QDII", 
+                                                 value=bool(product.get('is_qdii')), 
+                                                 key=f"edit_qdii{edit_key_suffix}")
+                        new_is_active = st.checkbox("是否启用", 
+                                                    value=bool(product.get('is_active', 1)), 
+                                                    key=f"edit_active{edit_key_suffix}")
+                        new_track_index = st.text_input("跟踪指数", 
+                                                        value=product.get('track_index') or '', 
+                                                        key=f"edit_index{edit_key_suffix}")
+                    
+                    if st.button("💾 保存修改", key=f"save_product_{selected_product_id}"):
+                        try:
+                            update_data = {
+                                'product_name': new_name,
+                                'buy_fee_rate': new_buy_fee / 100,
+                                'sell_fee_rate': new_sell_fee / 100,
+                                'is_qdii': 1 if new_is_qdii else 0,
+                                'is_active': 1 if new_is_active else 0,
+                                'track_index': new_track_index if new_track_index else None
+                            }
+                            update_product(selected_product_id, update_data)
+                            st.success("✅ 产品更新成功！")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ 更新失败: {e}")
+                    
+                    if st.button("🗑️ 删除产品（软删除）", key=f"delete_product_{selected_product_id}"):
+                        try:
+                            delete_product(selected_product_id)
+                            st.success("✅ 产品已停用！")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ 删除失败: {e}")
+            
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info("暂无产品")
+    
+    with tab2:
+        st.subheader("新增产品")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_code = st.text_input("产品代码 *", key="new_code")
+            new_name = st.text_input("产品名称 *", key="new_name")
+            new_channel = st.selectbox("渠道 *", ["OTC", "EXCHANGE"], key="new_channel")
+            new_market = st.selectbox("市场", ["NA", "SH", "SZ"], key="new_market", index=0)
+            new_asset_type = st.selectbox("资产类型 *", ["FUND", "ETF", "LOF", "MMF", "BANK_WM_NAV", "BANK_WM_BOX"], key="new_asset")
+        with col2:
+            new_currency = st.selectbox("货币", ["CNY", "USD", "HKD"], key="new_currency", index=0)
+            new_is_qdii = st.checkbox("是否QDII", key="new_qdii")
+            new_track_index = st.text_input("跟踪指数", key="new_track_index")
+            new_buy_fee = st.number_input("申购费率 (%)", value=0.0, min_value=0.0, max_value=10.0, step=0.0001, key="new_buy_fee")
+            new_sell_fee = st.number_input("赎回费率 (%)", value=0.0, min_value=0.0, max_value=10.0, step=0.0001, key="new_sell_fee")
+        
+        if st.button("➕ 创建产品", key="create_product"):
+            if not new_code or not new_name:
+                st.error("❌ 产品代码和名称不能为空")
+            else:
+                try:
+                    product_data = {
+                        'code': new_code,
+                        'product_name': new_name,
+                        'channel': new_channel,
+                        'market': new_market,
+                        'asset_type': new_asset_type,
+                        'currency': new_currency,
+                        'is_qdii': 1 if new_is_qdii else 0,
+                        'track_index': new_track_index if new_track_index else None,
+                        'buy_fee_rate': new_buy_fee / 100,
+                        'sell_fee_rate': new_sell_fee / 100,
+                        'category': 'fund' if new_asset_type in ['FUND', 'ETF', 'LOF', 'MMF'] else 'bank',
+                        'source': 'fund' if new_asset_type in ['FUND', 'ETF', 'LOF', 'MMF'] else 'bank'
+                    }
+                    product_id = create_product(product_data)
+                    st.success(f"✅ 产品创建成功！ID: {product_id}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 创建失败: {e}")
+
+
+# ============================================================
+# 账户管理页面
+# ============================================================
+def page_account_management():
+    st.title("💳 账户管理")
+    
+    from data.account_service import get_accounts, get_account_by_id, create_account, update_account, delete_account
+    from data.product_service import get_products
+    
+    tab1, tab2 = st.tabs(["📋 账户列表", "➕ 新增账户"])
+    
+    with tab1:
+        st.subheader("账户列表")
+        
+        # 筛选选项
+        account_type_filter = st.selectbox("账户类型筛选", ["全部", "CASH", "BUCKET", "FUND_MAPPED", "PRODUCT_SUB", "FUND_TOTAL", "SUMMARY"], key="acc_type")
+        show_inactive = st.checkbox("显示已停用", key="acc_show_inactive")
+        
+        # 获取账户列表
+        account_type = None if account_type_filter == "全部" else account_type_filter
+        accounts = get_accounts(account_type=account_type, is_active=not show_inactive)
+        
+        if accounts:
+            # 获取产品映射
+            products = {p['id']: p for p in get_products()}
+            
+            # 构建显示数据
+            display_data = []
+            for a in accounts:
+                product_name = ""
+                if a.get('product_id'):
+                    product = products.get(a['product_id'])
+                    if product:
+                        product_name = f"{product.get('code', '')} - {product.get('name') or product.get('product_name', '')}"
+                
+                display_data.append({
+                    'ID': a.get('id'),
+                    '账户代码': a.get('account_code', ''),
+                    '账户名称': a.get('account_name', ''),
+                    '账户类型': a.get('account_type', ''),
+                    '关联产品': product_name,
+                    '货币': a.get('currency', 'CNY'),
+                    '状态': '启用' if a.get('is_active', 1) else '停用'
+                })
+            
+            df = pd.DataFrame(display_data)
+            
+            # 选择要编辑的账户（使用账户ID作为选项值，确保唯一性）
+            account_options = {a.get('id'): f"{a.get('account_code', '')} - {a.get('account_name', '')}" for a in accounts}
+            selected_account_id = st.selectbox("选择账户进行编辑", 
+                                             options=list(account_options.keys()),
+                                             format_func=lambda x: account_options[x],
+                                             key="select_account_edit")
+            
+            if selected_account_id:
+                # 根据ID查找账户
+                account = next((a for a in accounts if a.get('id') == selected_account_id), None)
+                
+                if account:
+                    st.divider()
+                    st.subheader(f"编辑账户: {account.get('account_code', '')} - {account.get('account_name', '')}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        # 使用账户ID作为key的一部分，确保每个账户的输入框是独立的
+                        edit_key_suffix = f"_{selected_account_id}"
+                        new_name = st.text_input("账户名称", value=account.get('account_name', ''), key=f"edit_acc_name{edit_key_suffix}")
+                        
+                        account_type_list = ["CASH", "BUCKET", "FUND_MAPPED", "PRODUCT_SUB", "FUND_TOTAL", "SUMMARY"]
+                        current_type = account.get('account_type', 'CASH')
+                        type_index = account_type_list.index(current_type) if current_type in account_type_list else 0
+                        new_type = st.selectbox("账户类型", account_type_list, index=type_index, key=f"edit_acc_type{edit_key_suffix}")
+                    with col2:
+                        currency_list = ["CNY", "USD", "HKD"]
+                        current_currency = account.get('currency', 'CNY')
+                        currency_index = currency_list.index(current_currency) if current_currency in currency_list else 0
+                        new_currency = st.selectbox("货币", currency_list, index=currency_index, key=f"edit_acc_currency{edit_key_suffix}")
+                        new_is_active = st.checkbox("是否启用", value=bool(account.get('is_active', 1)), key=f"edit_acc_active{edit_key_suffix}")
+                    
+                    # 产品选择
+                    all_products = get_products()
+                    product_options = {0: "无"}
+                    for p in all_products:
+                        product_options[p['id']] = f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')}"
+                    
+                    current_product_id = account.get('product_id') or 0
+                    product_keys = list(product_options.keys())
+                    product_index = product_keys.index(current_product_id) if current_product_id in product_keys else 0
+                    selected_product_id = st.selectbox("关联产品", 
+                                                     options=product_keys,
+                                                     format_func=lambda x: product_options[x],
+                                                     index=product_index,
+                                                     key=f"edit_acc_product{edit_key_suffix}")
+                    
+                    if st.button("💾 保存修改", key=f"save_account_{selected_account_id}"):
+                        try:
+                            update_data = {
+                                'account_name': new_name,
+                                'account_type': new_type,
+                                'currency': new_currency,
+                                'is_active': 1 if new_is_active else 0,
+                                'product_id': selected_product_id if selected_product_id else None
+                            }
+                            update_account(selected_account_id, update_data)
+                            st.success("✅ 账户更新成功！")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ 更新失败: {e}")
+                    
+                    if st.button("🗑️ 删除账户（软删除）", key=f"delete_account_{selected_account_id}"):
+                        try:
+                            delete_account(selected_account_id)
+                            st.success("✅ 账户已停用！")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ 删除失败: {e}")
+            
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info("暂无账户")
+    
+    with tab2:
+        st.subheader("新增账户")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_code = st.text_input("账户代码 *", key="new_acc_code")
+            new_name = st.text_input("账户名称 *", key="new_acc_name")
+            new_type = st.selectbox("账户类型 *", ["CASH", "BUCKET", "FUND_MAPPED", "PRODUCT_SUB", "FUND_TOTAL", "SUMMARY"], key="new_acc_type")
+        with col2:
+            new_currency = st.selectbox("货币", ["CNY", "USD", "HKD"], key="new_acc_currency", index=0)
+        
+        # 产品选择
+        all_products = get_products()
+        product_options = {0: "无"}
+        for p in all_products:
+            product_options[p['id']] = f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')}"
+        
+        selected_product_id = st.selectbox("关联产品", options=list(product_options.keys()), 
+                                         format_func=lambda x: product_options[x],
+                                         key="new_acc_product")
+        
+        if st.button("➕ 创建账户", key="create_account"):
+            if not new_code or not new_name:
+                st.error("❌ 账户代码和名称不能为空")
+            else:
+                try:
+                    account_data = {
+                        'account_code': new_code,
+                        'account_name': new_name,
+                        'account_type': new_type,
+                        'currency': new_currency,
+                        'product_id': selected_product_id if selected_product_id else None
+                    }
+                    account_id = create_account(account_data)
+                    st.success(f"✅ 账户创建成功！ID: {account_id}")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ 创建失败: {e}")
+
+
+# ============================================================
+# 资金池规则页面
+# ============================================================
+def page_pool_rules():
+    st.title("💰 资金池规则")
+    
+    from data.account_service import load_account_pool_rules, get_account_pool_rule, add_account_pool_rule, update_account_pool_rule, delete_account_pool_rule, get_accounts
+    from data.product_service import get_products
+    
+    tab1, tab2 = st.tabs(["📋 规则列表", "➕ 新增规则"])
+    
+    with tab1:
+        st.subheader("资金池规则列表")
+        
+        rules = load_account_pool_rules()
+        
+        if rules:
+            # 获取账户和产品映射
+            accounts = {a['id']: a for a in get_accounts()}
+            products = {p['id']: p for p in get_products()}
+            
+            # 构建显示数据
+            display_data = []
+            for r in rules:
+                from_account = accounts.get(r.get('from_account_id'), {})
+                to_product = products.get(r.get('to_product_id'), {})
+                
+                display_data.append({
+                    'ID': r.get('id'),
+                    '来源账户': f"{from_account.get('account_code', '')} - {from_account.get('account_name', '')}",
+                    '目标产品': f"{to_product.get('code', '')} - {to_product.get('name') or to_product.get('product_name', '')}",
+                    '分配比例': f"{float(r.get('ratio', 0)) * 100:.2f}%",
+                    '最小金额': f"{float(r.get('min_amount', 0)):.2f}",
+                    '取整粒度': f"{float(r.get('round_step', 1)):.2f}",
+                    '状态': '启用' if r.get('is_active', 1) else '停用'
+                })
+            
+            df = pd.DataFrame(display_data)
+            
+            # 选择要编辑的规则
+            selected_idx = st.selectbox("选择规则进行编辑", range(len(rules)), 
+                                      format_func=lambda x: f"{display_data[x]['来源账户']} -> {display_data[x]['目标产品']}")
+            
+            if selected_idx is not None:
+                rule = rules[selected_idx]
+                st.divider()
+                st.subheader("编辑资金池规则")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_ratio = st.number_input("分配比例 (%)", value=float(rule.get('ratio', 0)) * 100, min_value=0.0, max_value=100.0, step=0.01, key="edit_ratio")
+                    new_min_amount = st.number_input("最小金额", value=float(rule.get('min_amount', 0)), min_value=0.0, step=0.01, key="edit_min")
+                with col2:
+                    new_round_step = st.number_input("取整粒度", value=float(rule.get('round_step', 1)), min_value=0.01, step=0.01, key="edit_round")
+                    new_is_active = st.checkbox("是否启用", value=bool(rule.get('is_active', 1)), key="edit_rule_active")
+                
+                if st.button("💾 保存修改", key="save_rule"):
+                    try:
+                        update_data = {
+                            'ratio': new_ratio / 100,
+                            'min_amount': new_min_amount,
+                            'round_step': new_round_step,
+                            'is_active': 1 if new_is_active else 0
+                        }
+                        update_account_pool_rule(rule.get('id'), update_data)
+                        st.success("✅ 规则更新成功！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ 更新失败: {e}")
+                
+                if st.button("🗑️ 删除规则", key="delete_rule"):
+                    try:
+                        delete_account_pool_rule(rule.get('id'))
+                        st.success("✅ 规则已删除！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ 删除失败: {e}")
+            
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info("暂无资金池规则")
+    
+    with tab2:
+        st.subheader("新增资金池规则")
+        
+        # 账户选择
+        accounts = get_accounts(account_type='CASH', is_active=True)
+        account_options = {}
+        for a in accounts:
+            account_options[a['id']] = f"{a.get('account_code', '')} - {a.get('account_name', '')}"
+        
+        selected_from_account = st.selectbox("来源账户 *", options=list(account_options.keys()), 
+                                            format_func=lambda x: account_options[x],
+                                            key="new_rule_from")
+        
+        # 产品选择
+        products = get_products(is_active=True)
+        product_options = {}
+        for p in products:
+            product_options[p['id']] = f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')}"
+        
+        selected_to_product = st.selectbox("目标产品 *", options=list(product_options.keys()), 
+                                          format_func=lambda x: product_options[x],
+                                          key="new_rule_to")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            new_ratio = st.number_input("分配比例 (%) *", value=0.0, min_value=0.0, max_value=100.0, step=0.01, key="new_rule_ratio")
+            new_min_amount = st.number_input("最小金额", value=0.0, min_value=0.0, step=0.01, key="new_rule_min")
+        with col2:
+            new_round_step = st.number_input("取整粒度", value=1.0, min_value=0.01, step=0.01, key="new_rule_round")
+        
+        if st.button("➕ 创建规则", key="create_rule"):
+            try:
+                rule_data = {
+                    'from_account_id': selected_from_account,
+                    'to_product_id': selected_to_product,
+                    'ratio': new_ratio / 100,
+                    'min_amount': new_min_amount,
+                    'round_step': new_round_step,
+                    'is_active': 1
+                }
+                rule_id = add_account_pool_rule(rule_data)
+                st.success(f"✅ 规则创建成功！ID: {rule_id}")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ 创建失败: {e}")
+
+
+# ============================================================
 # 主程序
 # ============================================================
 def main():
@@ -1929,7 +2608,8 @@ def main():
     
     page = st.sidebar.radio(
         "导航",
-        ["📊 Dashboard", "📝 生活记账", "📈 理财录入", "📋 订单结算"],
+        ["📊 Dashboard", "📝 生活记账", "📈 理财录入", "📋 订单结算", 
+         "🏷️ 产品管理", "💳 账户管理", "💰 资金池规则"],
         label_visibility="collapsed"
     )
     
@@ -1946,6 +2626,12 @@ def main():
         page_invest()
     elif page == "📋 订单结算":
         page_orders()
+    elif page == "🏷️ 产品管理":
+        page_product_management()
+    elif page == "💳 账户管理":
+        page_account_management()
+    elif page == "💰 资金池规则":
+        page_pool_rules()
 
 
 if __name__ == "__main__":

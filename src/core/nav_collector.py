@@ -49,11 +49,19 @@ def validate_configs():
             logger.error(f"产品配置错误 {product.get('product_code', 'UNKNOWN')}: {error}")
             sys.exit(1)
         
-        # 校验source是否有对应适配器
-        source = product['source']
+        # 场内产品（EXCHANGE）不通过净值采集器处理，跳过数据源检查
+        channel = product.get('channel', 'OTC')
+        if channel == 'EXCHANGE':
+            continue
+        
+        # 场外产品校验source是否有对应适配器
+        source = product.get('source')
+        if not source:
+            logger.error(f"产品 {product.get('product_code', 'UNKNOWN')} 缺少 source 字段")
+            sys.exit(1)
         is_valid, error = validate_adaptor_exists(source, ADAPTOR_MAP)
         if not is_valid:
-            logger.error(f"产品 {product['product_code']} 配置错误: {error}")
+            logger.error(f"产品 {product.get('product_code', 'UNKNOWN')} 配置错误: {error}")
             sys.exit(1)
     
     # 构建映射
@@ -95,7 +103,21 @@ def process_single_product(product, products_map, nav_records):
     """
     product_code = product['product_code']
     product_name = product['product_name']
-    source = product['source']
+    source = product.get('source')
+    channel = product.get('channel', 'OTC')
+    
+    # 跳过场内产品（场内产品通过行情服务处理，不通过净值采集器）
+    if channel == 'EXCHANGE':
+        result = {
+            'code': product_code,
+            'source': source or 'EXCHANGE',
+            'date': '-',
+            'nav': '-',
+            'csv': 'N',
+            'snapshot': 'N',
+            'status': 'SKIP (场内产品)'
+        }
+        return result
     
     result = {
         'code': product_code,

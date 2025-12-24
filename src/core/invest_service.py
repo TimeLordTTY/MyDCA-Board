@@ -22,6 +22,7 @@ from data.data_store import (
     VALID_ACTIONS
 )
 from data.config_loader import load_products, get_product, get_sell_fee_rate
+from data.product_service import get_product_by_code
 from data.nav_reader import get_nav
 from utils.trade_calendar import (
     is_trade_day, next_trade_day, add_trade_days, subtract_trade_days
@@ -72,10 +73,11 @@ def add_buy_debit(
     amount: Decimal,
     fee: Decimal = None,
     requested_at: datetime = None,
-    note: str = None
+    note: str = None,
+    channel: str = None
 ) -> str:
     """
-    添加买入扣款
+    添加买入扣款（支持场内/场外）
     
     Args:
         product_code: 产品代码
@@ -83,6 +85,7 @@ def add_buy_debit(
         fee: 手续费（可选，默认自动计算）
         requested_at: 请求时间（默认当前时间）
         note: 备注（默认产品名称）
+        channel: 渠道（EXCHANGE/OTC），None 表示优先场外
     
     Returns:
         order_id: 生成的订单号
@@ -90,9 +93,10 @@ def add_buy_debit(
     Raises:
         ValueError: 产品不存在
     """
-    product = get_product(product_code)
+    from data.product_service import get_product_by_code
+    product = get_product_by_code(product_code, channel=channel)
     if product is None:
-        raise ValueError(f"产品不存在: {product_code}")
+        raise ValueError(f"产品不存在: product_code={product_code}, channel={channel}")
     
     product_name = product['product_name']
     buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
@@ -121,6 +125,7 @@ def add_buy_debit(
     # 写入 transactions (buy_debit)，使用请求时间作为 created_at
     tx_record = {
         'date': str(trade_date),
+        'product_id': product.get('id'),  # 添加 product_id
         'product_code': product_code,
         'action': 'buy_debit',
         'amount': format_decimal(amount, 2),
@@ -134,9 +139,10 @@ def add_buy_debit(
     }
     append_transaction(tx_record)
     
-    # 写入 orders.csv
+    # 写入 orders
     order_record = {
         'order_id': order_id,
+        'product_id': product.get('id'),  # 添加 product_id
         'product_code': product_code,
         'order_type': 'buy_debit',
         'amount': format_decimal(amount, 2),
@@ -179,9 +185,10 @@ def add_redeem_request(
     Raises:
         ValueError: 产品不存在
     """
-    product = get_product(product_code)
+    from data.product_service import get_product_by_code
+    product = get_product_by_code(product_code, channel=channel)
     if product is None:
-        raise ValueError(f"产品不存在: {product_code}")
+        raise ValueError(f"产品不存在: product_code={product_code}, channel={channel}")
     
     product_name = product['product_name']
     sell_confirm_offset = product.get('sell_confirm_offset', 1)
@@ -204,9 +211,10 @@ def add_redeem_request(
     if note is None:
         note = product_name
     
-    # 只写入 orders.csv（不写 transactions.csv）
+    # 只写入 orders（不写 transactions）
     order_record = {
         'order_id': order_id,
+        'product_id': product.get('id'),  # 添加 product_id
         'product_code': product_code,
         'order_type': 'redeem_request',
         'amount': '',
@@ -262,9 +270,10 @@ def add_history_trade(
     if action not in ['buy', 'sell', 'dividend']:
         raise ValueError(f"无效的 action: {action}")
     
-    product = get_product(product_code)
+    from data.product_service import get_product_by_code
+    product = get_product_by_code(product_code, channel=channel)
     if product is None:
-        raise ValueError(f"产品不存在: {product_code}")
+        raise ValueError(f"产品不存在: product_code={product_code}, channel={channel}")
     
     if note is None:
         note = product['product_name']
@@ -276,8 +285,12 @@ def add_history_trade(
     # 构造完整的 created_at
     created_at = f"{confirm_date} {confirm_time}"
     
+    # 获取 product_id
+    product_id = product.get('id')
+    
     tx_record = {
         'date': confirm_date,
+        'product_id': product_id,
         'product_code': product_code,
         'action': action,
         'amount': format_decimal(amount, 2) if amount and amount > 0 else '',
@@ -389,7 +402,7 @@ def settle_orders(target_date: str = None) -> SettleResult:
             continue
         
         # 获取产品配置
-        product = get_product(product_code)
+        product = get_product_by_code(product_code)
         if product is None:
             result.errors.append({
                 'order': order,
@@ -405,9 +418,9 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 
                 # 如果手续费为空或0，尝试从产品配置重新计算
                 if fee == 0:
-                    product = get_product(product_code)
-                    if product:
-                        buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
+                    product_obj = get_product_by_code(product_code)
+                    if product_obj:
+                        buy_fee_rate = Decimal(str(product_obj.get('buy_fee_rate', 0)))
                         if buy_fee_rate > 0:
                             fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 
@@ -422,8 +435,14 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 confirm_date_str = order.get('confirm_date', target_date)
                 created_at = f"{confirm_date_str} 12:00:00"
                 
+                # 获取 product_id
+                from data.product_service import get_product_by_code
+                product = get_product_by_code(product_code)
+                product_id = product.get('id') if product else None
+                
                 tx_record = {
                     'date': confirm_date_str,
+                    'product_id': product_id,  # 添加 product_id
                     'product_code': product_code,
                     'action': 'buy_confirm',
                     'amount': '',
@@ -448,6 +467,10 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 amount = gross - fee
                 
+                # 获取 product_id
+                product_obj = get_product_by_code(product_code)
+                product_id = product_obj.get('id') if product_obj else None
+                
                 # 写入 sell_confirm
                 # 使用订单的确认日期，时间默认 12:00:00
                 confirm_date_str = order.get('confirm_date', target_date)
@@ -455,6 +478,7 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 
                 tx_record = {
                     'date': confirm_date_str,
+                    'product_id': product_id,
                     'product_code': product_code,
                     'action': 'sell_confirm',
                     'amount': format_decimal(amount, 2),
@@ -561,7 +585,7 @@ def settle_single_order(
         )
     
     # 获取产品配置
-    product = get_product(product_code)
+    product = get_product_by_code(product_code)
     if product is None:
         return SingleSettleResult(
             success=False,
@@ -587,9 +611,9 @@ def settle_single_order(
             
             # 如果手续费为空或0，尝试从产品配置重新计算
             if fee == 0:
-                product = get_product(product_code)
-                if product:
-                    buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
+                product_obj = get_product_by_code(product_code)
+                if product_obj:
+                    buy_fee_rate = Decimal(str(product_obj.get('buy_fee_rate', 0)))
                     if buy_fee_rate > 0:
                         fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             
@@ -599,9 +623,14 @@ def settle_single_order(
             # 计算份额：净申购金额 / 净值（保持6位小数精度，与数据库字段匹配）
             shares = (net_amount / nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
             
+            # 获取 product_id
+            product_obj = get_product_by_code(product_code)
+            product_id = product_obj.get('id') if product_obj else None
+            
             # 写入 buy_confirm
             tx_record = {
                 'date': confirm_date_str,
+                'product_id': product_id,
                 'product_code': product_code,
                 'action': 'buy_confirm',
                 'amount': '',
@@ -641,9 +670,14 @@ def settle_single_order(
             fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             amount = gross - fee
             
+            # 获取 product_id
+            product_obj = get_product_by_code(product_code)
+            product_id = product_obj.get('id') if product_obj else None
+            
             # 写入 sell_confirm
             tx_record = {
                 'date': confirm_date_str,
+                'product_id': product_id,
                 'product_code': product_code,
                 'action': 'sell_confirm',
                 'amount': format_decimal(amount, 2),
@@ -719,9 +753,9 @@ def preview_settle(order_id: str) -> Dict:
         
         # 如果手续费为空或0，尝试从产品配置重新计算
         if fee == 0:
-            product = get_product(product_code)
-            if product:
-                buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
+            product_obj = get_product_by_code(product_code)
+            if product_obj:
+                buy_fee_rate = Decimal(str(product_obj.get('buy_fee_rate', 0)))
                 if buy_fee_rate > 0:
                     fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         
@@ -839,11 +873,11 @@ def get_product_options() -> List[Dict]:
     return [{
         'code': p['product_code'],
         'name': p['product_name'],
-        'buy_fee_rate': p.get('buy_fee_rate', 0),
-        'buy_confirm_offset': p.get('buy_confirm_offset', 1),
-        'sell_confirm_offset': p.get('sell_confirm_offset', 1),
-        'cutoff_time': p.get('cutoff_time', '15:00'),
-        'market': p.get('market', 'cn')
+        'buy_fee_rate': p.get('buy_fee_rate') or 0,  # 确保 None 转换为 0
+        'buy_confirm_offset': p.get('buy_confirm_offset') or 1,
+        'sell_confirm_offset': p.get('sell_confirm_offset') or 1,
+        'cutoff_time': p.get('cutoff_time') or '15:00',
+        'market': p.get('market') or 'cn'
     } for p in products]
 
 
@@ -858,7 +892,7 @@ def calc_buy_fee(product_code: str, amount: Decimal) -> Decimal:
     Returns:
         计算的手续费
     """
-    product = get_product(product_code)
+    product = get_product_by_code(product_code)
     if product is None:
         return Decimal('0')
     
@@ -877,7 +911,7 @@ def calc_trade_dates(product_code: str, requested_at: datetime = None) -> Dict:
     Returns:
         {trade_date, nav_date, confirm_date}
     """
-    product = get_product(product_code)
+    product = get_product_by_code(product_code)
     if product is None:
         return {}
     

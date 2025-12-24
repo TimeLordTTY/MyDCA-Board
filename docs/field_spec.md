@@ -1,4 +1,4 @@
-# 字段计算规则合同 (Field Spec) v2.1
+# 字段计算规则合同 (Field Spec) v3.0
 
 本文档定义 MyDCA-Board 财富中枢系统中所有数据文件的字段规范，确保：
 - 字段命名统一（snake_case 全小写）
@@ -6,9 +6,12 @@
 - 可解释性（每个字段都能通过交易/净值变化解释数值变化）
 - 可复现性（关键数值固化到流水，不依赖未来配置反算）
 
-**v2.1 更新**：
-- 新增 daily_balance.csv（账户余额快照表）规范
-- 新增货币基金收益自动计算规则（fund_mapped 账户）
+**v3.0 更新**：
+- 新增场内交易相关表规范（trade_fills, market_quote_rt, market_bar_d, qdii_premium_rt）
+- 新增资金池与定投相关表规范（account_pool_rules, dca_plan, task_dca, pending_buy_pool）
+- 新增调度配置表规范（job_config）
+- 新增分类和账户组表规范（categories, account_groups）
+- 所有配置迁移到数据库，不再使用 JSON 文件
 
 ---
 
@@ -26,12 +29,12 @@
 
 ---
 
-## 1. transactions.csv（投资交易事实表）
+## 1. transactions 表（投资交易事实表）
 
-### 1.1 列顺序（固定）
+### 1.1 数据库表字段（固定）
 
 ```
-date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
+id, date, product_id, product_code, action, amount, shares, fee, nav, nav_date, order_id, note, created_at
 ```
 
 ### 1.2 action 枚举与含义
@@ -236,12 +239,12 @@ date,product_code,action,amount,shares,fee,nav,nav_date,order_id,note
 
 ---
 
-## 2. orders.csv（清算任务队列）
+## 2. orders 表（清算任务队列）
 
-### 2.1 列顺序（固定）
+### 2.1 数据库表字段（固定）
 
 ```
-order_id,product_code,order_type,amount,fee,shares,requested_at,trade_date,nav_date,confirm_date,holding_days,sell_fee_rate,status,note
+id, order_id, product_id, product_code, order_type, amount, fee, shares, requested_at, trade_date, nav_date, confirm_date, holding_days, sell_fee_rate, status, note, created_at, updated_at
 ```
 
 ### 2.2 order_type 枚举
@@ -287,12 +290,12 @@ order_id,product_code,order_type,amount,fee,shares,requested_at,trade_date,nav_d
 
 ---
 
-## 3. ledger（生活记账流水表）
+## 3. ledger 表（生活记账流水表）
 
-### 3.1 列顺序（固定）
+### 3.1 数据库表字段（固定）
 
 ```
-event_time,entry_type,amount,category_l1,category_l2,account_from,account_to,discount,reimbursable,note
+id, event_time, entry_type, amount, category_l1, category_l2, account_from, account_to, discount, reimbursable, note, created_at
 ```
 
 ### 3.2 entry_type 枚举
@@ -345,12 +348,12 @@ parent_balance_after: ylb_life + ylb_project 的总余额（截止该时间）
 
 ---
 
-## 4. daily.csv（每日快照事实表）
+## 4. daily_snapshot 表（每日快照事实表）
 
-### 4.1 列顺序（固定）
+### 4.1 数据库表字段（固定）
 
 ```
-fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,cost,unrealized_pnl,return_rate,cash_in_transit,total_value,principal_total,total_redemption,total_pnl,real_return,fetched_at
+id, fetch_date, product_id, product_code, product_name, category, nav_date, nav, shares, value, pnl_day, cost, unrealized_pnl, return_rate, cash_in_transit, total_value, principal_total, total_redemption, total_pnl, real_return, fetched_at, created_at
 ```
 
 ### 4.2 中文表头映射
@@ -445,12 +448,12 @@ fetch_date,product_code,product_name,category,nav_date,nav,shares,value,pnl_day,
 
 ## 5. daily_balance（账户余额快照表）
 
-**注意**：账户余额快照数据存储在 MySQL 数据库中，不再写入 CSV 文件。
+**注意**：账户余额快照数据存储在 MySQL 数据库的 `daily_balance` 表中。
 
-### 5.1 列顺序（固定）
+### 5.1 数据库表字段（固定）
 
 ```
-fetch_date,account_id,account_name,account_type,balance,related_product,product_value,diff,yesterday_pnl,unrealized_pnl,total_pnl,note
+id, fetch_date, account_id, account_name, account_type, balance, related_product, product_value, diff, yesterday_pnl, unrealized_pnl, total_pnl, note, created_at
 ```
 
 ### 5.2 中文表头映射
@@ -477,7 +480,7 @@ fetch_date,account_id,account_name,account_type,balance,related_product,product_
 | cash | 现金账户（余利宝、银行卡等） | `Σ ledger 入账 - Σ ledger 出账` |
 | fund_mapped | 货币基金映射账户（小荷包） | `关联产品市值 + 当日收益`（收益自动入账） |
 | product_sub | 产品子账户（稳利宝各子账户） | `Σ ledger 入账 - Σ ledger 出账` |
-| fund_total | 基金账户汇总 | `Σ daily.csv 基金市值`（排除 fund_mapped 关联产品） |
+| fund_total | 基金账户汇总 | `Σ daily_snapshot 表基金市值`（排除 fund_mapped 关联产品） |
 | summary | 汇总行 | 各组账户合计 |
 
 ### 5.4 字段定义与公式
@@ -559,7 +562,7 @@ fetch_date,account_id,account_name,account_type,balance,related_product,product_
 |--------|------------|----------|
 | 稳利宝合计 | wenlibao_total | balance = Σ 子账户余额，product_value = 父产品市值，diff = group_profit |
 | 余利宝合计 | ylb_total | balance = ylb_life + ylb_finance |
-| 基金合计 | fund_total | balance = Σ daily.csv 基金市值（排除 fund_mapped 关联产品） |
+| 基金合计 | fund_total | balance = Σ daily_snapshot 表基金市值（排除 fund_mapped 关联产品） |
 
 **汇总行 diff 与 profit_account diff 一致**：表示该产品组在该快照日的收益/亏损。
 
@@ -634,13 +637,13 @@ pnl_day=0 (因为 shares=0)
 ### D2 午：录入 buy_debit amount=500 fee=0.60
 
 ```
-# transactions.csv 新增:
+# transactions 表新增:
 date=D2, action=buy_debit, amount=500, fee=0.60, order_id=20251202120000_163406_001
 
-# orders.csv 新增:
+# orders 表新增:
 order_id=20251202120000_163406_001, status=pending, confirm_date=D3
 
-# daily.csv 变化:
+# daily_snapshot 表变化:
 shares=0 (份额未变)
 value=0
 cash_in_transit=499.40 (=500-0.60，在途资金增加)
@@ -665,13 +668,13 @@ cash_in_transit=499.40 (不变)
 ```
 # 计算份额（精度≥4位）: shares = 499.40 / 2.0100 = 248.4577
 
-# transactions.csv 新增:
+# transactions 表新增:
 date=D3, action=buy_confirm, shares=248.4577, nav=2.0100, nav_date=D2, fee=0, order_id=20251202120000_163406_001
 
-# orders.csv 更新:
+# orders 表更新:
 order_id=20251202120000_163406_001, status=done
 
-# daily.csv 变化:
+# daily_snapshot 表变化:
 shares=248.4577 (份额增加)
 value=248.4577 × 2.0200 = 501.88
 cost=499.40 (净申购额)
@@ -691,10 +694,10 @@ total_pnl=1.88 (=501.88+0-500，开始盈利)
 ```
 # 计算到账: gross=248.4577×2.0500=509.34, fee=2.55(0.5%), amount=506.79
 
-# transactions.csv 新增:
+# transactions 表新增:
 date=D4, action=sell_confirm, amount=506.79, shares=248.4577, fee=2.55, nav=2.0500, order_id=20251204120000_163406_001
 
-# daily.csv 变化:
+# daily_snapshot 表变化:
 shares=0 (全部赎回)
 value=0
 cost=0 (全部结转)
@@ -739,9 +742,9 @@ real_return=1.36% (=6.79/500)
 
 ---
 
-## 附录：CSV 中文表头对照表
+## 附录：数据库表字段对照表
 
-### transactions.csv
+### transactions 表
 
 | 英文 | 中文 |
 |------|------|
@@ -756,7 +759,7 @@ real_return=1.36% (=6.79/500)
 | order_id | 订单号 |
 | note | 备注 |
 
-### orders.csv
+### orders 表
 
 | 英文 | 中文 |
 |------|------|
@@ -775,7 +778,7 @@ real_return=1.36% (=6.79/500)
 | status | 状态 |
 | note | 备注 |
 
-### ledger.csv
+### ledger 表
 
 | 英文 | 中文 |
 |------|------|
@@ -790,7 +793,7 @@ real_return=1.36% (=6.79/500)
 | reimbursable | 可报销 |
 | note | 备注 |
 
-### daily.csv
+### daily_snapshot 表
 
 | 英文 | 中文 |
 |------|------|

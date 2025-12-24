@@ -1,14 +1,9 @@
-
 chinese-calendar>=1.9.0
-
 pandas>=2.0.0
-
 streamlit>=1.28.0
-
 requests>=2.28.0
-
 pymysql>=1.1.0
 dbutils>=3.0.0
-
 pytest>=7.0.0
-
+akshare>=1.12.0
+APScheduler>=3.10.0

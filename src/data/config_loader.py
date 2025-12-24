@@ -88,29 +88,21 @@ def _apply_product_defaults(product: Dict) -> Dict:
 
 
 def load_products() -> List[Dict]:
-    """加载产品配置（带默认值填充）"""
-    config_path = get_project_root() / "config" / "products.json"
-    with open(config_path, 'r', encoding='utf-8') as f:
-        products = json.load(f)
-    
-    # 为每个产品应用默认值
-    return [_apply_product_defaults(p) for p in products]
+    """加载产品配置（从数据库读取，带默认值填充）"""
+    from data.product_service import get_products
+    return get_products()
 
 
 def load_products_raw() -> List[Dict]:
-    """加载产品配置（原始数据，不填充默认值）"""
-    config_path = get_project_root() / "config" / "products.json"
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    """加载产品配置（从数据库读取，原始数据）"""
+    from data.product_service import get_products
+    return get_products()
 
 
 def get_product(product_code: str) -> Optional[Dict]:
-    """根据产品代码获取产品配置"""
-    products = load_products()
-    for p in products:
-        if p['product_code'] == product_code:
-            return p
-    return None
+    """根据产品代码获取产品配置（从数据库读取，兼容旧接口）"""
+    from data.product_service import get_product_by_code
+    return get_product_by_code(product_code)
 
 
 def get_sell_fee_rate(product: Dict, holding_days: int) -> float:
@@ -175,93 +167,111 @@ def get_holdings_map():
 
 
 def load_json_config(filename: str) -> Any:
-    """加载 JSON 配置文件"""
-    config_path = get_project_root() / "config" / filename
-    if not config_path.exists():
-        return None
+    """
+    加载 JSON 配置文件（已废弃，保留仅为兼容）
     
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    注意：db_config.json 仍从文件读取（数据库连接配置）
+    """
+    if filename == 'db_config.json':
+        config_path = get_project_root() / "config" / filename
+        if not config_path.exists():
+            return None
+        with open(config_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    # 其他配置文件已迁移到数据库，不再从文件读取
+    return None
 
 
 def load_accounts() -> List[Dict]:
-    """加载账户配置 (accounts.json)"""
-    config = load_json_config('accounts.json')
-    if config is None:
-        # 返回默认账户列表
-        return [
-            {'id': 'ylb_life', 'name': '余利宝生活费'},
-            {'id': 'ylb_finance', 'name': '余利宝理财金'},
-            {'id': 'couple_pocket', 'name': '情侣小荷包'},
-            {'id': 'other', 'name': '其他'},
-        ]
-    return config.get('accounts', [])
+    """加载账户配置（从数据库读取）"""
+    from data.account_service import get_accounts
+    accounts = get_accounts()
+    # 转换为旧格式（兼容性）
+    result = []
+    for acc in accounts:
+        result.append({
+            'id': acc.get('account_code') or acc.get('account_id'),
+            'name': acc.get('account_name'),
+            'account_type': acc.get('account_type'),
+            'linked_product': None,  # 需要通过 product_id 查询
+            'group': None,  # 需要通过 account_groups 查询
+            'receives_profit': False,  # 需要通过 account_groups 查询
+            'note': acc.get('note')
+        })
+    return result
 
 
 def load_account_groups() -> Dict:
-    """加载账户组配置"""
-    config = load_json_config('accounts.json')
-    if config is None:
-        return {}
-    return config.get('account_groups', {})
+    """加载账户组配置（从数据库读取）"""
+    from data.db_connector import execute_query
+    sql = """
+        SELECT 
+            ag.group_code, ag.group_name, ag.linked_product_id, ag.profit_account_id,
+            p.code AS linked_product_code,
+            a.account_code AS profit_account_code
+        FROM account_groups ag
+        LEFT JOIN products p ON ag.linked_product_id = p.id
+        LEFT JOIN accounts a ON ag.profit_account_id = a.id
+    """
+    rows = execute_query(sql)
+    
+    result = {}
+    for row in rows:
+        group_code = row['group_code']
+        result[group_code] = {
+            'name': row['group_name'],
+            'linked_product': row['linked_product_code'],
+            'profit_account': row['profit_account_code']
+        }
+    return result
 
 
 def get_account(account_id: str) -> Optional[Dict]:
-    """根据账户ID获取账户配置"""
-    accounts = load_accounts()
-    for acc in accounts:
-        if acc['id'] == account_id:
-            return acc
+    """根据账户ID获取账户配置（从数据库读取）"""
+    from data.account_service import get_account_by_code
+    acc = get_account_by_code(account_id)
+    if acc:
+        return {
+            'id': acc.get('account_code') or acc.get('account_id'),
+            'name': acc.get('account_name'),
+            'account_type': acc.get('account_type'),
+            'linked_product': None,  # 需要通过 product_id 查询
+            'group': None,  # 需要通过 account_groups 查询
+            'note': acc.get('note')
+        }
     return None
 
 
 def get_accounts_by_group(group_id: str) -> List[Dict]:
-    """获取属于指定组的所有账户"""
-    accounts = load_accounts()
-    return [acc for acc in accounts if acc.get('group') == group_id]
+    """获取属于指定组的所有账户（从数据库读取）"""
+    from data.account_service import get_accounts_by_group
+    accounts = get_accounts_by_group(group_id)
+    # 转换为旧格式
+    result = []
+    for acc in accounts:
+        result.append({
+            'id': acc.get('account_code') or acc.get('account_id'),
+            'name': acc.get('account_name'),
+            'account_type': acc.get('account_type'),
+            'group': group_id,
+            'note': acc.get('note')
+        })
+    return result
 
 
 def get_wenlibao_accounts() -> List[Dict]:
-    """获取所有稳利宝子账户"""
+    """获取所有稳利宝子账户（从数据库读取）"""
     return get_accounts_by_group('wenlibao')
 
 
 def get_account_name(account_id: str) -> str:
-    """获取账户名称"""
-    acc = get_account(account_id)
-    return acc['name'] if acc else account_id
+    """获取账户名称（从数据库读取）"""
+    from data.account_service import get_account_name as _get_account_name
+    return _get_account_name(account_id)
 
 
 def load_categories() -> Dict:
-    """加载分类配置 (categories.json)"""
-    config = load_json_config('categories.json')
-    if config is None:
-        # 返回默认分类
-        return {
-            'expense': {
-                '其他': [],
-                '购物消费': ['日用百货', '服饰鞋包', '数码电子'],
-                '食品餐饮': ['早午晚餐', '饮料甜点', '水果零食'],
-                '出行交通': ['公共交通', '打车租车', '加油停车'],
-                '休闲娱乐': ['电影演出', '游戏充值', '旅行度假'],
-                '居家生活': ['水电煤气', '物业房租', '家居家电'],
-                '文化教育': ['书籍资料', '培训课程'],
-                '送礼人情': ['红包礼金', '礼品馈赠'],
-                '健康医疗': ['医疗药品', '运动健身'],
-            },
-            'income': {
-                '其他': [],
-                '中奖': [],
-                '理财盈利': [],
-                '礼金人情': [],
-                '借入': [],
-                '奖金': [],
-                '兼职外快': [],
-                '工资': [],
-                '二手闲置': [],
-                '补贴': [],
-                '报销': [],
-            }
-        }
-    return config
+    """加载分类配置（从数据库读取）"""
+    from data.category_service import get_categories
+    return get_categories()
 
