@@ -297,7 +297,7 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
             'category': category_map.get(product_code, 'fund'),
             'nav_date': nav_date,
             'nav': str(nav),
-            'shares': f"{shares:.4f}",  # 份额精度至少4位
+            'shares': f"{shares:.6f}",  # 份额精度6位（与数据库 DECIMAL(18,6) 匹配）
             'value': f"{value:.2f}",
             'pnl_day': f"{pnl_day:.2f}",
             'cost': f"{cost:.2f}",

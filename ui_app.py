@@ -571,14 +571,46 @@ def page_dashboard():
                 return Decimal("0.00")
         
         def _recalc_row(row: pd.Series) -> pd.Series:
-            # 使用原始精度计算市值，避免先四舍五入导致的误差
+            # 始终使用原始精度的 nav 和 shares 重新计算市值，确保精度准确
+            # 数据库中的 value 字段可能因为存储时的四舍五入导致误差
             try:
-                nav = Decimal(str(row.get("nav") or "0"))
-                shares = Decimal(str(row.get("shares") or "0"))
-                # 先计算市值，再四舍五入到两位小数
-                value = (nav * shares).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
-            except Exception:
-                value = Decimal("0.00")
+                nav_raw = row.get("nav")
+                shares_raw = row.get("shares")
+                
+                if nav_raw and shares_raw:
+                    # 转换为 Decimal，保持数据库中的完整精度（nav: 6位小数，shares: 6位小数）
+                    nav = Decimal(str(nav_raw))
+                    shares = Decimal(str(shares_raw))
+                    
+                    # 使用完整精度计算市值，然后四舍五入到两位小数
+                    # 这样可以避免使用数据库中可能已经四舍五入的 value 字段
+                    # 注意：使用 ROUND_HALF_UP 确保 0.5 向上舍入
+                    value = (nav * shares).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+                    
+                    # 调试：如果计算出的 value 与数据库中的 value 不一致，记录日志
+                    db_value = row.get("value")
+                    if db_value:
+                        db_value_dec = Decimal(str(db_value))
+                        if abs(value - db_value_dec) > Decimal("0.01"):
+                            # 差异超过 0.01，可能是精度问题
+                            pass  # 可以在这里添加日志
+                else:
+                    # 如果 nav 或 shares 不存在，尝试使用数据库中的 value 字段
+                    value_raw = row.get("value")
+                    if value_raw and str(value_raw).strip():
+                        value = Decimal(str(value_raw)).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+                    else:
+                        value = Decimal("0.00")
+            except Exception as e:
+                # 如果计算失败，尝试使用数据库中的 value 字段
+                try:
+                    value_raw = row.get("value")
+                    if value_raw and str(value_raw).strip():
+                        value = Decimal(str(value_raw)).quantize(Decimal("0.00"), rounding=ROUND_HALF_UP)
+                    else:
+                        value = Decimal("0.00")
+                except:
+                    value = Decimal("0.00")
             
             # 显示时四舍五入到两位小数
             shares_display = _round_2(row.get("shares"))
@@ -1791,6 +1823,76 @@ def page_orders():
         df_all = pd.DataFrame(rows)
         # 分页
         df_page = paginate_dataframe(df_all, "all_orders", page_size=50)
+        
+        # 选择订单进行重新结算
+        if len(df_page) > 0:
+            st.caption("💡 选择已完成的订单可以重新结算（删除确认记录并重置订单状态）")
+            selected_indices = st.multiselect(
+                "选择要重新结算的订单（仅限已完成状态）",
+                options=df_page.index.tolist(),
+                format_func=lambda idx: f"{df_page.loc[idx, '订单号']} - {df_page.loc[idx, '产品代码']}",
+                key="resettle_order_select"
+            )
+            
+            if selected_indices:
+                selected_orders = []
+                for idx in selected_indices:
+                    order_row = df_page.loc[idx]
+                    order_id = order_row['订单号']
+                    # 从原始订单列表中找到对应的订单
+                    for order in all_orders:
+                        if order.get('order_id') == order_id and order.get('status') == 'done':
+                            selected_orders.append(order)
+                            break
+                
+                if selected_orders:
+                    st.warning(f"⚠️ 将重新结算 {len(selected_orders)} 个订单。这将：\n1. 删除对应的 buy_confirm/sell_confirm 交易记录\n2. 将订单状态重置为 pending\n3. 然后可以重新结算")
+                    
+                    if st.button("🔄 确认重新结算", type="primary", key="do_resettle"):
+                        from data.data_store import delete_transaction, update_order_status
+                        from core.invest_service import list_recent_transactions
+                        
+                        success_count = 0
+                        error_count = 0
+                        
+                        for order in selected_orders:
+                            order_id = order.get('order_id')
+                            try:
+                                # 1. 查找并删除对应的确认交易记录
+                                txs = list_recent_transactions(1000)  # 获取更多记录
+                                deleted = False
+                                for tx in txs:
+                                    if tx.get('order_id') == order_id and tx.get('action') in ['buy_confirm', 'sell_confirm']:
+                                        tx_id = tx.get('id')
+                                        if tx_id and delete_transaction(tx_id):
+                                            deleted = True
+                                
+                                if deleted:
+                                    # 2. 将订单状态重置为 pending
+                                    if update_order_status(order_id, 'pending'):
+                                        success_count += 1
+                                    else:
+                                        error_count += 1
+                                        st.error(f"❌ 重置订单状态失败: {order_id}")
+                                else:
+                                    error_count += 1
+                                    st.warning(f"⚠️ 未找到确认记录: {order_id}")
+                            except Exception as e:
+                                error_count += 1
+                                st.error(f"❌ 处理订单失败 {order_id}: {e}")
+                        
+                        if success_count > 0:
+                            st.success(f"✅ 成功重置 {success_count} 个订单，现在可以重新结算了！")
+                            # 刷新快照
+                            try:
+                                from core.snapshot_service import collect_nav_and_build_snapshots
+                                collect_nav_and_build_snapshots(silent=True)
+                            except:
+                                pass
+                            st.rerun()
+                        else:
+                            st.error(f"❌ 重置失败 {error_count} 个订单")
+        
         st.dataframe(df_page, use_container_width=True, hide_index=True)
     else:
         st.info("暂无订单")

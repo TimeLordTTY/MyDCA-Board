@@ -414,21 +414,26 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 # 计算净申购金额（金额 - 手续费）
                 net_amount = amount - fee
                 
-                # 计算份额：净申购金额 / 净值
-                shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+                # 计算份额：净申购金额 / 净值（保持6位小数精度，与数据库字段匹配）
+                shares = (net_amount / nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
                 
                 # 写入 buy_confirm
+                # 使用订单的确认日期，时间默认 12:00:00
+                confirm_date_str = order.get('confirm_date', target_date)
+                created_at = f"{confirm_date_str} 12:00:00"
+                
                 tx_record = {
-                    'date': order.get('confirm_date', target_date),
+                    'date': confirm_date_str,
                     'product_code': product_code,
                     'action': 'buy_confirm',
                     'amount': '',
-                    'shares': format_decimal(shares, 4),
+                    'shares': format_decimal(shares, 6),
                     'fee': '0',
                     'nav': str(nav),
                     'nav_date': nav_date,
                     'order_id': order_id,
-                    'note': order.get('note', '')
+                    'note': order.get('note', ''),
+                    'created_at': created_at
                 }
                 append_transaction(tx_record)
                 
@@ -444,8 +449,12 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 amount = gross - fee
                 
                 # 写入 sell_confirm
+                # 使用订单的确认日期，时间默认 12:00:00
+                confirm_date_str = order.get('confirm_date', target_date)
+                created_at = f"{confirm_date_str} 12:00:00"
+                
                 tx_record = {
-                    'date': order.get('confirm_date', target_date),
+                    'date': confirm_date_str,
                     'product_code': product_code,
                     'action': 'sell_confirm',
                     'amount': format_decimal(amount, 2),
@@ -454,7 +463,8 @@ def settle_orders(target_date: str = None) -> SettleResult:
                     'nav': str(nav),
                     'nav_date': nav_date,
                     'order_id': order_id,
-                    'note': order.get('note', '')
+                    'note': order.get('note', ''),
+                    'created_at': created_at
                 }
                 append_transaction(tx_record)
             
@@ -565,9 +575,9 @@ def settle_single_order(
         confirm_date_str = confirm_datetime[:10]  # YYYY-MM-DD
         created_at = confirm_datetime
     else:
-        # 使用订单的确认日期，时间默认 09:30:00
+        # 使用订单的确认日期，时间默认 12:00:00
         confirm_date_str = order.get('confirm_date', date.today().strftime('%Y-%m-%d'))
-        created_at = f"{confirm_date_str} 09:30:00"
+        created_at = f"{confirm_date_str} 12:00:00"
     
     try:
         if order_type == 'buy_debit':
@@ -586,8 +596,8 @@ def settle_single_order(
             # 计算净申购金额（金额 - 手续费）
             net_amount = amount - fee
             
-            # 计算份额：净申购金额 / 净值
-            shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+            # 计算份额：净申购金额 / 净值（保持6位小数精度，与数据库字段匹配）
+            shares = (net_amount / nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
             
             # 写入 buy_confirm
             tx_record = {
@@ -595,7 +605,7 @@ def settle_single_order(
                 'product_code': product_code,
                 'action': 'buy_confirm',
                 'amount': '',
-                'shares': format_decimal(shares, 4),
+                'shares': format_decimal(shares, 6),
                 'fee': '0',
                 'nav': str(nav),
                 'nav_date': nav_date,
@@ -719,7 +729,7 @@ def preview_settle(order_id: str) -> Dict:
         net_amount = amount - fee
         
         # 计算份额：净申购金额 / 净值
-        shares = (net_amount / nav).quantize(Decimal('0.0001'), rounding=ROUND_HALF_UP)
+        shares = (net_amount / nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
         
         return {
             'success': True,
