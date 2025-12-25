@@ -759,7 +759,7 @@ def page_dashboard():
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if st.button("🔄 一键日更", use_container_width=True, type="primary"):
+        if st.button("🔄 一键日更", width='stretch', type="primary"):
             with st.spinner("正在同步数据..."):
                 try:
                     result = collect_nav_and_build_snapshots()
@@ -771,7 +771,7 @@ def page_dashboard():
                     st.error(f"❌ 同步失败: {e}")
     
     with col2:
-        if st.button("✅ 运行校验", use_container_width=True):
+        if st.button("✅ 运行校验", width='stretch'):
             with st.spinner("正在校验..."):
                 ledger_result = validate_ledger()
                 invest_result = validate_transactions_orders()
@@ -873,7 +873,7 @@ def page_dashboard():
         df_display = df_balance[display_cols].copy()
         df_display = df_display.rename(columns=col_names)
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.dataframe(df_display, width='stretch', hide_index=True)
     else:
         st.info("暂无账户余额数据，请点击「一键日更」生成快照")
     
@@ -975,7 +975,7 @@ def page_dashboard():
         df_display = df_daily[display_cols].copy()
         df_display = df_display.rename(columns=col_names)
         
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
+        st.dataframe(df_display, width='stretch', hide_index=True)
     else:
         st.info("暂无产品持仓数据")
 
@@ -1295,7 +1295,7 @@ def page_ledger():
         styled_df = df_page[display_cols].style.map(color_amount, subset=['金额'])
         event = st.dataframe(
             styled_df, 
-            use_container_width=True, 
+            width='stretch', 
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
@@ -1369,7 +1369,7 @@ def page_ledger():
             col_save, col_delete = st.columns([3, 1])
             
             with col_save:
-                if st.button("💾 保存修改", type="primary", key="save_ledger_edit", use_container_width=True):
+                if st.button("💾 保存修改", type="primary", key="save_ledger_edit", width='stretch'):
                     updated_record = {
                         'event_time': edit_time,
                         'entry_type': entry_type,
@@ -1387,7 +1387,7 @@ def page_ledger():
                         st.error("❌ 保存失败")
             
             with col_delete:
-                if st.button("🗑️ 删除", type="secondary", key="delete_ledger_edit", use_container_width=True):
+                if st.button("🗑️ 删除", type="secondary", key="delete_ledger_edit", width='stretch'):
                     st.session_state['pending_delete_ledger_id'] = selected_record['id']
             
             # 删除确认
@@ -1443,13 +1443,27 @@ def page_invest():
                 buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee")
         
         with col2:
+            # 交易日期输入（可编辑，默认当前日期）
+            buy_trade_date = st.date_input(
+                "交易日期", 
+                value=date.today(), 
+                key="buy_trade_date",
+                help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
+            )
+            
             if buy_product:
                 product = product_dict[buy_product]
-                dates = calc_trade_dates(product['code'])
-                if dates:
-                    st.info(f"📅 交易日期: {dates['trade_date']}")
-                    st.info(f"📅 净值日期: {dates['nav_date']}")
-                    st.info(f"📅 确认日期: {dates['confirm_date']}")
+                # 根据交易日期计算净值日期和确认日期
+                from core.invest_service import calc_confirm_date
+                buy_confirm_offset = product.get('buy_confirm_offset', 1)
+                
+                # 净值日期 = 交易日期
+                buy_nav_date = buy_trade_date
+                # 确认日期 = 交易日期 + confirm_offset 个交易日
+                buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
+                
+                st.info(f"📅 净值日期: {buy_nav_date}")
+                st.info(f"📅 确认日期: {buy_confirm_date}")
             
             # 二级分类选择
             buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
@@ -1473,19 +1487,20 @@ def page_invest():
                     # 解析时间
                     try:
                         time_parts = buy_time.split(':')
-                        requested_at = datetime.now().replace(
-                            hour=int(time_parts[0]),
-                            minute=int(time_parts[1]),
-                            second=int(time_parts[2]) if len(time_parts) > 2 else 0
+                        requested_at = datetime.combine(
+                            buy_trade_date,
+                            datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
+                            else datetime.strptime(buy_time, '%H:%M').time()
                         )
                     except:
-                        requested_at = datetime.now()
+                        requested_at = datetime.combine(buy_trade_date, datetime.now().time())
                     
                     order_id = add_buy_debit(
                         product_code=product['code'],
                         amount=Decimal(str(buy_amount)),
                         fee=Decimal(str(buy_fee_override)) if 'buy_fee_override' in dir() else None,
                         requested_at=requested_at,
+                        trade_date=buy_trade_date,
                         note=buy_note or None
                     )
                     
@@ -1527,14 +1542,54 @@ def page_invest():
                     st.info(f"💡 赎回费率: {float(fee_rate)*100:.2f}%")
         
         with col2:
+            # 交易日期输入（可编辑，默认当前日期）
+            redeem_trade_date = st.date_input(
+                "交易日期", 
+                value=date.today(), 
+                key="redeem_trade_date",
+                help="赎回发生的日期，修改后会自动计算确认日期"
+            )
+            
             if redeem_product:
                 product = product_dict[redeem_product]
-                from core.invest_service import calc_trade_date as calc_td, calc_confirm_date as calc_cd
-                from datetime import datetime as dt
-                trade_date = calc_td(dt.now(), product.get('cutoff_time', '15:00'))
-                confirm_date = calc_cd(trade_date, product.get('sell_confirm_offset', 1))
-                st.info(f"📅 交易日期: {trade_date}")
-                st.info(f"📅 确认日期: {confirm_date}")
+                # 根据交易日期计算确认日期
+                from core.invest_service import calc_confirm_date
+                sell_confirm_offset = product.get('sell_confirm_offset', 1)
+                redeem_confirm_date = calc_confirm_date(redeem_trade_date, sell_confirm_offset)
+                st.info(f"📅 确认日期: {redeem_confirm_date}")
+            
+            # 请求时间（日期+时分秒），默认当前时间
+            redeem_request_date = st.date_input(
+                "请求日期", 
+                value=date.today(), 
+                key="redeem_request_date",
+                help="赎回请求的日期"
+            )
+            redeem_request_time = st.text_input(
+                "请求时间（HH:MM:SS）", 
+                value=datetime.now().strftime('%H:%M:%S'), 
+                key="redeem_request_time",
+                help="赎回请求的时间，精确到秒"
+            )
+            
+            # 赎回账户选择
+            account_options = get_account_options()
+            account_dict = {acc['name']: acc['id'] for acc in account_options}
+            account_names = list(account_dict.keys())
+            
+            # 默认选择余利宝理财金
+            default_redeem_account_name = '余利宝理财金'
+            default_redeem_account_idx = 0
+            if default_redeem_account_name in account_names:
+                default_redeem_account_idx = account_names.index(default_redeem_account_name)
+            
+            redeem_account_name = st.selectbox(
+                "赎回账户", 
+                account_names, 
+                index=default_redeem_account_idx,
+                key="redeem_account"
+            )
+            redeem_account = account_dict[redeem_account_name]
             
             redeem_note = st.text_input("备注（可选）", key="redeem_note")
         
@@ -1544,10 +1599,24 @@ def page_invest():
             else:
                 try:
                     product = product_dict[redeem_product]
+                    # 解析请求时间
+                    try:
+                        time_parts = redeem_request_time.split(':')
+                        requested_at = datetime.combine(
+                            redeem_request_date,
+                            datetime.strptime(redeem_request_time, '%H:%M:%S').time() if len(time_parts) == 3 
+                            else datetime.strptime(redeem_request_time, '%H:%M').time()
+                        )
+                    except:
+                        requested_at = datetime.combine(redeem_request_date, datetime.now().time())
+                    
                     order_id = add_redeem_request(
                         product_code=product['code'],
                         shares=Decimal(str(redeem_shares)),
                         holding_days=redeem_holding_days,
+                        requested_at=requested_at,
+                        trade_date=redeem_trade_date,
+                        redeem_account=redeem_account,
                         note=redeem_note or None
                     )
                     st.success(f"✅ 赎回发起已提交！订单号: {order_id}")
@@ -1677,7 +1746,7 @@ def page_invest():
                     product_shares[product_code] = product_shares.get(product_code, Decimal('0')) - Decimal(str(shares))
                 except:
                     pass
-            elif action in ['sell', 'sell_confirm'] and shares:
+            elif action in ['sell', 'sell_confirm', 'redeem_request'] and shares:
                 try:
                     product_shares[product_code] = product_shares.get(product_code, Decimal('0')) + Decimal(str(shares))
                 except:
@@ -1724,19 +1793,48 @@ def page_invest():
             # 获取该产品在此交易后的份额
             product_shares_after = r.get('_product_shares_after', Decimal('0'))
             
+            # 格式化份额显示（添加+/-号）
+            shares_display = ''
+            if shares:
+                try:
+                    shares_val = float(shares)
+                    if is_pending:
+                        shares_display = f"{shares_val:.4f}"  # 待确认：无+/-号
+                    elif is_shares_increase:
+                        shares_display = f"+{shares_val:.4f}"  # 份额增加：+ 红色
+                    else:
+                        shares_display = f"-{shares_val:.4f}"  # 份额减少：- 绿色
+                except:
+                    shares_display = str(shares)
+            
+            # 格式化金额显示
+            # 赎回时（sell_confirm, redeem_request）：金额用黑色（不显示+/-号）
+            # 购买时：保持原有逻辑（份额增加用红色+，份额减少用绿色-）
+            if action in ['sell_confirm', 'redeem_request']:
+                # 赎回时，金额用黑色显示，不添加+/-号
+                try:
+                    amount_val = float(amount) if amount else 0
+                    amount_display = f"{abs(amount_val):.2f}" if amount_val else ''
+                except:
+                    amount_display = str(amount) if amount else ''
+            else:
+                # 购买时，使用原有逻辑
+                amount_display = format_invest_amount(amount, is_shares_increase, is_pending)
+            
             raw_records.append(r)
             rows.append({
                 'ID': r.get('id'),
                 '时间': time_str,
                 '产品': product_code,
                 '类型': ACTION_DISPLAY_MAP.get(action, action),
-                '金额': format_invest_amount(amount, is_shares_increase, is_pending),
-                '份额': shares,
+                '金额': amount_display,
+                '份额': shares_display,
                 '产品份额': f"{product_shares_after:.2f}",  # 该产品在此交易后的累计份额
                 '备注': r.get('note', ''),
                 '_account': account,
                 '_action': action,
-                '_is_pending': is_pending
+                '_is_pending': is_pending,
+                '_is_shares_increase': is_shares_increase  # 保存份额增减标志，用于着色
             })
         
         if rows:
@@ -1750,17 +1848,40 @@ def page_invest():
             
             display_cols = ['ID', '时间', '产品', '类型', '金额', '份额', '产品份额', '备注']
             
-            # 为金额列着色，待确认类型使用白色
-            # 理财视角（按份额）：份额增加（买入/分红）红色，份额减少（卖出）绿色
+            # 为金额和份额列着色
+            # 金额：赎回时黑色，购买时按份额增减着色（红色+/绿色-）
+            # 份额：份额增加红色+，份额减少绿色-，待确认白色
             def color_tx_amount(row):
                 is_pending = df_page.loc[row.name, '_is_pending'] if '_is_pending' in df_page.columns else False
-                return [color_invest_amount(val, is_pending) if col == '金额' else '' for col, val in row.items()]
+                is_shares_increase = df_page.loc[row.name, '_is_shares_increase'] if '_is_shares_increase' in df_page.columns else False
+                action = df_page.loc[row.name, '_action'] if '_action' in df_page.columns else ''
+                
+                styles = []
+                for col, val in row.items():
+                    if col == '金额':
+                        # 赎回时：黑色（不显示+/-号）
+                        if action in ['sell_confirm', 'redeem_request']:
+                            styles.append('')  # 黑色（默认）
+                        else:
+                            # 购买时：按份额增减着色
+                            styles.append(color_invest_amount(val, is_pending))
+                    elif col == '份额':
+                        # 份额：份额增加红色+，份额减少绿色-，待确认白色
+                        if is_pending:
+                            styles.append('')  # 待确认：白色（默认）
+                        elif is_shares_increase:
+                            styles.append('color: #dc3545')  # 份额增加：红色
+                        else:
+                            styles.append('color: #28a745')  # 份额减少：绿色
+                    else:
+                        styles.append('')
+                return styles
             
             # 显示带颜色和行选择的表格（不显示原始索引列）
             styled_df = df_page[display_cols].style.apply(color_tx_amount, axis=1)
             event = st.dataframe(
                 styled_df, 
-                use_container_width=True, 
+                width='stretch', 
                 hide_index=True,
                 on_select="rerun",
                 selection_mode="single-row",
@@ -1805,7 +1926,7 @@ def page_invest():
                 col_save, col_delete = st.columns([3, 1])
                 
                 with col_save:
-                    if st.button("💾 保存修改", type="primary", key="save_tx_edit", use_container_width=True):
+                    if st.button("💾 保存修改", type="primary", key="save_tx_edit", width='stretch'):
                         updated_record = {
                             'date': str(edit_date),
                             'product_code': edit_product,
@@ -1822,7 +1943,7 @@ def page_invest():
                             st.error("❌ 保存失败")
                 
                 with col_delete:
-                    if st.button("🗑️ 删除", type="secondary", key="delete_tx_edit", use_container_width=True):
+                    if st.button("🗑️ 删除", type="secondary", key="delete_tx_edit", width='stretch'):
                         st.session_state['pending_delete_tx_id'] = selected_record['id']
                 
                 # 删除确认
@@ -1884,8 +2005,16 @@ def page_orders():
                 display_shares = f"{float(orig_shares):.2f}" if orig_shares else '-'
             
             # 格式化金额（两位小数）
-            orig_amount = order.get('amount', '')
-            display_amount = f"{float(orig_amount):.2f}" if orig_amount else '-'
+            # 对于赎回订单，如果预览成功，使用预览计算出的金额；否则使用订单原有金额
+            if order_type == 'redeem_request' and preview.get('success') and preview.get('amount') is not None:
+                display_amount = f"{preview.get('amount'):.2f}"
+            else:
+                orig_amount = order.get('amount', '')
+                display_amount = f"{float(orig_amount):.2f}" if orig_amount else '-'
+            
+            # 处理净值列，确保类型一致（避免 Arrow 序列化错误）
+            nav_value = preview.get('nav', None) if preview.get('success') else None
+            nav_display = f"{nav_value:.4f}" if nav_value is not None else '-'
             
             rows.append({
                 '订单号': order.get('order_id', ''),
@@ -1895,7 +2024,7 @@ def page_orders():
                 '份额': display_shares,
                 '确认日期': confirm_date,
                 '状态': order.get('status', ''),
-                '净值': preview.get('nav', '-') if preview.get('success') else '-',
+                '净值': nav_display,
                 '备注': order.get('note', '')
             })
             raw_orders.append(order)
@@ -1912,7 +2041,7 @@ def page_orders():
         display_cols = ['订单号', '产品代码', '类型', '金额', '份额', '确认日期', '状态', '净值', '备注']
         event = st.dataframe(
             df_page[display_cols],
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
             on_select="rerun",
             selection_mode="single-row",
@@ -2020,7 +2149,7 @@ def page_orders():
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button("⚡ 结算今日可结算", use_container_width=True):
+            if st.button("⚡ 结算今日可结算", width='stretch'):
                 with st.spinner("正在结算..."):
                     try:
                         today = date.today().strftime('%Y-%m-%d')
@@ -2057,7 +2186,7 @@ def page_orders():
                         st.error(f"❌ 结算失败: {e}")
     
         with col2:
-            if st.button("📋 结算全部到期", use_container_width=True):
+            if st.button("📋 结算全部到期", width='stretch'):
                 with st.spinner("正在结算..."):
                     try:
                         result = settle_orders()
@@ -2109,26 +2238,49 @@ def page_orders():
             order_type = order.get('order_type', '')
             status = order.get('status', '')
             
-            # 已完成的订单，从交易记录中获取份额和净值
+            # 已完成的订单，从交易记录中获取份额、净值和金额
             display_shares = order.get('shares', '') or ''
-            display_nav = ''
+            display_nav = '-'  # 初始化为字符串，避免类型不一致
+            display_amount = ''  # 初始化为空，后续从交易记录或订单中获取
             
             if status == 'done':
-                # 从 transactions 中查找对应的 buy_confirm 记录
+                # 从 transactions 中查找对应的 buy_confirm 或 sell_confirm 记录
                 from core.invest_service import list_recent_transactions
                 order_id = order.get('order_id', '')
                 txs = list_recent_transactions(100)
                 for tx in txs:
                     if tx.get('order_id') == order_id and tx.get('action') in ['buy_confirm', 'sell_confirm']:
                         display_shares = tx.get('shares', '') or display_shares
-                        display_nav = tx.get('nav', '') or ''
+                        # 处理净值列，确保类型一致（避免 Arrow 序列化错误）
+                        nav_value = tx.get('nav', '')
+                        if nav_value:
+                            try:
+                                display_nav = f"{float(nav_value):.4f}"
+                            except (ValueError, TypeError):
+                                display_nav = str(nav_value) if nav_value else '-'
+                        else:
+                            display_nav = '-'
+                        # 对于赎回订单（sell_confirm），从交易记录中获取金额
+                        if tx.get('action') == 'sell_confirm':
+                            amount_value = tx.get('amount', '')
+                            if amount_value:
+                                try:
+                                    display_amount = f"{float(amount_value):.2f}"
+                                except (ValueError, TypeError):
+                                    display_amount = str(amount_value) if amount_value else '-'
                         break
             elif status == 'pending':
                 # 待处理的订单，预览计算份额
                 preview = preview_settle(order['order_id'])
                 if preview.get('success') and preview.get('shares'):
                     display_shares = f"{preview.get('shares'):.2f}"
-                    display_nav = preview.get('nav', '')
+                    # 处理净值列，确保类型一致（避免 Arrow 序列化错误）
+                    nav_value = preview.get('nav', None)
+                    display_nav = f"{nav_value:.4f}" if nav_value is not None else '-'
+                else:
+                    display_nav = '-'
+            else:
+                display_nav = '-'
             
             # 格式化份额（两位小数）
             if display_shares and display_shares != '-':
@@ -2138,8 +2290,10 @@ def page_orders():
                     pass
             
             # 格式化金额（两位小数）
-            orig_amount = order.get('amount', '')
-            display_amount = f"{float(orig_amount):.2f}" if orig_amount else '-'
+            # 如果还没有从交易记录中获取到金额，则从订单中获取
+            if not display_amount:
+                orig_amount = order.get('amount', '')
+                display_amount = f"{float(orig_amount):.2f}" if orig_amount else '-'
             
             # 状态中文化
             status_map = {'pending': '待处理', 'done': '已完成', 'cancelled': '已取消'}
@@ -2229,7 +2383,7 @@ def page_orders():
                         else:
                             st.error(f"❌ 重置失败 {error_count} 个订单")
         
-        st.dataframe(df_page, use_container_width=True, hide_index=True)
+        st.dataframe(df_page, width='stretch', hide_index=True)
     else:
         st.info("暂无订单")
 
@@ -2348,7 +2502,7 @@ def page_product_management():
                         except Exception as e:
                             st.error(f"❌ 删除失败: {e}")
             
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.info("暂无产品")
     
@@ -2512,7 +2666,7 @@ def page_account_management():
                         except Exception as e:
                             st.error(f"❌ 删除失败: {e}")
             
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.info("暂无账户")
     
@@ -2634,7 +2788,7 @@ def page_pool_rules():
                     except Exception as e:
                         st.error(f"❌ 删除失败: {e}")
             
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.dataframe(df, width='stretch', hide_index=True)
         else:
             st.info("暂无资金池规则")
     

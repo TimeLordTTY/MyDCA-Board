@@ -35,7 +35,7 @@ TRANSACTIONS_FIELDNAMES = [
     'fee', 'nav', 'nav_date', 'order_id', 'note'
 ]
 
-VALID_ACTIONS = ['buy_debit', 'buy_confirm', 'buy', 'sell', 'sell_confirm', 'dividend']
+VALID_ACTIONS = ['buy_debit', 'buy_confirm', 'buy', 'sell', 'sell_confirm', 'dividend', 'redeem_request']
 
 
 def load_transactions() -> List[Dict]:

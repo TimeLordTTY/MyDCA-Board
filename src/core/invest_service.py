@@ -76,6 +76,7 @@ def add_buy_debit(
     amount: Decimal,
     fee: Decimal = None,
     requested_at: datetime = None,
+    trade_date: date = None,
     note: str = None,
     channel: str = None
 ) -> str:
@@ -87,6 +88,7 @@ def add_buy_debit(
         amount: 扣款金额（含手续费）
         fee: 手续费（可选，默认自动计算）
         requested_at: 请求时间（默认当前时间）
+        trade_date: 交易日期（可选，默认根据requested_at计算）
         note: 备注（默认产品名称）
         channel: 渠道（EXCHANGE/OTC），None 表示优先场外
     
@@ -114,7 +116,8 @@ def add_buy_debit(
         fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     
     # 计算日期
-    trade_date = calc_trade_date(requested_at, cutoff_time)
+    if trade_date is None:
+        trade_date = calc_trade_date(requested_at, cutoff_time)
     nav_date = trade_date
     confirm_date = calc_confirm_date(trade_date, buy_confirm_offset)
     
@@ -170,6 +173,8 @@ def add_redeem_request(
     shares: Decimal,
     holding_days: int,
     requested_at: datetime = None,
+    trade_date: date = None,
+    redeem_account: str = None,
     note: str = None
 ) -> str:
     """
@@ -180,6 +185,8 @@ def add_redeem_request(
         shares: 赎回份额
         holding_days: 持有天数（用于确定赎回费率）
         requested_at: 请求时间（默认当前时间）
+        trade_date: 交易日期（可选，默认根据requested_at计算）
+        redeem_account: 赎回账户（可选，默认余利宝理财金）
         note: 备注（默认产品名称）
     
     Returns:
@@ -204,17 +211,59 @@ def add_redeem_request(
     sell_fee_rate = Decimal(str(get_sell_fee_rate(product, holding_days)))
     
     # 计算日期
-    trade_date = calc_trade_date(requested_at, cutoff_time)
+    if trade_date is None:
+        trade_date = calc_trade_date(requested_at, cutoff_time)
     nav_date = trade_date
     confirm_date = calc_confirm_date(trade_date, sell_confirm_offset)
     
-    # 生成订单号
-    order_id = generate_order_id(product_code)
+    # 生成订单号（包含请求时间，格式：YYYYMMDDHHMMSS_product_code_seq_R{requested_at_timestamp}）
+    # 使用请求时间生成基础订单号，而不是当前时间
+    requested_at_str = requested_at.strftime('%Y%m%d%H%M%S')
+    prefix = f"{requested_at_str}_{product_code}_"
+    
+    # 查找同秒内的最大序号
+    from data.data_store import load_orders, load_transactions
+    max_seq = 0
+    orders = load_orders()
+    for order in orders:
+        order_id = order.get('order_id') or ''
+        if order_id.startswith(prefix):
+            try:
+                # 格式：YYYYMMDDHHMMSS_product_code_seq 或 YYYYMMDDHHMMSS_product_code_seq_R...
+                parts = order_id.split('_')
+                if len(parts) >= 3:
+                    seq_str = parts[2].split('R')[0]  # 提取序号部分（去掉R后面的内容）
+                    seq = int(seq_str)
+                    max_seq = max(max_seq, seq)
+            except (ValueError, IndexError):
+                pass
+    
+    transactions = load_transactions()
+    for tx in transactions:
+        order_id = tx.get('order_id') or ''
+        if order_id.startswith(prefix):
+            try:
+                parts = order_id.split('_')
+                if len(parts) >= 3:
+                    seq_str = parts[2].split('R')[0]
+                    seq = int(seq_str)
+                    max_seq = max(max_seq, seq)
+            except (ValueError, IndexError):
+                pass
+    
+    new_seq = max_seq + 1
+    order_id = f"{prefix}{new_seq:03d}R{requested_at_str}"
     
     if note is None:
         note = product_name
     
-    # 只写入 orders（不写 transactions）
+    # 将赎回账户信息存储在note中（格式：原备注|redeem_account:账户ID）
+    if redeem_account:
+        note_with_account = f"{note}|redeem_account:{redeem_account}"
+    else:
+        note_with_account = note
+    
+    # 写入 orders
     order_record = {
         'order_id': order_id,
         'product_id': product.get('id'),  # 添加 product_id
@@ -230,9 +279,27 @@ def add_redeem_request(
         'holding_days': str(holding_days),
         'sell_fee_rate': str(sell_fee_rate),
         'status': 'pending',
-        'note': note
+        'note': note_with_account
     }
     append_order(order_record)
+    
+    # 同时写入 transactions（redeem_request），以便在理财记录中可查询
+    from data.data_store import append_transaction
+    tx_record = {
+        'date': str(trade_date),
+        'product_id': product.get('id'),
+        'product_code': product_code,
+        'action': 'redeem_request',
+        'amount': '',
+        'shares': format_decimal(shares, 4),
+        'fee': '',
+        'nav': '',
+        'nav_date': str(nav_date),
+        'order_id': order_id,
+        'note': note,
+        'created_at': requested_at.strftime('%Y-%m-%d %H:%M:%S')
+    }
+    append_transaction(tx_record)
     
     return order_id
 
@@ -395,7 +462,7 @@ def settle_orders(target_date: str = None) -> SettleResult:
             })
             continue
         
-        # 获取净值
+        # 获取净值（赎回订单使用交易日期nav_date的净值）
         nav = get_nav(product_code, nav_date)
         if nav is None:
             result.errors.append({
@@ -471,6 +538,19 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 # 获取 product_id（使用之前已获取的 product）
                 product_id = product.get('id') if product else None
                 
+                # 获取赎回账户（从订单的note中解析，格式：原备注|redeem_account:账户ID）
+                redeem_account = None
+                order_note = order.get('note', '')
+                if '|redeem_account:' in order_note:
+                    try:
+                        redeem_account = order_note.split('|redeem_account:')[1].strip()
+                    except:
+                        pass
+                
+                # 如果没有找到，使用默认账户（余利宝理财金）
+                if not redeem_account:
+                    redeem_account = 'ylb_finance'
+                
                 # 写入 sell_confirm
                 # 使用订单的确认日期，时间默认 12:00:00
                 confirm_date_str = order.get('confirm_date', target_date)
@@ -487,10 +567,21 @@ def settle_orders(target_date: str = None) -> SettleResult:
                     'nav': str(nav),
                     'nav_date': nav_date,
                     'order_id': order_id,
-                    'note': order.get('note', ''),
+                    'note': order_note.split('|redeem_account:')[0] if '|redeem_account:' in order_note else order_note,
                     'created_at': created_at
                 }
                 append_transaction(tx_record)
+                
+                # 添加记账记录（赎回账户金额增加）
+                from core.ledger_service import add_income
+                add_income(
+                    account_to=redeem_account,
+                    amount=amount,
+                    category_l1="理财投资",
+                    category_l2="赎回确认",
+                    event_time=created_at,
+                    note=f"{product.get('product_name', product_code)} 赎回 (订单号: {order_id})"
+                )
             
             # 标记订单完成
             update_order_status(order_id, 'done')
@@ -572,7 +663,7 @@ def settle_single_order(
             message='已存在确认记录'
         )
     
-    # 获取净值
+    # 获取净值（赎回订单使用交易日期nav_date的净值）
     nav = nav_override
     if nav is None:
         nav = get_nav(product_code, nav_date)
@@ -671,6 +762,19 @@ def settle_single_order(
             # 获取 product_id（使用之前已获取的 product）
             product_id = product.get('id') if product else None
             
+            # 获取赎回账户（从订单的note中解析，格式：原备注|redeem_account:账户ID）
+            redeem_account = None
+            order_note = order.get('note', '')
+            if '|redeem_account:' in order_note:
+                try:
+                    redeem_account = order_note.split('|redeem_account:')[1].strip()
+                except:
+                    pass
+            
+            # 如果没有找到，使用默认账户（余利宝理财金）
+            if not redeem_account:
+                redeem_account = 'ylb_finance'
+            
             # 写入 sell_confirm
             tx_record = {
                 'date': confirm_date_str,
@@ -683,12 +787,24 @@ def settle_single_order(
                 'nav': str(nav),
                 'nav_date': nav_date,
                 'order_id': order_id,
-                'note': order.get('note', ''),
+                'note': order_note.split('|redeem_account:')[0] if '|redeem_account:' in order_note else order_note,
                 'created_at': created_at
             }
             logger.info(f"settle_single_order: 准备写入赎回确认记录 order_id={order_id}, product_code={product_code}, product_id={product_id}, shares={shares}, amount={amount}")
             append_transaction(tx_record)
             logger.info(f"settle_single_order: 成功写入赎回确认记录 order_id={order_id}")
+            
+            # 添加记账记录（赎回账户金额增加）
+            from core.ledger_service import add_income
+            add_income(
+                account_to=redeem_account,
+                amount=amount,
+                category_l1="理财投资",
+                category_l2="赎回确认",
+                event_time=created_at,
+                note=f"{product.get('product_name', product_code)} 赎回 (订单号: {order_id})"
+            )
+            logger.info(f"settle_single_order: 成功添加记账记录，账户={redeem_account}，金额={amount}")
             
             # 标记订单完成
             update_order_status(order_id, 'done')
@@ -741,7 +857,7 @@ def preview_settle(order_id: str) -> Dict:
     nav_date = order.get('nav_date', '')
     order_type = order['order_type']
     
-    # 获取净值
+    # 获取净值（赎回订单使用交易日期nav_date的净值）
     nav = get_nav(product_code, nav_date)
     if nav is None:
         return {'success': False, 'message': f'缺少净值: {product_code} @ {nav_date}', 'nav': None}
@@ -775,6 +891,8 @@ def preview_settle(order_id: str) -> Dict:
     elif order_type == 'redeem_request':
         shares = parse_decimal(order.get('shares', 0))
         sell_fee_rate = Decimal(order.get('sell_fee_rate', '0') or '0')
+        
+        # 赎回订单使用交易日期（nav_date）的净值计算金额
         gross = shares * nav
         fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         amount = gross - fee

@@ -1,5 +1,12 @@
 from datetime import date, timedelta, datetime
 import requests
+import ssl
+import urllib3
+from urllib3.util.ssl_ import create_urllib3_context
+from requests.adapters import HTTPAdapter
+
+# 禁用SSL警告（因为我们使用了verify=False和legacy renegotiation）
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def _normalize_nav_record(raw_record, product_code):
     """
@@ -25,6 +32,30 @@ def _normalize_nav_record(raw_record, product_code):
         'weekly_rate': str(raw_record['WEEK_CLIENTRATE']),
     }
 
+class LegacySSLAdapter(HTTPAdapter):
+    """支持legacy SSL重新协商的适配器（解决Python 3.12+的SSL错误）"""
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = create_urllib3_context()
+        # 允许legacy renegotiation（Python 3.12+默认禁用）
+        # 使用 OP_LEGACY_SERVER_CONNECT = 0x4 来允许不安全的legacy重新协商
+        try:
+            # 尝试使用常量（如果存在）
+            if hasattr(ssl, 'OP_LEGACY_SERVER_CONNECT'):
+                ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT
+            else:
+                # Python 3.12+ 使用数值
+                ctx.options |= 0x4
+        except (AttributeError, TypeError):
+            # 如果设置失败，尝试其他方法
+            pass
+        # 设置 verify_mode 和 check_hostname（必须同时设置，否则会冲突）
+        # 先设置 check_hostname = False，再设置 verify_mode = CERT_NONE
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        kwargs['ssl_context'] = ctx
+        return super().init_poolmanager(*args, **kwargs)
+
+
 def query_latest_nav(product_code, query_date, retry_num):
     """
     获取民生理财产品的每日净值
@@ -41,12 +72,16 @@ def query_latest_nav(product_code, query_date, retry_num):
     }
     try:
         print(f"开始获取基金 {product_code} {query_date} 的净值")
-        response = requests.post("https://www.cmbcwm.com.cn/gw/po_web/BTADailyQry", data={
+        # 创建支持legacy SSL的session
+        session = requests.Session()
+        session.mount('https://', LegacySSLAdapter())
+        
+        response = session.post("https://www.cmbcwm.com.cn/gw/po_web/BTADailyQry", data={
             "chart_type": "1",
             "real_prd_code": product_code,
             "begin_date": query_date.strftime("%Y%m%d"),
             "end_date": query_date.strftime("%Y%m%d")
-        }, headers=headers, timeout=10).json()
+        }, headers=headers, timeout=10, verify=False).json()
     except Exception as e:
         print(f"获取最新净值失败:{e}")
         raise e
