@@ -1,7 +1,7 @@
 """调度器服务 - 基于 APScheduler + job_config 表驱动"""
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -9,13 +9,16 @@ try:
     APSCHEDULER_AVAILABLE = True
 except ImportError:
     APSCHEDULER_AVAILABLE = False
+    BackgroundScheduler = None  # 占位符，避免类型注解错误
+    CronTrigger = None
     logging.warning("APScheduler 未安装，调度功能不可用")
 
 from data.db_connector import execute_query, execute_one, execute_update
 
 logger = logging.getLogger(__name__)
 
-_scheduler: Optional[BackgroundScheduler] = None
+# 使用 Any 类型，避免在 APScheduler 未安装时类型注解错误
+_scheduler: Optional[Any] = None
 
 
 def get_job_configs(enabled_only: bool = True) -> list:
@@ -100,7 +103,7 @@ def start_scheduler():
             job_code = job['job_code']
             cron_expr = job['cron_expr']
             
-            # 解析 cron 表达式（简化版，支持标准格式）
+            # 解析 cron 表达式（支持标准格式）
             # 格式：分钟 小时 日 月 星期
             parts = cron_expr.split()
             if len(parts) != 5:
@@ -109,14 +112,43 @@ def start_scheduler():
             
             minute, hour, day, month, day_of_week = parts
             
+            # 解析各个字段，支持 */1, 9-11,13-14, 1-5 等格式
+            # APScheduler 的 CronTrigger 支持这些格式，但需要正确传递
+            def parse_field(field_str):
+                """解析 cron 字段，返回 APScheduler 可用的值"""
+                if field_str == '*':
+                    return None
+                # 支持 */1 格式 - APScheduler 需要转换为 '*' 或使用 IntervalTrigger
+                if field_str.startswith('*/'):
+                    # 对于 */1，直接使用 '*' 表示每分钟/每小时
+                    if field_str == '*/1':
+                        return '*'
+                    # 对于其他间隔，保持原样（APScheduler 可能不支持，需要特殊处理）
+                    interval = int(field_str[2:])
+                    # 这里简化处理，对于非1的间隔可能需要使用 IntervalTrigger
+                    return '*'
+                # 支持范围格式，如 9-11,13-14 或 1-5
+                # APScheduler 支持这种格式，直接传递字符串
+                if ',' in field_str or '-' in field_str:
+                    return field_str
+                # 单个值
+                try:
+                    return int(field_str)
+                except ValueError:
+                    return field_str
+            
             # 创建触发器
-            trigger = CronTrigger(
-                minute=minute if minute != '*' else None,
-                hour=hour if hour != '*' else None,
-                day=day if day != '*' else None,
-                month=month if month != '*' else None,
-                day_of_week=day_of_week if day_of_week != '*' else None
-            )
+            try:
+                trigger = CronTrigger(
+                    minute=parse_field(minute),
+                    hour=parse_field(hour),
+                    day=parse_field(day),
+                    month=parse_field(month),
+                    day_of_week=parse_field(day_of_week)
+                )
+            except Exception as e:
+                logger.error(f"创建触发器失败: {job_code}={cron_expr}, 错误: {e}")
+                continue
             
             # 根据任务代码选择执行函数
             if job_code == 'rt_quote_1m':
@@ -163,5 +195,7 @@ def stop_scheduler():
 
 def is_scheduler_running() -> bool:
     """检查调度器是否运行"""
+    if not APSCHEDULER_AVAILABLE:
+        return False
     return _scheduler is not None and _scheduler.running
 

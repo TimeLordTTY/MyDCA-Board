@@ -88,11 +88,13 @@ def append_transaction(record: Dict) -> None:
     product_code = record.get('product_code')
     
     if not product_id and product_code:
-        # 通过 product_code 查找 product_id（优先场外，兼容旧数据）
+        # 通过 product_code 查找 product_id（不限制渠道，兼容所有产品类型）
         from data.product_service import get_product_by_code
-        product = get_product_by_code(product_code, channel='OTC')
+        product = get_product_by_code(product_code)
         if product:
             product_id = product.get('id')
+        else:
+            logger.warning(f"append_transaction: 无法找到产品 product_code={product_code}, 将使用 product_id=NULL 写入记录")
     
     # 如果有 created_at 字段，使用它；否则数据库自动设置
     created_at = record.get('created_at')
@@ -136,7 +138,12 @@ def append_transaction(record: Dict) -> None:
             record.get('order_id') or None,
             record.get('note') or None
         )
-    execute_insert(sql, params)
+    try:
+        execute_insert(sql, params)
+        logger.debug(f"append_transaction: 成功写入交易记录 product_code={product_code}, action={record.get('action')}, order_id={record.get('order_id')}")
+    except Exception as e:
+        logger.error(f"append_transaction: 写入交易记录失败 product_code={product_code}, action={record.get('action')}, order_id={record.get('order_id')}, 错误: {e}")
+        raise
 
 
 def transaction_exists(order_id: str, action: str) -> bool:

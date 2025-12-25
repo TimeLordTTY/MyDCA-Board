@@ -10,10 +10,13 @@
 
 UI 和 CLI 都通过此服务操作理财数据，避免业务逻辑重复。
 """
+import logging
 from datetime import datetime, date
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 from data.data_store import (
     load_transactions, append_transaction, transaction_exists,
@@ -94,9 +97,9 @@ def add_buy_debit(
         ValueError: 产品不存在
     """
     from data.product_service import get_product_by_code
-    product = get_product_by_code(product_code, channel=channel)
+    product = get_product_by_code(product_code)
     if product is None:
-        raise ValueError(f"产品不存在: product_code={product_code}, channel={channel}")
+        raise ValueError(f"产品不存在: product_code={product_code}")
     
     product_name = product['product_name']
     buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
@@ -186,9 +189,9 @@ def add_redeem_request(
         ValueError: 产品不存在
     """
     from data.product_service import get_product_by_code
-    product = get_product_by_code(product_code, channel=channel)
+    product = get_product_by_code(product_code)
     if product is None:
-        raise ValueError(f"产品不存在: product_code={product_code}, channel={channel}")
+        raise ValueError(f"产品不存在: product_code={product_code}")
     
     product_name = product['product_name']
     sell_confirm_offset = product.get('sell_confirm_offset', 1)
@@ -271,9 +274,9 @@ def add_history_trade(
         raise ValueError(f"无效的 action: {action}")
     
     from data.product_service import get_product_by_code
-    product = get_product_by_code(product_code, channel=channel)
+    product = get_product_by_code(product_code)
     if product is None:
-        raise ValueError(f"产品不存在: product_code={product_code}, channel={channel}")
+        raise ValueError(f"产品不存在: product_code={product_code}")
     
     if note is None:
         note = product['product_name']
@@ -683,7 +686,9 @@ def settle_single_order(
                 'note': order.get('note', ''),
                 'created_at': created_at
             }
+            logger.info(f"settle_single_order: 准备写入赎回确认记录 order_id={order_id}, product_code={product_code}, product_id={product_id}, shares={shares}, amount={amount}")
             append_transaction(tx_record)
+            logger.info(f"settle_single_order: 成功写入赎回确认记录 order_id={order_id}")
             
             # 标记订单完成
             update_order_status(order_id, 'done')

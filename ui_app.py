@@ -20,9 +20,12 @@ from typing import Any
 
 import streamlit as st
 import pandas as pd
+import logging
 
 # 添加 src 目录到路径
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+logger = logging.getLogger(__name__)
 
 from data.config_loader import get_project_root
 from core.ledger_service import (
@@ -445,17 +448,12 @@ def render_product_quote():
         return
     
     # 产品选择
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        product_options = {p['id']: f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')} ({'场内' if p.get('channel') == 'EXCHANGE' else '场外'})" 
-                          for p in all_products}
-        selected_product_id = st.selectbox("选择产品", 
-                                         options=list(product_options.keys()),
-                                         format_func=lambda x: product_options[x],
-                                         key="product_quote_select")
-    
-    with col2:
-        auto_refresh = st.checkbox("🔄 自动刷新（交易时间每分钟）", value=False, key="auto_refresh_quote")
+    product_options = {p['id']: f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')} ({'场内' if p.get('channel') == 'EXCHANGE' else '场外'})" 
+                      for p in all_products}
+    selected_product_id = st.selectbox("选择产品", 
+                                     options=list(product_options.keys()),
+                                     format_func=lambda x: product_options[x],
+                                     key="product_quote_select")
     
     if selected_product_id:
         product = next((p for p in all_products if p['id'] == selected_product_id), None)
@@ -466,8 +464,8 @@ def render_product_quote():
         product_code = product.get('code', '')
         product_name = product.get('name') or product.get('product_name', '')
         
-        # 自动刷新逻辑（交易时间段内每分钟）
-        if auto_refresh and channel == 'EXCHANGE':
+        # 自动刷新逻辑（场内产品：交易时间段内每分钟自动刷新）
+        if channel == 'EXCHANGE':
             now = datetime.now()
             hour = now.hour
             minute = now.minute
@@ -476,36 +474,17 @@ def render_product_quote():
             is_weekday = now.weekday() < 5
             
             if is_trading_hours and is_weekday:
-                # 检查是否需要刷新（每分钟刷新一次）
-                last_refresh_key = f"last_quote_refresh_{selected_product_id}"
-                if last_refresh_key not in st.session_state:
-                    st.session_state[last_refresh_key] = None
-                
-                last_refresh = st.session_state[last_refresh_key]
-                should_refresh = False
-                
-                if last_refresh is None:
-                    should_refresh = True
+                # 显示自动刷新提示
+                st.info("🔄 交易时间段内，调度器将自动采集行情数据（每分钟）")
+            else:
+                # 非交易时间段，显示提示
+                if not is_weekday:
+                    st.info("📅 当前为非交易日")
                 else:
-                    time_diff = (now - last_refresh).total_seconds()
-                    if time_diff >= 60:  # 超过60秒，需要刷新
-                        should_refresh = True
-                
-                if should_refresh:
-                    try:
-                        fetch_and_save_realtime_quote(selected_product_id, product_code)
-                        if product.get('is_qdii'):
-                            fetch_and_save_qdii_premium(selected_product_id, product_code)
-                        st.session_state[last_refresh_key] = now
-                    except Exception as e:
-                        pass  # 静默失败，避免干扰用户
-                
-                # 使用 Streamlit 的自动刷新（每60秒）
-                time.sleep(60)
-                st.rerun()
+                    st.info("⏰ 当前为非交易时间段（交易时间：9:00-11:30, 13:00-15:00）")
         
-        # 手动刷新按钮
-        if st.button("🔄 刷新行情", key="manual_refresh_quote"):
+        # 手动刷新按钮（保留，用于立即刷新）
+        if st.button("🔄 立即刷新", key="manual_refresh_quote"):
             with st.spinner("正在获取最新行情..."):
                 try:
                     if channel == 'EXCHANGE':
@@ -541,6 +520,10 @@ def _render_exchange_quote(product, product_id):
     
     # 实时行情
     latest_quote = get_latest_realtime_quote(product_id)
+    
+    # 调试信息：显示获取到的字段（可选，用于排查问题）
+    # if latest_quote:
+    #     st.json(latest_quote)  # 取消注释以查看原始数据
     
     if latest_quote:
         # ========== ① 价格 & 估值核心（最重要） ==========
@@ -590,7 +573,7 @@ def _render_exchange_quote(product, product_id):
         # ========== ② 基础价格时间序列（用于高低位判断） ==========
         st.divider()
         st.markdown("**📊 基础价格时间序列**")
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1.2])  # 给行情时间更多空间
         with col1:
             open_val = latest_quote.get('open')
             if open_val is not None:
@@ -620,18 +603,34 @@ def _render_exchange_quote(product, product_id):
             else:
                 st.metric("昨收价", "N/A")
         with col5:
+            # 使用自定义显示方式，避免 st.metric 的截断问题
             quote_time = latest_quote.get('quote_time', '')
+            time_str = "N/A"
             if isinstance(quote_time, str):
-                st.metric("行情时间", quote_time[:19] if len(quote_time) > 19 else quote_time)
+                # 确保完整显示日期和时间
+                if len(quote_time) >= 19:
+                    time_str = quote_time[:19]
+                elif len(quote_time) >= 10:
+                    time_str = quote_time[:10]
+                else:
+                    time_str = quote_time
             elif hasattr(quote_time, 'strftime'):
-                st.metric("行情时间", quote_time.strftime('%Y-%m-%d %H:%M:%S'))
-            else:
-                st.metric("行情时间", str(quote_time))
+                time_str = quote_time.strftime('%Y-%m-%d %H:%M:%S')
+            elif quote_time:
+                time_str = str(quote_time)
+            
+            # 使用 markdown 和 HTML 来显示，确保完整显示且样式一致
+            st.markdown(f"""
+            <div style="padding: 0.5rem 0;">
+                <div style="font-size: 0.875rem; color: rgb(128, 128, 128); margin-bottom: 0.25rem;">行情时间</div>
+                <div style="font-size: 1.5rem; font-weight: 600; color: rgb(49, 51, 63);">{time_str}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         # ========== ③ 流动性与可交易性（质量监控） ==========
         st.divider()
         st.markdown("**💧 流动性与可交易性**")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             volume_val = latest_quote.get('volume')
             if volume_val is not None:
@@ -653,6 +652,13 @@ def _render_exchange_quote(product, product_id):
                 st.metric("换手率", f"{turnover_rate:.2f}%")
             else:
                 st.metric("换手率", "N/A")
+        with col4:
+            amplitude_val = latest_quote.get('amplitude')
+            if amplitude_val is not None:
+                amplitude = float(amplitude_val) * 100
+                st.metric("振幅", f"{amplitude:.2f}%")
+            else:
+                st.metric("振幅", "N/A")
         
         # ========== QDII 溢价率决策建议（如果溢价率未在实时行情中） ==========
         if product.get('is_qdii'):
@@ -2683,6 +2689,23 @@ def page_pool_rules():
 # 主程序
 # ============================================================
 def main():
+    # 初始化调度器（只在第一次运行时启动）
+    if 'scheduler_initialized' not in st.session_state:
+        try:
+            from core.scheduler_service import start_scheduler, is_scheduler_running
+            if not is_scheduler_running():
+                if start_scheduler():
+                    st.session_state.scheduler_initialized = True
+                    logger.info("调度器已在 UI 中启动")
+                else:
+                    logger.warning("调度器启动失败")
+            else:
+                st.session_state.scheduler_initialized = True
+                logger.info("调度器已在运行")
+        except Exception as e:
+            logger.error(f"初始化调度器失败: {e}", exc_info=True)
+            st.session_state.scheduler_initialized = False
+    
     # 侧边栏导航
     st.sidebar.title("💰 财富中枢")
     st.sidebar.divider()

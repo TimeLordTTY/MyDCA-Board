@@ -14,73 +14,219 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass
+import logging
 
 from data.data_store import (
     load_ledger, append_ledger, VALID_ENTRY_TYPES,
     format_decimal
 )
 from data.config_loader import load_accounts, load_categories, get_project_root
+from data.account_service import get_account_by_id
+
+logger = logging.getLogger(__name__)
 
 
 def get_account_parent_group(account_id: str) -> Optional[Dict]:
     """
-    获取账户的父账户组信息
+    获取账户的父账户组信息（从数据库读取）
     
     Args:
-        account_id: 账户ID
+        account_id: 账户ID（account_code）
     
     Returns:
         如果是子账户，返回父账户组信息 {'group_name': 'wenlibao', 'group_display': '稳利宝', 'accounts': [...]}
         否则返回 None
     """
-    import json
-    accounts_path = get_project_root() / "config" / "accounts.json"
-    if not accounts_path.exists():
-        return None
-    
-    with open(accounts_path, 'r', encoding='utf-8') as f:
-        config = json.load(f)
-    
-    # 查找账户所属的组
-    accounts = config.get('accounts', [])
-    account_groups = config.get('account_groups', {})
-    
-    # 先找到账户信息
-    account_info = None
-    for acc in accounts:
-        if acc.get('id') == account_id:
-            account_info = acc
-            break
-    
-    if not account_info:
-        return None
-    
-    # 检查账户类型和组
-    account_type = account_info.get('account_type', '')
-    account_group = account_info.get('group', '')
-    
-    # product_sub 类型的账户有父账户组
-    if account_type == 'product_sub' and account_group:
-        group_info = account_groups.get(account_group, {})
-        group_accounts = [acc['id'] for acc in accounts 
-                         if acc.get('group') == account_group]
-        return {
-            'group_name': account_group,
-            'group_display': group_info.get('name', account_group),
-            'accounts': group_accounts
-        }
-    
-    # 检查 cash 类型账户是否在 ylb 组
-    if account_type == 'cash':
-        for group_name, group_info in account_groups.items():
-            if account_id in group_info.get('accounts', []):
+    try:
+        from data.account_service import get_account_by_code
+        from data.db_connector import execute_query
+        
+        # 从数据库获取账户信息
+        account = get_account_by_code(account_id)
+        if not account:
+            logger.debug(f"账户不存在: {account_id}")
+            return None
+        
+        account_type = account.get('account_type', '')
+        product_id = account.get('product_id')
+        
+        logger.debug(f"查找账户父组: account_id={account_id}, account_type={account_type}, product_id={product_id}")
+        
+        # 方法1: 通过 product_id 查找账户组（适用于 PRODUCT_SUB 和部分 CASH 账户）
+        if product_id:
+            # 查询账户组信息
+            sql = """
+                SELECT 
+                    ag.group_code, ag.group_name, ag.linked_product_id
+                FROM account_groups ag
+                WHERE ag.linked_product_id = %s
+                LIMIT 1
+            """
+            group_row = execute_query(sql, (product_id,))
+            if group_row and len(group_row) > 0:
+                group_info = group_row[0]
+                group_code = group_info['group_code']
+                group_name = group_info['group_name']
+                
+                # 获取该组的所有账户（通过 product_id 关联）
+                accounts_sql = """
+                    SELECT account_code
+                    FROM accounts
+                    WHERE product_id = %s AND is_active = 1
+                    ORDER BY account_code
+                """
+                group_accounts_rows = execute_query(accounts_sql, (product_id,))
+                group_accounts = [row['account_code'] for row in group_accounts_rows]
+                
+                logger.debug(f"找到账户组: group_code={group_code}, group_name={group_name}, accounts={group_accounts}")
                 return {
-                    'group_name': group_name,
-                    'group_display': group_info.get('name', group_name),
-                    'accounts': group_info.get('accounts', [])
+                    'group_name': group_code,
+                    'group_display': group_name,
+                    'accounts': group_accounts
                 }
-    
-    return None
+        
+        # 方法2: 如果是 CASH 类型账户且没有 product_id，检查父账户
+        if account_type == 'CASH':
+            parent_account_id = account.get('parent_account_id')
+            if parent_account_id:
+                # 查找父账户，看是否属于某个组
+                parent_account = get_account_by_id(parent_account_id)
+                if parent_account:
+                    parent_product_id = parent_account.get('product_id')
+                    if parent_product_id:
+                        # 查询账户组信息
+                        sql = """
+                            SELECT 
+                                ag.group_code, ag.group_name, ag.linked_product_id
+                            FROM account_groups ag
+                            WHERE ag.linked_product_id = %s
+                            LIMIT 1
+                        """
+                        group_row = execute_query(sql, (parent_product_id,))
+                        if group_row and len(group_row) > 0:
+                            group_info = group_row[0]
+                            group_code = group_info['group_code']
+                            group_name = group_info['group_name']
+                            
+                            # 获取该组的所有账户
+                            accounts_sql = """
+                                SELECT account_code
+                                FROM accounts
+                                WHERE product_id = %s AND is_active = 1
+                                ORDER BY account_code
+                            """
+                            group_accounts_rows = execute_query(accounts_sql, (parent_product_id,))
+                            group_accounts = [row['account_code'] for row in group_accounts_rows]
+                            
+                            logger.debug(f"通过父账户找到账户组: group_code={group_code}, group_name={group_name}, accounts={group_accounts}")
+                            return {
+                                'group_name': group_code,
+                                'group_display': group_name,
+                                'accounts': group_accounts
+                            }
+        
+        # 方法3: 通过账户代码前缀匹配查找账户组（适用于 ylb_life, ylb_finance 等）
+        # 例如：ylb_life, ylb_finance 属于 ylb 组（账户代码以 ylb_ 开头）
+        all_groups_sql = """
+            SELECT 
+                ag.group_code, ag.group_name, ag.linked_product_id
+            FROM account_groups ag
+        """
+        all_groups = execute_query(all_groups_sql)
+        
+        for group_info in all_groups:
+            group_code = group_info['group_code']
+            group_name = group_info['group_name']
+            group_linked_product_id = group_info['linked_product_id']
+            
+            # 检查账户代码是否以组代码开头（例如：ylb_life 以 ylb_ 开头）
+            if group_code and account_id.startswith(f"{group_code}_"):
+                # 获取该组的所有账户（通过账户代码前缀匹配）
+                accounts_sql = """
+                    SELECT account_code
+                    FROM accounts
+                    WHERE account_code LIKE %s AND is_active = 1
+                    ORDER BY account_code
+                """
+                pattern = f"{group_code}_%"
+                group_accounts_rows = execute_query(accounts_sql, (pattern,))
+                group_accounts = [row['account_code'] for row in group_accounts_rows]
+                
+                if group_accounts:
+                    logger.debug(f"通过代码前缀匹配找到账户组: group_code={group_code}, group_name={group_name}, accounts={group_accounts}")
+                    return {
+                        'group_name': group_code,
+                        'group_display': group_name,
+                        'accounts': group_accounts
+                    }
+            
+            # 如果账户组有 linked_product_id，也检查是否匹配
+            if group_linked_product_id and product_id == group_linked_product_id:
+                # 获取该组的所有账户
+                accounts_sql = """
+                    SELECT account_code
+                    FROM accounts
+                    WHERE product_id = %s AND is_active = 1
+                    ORDER BY account_code
+                """
+                group_accounts_rows = execute_query(accounts_sql, (group_linked_product_id,))
+                group_accounts = [row['account_code'] for row in group_accounts_rows]
+                
+                if group_accounts:
+                    logger.debug(f"通过 product_id 匹配找到账户组: group_code={group_code}, group_name={group_name}, accounts={group_accounts}")
+                    return {
+                        'group_name': group_code,
+                        'group_display': group_name,
+                        'accounts': group_accounts
+                    }
+        
+        # 兼容旧逻辑：尝试从 JSON 文件读取（如果数据库中没有找到）
+        import json
+        accounts_path = get_project_root() / "config" / "accounts.json"
+        if accounts_path.exists():
+            with open(accounts_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            accounts = config.get('accounts', [])
+            account_groups = config.get('account_groups', {})
+            
+            # 查找账户信息
+            account_info = None
+            for acc in accounts:
+                if acc.get('id') == account_id:
+                    account_info = acc
+                    break
+            
+            if account_info:
+                account_type_old = account_info.get('account_type', '')
+                account_group = account_info.get('group', '')
+                
+                # product_sub 类型的账户有父账户组
+                if account_type_old == 'product_sub' and account_group:
+                    group_info = account_groups.get(account_group, {})
+                    group_accounts = [acc['id'] for acc in accounts 
+                                     if acc.get('group') == account_group]
+                    return {
+                        'group_name': account_group,
+                        'group_display': group_info.get('name', account_group),
+                        'accounts': group_accounts
+                    }
+                
+                # 检查 cash 类型账户是否在组中
+                if account_type_old == 'cash':
+                    for group_name, group_info in account_groups.items():
+                        if account_id in group_info.get('accounts', []):
+                            return {
+                                'group_name': group_name,
+                                'group_display': group_info.get('name', group_name),
+                                'accounts': group_info.get('accounts', [])
+                            }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"获取账户父组信息失败: account_id={account_id}, 错误: {e}", exc_info=True)
+        return None
 
 
 def calc_account_balance(account_id: str, as_of_time: str = None, as_of_id: int = None) -> Decimal:
@@ -457,8 +603,10 @@ def enrich_with_balances(records: List[Dict]) -> List[Dict]:
             if parent_group:
                 parent_balance = calc_group_balance(parent_group['accounts'], event_time, record_id)
                 record['parent_balance_after'] = format_decimal(parent_balance, 2)
+                logger.debug(f"计算父账户余额: account={main_account}, group={parent_group['group_name']}, balance={parent_balance}")
             else:
                 record['parent_balance_after'] = None
+                logger.debug(f"账户 {main_account} 没有父账户组")
         else:
             record['balance_after'] = None
             record['parent_balance_after'] = None

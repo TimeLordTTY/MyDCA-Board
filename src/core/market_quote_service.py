@@ -315,13 +315,13 @@ def get_latest_quote(product_id: int) -> Optional[Dict]:
         """
         result = execute_one(sql, (product_id,))
         if result:
-            # 将数据库字段名映射到代码中使用的字段名
-            if result.get('open_price') is not None:
-                result['open'] = result.pop('open_price')
-            if result.get('high_price') is not None:
-                result['high'] = result.pop('high_price')
-            if result.get('low_price') is not None:
-                result['low'] = result.pop('low_price')
+            # 将数据库字段名映射到代码中使用的字段名（不删除原字段，保留两者）
+            if 'open_price' in result:
+                result['open'] = result['open_price']
+            if 'high_price' in result:
+                result['high'] = result['high_price']
+            if 'low_price' in result:
+                result['low'] = result['low_price']
         return result
     except Exception as e:
         # 如果新字段不存在，回退到基础字段查询

@@ -96,17 +96,43 @@ def fetch_realtime_quote(product_code: str, market: str) -> Optional[Dict]:
             except (ValueError, TypeError):
                 return default
         
-        # 解析更新时间
-        update_time_str = safe_get('更新时间', '')
-        quote_time = datetime.now()  # 默认使用当前时间
-        if update_time_str:
+        # 解析更新时间（优先使用响应中的更新时间）
+        update_time_val = safe_get('更新时间')
+        quote_time = None
+        
+        if update_time_val:
             try:
-                # 尝试解析时间字符串，格式可能是 "2025-12-24 16:11:44+08:00"
-                if '+' in update_time_str:
-                    update_time_str = update_time_str.split('+')[0]
-                quote_time = datetime.strptime(update_time_str, '%Y-%m-%d %H:%M:%S')
-            except:
-                pass
+                # 如果是 pandas Timestamp 对象
+                if hasattr(update_time_val, 'to_pydatetime'):
+                    quote_time = update_time_val.to_pydatetime()
+                # 如果是 datetime 对象
+                elif isinstance(update_time_val, datetime):
+                    quote_time = update_time_val
+                # 如果是字符串
+                elif isinstance(update_time_val, str):
+                    # 尝试解析时间字符串，格式可能是 "2025-12-24 16:11:44+08:00"
+                    update_time_str = update_time_val
+                    if '+' in update_time_str:
+                        # 处理时区信息，提取时间部分
+                        if '+08:00' in update_time_str or '+0800' in update_time_str:
+                            update_time_str = update_time_str.split('+')[0].strip()
+                        else:
+                            update_time_str = update_time_str.split('+')[0].strip()
+                    quote_time = datetime.strptime(update_time_str, '%Y-%m-%d %H:%M:%S')
+                else:
+                    # 尝试转换为字符串再解析
+                    update_time_str = str(update_time_val)
+                    if '+' in update_time_str:
+                        update_time_str = update_time_str.split('+')[0].strip()
+                    quote_time = datetime.strptime(update_time_str, '%Y-%m-%d %H:%M:%S')
+            except Exception as e:
+                logger.warning(f"解析更新时间失败: {update_time_val}, 错误: {e}")
+                quote_time = None
+        
+        # 如果解析失败，使用当前时间作为默认值
+        if quote_time is None:
+            quote_time = datetime.now()
+            logger.debug(f"使用当前时间作为行情时间: {quote_time}")
         
         # 核心字段：价格 & 估值
         price = safe_decimal('最新价', 0)
