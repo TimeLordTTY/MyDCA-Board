@@ -435,9 +435,7 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 confirm_date_str = order.get('confirm_date', target_date)
                 created_at = f"{confirm_date_str} 12:00:00"
                 
-                # 获取 product_id
-                from data.product_service import get_product_by_code
-                product = get_product_by_code(product_code)
+                # 获取 product_id（使用之前已获取的 product）
                 product_id = product.get('id') if product else None
                 
                 tx_record = {
@@ -467,9 +465,8 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
                 amount = gross - fee
                 
-                # 获取 product_id
-                product_obj = get_product_by_code(product_code)
-                product_id = product_obj.get('id') if product_obj else None
+                # 获取 product_id（使用之前已获取的 product）
+                product_id = product.get('id') if product else None
                 
                 # 写入 sell_confirm
                 # 使用订单的确认日期，时间默认 12:00:00
@@ -611,9 +608,8 @@ def settle_single_order(
             
             # 如果手续费为空或0，尝试从产品配置重新计算
             if fee == 0:
-                product_obj = get_product_by_code(product_code)
-                if product_obj:
-                    buy_fee_rate = Decimal(str(product_obj.get('buy_fee_rate', 0)))
+                if product:
+                    buy_fee_rate = Decimal(str(product.get('buy_fee_rate', 0)))
                     if buy_fee_rate > 0:
                         fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             
@@ -623,9 +619,8 @@ def settle_single_order(
             # 计算份额：净申购金额 / 净值（保持6位小数精度，与数据库字段匹配）
             shares = (net_amount / nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
             
-            # 获取 product_id
-            product_obj = get_product_by_code(product_code)
-            product_id = product_obj.get('id') if product_obj else None
+            # 获取 product_id（使用之前已获取的 product）
+            product_id = product.get('id') if product else None
             
             # 写入 buy_confirm
             tx_record = {
@@ -670,9 +665,8 @@ def settle_single_order(
             fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             amount = gross - fee
             
-            # 获取 product_id
-            product_obj = get_product_by_code(product_code)
-            product_id = product_obj.get('id') if product_obj else None
+            # 获取 product_id（使用之前已获取的 product）
+            product_id = product.get('id') if product else None
             
             # 写入 sell_confirm
             tx_record = {
