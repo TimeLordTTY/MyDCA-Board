@@ -17,7 +17,8 @@ def save_realtime_quote(product_id: int, quote_data: Dict, source: str = 'AKSHAR
     
     Args:
         product_id: 产品ID
-        quote_data: 行情数据（包含 price, prev_close, pct_chg, volume, amount, quote_time）
+        quote_data: 行情数据（包含 price, prev_close, pct_chg, volume, amount, quote_time,
+                    iopv, premium_rate, open, high, low, turnover_rate, amplitude）
         source: 数据源
     
     Returns:
@@ -27,31 +28,75 @@ def save_realtime_quote(product_id: int, quote_data: Dict, source: str = 'AKSHAR
         quote_time = quote_data.get('quote_time', datetime.now())
         
         # UPSERT: 如果存在相同 (product_id, quote_time, source)，则更新；否则插入
-        sql = """
-            INSERT INTO market_quote_rt (
-                product_id, quote_time, price, prev_close, pct_chg, volume, amount, source
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s
+        # 尝试保存新字段，如果字段不存在会失败，则回退到基础字段
+        try:
+            sql = """
+                INSERT INTO market_quote_rt (
+                    product_id, quote_time, price, prev_close, pct_chg, volume, amount,
+                    iopv, premium_rate, open_price, high_price, low_price, turnover_rate, amplitude, source
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON DUPLICATE KEY UPDATE
+                    price = VALUES(price),
+                    prev_close = VALUES(prev_close),
+                    pct_chg = VALUES(pct_chg),
+                    volume = VALUES(volume),
+                    amount = VALUES(amount),
+                    iopv = VALUES(iopv),
+                    premium_rate = VALUES(premium_rate),
+                    open_price = VALUES(open_price),
+                    high_price = VALUES(high_price),
+                    low_price = VALUES(low_price),
+                    turnover_rate = VALUES(turnover_rate),
+                    amplitude = VALUES(amplitude)
+            """
+            params = (
+                product_id,
+                quote_time,
+                str(quote_data.get('price', 0)),
+                str(quote_data.get('prev_close')) if quote_data.get('prev_close') else None,
+                float(quote_data.get('pct_chg')) if quote_data.get('pct_chg') is not None else None,
+                str(quote_data.get('volume')) if quote_data.get('volume') else None,
+                str(quote_data.get('amount')) if quote_data.get('amount') else None,
+                str(quote_data.get('iopv')) if quote_data.get('iopv') else None,
+                str(quote_data.get('premium_rate')) if quote_data.get('premium_rate') else None,
+                str(quote_data.get('open')) if quote_data.get('open') else None,
+                str(quote_data.get('high')) if quote_data.get('high') else None,
+                str(quote_data.get('low')) if quote_data.get('low') else None,
+                str(quote_data.get('turnover_rate')) if quote_data.get('turnover_rate') else None,
+                str(quote_data.get('amplitude')) if quote_data.get('amplitude') else None,
+                source
             )
-            ON DUPLICATE KEY UPDATE
-                price = VALUES(price),
-                prev_close = VALUES(prev_close),
-                pct_chg = VALUES(pct_chg),
-                volume = VALUES(volume),
-                amount = VALUES(amount)
-        """
-        params = (
-            product_id,
-            quote_time,
-            str(quote_data.get('price', 0)),
-            str(quote_data.get('prev_close')) if quote_data.get('prev_close') else None,
-            float(quote_data.get('pct_chg')) if quote_data.get('pct_chg') is not None else None,
-            str(quote_data.get('volume')) if quote_data.get('volume') else None,
-            str(quote_data.get('amount')) if quote_data.get('amount') else None,
-            source
-        )
+            execute_insert(sql, params)
+        except Exception as e:
+            # 如果新字段不存在，回退到基础字段
+            logger.warning(f"尝试保存扩展字段失败，回退到基础字段: {e}")
+            sql = """
+                INSERT INTO market_quote_rt (
+                    product_id, quote_time, price, prev_close, pct_chg, volume, amount, source
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                ON DUPLICATE KEY UPDATE
+                    price = VALUES(price),
+                    prev_close = VALUES(prev_close),
+                    pct_chg = VALUES(pct_chg),
+                    volume = VALUES(volume),
+                    amount = VALUES(amount)
+            """
+            params = (
+                product_id,
+                quote_time,
+                str(quote_data.get('price', 0)),
+                str(quote_data.get('prev_close')) if quote_data.get('prev_close') else None,
+                float(quote_data.get('pct_chg')) if quote_data.get('pct_chg') is not None else None,
+                str(quote_data.get('volume')) if quote_data.get('volume') else None,
+                str(quote_data.get('amount')) if quote_data.get('amount') else None,
+                source
+            )
+            execute_insert(sql, params)
         
-        execute_insert(sql, params)
         logger.debug(f"保存实时行情成功: product_id={product_id}, quote_time={quote_time}")
         return True
         
@@ -257,15 +302,39 @@ def get_latest_realtime_quote(product_id: int) -> Optional[Dict]:
 
 def get_latest_quote(product_id: int) -> Optional[Dict]:
     """获取最新实时行情"""
-    sql = """
-        SELECT 
-            id, product_id, quote_time, price, prev_close, pct_chg, volume, amount, source
-        FROM market_quote_rt
-        WHERE product_id = %s
-        ORDER BY quote_time DESC
-        LIMIT 1
-    """
-    return execute_one(sql, (product_id,))
+    # 尝试查询包含新字段，如果字段不存在则回退到基础字段
+    try:
+        sql = """
+            SELECT 
+                id, product_id, quote_time, price, prev_close, pct_chg, volume, amount,
+                iopv, premium_rate, open_price, high_price, low_price, turnover_rate, amplitude, source
+            FROM market_quote_rt
+            WHERE product_id = %s
+            ORDER BY quote_time DESC
+            LIMIT 1
+        """
+        result = execute_one(sql, (product_id,))
+        if result:
+            # 将数据库字段名映射到代码中使用的字段名
+            if result.get('open_price') is not None:
+                result['open'] = result.pop('open_price')
+            if result.get('high_price') is not None:
+                result['high'] = result.pop('high_price')
+            if result.get('low_price') is not None:
+                result['low'] = result.pop('low_price')
+        return result
+    except Exception as e:
+        # 如果新字段不存在，回退到基础字段查询
+        logger.debug(f"查询扩展字段失败，回退到基础字段: {e}")
+        sql = """
+            SELECT 
+                id, product_id, quote_time, price, prev_close, pct_chg, volume, amount, source
+            FROM market_quote_rt
+            WHERE product_id = %s
+            ORDER BY quote_time DESC
+            LIMIT 1
+        """
+        return execute_one(sql, (product_id,))
 
 
 def get_latest_qdii_premium(product_id: int) -> Optional[Dict]:

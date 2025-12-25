@@ -543,65 +543,146 @@ def _render_exchange_quote(product, product_id):
     latest_quote = get_latest_realtime_quote(product_id)
     
     if latest_quote:
+        # ========== ① 价格 & 估值核心（最重要） ==========
+        st.markdown("**💰 价格 & 估值核心**")
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            price = float(latest_quote.get('price', 0))
-            st.metric("最新价", f"{price:.4f}")
+            price_val = latest_quote.get('price')
+            if price_val is not None:
+                price = float(price_val)
+                st.metric("最新价", f"{price:.4f}")
+            else:
+                st.metric("最新价", "N/A")
         with col2:
+            # IOPV 实时估值
+            iopv_val = latest_quote.get('iopv')
+            if iopv_val is not None:
+                iopv = float(iopv_val)
+                st.metric("IOPV实时估值", f"{iopv:.4f}")
+            else:
+                st.metric("IOPV实时估值", "N/A")
+        with col3:
+            # 溢价率（从实时行情中获取，如果没有则从 QDII 溢价率表获取）
+            premium_rate_val = latest_quote.get('premium_rate')
+            if premium_rate_val is not None:
+                premium_rate = float(premium_rate_val) * 100
+                # 根据溢价率显示颜色
+                if premium_rate <= 1:
+                    delta_color = "normal"
+                    label = "✅ 可买"
+                elif premium_rate <= 3:
+                    delta_color = "normal"
+                    label = "⚠️ 减半"
+                else:
+                    delta_color = "inverse"
+                    label = "❌ 等待池"
+                st.metric("溢价率", f"{premium_rate:.2f}%", delta=label, delta_color=delta_color)
+            else:
+                st.metric("溢价率", "N/A")
+        with col4:
             pct_chg_val = latest_quote.get('pct_chg')
             if pct_chg_val is not None:
                 pct_chg = float(pct_chg_val) * 100
                 st.metric("涨跌幅", f"{pct_chg:.2f}%", delta=f"{pct_chg:.2f}%")
             else:
                 st.metric("涨跌幅", "N/A")
+        
+        # ========== ② 基础价格时间序列（用于高低位判断） ==========
+        st.divider()
+        st.markdown("**📊 基础价格时间序列**")
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            open_val = latest_quote.get('open')
+            if open_val is not None:
+                open_price = float(open_val)
+                st.metric("开盘价", f"{open_price:.4f}")
+            else:
+                st.metric("开盘价", "N/A")
+        with col2:
+            high_val = latest_quote.get('high')
+            if high_val is not None:
+                high_price = float(high_val)
+                st.metric("最高价", f"{high_price:.4f}")
+            else:
+                st.metric("最高价", "N/A")
         with col3:
-            prev_close = float(latest_quote.get('prev_close', 0))
-            st.metric("昨收价", f"{prev_close:.4f}")
+            low_val = latest_quote.get('low')
+            if low_val is not None:
+                low_price = float(low_val)
+                st.metric("最低价", f"{low_price:.4f}")
+            else:
+                st.metric("最低价", "N/A")
         with col4:
+            prev_close_val = latest_quote.get('prev_close')
+            if prev_close_val is not None:
+                prev_close = float(prev_close_val)
+                st.metric("昨收价", f"{prev_close:.4f}")
+            else:
+                st.metric("昨收价", "N/A")
+        with col5:
             quote_time = latest_quote.get('quote_time', '')
             if isinstance(quote_time, str):
                 st.metric("行情时间", quote_time[:19] if len(quote_time) > 19 else quote_time)
+            elif hasattr(quote_time, 'strftime'):
+                st.metric("行情时间", quote_time.strftime('%Y-%m-%d %H:%M:%S'))
             else:
                 st.metric("行情时间", str(quote_time))
         
-        # 成交量/成交额
-        col1, col2 = st.columns(2)
+        # ========== ③ 流动性与可交易性（质量监控） ==========
+        st.divider()
+        st.markdown("**💧 流动性与可交易性**")
+        col1, col2, col3 = st.columns(3)
         with col1:
-            volume = float(latest_quote.get('volume', 0))
-            st.metric("成交量", f"{volume:,.0f}")
+            volume_val = latest_quote.get('volume')
+            if volume_val is not None:
+                volume = float(volume_val)
+                st.metric("成交量", f"{volume:,.0f}")
+            else:
+                st.metric("成交量", "N/A")
         with col2:
-            amount = float(latest_quote.get('amount', 0))
-            st.metric("成交额", f"{amount:,.2f}")
+            amount_val = latest_quote.get('amount')
+            if amount_val is not None:
+                amount = float(amount_val)
+                st.metric("成交额", f"{amount:,.2f}")
+            else:
+                st.metric("成交额", "N/A")
+        with col3:
+            turnover_rate_val = latest_quote.get('turnover_rate')
+            if turnover_rate_val is not None:
+                turnover_rate = float(turnover_rate_val) * 100
+                st.metric("换手率", f"{turnover_rate:.2f}%")
+            else:
+                st.metric("换手率", "N/A")
+        
+        # ========== QDII 溢价率决策建议（如果溢价率未在实时行情中） ==========
+        if product.get('is_qdii'):
+            # 如果实时行情中没有溢价率，尝试从 QDII 溢价率表获取
+            if latest_quote.get('premium_rate') is None:
+                st.divider()
+                st.markdown("**💰 QDII溢价率（从溢价率表）**")
+                latest_premium = get_latest_qdii_premium(product_id)
+                
+                if latest_premium:
+                    premium_rate = float(latest_premium.get('premium_rate', 0)) * 100
+                    iopv = float(latest_premium.get('iopv', 0))
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("溢价率", f"{premium_rate:.2f}%")
+                    with col2:
+                        st.metric("IOPV", f"{iopv:.4f}")
+                    with col3:
+                        # 买入建议
+                        if premium_rate <= 1:
+                            st.metric("买入建议", "✅ 正常买入", delta="100%")
+                        elif premium_rate <= 3:
+                            st.metric("买入建议", "⚠️ 买入一半", delta="50%")
+                        else:
+                            st.metric("买入建议", "❌ 暂停买入", delta="0%")
+                else:
+                    st.info("暂无溢价率数据")
     else:
         st.warning("暂无实时行情数据，请点击刷新按钮获取")
-    
-    # QDII溢价率
-    if product.get('is_qdii'):
-        st.divider()
-        st.markdown("**💰 QDII溢价率**")
-        latest_premium = get_latest_qdii_premium(product_id)
-        
-        if latest_premium:
-            premium_rate = float(latest_premium.get('premium_rate', 0)) * 100
-            iopv = float(latest_premium.get('iopv', 0))
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("溢价率", f"{premium_rate:.2f}%")
-            with col2:
-                st.metric("IOPV", f"{iopv:.4f}")
-            with col3:
-                # 买入建议
-                from decimal import Decimal
-                brake_result = apply_premium_brake(Decimal('100'), Decimal(str(premium_rate / 100)))
-                if premium_rate <= 1:
-                    st.metric("买入建议", "✅ 正常买入", delta="100%")
-                elif premium_rate <= 2:
-                    st.metric("买入建议", "⚠️ 买入一半", delta="50%")
-                else:
-                    st.metric("买入建议", "❌ 暂停买入", delta="0%")
-        else:
-            st.info("暂无溢价率数据")
 
 
 def _render_otc_quote(product, product_code):

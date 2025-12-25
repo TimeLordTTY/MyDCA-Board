@@ -16,14 +16,15 @@ logger = logging.getLogger(__name__)
 
 def fetch_realtime_quote(product_code: str, market: str) -> Optional[Dict]:
     """
-    获取场内实时行情
+    获取场内实时行情（使用东方财富接口）
     
     Args:
         product_code: 产品代码（如 513100, 163406）
         market: 市场（SH/SZ）
     
     Returns:
-        行情字典，包含：price, prev_close, pct_chg, volume, amount, quote_time
+        行情字典，包含：price, prev_close, pct_chg, volume, amount, quote_time, 
+        iopv, premium_rate, open, high, low, amplitude, turnover_rate
         如果失败返回 None
     """
     if not AKSHARE_AVAILABLE:
@@ -31,37 +32,146 @@ def fetch_realtime_quote(product_code: str, market: str) -> Optional[Dict]:
         return None
     
     try:
-        # 根据市场选择不同的接口
+        # 使用东方财富 ETF 实时行情接口
+        # 根据市场构建代码：上海 sh，深圳 sz
         if market == 'SH':
-            # 上海交易所
-            df = ak.fund_etf_hist_sina(symbol=f"sh{product_code}")
+            symbol = f"sh{product_code}"
         elif market == 'SZ':
-            # 深圳交易所
-            df = ak.fund_etf_hist_sina(symbol=f"sz{product_code}")
+            symbol = f"sz{product_code}"
         else:
             logger.error(f"不支持的市场类型: {market}")
             return None
         
+        # 使用 akshare 的东方财富 ETF 实时行情接口
+        # 这个接口返回中文字段名的 DataFrame
+        df = ak.fund_etf_spot_em()
+        
         if df.empty:
-            logger.warning(f"未获取到 {product_code} 的实时行情")
+            logger.warning(f"未获取到 ETF 实时行情数据")
             return None
         
-        # 获取最新一行
-        latest = df.iloc[-1]
+        # 根据代码查找对应的产品
+        # 代码字段可能是 "513100" 格式（不包含市场前缀）
+        product_row = None
+        for _, row in df.iterrows():
+            code = str(row.get('代码', '')).strip()
+            # 精确匹配代码（去除可能的空格和前缀）
+            # 支持 "513100" 或 "sh513100" 或 "sz513100" 格式
+            code_clean = code.replace('sh', '').replace('sz', '').replace('SH', '').replace('SZ', '')
+            if code_clean == product_code or code == product_code:
+                product_row = row
+                break
         
-        # 解析数据
-        quote_time = datetime.now()  # 使用当前时间作为行情时间
+        if product_row is None:
+            logger.warning(f"未找到产品 {product_code} 的实时行情")
+            return None
+        
+        logger.info(f"[AKShare][ETF][{product_code}] 原始行响应={product_row.to_dict()}")
+        
+        # 解析中文字段名
+        def safe_get(key, default=None):
+            """安全获取字段值，处理 None 和空值"""
+            val = product_row.get(key, default)
+            if val is None or (isinstance(val, float) and (val != val or val == float('inf') or val == float('-inf'))):
+                return default
+            return val
+        
+        def safe_decimal(key, default=None):
+            """安全转换为 Decimal"""
+            val = safe_get(key, default)
+            if val is None:
+                return None
+            try:
+                return Decimal(str(val))
+            except (ValueError, TypeError):
+                return default
+        
+        def safe_float(key, default=None):
+            """安全转换为 float"""
+            val = safe_get(key, default)
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+        
+        # 解析更新时间
+        update_time_str = safe_get('更新时间', '')
+        quote_time = datetime.now()  # 默认使用当前时间
+        if update_time_str:
+            try:
+                # 尝试解析时间字符串，格式可能是 "2025-12-24 16:11:44+08:00"
+                if '+' in update_time_str:
+                    update_time_str = update_time_str.split('+')[0]
+                quote_time = datetime.strptime(update_time_str, '%Y-%m-%d %H:%M:%S')
+            except:
+                pass
+        
+        # 核心字段：价格 & 估值
+        price = safe_decimal('最新价', 0)
+        iopv = safe_decimal('IOPV实时估值')
+        prev_close = safe_decimal('昨收')
+        
+        # 涨跌幅相关
+        pct_chg = safe_float('涨跌幅')  # 已经是百分比，如 -0.1 表示 -0.1%
+        if pct_chg is not None:
+            pct_chg = pct_chg / 100.0  # 转换为小数，如 -0.001
+        
+        # 基础价格时间序列
+        open_price = safe_decimal('开盘价')
+        high_price = safe_decimal('最高价')
+        low_price = safe_decimal('最低价')
+        
+        # 流动性指标
+        volume = safe_decimal('成交量')
+        amount = safe_decimal('成交额')
+        turnover_rate = safe_float('换手率')  # 换手率，如 1.88 表示 1.88%
+        if turnover_rate is not None:
+            turnover_rate = turnover_rate / 100.0  # 转换为小数
+        
+        # 其他指标
+        amplitude = safe_float('振幅')  # 振幅，如 0.72 表示 0.72%
+        if amplitude is not None:
+            amplitude = amplitude / 100.0  # 转换为小数
+        
+        # 计算溢价率（根据建议：premium_rate = (最新价 / IOPV - 1)）
+        premium_rate = None
+        if price and iopv and iopv > 0:
+            premium_rate = float((price - iopv) / iopv)
+        elif safe_get('基金折价率') is not None:
+            # 如果无法从 IOPV 计算，使用基金折价率（注意：折价率是负的溢价率）
+            discount_rate = safe_float('基金折价率')  # 如 -7.2 表示折价 7.2%
+            if discount_rate is not None:
+                premium_rate = -discount_rate / 100.0  # 转换为溢价率（小数）
         
         result = {
-            'price': Decimal(str(latest.get('close', 0))),
-            'prev_close': Decimal(str(latest.get('prev_close', 0))) if 'prev_close' in latest else None,
-            'pct_chg': float(latest.get('pct_chg', 0)) if 'pct_chg' in latest else None,
-            'volume': Decimal(str(latest.get('volume', 0))) if 'volume' in latest else None,
-            'amount': Decimal(str(latest.get('amount', 0))) if 'amount' in latest else None,
-            'quote_time': quote_time
+            # 核心价格字段
+            'price': price,
+            'prev_close': prev_close,
+            'pct_chg': pct_chg,
+            'volume': volume,
+            'amount': amount,
+            'quote_time': quote_time,
+            
+            # 新增字段：IOPV 和溢价率（用于 QDII 决策）
+            'iopv': iopv,
+            'premium_rate': Decimal(str(premium_rate)) if premium_rate is not None else None,
+            
+            # 基础价格时间序列（用于高低位判断）
+            'open': open_price,
+            'high': high_price,
+            'low': low_price,
+            
+            # 流动性指标（用于质量监控）
+            'turnover_rate': Decimal(str(turnover_rate)) if turnover_rate is not None else None,
+            
+            # 其他指标
+            'amplitude': Decimal(str(amplitude)) if amplitude is not None else None,
         }
         
-        logger.info(f"获取 {product_code} 实时行情成功: price={result['price']}, pct_chg={result['pct_chg']}")
+        premium_rate_str = f"{premium_rate:.4%}" if premium_rate is not None else "None"
+        logger.info(f"获取 {product_code} 实时行情成功: price={result['price']}, iopv={result['iopv']}, premium_rate={premium_rate_str}")
         return result
         
     except Exception as e:
@@ -141,7 +251,7 @@ def fetch_daily_bar(product_code: str, market: str, start_date: Optional[str] = 
 
 def fetch_qdii_premium(product_code: str, market: str) -> Optional[Dict]:
     """
-    获取 QDII ETF 溢价率
+    获取 QDII ETF 溢价率（从实时行情中提取）
     
     Args:
         product_code: 产品代码（如 513100, 513500, 513180）
@@ -156,35 +266,26 @@ def fetch_qdii_premium(product_code: str, market: str) -> Optional[Dict]:
         return None
     
     try:
-        # 获取实时行情
+        # 获取实时行情（已经包含 IOPV 和溢价率）
         quote = fetch_realtime_quote(product_code, market)
         if not quote:
             return None
         
-        # 获取 IOPV（基金份额参考净值）
-        # 注意：akshare 可能没有直接的 IOPV 接口，这里先用价格作为近似
-        # 实际 IOPV 需要从其他数据源获取
+        # 从实时行情中提取 IOPV 和溢价率
+        iopv = quote.get('iopv')
+        premium_rate = quote.get('premium_rate')
         
-        current_price = quote['price']
-        
-        # 尝试从日K线获取昨收价作为 IOPV 近似值
-        # 实际应用中，IOPV 应该从专门的接口获取
-        iopv = quote.get('prev_close')
-        
-        if iopv and iopv > 0:
-            premium_rate = float((current_price - iopv) / iopv)
-        else:
-            # 如果无法获取 IOPV，返回 None
-            logger.warning(f"无法获取 {product_code} 的 IOPV，无法计算溢价率")
+        if iopv is None or premium_rate is None:
+            logger.warning(f"无法获取 {product_code} 的 IOPV 或溢价率")
             return None
         
         result = {
             'iopv': iopv,
-            'premium_rate': Decimal(str(premium_rate)),
+            'premium_rate': premium_rate,
             'quote_time': quote['quote_time']
         }
         
-        logger.info(f"获取 {product_code} QDII 溢价率成功: premium_rate={premium_rate:.4%}")
+        logger.info(f"获取 {product_code} QDII 溢价率成功: iopv={iopv}, premium_rate={float(premium_rate):.4%}")
         return result
         
     except Exception as e:
