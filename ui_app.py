@@ -21,6 +21,7 @@ from typing import Any
 import streamlit as st
 import pandas as pd
 import logging
+import json
 
 # 添加 src 目录到路径
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -48,6 +49,18 @@ from core.snapshot_service import (
 )
 from core.daily_balance import create_daily_balance_snapshot
 from data.config_loader import get_sell_fee_rate, get_product
+from core.strategy_lab_service import (
+    list_backtest_summaries, get_backtest_summary,
+    get_backtest_daily_records, get_backtest_trades,
+    run_backtest, run_param_comparison
+)
+# 先导入策略模块以确保策略被注册
+import strategy_lab.strategy  # noqa: F401
+from strategy_lab.framework.registry import list_strategies, get_strategy_info
+from data.product_service import get_products
+from core.strategy_manager import (
+    list_strategy_files, save_strategy, load_strategy_code, delete_strategy
+)
 
 # 页面配置
 st.set_page_config(
@@ -2840,6 +2853,808 @@ def page_pool_rules():
 
 
 # ============================================================
+# 策略实验室页面
+# ============================================================
+def page_strategy_lab():
+    """策略实验室页面"""
+    st.title("🔬 策略实验室")
+    st.markdown("---")
+    
+    # 标签页
+    tab1, tab2, tab3 = st.tabs(["📊 回测运行", "📈 回测结果", "🔀 参数对比"])
+    
+    with tab1:
+        _page_backtest_run()
+    
+    with tab2:
+        _page_backtest_results()
+    
+    with tab3:
+        _page_param_comparison()
+
+
+def _page_backtest_run():
+    """回测运行页面"""
+    st.subheader("📊 运行回测")
+    
+    # 策略管理标签页
+    tab_strategy, tab_backtest = st.tabs(["🔧 策略管理", "📊 运行回测"])
+    
+    with tab_strategy:
+        _page_strategy_management()
+    
+    with tab_backtest:
+        _page_backtest_run_content()
+
+
+def _page_strategy_management():
+    """策略管理页面"""
+    st.subheader("🔧 策略管理")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # 策略列表
+        st.write("**已注册的策略**")
+        try:
+            strategies = list_strategies()
+            if strategies:
+                for strategy_key, versions in strategies.items():
+                    with st.expander(f"📋 {strategy_key} (版本: {', '.join(versions)})"):
+                        try:
+                            info = get_strategy_info(strategy_key)
+                            st.write(f"**显示名称**: {info.get('display_name', 'N/A')}")
+                            st.write(f"**策略标识**: {info.get('strategy_key', 'N/A')}")
+                            st.write(f"**版本**: {info.get('strategy_version', 'N/A')}")
+                            
+                            # 显示默认参数
+                            default_params = info.get('default_params', {})
+                            if default_params:
+                                st.write("**默认参数**:")
+                                st.json(default_params)
+                            
+                            # 显示参数 schema
+                            param_schema = info.get('param_schema', {})
+                            if param_schema:
+                                st.write("**参数 Schema**:")
+                                st.json(param_schema)
+                            
+                            # 编辑和删除按钮
+                            col_edit, col_del = st.columns(2)
+                            with col_edit:
+                                if st.button("✏️ 编辑", key=f"edit_{strategy_key}"):
+                                    st.session_state[f"editing_{strategy_key}"] = True
+                                    st.session_state[f"edit_strategy_key"] = strategy_key
+                            
+                            with col_del:
+                                if st.button("🗑️ 删除", key=f"delete_{strategy_key}", type="secondary"):
+                                    st.session_state[f"confirm_delete_{strategy_key}"] = True
+                            
+                            # 删除确认
+                            if st.session_state.get(f"confirm_delete_{strategy_key}", False):
+                                st.warning(f"⚠️ 确定要删除策略 '{strategy_key}' 吗？")
+                                col_yes, col_no = st.columns(2)
+                                with col_yes:
+                                    if st.button("✅ 确认删除", key=f"confirm_yes_{strategy_key}", type="primary"):
+                                        result = delete_strategy(strategy_key)
+                                        if result.get('success'):
+                                            st.success(f"✅ {result.get('message')}")
+                                            st.session_state[f"confirm_delete_{strategy_key}"] = False
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ 删除失败: {result.get('error')}")
+                                with col_no:
+                                    if st.button("❌ 取消", key=f"confirm_no_{strategy_key}"):
+                                        st.session_state[f"confirm_delete_{strategy_key}"] = False
+                                        st.rerun()
+                            
+                            # 编辑界面
+                            if st.session_state.get(f"editing_{strategy_key}", False):
+                                st.divider()
+                                st.write("**编辑策略**")
+                                
+                                # 加载策略代码
+                                strategy_code = load_strategy_code(strategy_key)
+                                
+                                if strategy_code:
+                                    edited_code = st.text_area(
+                                        "策略代码",
+                                        value=strategy_code,
+                                        height=400,
+                                        key=f"edit_code_{strategy_key}"
+                                    )
+                                    
+                                    col_save, col_cancel = st.columns(2)
+                                    with col_save:
+                                        if st.button("💾 保存", key=f"save_edit_{strategy_key}", type="primary"):
+                                            result = save_strategy(
+                                                strategy_key=strategy_key,
+                                                strategy_code=edited_code,
+                                                overwrite=True
+                                            )
+                                            if result.get('success'):
+                                                st.success(f"✅ 策略已更新: {result.get('filename')}")
+                                                st.session_state[f"editing_{strategy_key}"] = False
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ 更新失败: {result.get('error')}")
+                                    
+                                    with col_cancel:
+                                        if st.button("❌ 取消", key=f"cancel_edit_{strategy_key}"):
+                                            st.session_state[f"editing_{strategy_key}"] = False
+                                            st.rerun()
+                                else:
+                                    st.warning(f"无法加载策略代码: {strategy_key}")
+                                    if st.button("❌ 关闭", key=f"close_edit_{strategy_key}"):
+                                        st.session_state[f"editing_{strategy_key}"] = False
+                                        st.rerun()
+                                        
+                        except Exception as e:
+                            st.error(f"获取策略信息失败: {e}")
+            else:
+                st.info("暂无已注册的策略")
+        except Exception as e:
+            st.error(f"获取策略列表失败: {e}")
+    
+    with col2:
+        # 新增策略
+        st.write("**新增策略**")
+        with st.form("new_strategy_form"):
+            new_strategy_key = st.text_input("策略标识 *", key="new_strategy_key", 
+                                            help="例如: my_custom_strategy")
+            new_display_name = st.text_input("显示名称", key="new_display_name",
+                                            help="例如: 我的自定义策略")
+            new_version = st.text_input("版本", value="default", key="new_strategy_version")
+            
+            overwrite_existing = st.checkbox("覆盖已存在文件", value=False, key="overwrite_existing",
+                                           help="如果策略文件已存在，是否覆盖")
+            
+            use_template = st.checkbox("使用模板代码", value=False, key="use_template",
+                                     help="如果取消勾选，需要在下方的代码编辑器中输入策略代码")
+            
+            # 策略代码编辑器
+            if not use_template:
+                strategy_code = st.text_area(
+                    "策略代码 *",
+                    height=400,
+                    key="strategy_code_input",
+                    help="请输入完整的策略代码（Python代码）",
+                    placeholder="# 请输入策略代码，例如：\nfrom typing import Dict, Any, Optional\nfrom ..framework.base import Strategy\n..."
+                )
+            else:
+                strategy_code = None
+            
+            if st.form_submit_button("➕ 创建策略"):
+                if new_strategy_key:
+                    if not use_template and (not strategy_code or not strategy_code.strip()):
+                        st.error("❌ 请输入策略代码或勾选'使用模板代码'")
+                    else:
+                        result = save_strategy(
+                            strategy_key=new_strategy_key,
+                            strategy_code=strategy_code if strategy_code else None,
+                            display_name=new_display_name or None,
+                            strategy_version=new_version,
+                            overwrite=overwrite_existing
+                        )
+                        if result.get('success'):
+                            st.success(f"✅ 策略创建成功: {result.get('filename')}")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ 创建失败: {result.get('error')}")
+                else:
+                    st.error("请输入策略标识")
+
+
+def _page_backtest_run_content():
+    """回测运行内容页面"""
+    # 获取产品列表
+    products = get_products(is_active=True)
+    if not products:
+        st.warning("暂无可用产品")
+        return
+    
+    product_options = {}
+    for p in products:
+        product_options[p['id']] = f"{p.get('code', '')} - {p.get('product_name', '')}"
+    
+    # 获取策略列表
+    try:
+        strategies = list_strategies()
+        # 构建策略选项列表（包含版本信息）
+        strategy_options = []
+        for strategy_key, versions in strategies.items():
+            if len(versions) == 1:
+                strategy_options.append(strategy_key)
+            else:
+                for version in versions:
+                    strategy_options.append(f"{strategy_key}@{version}")
+        
+        if not strategy_options:
+            st.warning("暂无可用策略，请先在策略管理中创建策略")
+            return
+        
+        # 策略选择
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            selected_strategy_full = st.selectbox(
+                "选择策略 *",
+                options=strategy_options,
+                key="backtest_strategy",
+                help="选择要回测的策略"
+            )
+            
+            # 解析策略标识和版本
+            if "@" in selected_strategy_full:
+                selected_strategy, selected_version = selected_strategy_full.split("@", 1)
+            else:
+                selected_strategy = selected_strategy_full
+                selected_version = None
+        
+        with col2:
+            # 获取策略信息并显示参数编辑界面
+            if selected_strategy:
+                try:
+                    strategy_info = get_strategy_info(selected_strategy, selected_version)
+                    st.caption(f"策略: {strategy_info.get('display_name', selected_strategy)}")
+                    if selected_version:
+                        st.caption(f"版本: {selected_version}")
+                except Exception as e:
+                    st.caption(f"策略: {selected_strategy}")
+    except Exception as e:
+        st.error(f"获取策略列表失败: {e}")
+        return
+    
+    # 策略参数编辑
+    params = {}
+    if selected_strategy:
+        st.subheader("策略参数")
+        try:
+            strategy_info = get_strategy_info(selected_strategy, selected_version)
+            default_params = strategy_info.get('default_params', {})
+            param_schema = strategy_info.get('param_schema', {})
+            
+            # 总是使用输入框形式，优先使用 schema，如果没有 schema 则从 default_params 推断
+            params = {}
+            
+            if param_schema:
+                # 使用 schema 生成输入框
+                for param_name, param_config in param_schema.items():
+                    param_type = param_config.get('type', 'str')
+                    param_default = param_config.get('default', default_params.get(param_name))
+                    param_desc = param_config.get('description', param_name)
+                    
+                    if param_type == 'float':
+                        params[param_name] = st.number_input(
+                            param_desc,
+                            value=float(param_default) if param_default is not None else 0.0,
+                            min_value=float(param_config.get('min', 0)) if 'min' in param_config else None,
+                            max_value=float(param_config.get('max', 1000000)) if 'max' in param_config else None,
+                            step=0.01,
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+                    elif param_type == 'int':
+                        params[param_name] = st.number_input(
+                            param_desc,
+                            value=int(param_default) if param_default is not None else 0,
+                            min_value=int(param_config.get('min', 0)) if 'min' in param_config else None,
+                            max_value=int(param_config.get('max', 1000000)) if 'max' in param_config else None,
+                            step=1,
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+                    elif param_type == 'bool':
+                        params[param_name] = st.checkbox(
+                            param_desc,
+                            value=bool(param_default) if param_default is not None else False,
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+                    elif param_type == 'list' and 'options' in param_config:
+                        options = param_config['options']
+                        params[param_name] = st.selectbox(
+                            param_desc,
+                            options=options,
+                            index=options.index(param_default) if param_default in options else 0,
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+                    elif param_type == 'str' and isinstance(param_default, str) and param_default.strip().startswith('['):
+                        # 字符串类型但看起来是JSON列表，尝试解析
+                        # 根据参数名提供更具体的帮助信息
+                        if param_name == 'deep_dip_levels':
+                            help_text = "请输入JSON格式的列表，例如: [{\"threshold\": -0.10, \"use_ratio\": 0.50}, {\"threshold\": -0.15, \"use_ratio\": 1.00}]"
+                        else:
+                            help_text = "请输入JSON格式的列表，例如: [0.02, 0.04, 0.08]"
+                        
+                        list_str = st.text_input(
+                            param_desc,
+                            value=param_default,
+                            key=f"param_{selected_strategy}_{param_name}",
+                            help=help_text
+                        )
+                        try:
+                            parsed_value = json.loads(list_str) if list_str.strip() else []
+                            # 对于 deep_dip_levels，保持为字符串格式（策略会自己解析）
+                            if param_name == 'deep_dip_levels':
+                                params[param_name] = list_str
+                            else:
+                                params[param_name] = parsed_value
+                        except json.JSONDecodeError as e:
+                            st.warning(f"参数 {param_name} 的JSON格式错误: {e}")
+                            # 对于 deep_dip_levels，保持原始字符串；其他参数使用空列表
+                            if param_name == 'deep_dip_levels':
+                                params[param_name] = param_default
+                            else:
+                                params[param_name] = []
+                    else:
+                        # 字符串或其他类型，使用文本输入
+                        params[param_name] = st.text_input(
+                            param_desc,
+                            value=str(param_default) if param_default is not None else "",
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+            elif default_params:
+                # 没有 schema，但从 default_params 推断类型并生成输入框
+                for param_name, param_value in default_params.items():
+                    if isinstance(param_value, (int, float)):
+                        if isinstance(param_value, float):
+                            params[param_name] = st.number_input(
+                                param_name,
+                                value=float(param_value),
+                                step=0.01,
+                                key=f"param_{selected_strategy}_{param_name}"
+                            )
+                        else:
+                            params[param_name] = st.number_input(
+                                param_name,
+                                value=int(param_value),
+                                step=1,
+                                key=f"param_{selected_strategy}_{param_name}"
+                            )
+                    elif isinstance(param_value, bool):
+                        params[param_name] = st.checkbox(
+                            param_name,
+                            value=bool(param_value),
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+                    elif isinstance(param_value, list):
+                        # 列表类型，使用文本输入（用户可以输入JSON格式）
+                        list_str = st.text_input(
+                            param_name,
+                            value=json.dumps(param_value, ensure_ascii=False),
+                            key=f"param_{selected_strategy}_{param_name}",
+                            help="请输入JSON格式的列表，例如: [0.02, 0.04, 0.08]"
+                        )
+                        # 尝试解析JSON
+                        try:
+                            params[param_name] = json.loads(list_str) if list_str.strip() else param_value
+                        except json.JSONDecodeError:
+                            st.warning(f"参数 {param_name} 的JSON格式错误，使用默认值")
+                            params[param_name] = param_value
+                    else:
+                        # 字符串或其他类型
+                        params[param_name] = st.text_input(
+                            param_name,
+                            value=str(param_value) if param_value is not None else "",
+                            key=f"param_{selected_strategy}_{param_name}"
+                        )
+            else:
+                # 既没有 schema 也没有 default_params，显示提示
+                st.info("该策略暂无参数配置")
+                params = {}
+        except Exception as e:
+            st.warning(f"获取策略参数失败: {e}")
+            params = {}
+    
+    # 基础配置
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        selected_product_id = st.selectbox(
+            "选择产品 *",
+            options=list(product_options.keys()),
+            format_func=lambda x: product_options[x],
+            key="backtest_product"
+        )
+        
+        initial_cash = st.number_input(
+            "初始现金 *",
+            value=10000.0,
+            min_value=0.0,
+            step=100.0,
+            key="backtest_initial_cash"
+        )
+        
+        monthly_deposit = st.number_input(
+            "每月入金",
+            value=1000.0,
+            min_value=0.0,
+            step=100.0,
+            key="backtest_monthly_deposit"
+        )
+    
+    with col2:
+        deposit_day = st.number_input(
+            "入金日期（每月几号）",
+            value=10,
+            min_value=1,
+            max_value=31,
+            step=1,
+            key="backtest_deposit_day"
+        )
+        
+        min_trade_amount = st.number_input(
+            "最小成交金额",
+            value=1000.0,
+            min_value=0.0,
+            step=100.0,
+            key="backtest_min_trade"
+        )
+        
+        start_date = st.date_input(
+            "开始日期",
+            value=date(2023, 1, 1),
+            min_value=date(2000, 1, 1),
+            max_value=date(2100, 12, 31),
+            key="backtest_start_date"
+        )
+        
+        end_date = st.date_input(
+            "结束日期",
+            value=date.today(),
+            min_value=date(2000, 1, 1),
+            max_value=date(2100, 12, 31),
+            key="backtest_end_date"
+        )
+    
+    # 运行按钮
+    if st.button("🚀 开始回测", type="primary", key="run_backtest"):
+        with st.spinner("回测运行中，请稍候..."):
+            result = run_backtest(
+                product_id=selected_product_id,
+                strategy_key=selected_strategy,
+                strategy_version=selected_version,
+                params=params,
+                initial_cash=initial_cash,
+                monthly_deposit=monthly_deposit if monthly_deposit > 0 else None,
+                deposit_day=deposit_day,
+                min_trade_amount=min_trade_amount,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            if result.get('success'):
+                st.success(f"✅ {result.get('message')}")
+                if result.get('summary_id'):
+                    st.info(f"📊 回测汇总ID: {result['summary_id']}")
+                    metrics = result.get('metrics', {})
+                    if metrics:
+                        # 第一行：核心指标
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("年化收益", f"{metrics.get('annual_return', 0):.2%}")
+                        with col2:
+                            st.metric("总收益率", f"{metrics.get('total_return', 0):.2%}")
+                        with col3:
+                            st.metric("最大回撤", f"{metrics.get('max_drawdown', 0):.2%}")
+                        with col4:
+                            st.metric("成交次数", f"{metrics.get('trade_count', 0)}")
+                        
+                        # 第二行：资金指标
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            initial = metrics.get('initial_cash', 0) or metrics.get('total_invested', 0)
+                            st.metric("累计投入", f"{initial:,.2f}")
+                        with col2:
+                            final = metrics.get('final_value', 0)
+                            st.metric("最终资产", f"{final:,.2f}")
+                        with col3:
+                            profit = final - initial
+                            st.metric("绝对收益", f"{profit:,.2f}")
+                        with col4:
+                            st.metric("手续费总额", f"{metrics.get('total_fees', 0):,.2f}")
+                        
+                        # 第三行：其他指标
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.metric("手续费占比", f"{metrics.get('fee_ratio', 0):.2%}")
+                        with col2:
+                            st.metric("平均月成交", f"{metrics.get('avg_monthly_trades', 0):.1f}")
+                        with col3:
+                            st.metric("等待池比例", f"{metrics.get('wait_pool_ratio', 0):.2%}")
+                        with col4:
+                            # 计算夏普比率（如果有数据）
+                            st.metric("回测天数", f"{len(result.get('daily_records', []))}")
+            else:
+                st.error(f"❌ {result.get('message')}")
+
+
+def _page_backtest_results():
+    """回测结果查看页面"""
+    st.subheader("📈 回测结果")
+    
+    # 筛选条件
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        products = get_products(is_active=True)
+        product_options = {0: "全部产品"}
+        for p in products:
+            product_options[p['id']] = f"{p.get('code', '')} - {p.get('product_name', '')}"
+        
+        filter_product_id = st.selectbox(
+            "筛选产品",
+            options=list(product_options.keys()),
+            format_func=lambda x: product_options[x],
+            key="filter_product"
+        )
+    
+    with col2:
+        try:
+            strategies = list_strategies()
+            strategy_options = ["全部策略"] + list(strategies.keys())
+            filter_strategy = st.selectbox(
+                "筛选策略",
+                options=strategy_options,
+                key="filter_strategy"
+            )
+        except:
+            filter_strategy = "全部策略"
+    
+    with col3:
+        limit = st.number_input("显示条数", value=50, min_value=1, max_value=500, key="result_limit")
+    
+    # 查询结果
+    summaries = list_backtest_summaries(
+        product_id=filter_product_id if filter_product_id > 0 else None,
+        strategy_key=filter_strategy if filter_strategy != "全部策略" else None,
+        limit=limit
+    )
+    
+    if not summaries:
+        st.info("暂无回测结果")
+        return
+    
+    # 显示汇总列表
+    df_data = []
+    for s in summaries:
+        # 计算绝对收益
+        initial_cash = float(s.get('initial_cash', 0) or 0)
+        final_value = float(s.get('final_value', 0) or 0)
+        absolute_profit = final_value - initial_cash
+        
+        # 计算平均月成交
+        days_diff = s.get('days_diff', 0) or 0
+        months = max(days_diff / 30.0, 1.0 / 30.0)  # 至少1个月
+        trade_count = s.get('trade_count', 0) or 0
+        avg_monthly_trades = trade_count / months if months > 0 else 0.0
+        
+        df_data.append({
+            'ID': s['id'],
+            '产品': f"{s.get('product_code', '')} - {s.get('product_name', '')}",
+            '策略': f"{s['strategy_key']}@{s.get('strategy_version', 'default')}",
+            '参数ID': s.get('param_set_id', ''),
+            '开始日期': s['start_date'],
+            '结束日期': s['end_date'],
+            '年化收益': f"{float(s.get('annual_return', 0)):.2%}",
+            '总收益率': f"{float(s.get('total_return', 0)):.2%}",
+            '最大回撤': f"{float(s.get('max_drawdown', 0)):.2%}",
+            '成交次数': trade_count,
+            '累计投入': f"{initial_cash:,.2f}",
+            '最终资产': f"{final_value:,.2f}",
+            '绝对收益': f"{absolute_profit:,.2f}",
+            '手续费总额': f"{float(s.get('total_fees', 0) or 0):,.2f}",
+            '手续费占比': f"{float(s.get('fee_ratio', 0)):.2%}",
+            '平均月成交': f"{avg_monthly_trades:.1f}",
+            '等待池比例': f"{float(s.get('wait_pool_ratio', 0)):.2%}",
+            '创建时间': s.get('created_at', '')
+        })
+    
+    df = pd.DataFrame(df_data)
+    st.dataframe(df, width='stretch', height=400)
+    
+    # 查看详情
+    st.subheader("查看详情")
+    selected_id = st.number_input("输入汇总ID", value=0, min_value=0, key="view_summary_id")
+    
+    if selected_id > 0:
+        summary = get_backtest_summary(selected_id)
+        if summary:
+            # 显示汇总信息
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("年化收益", f"{float(summary.get('annual_return', 0)):.2%}")
+            with col2:
+                st.metric("最大回撤", f"{float(summary.get('max_drawdown', 0)):.2%}")
+            with col3:
+                st.metric("成交次数", f"{summary.get('trade_count', 0)}")
+            with col4:
+                st.metric("手续费占比", f"{float(summary.get('fee_ratio', 0)):.2%}")
+            
+            # 显示每日记录
+            st.subheader("每日记录")
+            daily_records = get_backtest_daily_records(selected_id)
+            if daily_records:
+                df_daily = pd.DataFrame(daily_records)
+                st.dataframe(df_daily, use_container_width=True, height=300)
+            
+            # 显示成交记录
+            st.subheader("成交记录")
+            trades = get_backtest_trades(selected_id)
+            if trades:
+                df_trades = pd.DataFrame(trades)
+                st.dataframe(df_trades, use_container_width=True, height=300)
+        else:
+            st.warning(f"未找到汇总ID: {selected_id}")
+
+
+def _page_param_comparison():
+    """参数对比页面 - 对比同一策略的不同参数组合"""
+    st.subheader("🔀 参数组合对比")
+    st.caption("选择同一策略的不同参数组合，对比回测结果")
+    
+    # 筛选条件
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        products = get_products(is_active=True)
+        product_options = {0: "全部产品"}
+        for p in products:
+            product_options[p['id']] = f"{p.get('code', '')} - {p.get('product_name', '')}"
+        
+        filter_product_id = st.selectbox(
+            "筛选产品",
+            options=list(product_options.keys()),
+            format_func=lambda x: product_options[x],
+            key="param_filter_product"
+        )
+    
+    with col2:
+        try:
+            strategies = list_strategies()
+            strategy_options = ["全部策略"] + list(strategies.keys())
+            filter_strategy = st.selectbox(
+                "筛选策略 *",
+                options=strategy_options,
+                key="param_filter_strategy"
+            )
+        except Exception as e:
+            st.error(f"获取策略列表失败: {e}")
+            filter_strategy = "全部策略"
+    
+    with col3:
+        limit = st.number_input("显示条数", value=100, min_value=1, max_value=500, key="param_result_limit")
+    
+    if filter_strategy == "全部策略":
+        st.warning("请选择一个策略进行参数对比")
+        return
+    
+    # 查询该策略的所有回测结果
+    summaries = list_backtest_summaries(
+        product_id=filter_product_id if filter_product_id > 0 else None,
+        strategy_key=filter_strategy,
+        limit=limit
+    )
+    
+    if not summaries:
+        st.info(f"策略 '{filter_strategy}' 暂无回测结果")
+        return
+    
+    # 按参数ID分组显示
+    param_groups = {}
+    for s in summaries:
+        param_set_id = s.get('param_set_id', 'default')
+        if param_set_id not in param_groups:
+            param_groups[param_set_id] = []
+        param_groups[param_set_id].append(s)
+    
+    # 显示对比结果表格
+    st.subheader(f"参数对比结果 - {filter_strategy}")
+    st.caption(f"共找到 {len(summaries)} 条回测记录，{len(param_groups)} 个不同的参数组合")
+    
+    # 构建对比表格
+    df_data = []
+    for param_set_id, group_summaries in param_groups.items():
+        # 取最新的一条记录作为代表（或者可以取平均值）
+        latest = max(group_summaries, key=lambda x: x.get('created_at', ''))
+        
+        # 解析参数内容
+        param_json_str = latest.get('param_json')
+        params_display = "默认参数"
+        
+        # 如果 param_json 为空或None，尝试从策略获取默认参数
+        if not param_json_str:
+            try:
+                strategy_key = latest.get('strategy_key')
+                strategy_version = latest.get('strategy_version')
+                if strategy_key:
+                    strategy_info = get_strategy_info(strategy_key, strategy_version)
+                    default_params = strategy_info.get('default_params', {})
+                    if default_params:
+                        param_json_str = json.dumps(default_params, ensure_ascii=False)
+            except Exception as e:
+                logger.debug(f"获取策略默认参数失败: {e}")
+        
+        if param_json_str:
+            try:
+                params_dict = json.loads(param_json_str)
+                # 格式化参数显示：key: value 的形式，每行一个参数
+                param_lines = []
+                for key, value in sorted(params_dict.items()):
+                    if isinstance(value, (list, dict)):
+                        value_str = json.dumps(value, ensure_ascii=False)
+                    else:
+                        value_str = str(value)
+                    param_lines.append(f"{key}: {value_str}")
+                params_display = "\n".join(param_lines) if param_lines else "默认参数"
+            except (json.JSONDecodeError, TypeError):
+                params_display = param_json_str[:100] if param_json_str else "默认参数"
+        
+        # 计算绝对收益
+        initial_cash = float(latest.get('initial_cash', 0) or 0)
+        final_value = float(latest.get('final_value', 0) or 0)
+        absolute_profit = final_value - initial_cash
+        
+        # 计算平均月成交
+        start_date = latest.get('start_date')
+        end_date = latest.get('end_date')
+        if start_date and end_date:
+            if isinstance(start_date, str):
+                from datetime import datetime
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if isinstance(end_date, str):
+                from datetime import datetime
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            if hasattr(end_date, '__sub__') and hasattr(start_date, '__sub__'):
+                days_diff = (end_date - start_date).days
+            else:
+                days_diff = 0
+        else:
+            days_diff = 0
+        months = max(days_diff / 30.0, 1.0 / 30.0)
+        trade_count = latest.get('trade_count', 0) or 0
+        avg_monthly_trades = trade_count / months if months > 0 else 0.0
+        
+        df_data.append({
+            '参数ID': param_set_id,
+            '策略参数': params_display,  # 添加参数内容列
+            '汇总ID': latest['id'],
+            '开始日期': latest['start_date'],
+            '结束日期': latest['end_date'],
+            '年化收益': f"{float(latest.get('annual_return', 0)):.2%}",
+            '总收益率': f"{float(latest.get('total_return', 0)):.2%}",
+            '最大回撤': f"{float(latest.get('max_drawdown', 0)):.2%}",
+            '成交次数': trade_count,
+            '累计投入': f"{initial_cash:,.2f}",
+            '最终资产': f"{final_value:,.2f}",
+            '绝对收益': f"{absolute_profit:,.2f}",
+            '手续费总额': f"{float(latest.get('total_fees', 0) or 0):,.2f}",
+            '手续费占比': f"{float(latest.get('fee_ratio', 0)):.2%}",
+            '平均月成交': f"{avg_monthly_trades:.1f}",
+            '等待池比例': f"{float(latest.get('wait_pool_ratio', 0)):.2%}",
+            '创建时间': latest.get('created_at', '')
+        })
+    
+    if df_data:
+        df = pd.DataFrame(df_data)
+        # 按年化收益排序（降序）
+        if '年化收益' in df.columns:
+            # 提取数值进行排序
+            df['_sort_key'] = df['年化收益'].str.rstrip('%').astype(float)
+            df = df.sort_values('_sort_key', ascending=False)
+            df = df.drop('_sort_key', axis=1)
+        
+        # 调整列顺序，将策略参数放在前面
+        cols = df.columns.tolist()
+        if '策略参数' in cols:
+            cols.remove('策略参数')
+            cols.insert(1, '策略参数')  # 放在参数ID后面
+            df = df[cols]
+        
+        st.dataframe(df, width='stretch', height=400)
+    else:
+        st.info("暂无数据")
+
+
+# ============================================================
 # 主程序
 # ============================================================
 def main():
@@ -2867,7 +3682,7 @@ def main():
     page = st.sidebar.radio(
         "导航",
         ["📊 Dashboard", "📝 生活记账", "📈 理财录入", "📋 订单结算", 
-         "🏷️ 产品管理", "💳 账户管理", "💰 资金池规则"],
+         "🏷️ 产品管理", "💳 账户管理", "💰 资金池规则", "🔬 策略实验室"],
         label_visibility="collapsed"
     )
     
@@ -2890,6 +3705,8 @@ def main():
         page_account_management()
     elif page == "💰 资金池规则":
         page_pool_rules()
+    elif page == "🔬 策略实验室":
+        page_strategy_lab()
 
 
 if __name__ == "__main__":

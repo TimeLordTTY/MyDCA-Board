@@ -47,6 +47,7 @@ from data.config_loader import (
     get_account, get_accounts_by_group, get_account_name,
     get_sell_fee_rate, format_sell_fee_tiers
 )
+from data.product_service import get_product_by_id
 from data.data_store import (
     # transactions
     TRANSACTIONS_FIELDNAMES, VALID_ACTIONS,
@@ -1677,9 +1678,104 @@ def main():
         from core.daily_balance import create_daily_balance_snapshot
         count = create_daily_balance_snapshot(get_project_root())
         print(f"✓ 账户余额快照已更新: {count} 条")
+    elif cmd == 'collect-history':
+        # 批量采集场内基金历史日K数据
+        from core.market_quote_service import collect_historical_daily_bars
+        from data.product_service import get_products
+        
+        print("\n" + "=" * 50)
+        print("批量采集场内基金历史日K数据")
+        print("=" * 50)
+        
+        # 获取所有场内产品
+        products = get_products(channel='EXCHANGE', is_active=True)
+        if not products:
+            print("没有找到场内产品")
+            return
+        
+        print(f"\n找到 {len(products)} 个场内产品：")
+        for i, p in enumerate(products, 1):
+            print(f"  [{i}] {p['code']} - {p['product_name']} ({p.get('market', 'NA')})")
+        
+        # 选择产品
+        choice = input("\n选择产品（回车=全部，或输入序号/产品代码）: ").strip()
+        product_ids = None
+        
+        if choice:
+            # 尝试解析为序号
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(products):
+                    product_ids = [products[idx]['id']]
+                    print(f"✓ 选择: {products[idx]['code']} - {products[idx]['product_name']}")
+                else:
+                    print("✗ 序号超出范围")
+                    return
+            except ValueError:
+                # 尝试解析为产品代码
+                found = False
+                for p in products:
+                    if p['code'] == choice:
+                        product_ids = [p['id']]
+                        print(f"✓ 选择: {p['code']} - {p['product_name']}")
+                        found = True
+                        break
+                if not found:
+                    print(f"✗ 未找到产品: {choice}")
+                    return
+        
+        # 输入开始年份
+        start_year_str = input("\n开始年份（默认2000）: ").strip()
+        try:
+            start_year = int(start_year_str) if start_year_str else 2000
+        except ValueError:
+            print("✗ 年份格式错误，使用默认值 2000")
+            start_year = 2000
+        
+        # 输入批次大小
+        batch_years_str = input("每批年数（默认2年，避免单次请求过大）: ").strip()
+        try:
+            batch_years = int(batch_years_str) if batch_years_str else 2
+        except ValueError:
+            print("✗ 格式错误，使用默认值 2")
+            batch_years = 2
+        
+        print(f"\n开始采集（从 {start_year} 年到现在，每批 {batch_years} 年）...")
+        print("-" * 50)
+        
+        # 执行采集
+        results = collect_historical_daily_bars(
+            product_ids=product_ids,
+            start_year=start_year,
+            batch_years=batch_years
+        )
+        
+        # 显示结果
+        print("\n" + "=" * 50)
+        print("采集结果")
+        print("=" * 50)
+        
+        total_count = 0
+        success_count = 0
+        for product_id, result in results.items():
+            product = get_product_by_id(product_id)
+            code = product.get('code', '') if product else f"ID{product_id}"
+            name = product.get('product_name', '') if product else ''
+            
+            total_count += result['total_count']
+            if result['success']:
+                success_count += 1
+            
+            status = "✓" if result['success'] else "✗"
+            print(f"{status} {code} ({name}): {result['total_count']} 条")
+            if result.get('error'):
+                print(f"    错误: {result['error']}")
+        
+        print("-" * 50)
+        print(f"总计: {success_count}/{len(results)} 个产品成功，共保存 {total_count} 条数据")
     else:
         print(f"未知命令: {cmd}")
-        print("可用命令: add | settle | list-ledger | list-orders | list-tx | check | collect")
+        print("可用命令: add | settle | list-ledger | list-orders | list-tx | check | collect | collect-history")
         sys.exit(1)
 
 

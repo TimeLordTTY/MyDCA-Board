@@ -296,6 +296,112 @@ def collect_daily_bars(product_ids: Optional[List[int]] = None, days: int = 20) 
     return result
 
 
+def collect_historical_daily_bars(
+    product_ids: Optional[List[int]] = None,
+    start_year: int = 2000,
+    batch_years: int = 2
+) -> Dict[int, Dict]:
+    """
+    批量采集历史日K线（从指定年份到现在）
+    
+    由于数据量较大，采用分批获取策略（每批 N 年）
+    
+    Args:
+        product_ids: 产品ID列表，None 表示采集所有场内产品
+        start_year: 开始年份（默认2000）
+        batch_years: 每批获取的年数（默认2年，避免单次请求数据量过大）
+    
+    Returns:
+        {product_id: {'success': bool, 'total_count': int, 'error': str}} 字典
+    """
+    import time
+    
+    if product_ids is None:
+        products = get_products(channel='EXCHANGE', is_active=True)
+        product_ids = [p['id'] for p in products]
+    
+    result = {}
+    today = date.today()
+    
+    for product_id in product_ids:
+        product = get_product_by_id(product_id)
+        if not product:
+            result[product_id] = {'success': False, 'total_count': 0, 'error': '产品不存在'}
+            continue
+        
+        code = product.get('code')
+        market = product.get('market')
+        product_name = product.get('product_name', code)
+        
+        if market == 'NA':
+            result[product_id] = {'success': False, 'total_count': 0, 'error': '非场内产品'}
+            continue
+        
+        logger.info(f"开始采集 {code} ({product_name}) 的历史日K数据...")
+        
+        total_count = 0
+        current_year = start_year
+        has_error = False
+        error_msg = None
+        
+        # 分批获取（每批 N 年）
+        while current_year <= today.year:
+            # 计算本批的开始和结束日期
+            batch_start = date(current_year, 1, 1)
+            batch_end = date(min(current_year + batch_years - 1, today.year), 12, 31)
+            
+            # 如果结束日期超过今天，则使用今天
+            if batch_end > today:
+                batch_end = today
+            
+            logger.info(f"  采集 {code} {batch_start} 至 {batch_end} 的数据...")
+            
+            try:
+                # 获取日K线
+                bars = fetch_daily_bar(
+                    code, 
+                    market, 
+                    start_date=batch_start.strftime('%Y-%m-%d'),
+                    end_date=batch_end.strftime('%Y-%m-%d')
+                )
+                
+                if bars:
+                    batch_count = 0
+                    for bar in bars:
+                        if save_daily_bar(product_id, bar):
+                            batch_count += 1
+                    
+                    total_count += batch_count
+                    logger.info(f"  ✓ 保存 {batch_count} 条数据（累计 {total_count} 条）")
+                else:
+                    logger.warning(f"  ⚠ 未获取到数据")
+                
+                # 避免请求过快，稍作延迟
+                time.sleep(0.5)
+                
+            except Exception as e:
+                error_msg = str(e)
+                has_error = True
+                logger.error(f"  ✗ 采集失败: {e}", exc_info=True)
+                # 继续下一批，不中断
+            
+            # 移动到下一批
+            current_year += batch_years
+        
+        result[product_id] = {
+            'success': not has_error or total_count > 0,
+            'total_count': total_count,
+            'error': error_msg if has_error else None
+        }
+        
+        if total_count > 0:
+            logger.info(f"✓ {code} ({product_name}) 完成，共保存 {total_count} 条数据")
+        else:
+            logger.warning(f"⚠ {code} ({product_name}) 未保存任何数据")
+    
+    return result
+
+
 def get_latest_realtime_quote(product_id: int) -> Optional[Dict]:
     """获取最新实时行情（别名）"""
     return get_latest_quote(product_id)

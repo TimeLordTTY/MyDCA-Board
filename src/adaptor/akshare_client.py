@@ -236,36 +236,67 @@ def fetch_daily_bar(product_code: str, market: str, start_date: Optional[str] = 
         else:
             start_date = start_date.replace('-', '')
         
-        # 根据市场选择接口
-        if market == 'SH':
-            symbol = f"sh{product_code}"
-        elif market == 'SZ':
-            symbol = f"sz{product_code}"
-        else:
-            logger.error(f"不支持的市场类型: {market}")
-            return []
+        # fund_etf_hist_em 使用纯数字代码，不需要 sh/sz 前缀
+        symbol = product_code
         
-        df = ak.fund_etf_hist_sina(symbol=symbol, period="daily", 
-                                    start_date=start_date, end_date=end_date)
+        # 使用 fund_etf_hist_em 接口（支持日期范围）
+        df = ak.fund_etf_hist_em(
+            symbol=symbol,
+            period='daily',
+            start_date=start_date,
+            end_date=end_date,
+            adjust=''
+        )
         
         if df.empty:
             logger.warning(f"未获取到 {product_code} 的日K线数据")
             return []
         
+        # 列名映射（fund_etf_hist_em 返回中文列名）
+        column_map = {
+            '日期': 'date',
+            '开盘': 'open',
+            '收盘': 'close',
+            '最高': 'high',
+            '最低': 'low',
+            '成交量': 'volume',
+            '成交额': 'amount',
+            '涨跌额': 'change',
+            '涨跌幅': 'pct_chg'
+        }
+        
+        # 重命名列
+        df_renamed = df.rename(columns=column_map)
+        
         result = []
-        for _, row in df.iterrows():
-            bar = {
-                'trade_date': datetime.strptime(str(row.get('date', '')), '%Y-%m-%d').date() if 'date' in row else None,
-                'open': Decimal(str(row.get('open', 0))) if 'open' in row else None,
-                'high': Decimal(str(row.get('high', 0))) if 'high' in row else None,
-                'low': Decimal(str(row.get('low', 0))) if 'low' in row else None,
-                'close': Decimal(str(row.get('close', 0))) if 'close' in row else None,
-                'volume': Decimal(str(row.get('volume', 0))) if 'volume' in row else None,
-                'amount': Decimal(str(row.get('amount', 0))) if 'amount' in row else None,
-                'prev_close': Decimal(str(row.get('prev_close', 0))) if 'prev_close' in row else None
-            }
-            if bar['trade_date']:
+        for _, row in df_renamed.iterrows():
+            try:
+                # 解析日期
+                date_str = str(row.get('date', ''))
+                if not date_str:
+                    continue
+                
+                trade_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                
+                bar = {
+                    'trade_date': trade_date,
+                    'open': Decimal(str(row.get('open', 0))) if row.get('open') is not None else None,
+                    'high': Decimal(str(row.get('high', 0))) if row.get('high') is not None else None,
+                    'low': Decimal(str(row.get('low', 0))) if row.get('low') is not None else None,
+                    'close': Decimal(str(row.get('close', 0))) if row.get('close') is not None else None,
+                    'volume': Decimal(str(row.get('volume', 0))) if row.get('volume') is not None else None,
+                    'amount': Decimal(str(row.get('amount', 0))) if row.get('amount') is not None else None,
+                    'prev_close': None  # fund_etf_hist_em 不提供 prev_close
+                }
+                
+                # 计算 prev_close（使用前一天的 close）
+                if result:
+                    bar['prev_close'] = result[-1].get('close')
+                
                 result.append(bar)
+            except Exception as e:
+                logger.warning(f"解析日K线数据失败: {row}, error={e}")
+                continue
         
         logger.info(f"获取 {product_code} 日K线成功: {len(result)} 条")
         return result
