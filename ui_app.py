@@ -481,12 +481,39 @@ def render_product_quote():
         st.info("暂无产品，请先在产品管理中添加产品")
         return
     
+    # 分离场内和场外产品
+    exchange_products = [p for p in all_products if p.get('channel') == 'EXCHANGE']
+    otc_products = [p for p in all_products if p.get('channel') == 'OTC']
+    
+    # 场内场外选择（默认场内）
+    quote_channel = st.radio(
+        "交易类型",
+        ["场内", "场外"],
+        index=0,  # 默认场内
+        key="quote_channel",
+        horizontal=True
+    )
+    
+    # 根据选择显示不同的产品列表
+    if quote_channel == "场内":
+        products_to_show = exchange_products
+    else:
+        products_to_show = otc_products
+    
+    if not products_to_show:
+        st.warning(f"⚠️ 暂无{quote_channel}产品，请先在产品管理中添加{quote_channel}产品")
+        return
+    
     # 产品选择
-    product_options = {p['id']: f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')} ({'场内' if p.get('channel') == 'EXCHANGE' else '场外'})" 
-                      for p in all_products}
+    product_options = {p['id']: f"{p.get('code', '')} - {p.get('name') or p.get('product_name', '')}" 
+                      for p in products_to_show}
+    
+    # 默认选择第一个产品
+    default_idx = 0
     selected_product_id = st.selectbox("选择产品", 
                                      options=list(product_options.keys()),
                                      format_func=lambda x: product_options[x],
+                                     index=default_idx if default_idx < len(product_options) else 0,
                                      key="product_quote_select")
     
     if selected_product_id:
@@ -1619,8 +1646,102 @@ def page_asset_details():
             keyword = group_filter.split("(")[1].rstrip(")")
             balance_data = [r for r in balance_data if keyword in r.get('account_id', '').lower()]
         
+        # 处理基金账户：将 fund_total 改为场外基金账户，并增加场内基金账户和合计账户
+        from data.product_service import get_products
+        from core.snapshot_service import read_latest_daily
+        
+        all_products = get_products(is_active=True)
+        product_channel_map = {p.get('code', ''): p.get('channel', 'OTC') for p in all_products}
+        
+        daily_data = read_latest_daily()
+        exchange_fund_value = Decimal('0')
+        exchange_fund_pnl_day = Decimal('0')
+        exchange_fund_unrealized_pnl = Decimal('0')
+        exchange_fund_total_pnl = Decimal('0')
+        
+        otc_fund_value = Decimal('0')
+        otc_fund_pnl_day = Decimal('0')
+        otc_fund_unrealized_pnl = Decimal('0')
+        otc_fund_total_pnl = Decimal('0')
+        
+        # 计算场内和场外基金市值和收益
+        for record in daily_data:
+            product_code = record.get('product_code', '')
+            channel = product_channel_map.get(product_code, 'OTC')
+            if record.get('category') == 'fund':
+                value = Decimal(str(record.get('value', 0) or 0))
+                pnl_day = Decimal(str(record.get('pnl_day', 0) or 0))
+                unrealized_pnl = Decimal(str(record.get('unrealized_pnl', 0) or 0))
+                total_pnl = Decimal(str(record.get('total_pnl', 0) or 0))
+                
+                if channel == 'EXCHANGE':
+                    exchange_fund_value += value
+                    exchange_fund_pnl_day += pnl_day
+                    exchange_fund_unrealized_pnl += unrealized_pnl
+                    exchange_fund_total_pnl += total_pnl
+                else:
+                    otc_fund_value += value
+                    otc_fund_pnl_day += pnl_day
+                    otc_fund_unrealized_pnl += unrealized_pnl
+                    otc_fund_total_pnl += total_pnl
+        
+        # 修改账户名称并添加新账户
+        processed_balance_data = []
+        for record in balance_data:
+            account_type = record.get('account_type', '')
+            account_name = record.get('account_name', '')
+            
+            # 将 fund_total 账户名称改为"场外基金账户"
+            if account_type == 'fund_total':
+                record['account_name'] = '场外基金账户'
+                # 更新为场外基金的值
+                record['balance'] = str(otc_fund_value)
+                record['product_value'] = str(otc_fund_value)
+                record['yesterday_pnl'] = f"{otc_fund_pnl_day:.2f}" if otc_fund_pnl_day != 0 else ''
+                record['unrealized_pnl'] = f"{otc_fund_unrealized_pnl:.2f}" if otc_fund_unrealized_pnl != 0 else ''
+                record['total_pnl'] = f"{otc_fund_total_pnl:.2f}" if otc_fund_total_pnl != 0 else ''
+            
+            processed_balance_data.append(record)
+        
+        # 添加场内基金账户
+        if exchange_fund_value > 0:
+            processed_balance_data.append({
+                'account_id': 'exchange_fund_account',
+                'account_name': '场内基金账户',
+                'account_type': 'fund_total',
+                'balance': str(exchange_fund_value),
+                'product_value': str(exchange_fund_value),
+                'diff': '',
+                'yesterday_pnl': f"{exchange_fund_pnl_day:.2f}" if exchange_fund_pnl_day != 0 else '',
+                'unrealized_pnl': f"{exchange_fund_unrealized_pnl:.2f}" if exchange_fund_unrealized_pnl != 0 else '',
+                'total_pnl': f"{exchange_fund_total_pnl:.2f}" if exchange_fund_total_pnl != 0 else '',
+                'related_product': None,
+                'note': '场内基金账户汇总'
+            })
+        
+        # 添加基金(合计)账户
+        total_fund_value = exchange_fund_value + otc_fund_value
+        total_fund_pnl_day = exchange_fund_pnl_day + otc_fund_pnl_day
+        total_fund_unrealized_pnl = exchange_fund_unrealized_pnl + otc_fund_unrealized_pnl
+        total_fund_total_pnl = exchange_fund_total_pnl + otc_fund_total_pnl
+        
+        if total_fund_value > 0:
+            processed_balance_data.append({
+                'account_id': 'fund_total_account',
+                'account_name': '基金(合计)账户',
+                'account_type': 'summary',
+                'balance': str(total_fund_value),
+                'product_value': str(total_fund_value),
+                'diff': '',
+                'yesterday_pnl': f"{total_fund_pnl_day:.2f}" if total_fund_pnl_day != 0 else '',
+                'unrealized_pnl': f"{total_fund_unrealized_pnl:.2f}" if total_fund_unrealized_pnl != 0 else '',
+                'total_pnl': f"{total_fund_total_pnl:.2f}" if total_fund_total_pnl != 0 else '',
+                'related_product': None,
+                'note': '场内+场外基金账户合计'
+            })
+        
         # 转换为 DataFrame
-        df_balance = pd.DataFrame(balance_data)
+        df_balance = pd.DataFrame(processed_balance_data)
         
         # 选择显示的列（添加收益字段，去掉备注）
         display_cols = ['account_name', 'account_type', 'balance', 'product_value', 'diff', 
@@ -1651,7 +1772,27 @@ def page_asset_details():
     # 产品持仓表格
     st.subheader("📊 产品持仓")
     
+    # 场内场外选择（默认场内）
+    holdings_channel = st.radio(
+        "交易类型",
+        ["场内", "场外"],
+        index=0,  # 默认场内
+        key="holdings_channel",
+        horizontal=True
+    )
+    
     daily_data = read_latest_daily()
+    
+    if daily_data:
+        # 根据选择筛选产品
+        from data.product_service import get_products
+        all_products = get_products(is_active=True)
+        product_channel_map = {p.get('code', ''): p.get('channel', 'OTC') for p in all_products}
+        
+        if holdings_channel == "场内":
+            daily_data = [r for r in daily_data if product_channel_map.get(r.get('product_code', ''), 'OTC') == 'EXCHANGE']
+        else:
+            daily_data = [r for r in daily_data if product_channel_map.get(r.get('product_code', ''), 'OTC') == 'OTC']
     
     if daily_data:
         df_daily = pd.DataFrame(daily_data)
@@ -2184,112 +2325,361 @@ def page_invest():
     
     # 获取产品选项（需要包含 channel 字段）
     all_products = get_products(is_active=True)
-    product_dict = {}
-    product_names = []
-    for p in all_products:
+    
+    # 分离场内和场外产品
+    exchange_products = [p for p in all_products if p.get('channel') == 'EXCHANGE']
+    otc_products = [p for p in all_products if p.get('channel') == 'OTC']
+    
+    # 默认显示场内产品（优先）
+    exchange_product_dict = {}
+    exchange_product_names = []
+    for p in exchange_products:
         display_name = format_product_display_name(p)
-        product_dict[display_name] = p
-        product_names.append(display_name)
+        exchange_product_dict[display_name] = p
+        exchange_product_names.append(display_name)
+    
+    otc_product_dict = {}
+    otc_product_names = []
+    for p in otc_products:
+        display_name = format_product_display_name(p)
+        otc_product_dict[display_name] = p
+        otc_product_names.append(display_name)
+    
+    # 合并产品列表（场内优先）
+    all_product_dict = {}
+    all_product_names = []
+    for p in exchange_products + otc_products:
+        display_name = format_product_display_name(p)
+        all_product_dict[display_name] = p
+        all_product_names.append(display_name)
     
     with tab1:
         st.subheader("买入扣款")
         
-        col1, col2 = st.columns(2)
+        # 选择场内/场外（默认场内）
+        buy_channel = st.radio(
+            "交易类型",
+            ["场内", "场外"],
+            index=0,  # 默认场内
+            key="buy_channel",
+            horizontal=True
+        )
         
-        with col1:
-            buy_product = st.selectbox("选择产品", product_names, key="buy_product")
-            buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount")
-            
-            if buy_product and buy_amount > 0:
-                product = product_dict[buy_product]
-                fee = calc_buy_fee(product['code'], Decimal(str(buy_amount)))
-                buy_fee_rate = float(product.get('buy_fee_rate') or 0)
-                st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {buy_fee_rate*100:.2f}%）")
-                st.info(f"💡 净申购额: ¥{Decimal(str(buy_amount)) - fee:.2f}")
-                
-                buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee")
-        
-        with col2:
-            # 交易日期输入（可编辑，默认当前日期）
-            buy_trade_date = st.date_input(
-                "交易日期", 
-                value=date.today(), 
-                key="buy_trade_date",
-                help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
-            )
-            
-            if buy_product:
-                product = product_dict[buy_product]
-                # 根据交易日期计算净值日期和确认日期
-                from core.invest_service import calc_confirm_date
-                buy_confirm_offset = product.get('buy_confirm_offset', 1)
-                
-                # 净值日期 = 交易日期
-                buy_nav_date = buy_trade_date
-                # 确认日期 = 交易日期 + confirm_offset 个交易日
-                buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
-                
-                st.info(f"📅 净值日期: {buy_nav_date}")
-                st.info(f"📅 确认日期: {buy_confirm_date}")
-            
-            # 二级分类选择
-            buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
-            buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
-            
-            # 请求时间（时分秒），默认当前时间
-            buy_time = st.text_input(
-                "请求时间（HH:MM:SS）", 
-                value=datetime.now().strftime('%H:%M:%S'), 
-                key="buy_time",
-                help="扣款发生的时间，精确到秒"
-            )
-            buy_note = st.text_input("备注（可选）", key="buy_note")
-        
-        if st.button("提交买入扣款", type="primary", key="submit_buy"):
-            if not buy_product or buy_amount <= 0:
-                st.error("❌ 请选择产品并输入金额！")
+        # 根据选择显示不同的产品列表
+        if buy_channel == "场内":
+            # 场内模式：使用场内成交录入
+            if not exchange_product_names:
+                st.warning("⚠️ 暂无场内产品，请先在产品管理中添加场内ETF/LOF产品")
             else:
-                try:
-                    product = product_dict[buy_product]
-                    # 解析时间
-                    try:
-                        time_parts = buy_time.split(':')
-                        requested_at = datetime.combine(
-                            buy_trade_date,
-                            datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
-                            else datetime.strptime(buy_time, '%H:%M').time()
-                        )
-                    except:
-                        requested_at = datetime.combine(buy_trade_date, datetime.now().time())
-                    
-                    order_id = add_buy_debit(
-                        product_code=product['code'],
-                        amount=Decimal(str(buy_amount)),
-                        fee=Decimal(str(buy_fee_override)) if 'buy_fee_override' in dir() else None,
-                        requested_at=requested_at,
-                        trade_date=buy_trade_date,
-                        note=buy_note or None
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    buy_product = st.selectbox("选择产品 *", exchange_product_names, key="buy_product_exchange")
+                    buy_trade_type = st.selectbox(
+                        "成交类型 *",
+                        ["BUY"],
+                        format_func=lambda x: {"BUY": "买入"}[x],
+                        key="buy_trade_type"
                     )
                     
-                    # 同时在生活记账中添加一笔支出记录
-                    debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
-                    event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
-                    add_expense(
-                        account_from=debit_account,
-                        amount=Decimal(str(buy_amount)),
-                        category_l1="理财投资",
-                        category_l2=buy_category_l2,
-                        event_time=event_time,
-                        note=f"{product['name']} (订单号: {order_id})"
+                    # 账户选择
+                    account_options = get_account_options()
+                    account_dict = {acc['name']: acc['id'] for acc in account_options}
+                    account_names = list(account_dict.keys())
+                    
+                    default_account_idx = 0
+                    if '余利宝理财金' in account_names:
+                        default_account_idx = account_names.index('余利宝理财金')
+                    
+                    buy_account_name = st.selectbox(
+                        "资金来源账户 *",
+                        account_names,
+                        index=default_account_idx,
+                        key="buy_account"
+                    )
+                    buy_account_id = account_dict[buy_account_name]
+                    
+                    buy_amount = st.number_input(
+                        "成交金额 *",
+                        min_value=0.01,
+                        step=100.0,
+                        key="buy_amount_exchange",
+                        help="成交金额（含手续费）"
                     )
                     
-                    st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
-                    try:
-                        collect_nav_and_build_snapshots(silent=True)
-                    except:
-                        pass
-                except Exception as e:
-                    st.error(f"❌ 提交失败: {e}")
+                    buy_shares = st.number_input(
+                        "成交份额 *",
+                        min_value=0.0001,
+                        step=100.0,
+                        format="%.4f",
+                        key="buy_shares",
+                        help="成交份额（支持4位小数）"
+                    )
+                
+                with col2:
+                    buy_trade_date = st.date_input(
+                        "成交日期 *",
+                        value=date.today(),
+                        key="buy_trade_date_exchange"
+                    )
+                    
+                    buy_trade_time = st.text_input(
+                        "成交时间（HH:MM） *",
+                        value=datetime.now().strftime('%H:%M'),
+                        key="buy_trade_time",
+                        help="成交时间，精确到分钟"
+                    )
+                    
+                    buy_price = st.number_input(
+                        "成交价（可选）",
+                        min_value=0.0,
+                        step=0.01,
+                        value=0.0,
+                        key="buy_price",
+                        help="如果不填，将根据金额和份额自动计算"
+                    )
+                    
+                    # 手续费自动计算
+                    default_fee = 0.0
+                    if buy_product and buy_amount > 0:
+                        from core.exchange_trade_service import calc_default_fee
+                        from decimal import Decimal
+                        default_fee = float(calc_default_fee(Decimal(str(buy_amount))))
+                        st.info(f"💡 默认手续费: ¥{default_fee:.2f}（万0.845，最低0.20）")
+                    
+                    buy_fee = st.number_input(
+                        "手续费（可选）",
+                        min_value=0.0,
+                        step=0.01,
+                        value=default_fee,
+                        key="buy_fee_exchange",
+                        help="如果不填，将自动计算"
+                    )
+                    
+                    buy_note = st.text_input("备注（可选）", key="buy_note_exchange")
+                
+                if st.button("提交成交记录", type="primary", key="submit_buy_exchange"):
+                    if not buy_product or buy_amount <= 0 or buy_shares <= 0:
+                        st.error("❌ 请填写必填项：产品、成交金额、成交份额")
+                    else:
+                        try:
+                            product = exchange_product_dict[buy_product]
+                            product_id = product['id']
+                            
+                            # 解析成交时间
+                            try:
+                                time_parts = buy_trade_time.split(':')
+                                if len(time_parts) == 2:
+                                    trade_time = datetime.combine(
+                                        buy_trade_date,
+                                        datetime.strptime(buy_trade_time, '%H:%M').time()
+                                    )
+                                else:
+                                    trade_time = datetime.combine(buy_trade_date, datetime.now().time())
+                            except:
+                                trade_time = datetime.combine(buy_trade_date, datetime.now().time())
+                            
+                            # 调用服务保存成交
+                            from core.exchange_trade_service import save_exchange_trade
+                            from decimal import Decimal
+                            
+                            price = Decimal(str(buy_price)) if buy_price > 0 else None
+                            fee = Decimal(str(buy_fee)) if buy_fee > 0 else None
+                            
+                            success, message, result = save_exchange_trade(
+                                product_id=product_id,
+                                account_id=buy_account_id,
+                                trade_date=buy_trade_date,
+                                trade_time=trade_time,
+                                trade_type='BUY',
+                                amount=Decimal(str(buy_amount)),
+                                shares=Decimal(str(buy_shares)),
+                                price=price,
+                                fee=fee,
+                                remark=buy_note or None
+                            )
+                            
+                            if success:
+                                st.success(f"✅ {message}")
+                                
+                                # 显示详细信息
+                                if result:
+                                    holdings_before = result.get('holdings_before', {})
+                                    holdings_after = result.get('holdings_after', {})
+                                    deduction_result = result.get('deduction_result')
+                                    suggestion = result.get('suggestion')
+                                    warnings = result.get('warnings', [])
+                                    
+                                    if warnings:
+                                        for warning in warnings:
+                                            st.warning(f"⚠️ {warning}")
+                                    
+                                    st.divider()
+                                    st.subheader("📊 变化详情")
+                                    
+                                    col1, col2, col3 = st.columns(3)
+                                    
+                                    with col1:
+                                        st.metric(
+                                            "持仓份额",
+                                            f"{holdings_after.get('current_qty', 0):.4f}",
+                                            f"{holdings_after.get('current_qty', 0) - holdings_before.get('current_qty', 0):.4f}"
+                                        )
+                                    
+                                    with col2:
+                                        if deduction_result:
+                                            wait_pool_before = deduction_result.wait_pool_before
+                                            wait_pool_after = deduction_result.wait_pool_after
+                                            st.metric(
+                                                "等待池余额",
+                                                f"¥{wait_pool_after:.2f}",
+                                                f"¥{wait_pool_after - wait_pool_before:.2f}"
+                                            )
+                                    
+                                    with col3:
+                                        if deduction_result:
+                                            cash_pool_before = deduction_result.cash_pool_before
+                                            cash_pool_after = deduction_result.cash_pool_after
+                                            st.metric(
+                                                "现金池余额",
+                                                f"¥{cash_pool_after:.2f}",
+                                                f"¥{cash_pool_after - cash_pool_before:.2f}"
+                                            )
+                                    
+                                    # 显示扣减明细
+                                    if deduction_result:
+                                        st.info(
+                                            f"💰 资金扣减明细：\n"
+                                            f"- 从等待池扣减: ¥{deduction_result.wait_pool_deducted:.2f}\n"
+                                            f"- 从现金池扣减: ¥{deduction_result.cash_pool_deducted:.2f}\n"
+                                            f"- 合计扣减: ¥{deduction_result.total_deducted:.2f}"
+                                        )
+                                    
+                                    # 显示最新建议
+                                    if suggestion:
+                                        st.divider()
+                                        st.subheader("💡 最新Advisor建议")
+                                        action = suggestion.get('action', 'HOLD')
+                                        action_label = {'BUY': '买入', 'HOLD': '持有', 'WAIT': '等待', 'SKIP': '跳过'}.get(action, action)
+                                        st.info(f"**建议动作**: {action_label}")
+                                        st.caption(suggestion.get('reason', ''))
+                            else:
+                                st.error(f"❌ {message}")
+                        except Exception as e:
+                            st.error(f"❌ 提交失败: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+        else:
+            # 场外模式：使用原有的买入扣款逻辑
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 场外产品列表（默认显示场外产品）
+                buy_product = st.selectbox("选择产品", otc_product_names if otc_product_names else all_product_names, key="buy_product_otc")
+                buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount_otc")
+                
+                if buy_product and buy_amount > 0:
+                    # 使用合并的产品字典
+                    product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                    if product:
+                        from core.invest_service import calc_buy_fee
+                        from decimal import Decimal
+                        fee = calc_buy_fee(product['code'], Decimal(str(buy_amount)))
+                        buy_fee_rate = float(product.get('buy_fee_rate') or 0)
+                        st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {buy_fee_rate*100:.2f}%）")
+                        st.info(f"💡 净申购额: ¥{Decimal(str(buy_amount)) - fee:.2f}")
+                        
+                        buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee_otc")
+                
+                with col2:
+                    # 交易日期输入（可编辑，默认当前日期）
+                    buy_trade_date = st.date_input(
+                        "交易日期", 
+                        value=date.today(), 
+                        key="buy_trade_date_otc",
+                        help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
+                    )
+                    
+                    if buy_product:
+                        # 使用合并的产品字典
+                        product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                        if product:
+                            # 根据交易日期计算净值日期和确认日期
+                            from core.invest_service import calc_confirm_date
+                            buy_confirm_offset = product.get('buy_confirm_offset', 1)
+                            
+                            # 净值日期 = 交易日期
+                            buy_nav_date = buy_trade_date
+                            # 确认日期 = 交易日期 + confirm_offset 个交易日
+                            buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
+                            
+                            st.info(f"📅 净值日期: {buy_nav_date}")
+                            st.info(f"📅 确认日期: {buy_confirm_date}")
+                    
+                    # 二级分类选择
+                    buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
+                    buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
+                    
+                    # 请求时间（时分秒），默认当前时间
+                    buy_time = st.text_input(
+                        "请求时间（HH:MM:SS）", 
+                        value=datetime.now().strftime('%H:%M:%S'), 
+                        key="buy_time_otc",
+                        help="扣款发生的时间，精确到秒"
+                    )
+                    buy_note = st.text_input("备注（可选）", key="buy_note_otc")
+                
+                if st.button("提交买入扣款", type="primary", key="submit_buy_otc"):
+                    if not buy_product or buy_amount <= 0:
+                        st.error("❌ 请选择产品并输入金额！")
+                    else:
+                        try:
+                            # 使用合并的产品字典
+                            product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                            if not product:
+                                st.error(f"❌ 产品不存在: {buy_product}")
+                            else:
+                                # 解析时间
+                                try:
+                                    time_parts = buy_time.split(':')
+                                    requested_at = datetime.combine(
+                                        buy_trade_date,
+                                        datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
+                                        else datetime.strptime(buy_time, '%H:%M').time()
+                                    )
+                                except:
+                                    requested_at = datetime.combine(buy_trade_date, datetime.now().time())
+                                
+                                order_id = add_buy_debit(
+                                    product_code=product['code'],
+                                    amount=Decimal(str(buy_amount)),
+                                    fee=Decimal(str(buy_fee_override)) if buy_fee_override > 0 else None,
+                                    requested_at=requested_at,
+                                    trade_date=buy_trade_date,
+                                    note=buy_note or None
+                                )
+                                
+                                # 同时在生活记账中添加一笔支出记录
+                                debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
+                                event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
+                                add_expense(
+                                    account_from=debit_account,
+                                    amount=Decimal(str(buy_amount)),
+                                    category_l1="理财投资",
+                                    category_l2=buy_category_l2,
+                                    event_time=event_time,
+                                    note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
+                                )
+                                
+                                st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
+                                try:
+                                    collect_nav_and_build_snapshots(silent=True)
+                                except:
+                                    pass
+                        except Exception as e:
+                            st.error(f"❌ 提交失败: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
     
     with tab2:
         st.subheader("赎回发起")
@@ -2297,12 +2687,13 @@ def page_invest():
         col1, col2 = st.columns(2)
         
         with col1:
-            redeem_product = st.selectbox("选择产品", product_names, key="redeem_product")
+            # 默认显示场内产品（优先）
+            redeem_product = st.selectbox("选择产品", all_product_names, key="redeem_product")
             redeem_shares = st.number_input("赎回份额", min_value=0.01, step=100.0, key="redeem_shares")
             redeem_holding_days = st.number_input("持有天数", min_value=1, step=1, value=30, key="redeem_holding_days")
             
             if redeem_product:
-                product = product_dict[redeem_product]
+                product = all_product_dict[redeem_product]
                 product_config = get_product(product['code'])
                 if product_config:
                     fee_rate = get_sell_fee_rate(product_config, redeem_holding_days)
@@ -2318,7 +2709,7 @@ def page_invest():
             )
             
             if redeem_product:
-                product = product_dict[redeem_product]
+                product = all_product_dict[redeem_product]
                 # 根据交易日期计算确认日期
                 from core.invest_service import calc_confirm_date
                 sell_confirm_offset = product.get('sell_confirm_offset', 1)
@@ -2365,7 +2756,7 @@ def page_invest():
                 st.error("❌ 请选择产品并输入份额！")
             else:
                 try:
-                    product = product_dict[redeem_product]
+                    product = all_product_dict[redeem_product]
                     # 解析请求时间
                     try:
                         time_parts = redeem_request_time.split(':')
@@ -2400,7 +2791,8 @@ def page_invest():
         col1, col2 = st.columns(2)
         
         with col1:
-            history_product = st.selectbox("选择产品", product_names, key="history_product")
+            # 默认显示场内产品（优先）
+            history_product = st.selectbox("选择产品", all_product_names, key="history_product")
             history_action = st.selectbox("交易类型", ["buy", "sell", "dividend"], 
                                           format_func=lambda x: {"buy": "买入", "sell": "卖出", "dividend": "分红"}[x],
                                           key="history_action")
@@ -2433,7 +2825,7 @@ def page_invest():
                 st.error("❌ 请填写必要信息！")
             else:
                 try:
-                    product = product_dict[history_product]
+                    product = all_product_dict[history_product]
                     add_history_trade(
                         product_code=product['code'],
                         action=history_action,
@@ -2472,6 +2864,7 @@ def page_invest():
                         pass
                 except Exception as e:
                     st.error(f"❌ 补录失败: {e}")
+    
     
     st.divider()
     
@@ -3917,11 +4310,32 @@ def _page_backtest_run_content():
             st.warning(f"获取策略参数失败: {e}")
             params = {}
     
+    # 场内场外选择（默认场内）
+    backtest_channel = st.radio(
+        "交易类型",
+        ["场内", "场外"],
+        index=0,  # 默认场内
+        key="backtest_channel",
+        horizontal=True
+    )
+    
+    # 根据选择筛选产品
+    if backtest_channel == "场内":
+        filtered_products = {pid: name for pid, name in product_options.items() 
+                            if any(p['id'] == pid and p.get('channel') == 'EXCHANGE' for p in products)}
+    else:
+        filtered_products = {pid: name for pid, name in product_options.items() 
+                            if any(p['id'] == pid and p.get('channel') == 'OTC' for p in products)}
+    
+    if not filtered_products:
+        st.warning(f"⚠️ 暂无{backtest_channel}产品，请先在产品管理中添加{backtest_channel}产品")
+        return
+    
     # 产品选择（移到前面，以便显示行情范围）
     selected_product_id = st.selectbox(
         "选择产品 *",
-        options=list(product_options.keys()),
-        format_func=lambda x: product_options[x],
+        options=list(filtered_products.keys()),
+        format_func=lambda x: filtered_products[x],
         key="backtest_product"
     )
     

@@ -1,4 +1,4 @@
-# 字段计算规则合同 (Field Spec) v3.0
+# 字段计算规则合同 (Field Spec) v3.1
 
 本文档定义 MyDCA-Board 财富中枢系统中所有数据文件的字段规范，确保：
 - 字段命名统一（snake_case 全小写）
@@ -12,6 +12,10 @@
 - 新增调度配置表规范（job_config）
 - 新增分类和账户组表规范（categories, account_groups）
 - 所有配置迁移到数据库，不再使用 JSON 文件
+
+**v3.1 更新**：
+- 基金账户重构：分为场外基金账户、场内基金账户、基金(合计)账户（详见 5.7 节）
+- UI 功能增强：Dashboard 产品行情、资产详情产品持仓、理财录入、策略回测均支持场内/场外选择（默认场内）
 
 ---
 
@@ -489,7 +493,7 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 | bucket | 现金桶账户（未来扩展） | `Σ ledger 入账 - Σ ledger 出账` |
 | fund_mapped | 货币基金映射账户（小荷包） | `关联产品市值 + 当日收益`（收益自动入账） |
 | product_sub | 产品子账户（稳利宝各子账户） | `Σ ledger 入账 - Σ ledger 出账` |
-| fund_total | 基金账户汇总 | `Σ daily_snapshot 表基金市值`（排除 fund_mapped 关联产品） |
+| fund_total | 基金账户汇总（场外） | `Σ daily_snapshot 表场外基金市值`（channel=OTC，排除 fund_mapped 关联产品） |
 | summary | 汇总行 | 各组账户合计 |
 
 ### 5.4 字段定义与公式
@@ -575,9 +579,16 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 |--------|------------|----------|
 | 稳利宝合计 | wenlibao_total | balance = Σ 子账户余额，product_value = 父产品市值，diff = group_profit |
 | 余利宝合计 | ylb_total | balance = ylb_life + ylb_finance |
-| 基金合计 | fund_total | balance = Σ daily_snapshot 表基金市值（排除 fund_mapped 关联产品） |
+| 场外基金账户 | fund_account（原 fund_total） | balance = Σ daily_snapshot 表场外基金市值（channel=OTC，排除 fund_mapped 关联产品） |
+| 场内基金账户 | exchange_fund_account | balance = Σ daily_snapshot 表场内基金市值（channel=EXCHANGE） |
+| 基金(合计)账户 | fund_total_account | balance = 场外基金账户 + 场内基金账户 |
 
-**汇总行 diff 与 profit_account diff 一致**：表示该产品组在该快照日的收益/亏损。
+**说明**：
+- 原 `fund_total` 账户在 UI 中显示为"场外基金账户"，仅统计场外基金（channel=OTC）
+- 新增"场内基金账户"（account_id=exchange_fund_account），统计场内基金（channel=EXCHANGE）
+- 新增"基金(合计)账户"（account_id=fund_total_account），为场内+场外基金合计
+- 这些账户在 UI 的"资产详情"页面中动态计算并显示，不存储在 `daily_balance` 表中
+- 汇总行 diff 与 profit_account diff 一致**：表示该产品组在该快照日的收益/亏损
 
 ---
 

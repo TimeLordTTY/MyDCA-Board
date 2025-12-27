@@ -1,0 +1,500 @@
+# -*- coding: utf-8 -*-
+"""
+场内成交录入服务
+
+提供场内ETF/LOF手动录入成交的完整闭环：
+- 验证输入
+- 保存成交记录
+- 扣减等待池/现金池
+- 刷新持仓
+- 更新快照
+- 刷新建议
+"""
+import logging
+from datetime import datetime, date
+from decimal import Decimal
+from typing import Dict, Optional, Tuple, Any
+from dataclasses import dataclass
+
+from data.db_connector import execute_insert, execute_query, execute_one
+from data.product_service import get_product_by_id
+from data.account_service import get_account_by_id
+from core.exchange_holdings_calculator import calculate_exchange_holdings as calc_exchange_holdings
+from core.pending_buy_service import reduce_pending_amount, get_pending_pool
+from core.ledger_service import calc_account_balance
+from utils.trade_calendar import is_trade_day
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TradeValidationResult:
+    """交易验证结果"""
+    is_valid: bool
+    errors: list
+    warnings: list
+
+
+@dataclass
+class TradeDeductionResult:
+    """资金扣减结果"""
+    wait_pool_deducted: Decimal
+    cash_pool_deducted: Decimal
+    total_deducted: Decimal
+    wait_pool_before: Decimal
+    wait_pool_after: Decimal
+    cash_pool_before: Decimal
+    cash_pool_after: Decimal
+
+
+def validate_trade_input(
+    product_id: int,
+    account_id: int,
+    trade_type: str,
+    amount: Decimal,
+    shares: Decimal,
+    price: Optional[Decimal] = None,
+    fee: Optional[Decimal] = None,
+    trade_date: Optional[date] = None
+) -> TradeValidationResult:
+    """
+    验证交易输入
+    
+    Args:
+        product_id: 产品ID
+        account_id: 账户ID
+        trade_type: 交易类型（BUY/SELL/FEE/TAX）
+        amount: 成交金额
+        shares: 成交份额
+        price: 成交价（可选）
+        fee: 手续费（可选）
+        trade_date: 成交日期（可选）
+    
+    Returns:
+        TradeValidationResult
+    """
+    errors = []
+    warnings = []
+    
+    # 1. 验证产品
+    product = get_product_by_id(product_id)
+    if not product:
+        errors.append(f"产品不存在: product_id={product_id}")
+    elif product.get('channel') != 'EXCHANGE':
+        errors.append(f"产品不是场内产品: {product.get('code')}")
+    
+    # 2. 验证账户
+    account = get_account_by_id(account_id)
+    if not account:
+        errors.append(f"账户不存在: account_id={account_id}")
+    
+    # 3. 验证交易类型
+    valid_types = ['BUY', 'SELL', 'DIV_CASH', 'DIV_REINV', 'FEE', 'TAX']
+    if trade_type not in valid_types:
+        errors.append(f"无效的交易类型: {trade_type}，必须是 {valid_types} 之一")
+    
+    # 4. 验证金额和份额
+    if amount <= 0:
+        errors.append("成交金额必须大于0")
+    
+    if shares <= 0:
+        errors.append("成交份额必须大于0")
+    
+    # 5. 验证价格（如果提供）
+    if price is not None and price <= 0:
+        errors.append("成交价必须大于0")
+    
+    # 6. 验证手续费（如果提供）
+    if fee is not None and fee < 0:
+        errors.append("手续费不能为负")
+    
+    # 7. SELL交易：检查持仓是否足够（卖出时检查）
+    if trade_type == 'SELL':
+        holdings = calc_exchange_holdings(product_id)
+        current_qty = holdings.get('current_qty', Decimal('0'))
+        if shares > current_qty:
+            errors.append(f"卖出份额({shares})超过当前持仓({current_qty})")
+    
+    # 8. BUY交易：检查现金是否足够（买入时检查，但实际扣减在apply_fund_deduction中）
+    if trade_type == 'BUY':
+        # 这里只做警告，实际扣减在apply_fund_deduction中处理
+        account_code = account.get('account_code') if account else None
+        if account_code:
+                try:
+                    cash_balance = calc_account_balance(account_code)
+                    wait_pool = get_pending_pool(product_id, account_id)
+                    wait_pool_sum = Decimal(str(wait_pool['pending_amount'])) if wait_pool else Decimal('0')
+                    total_available = cash_balance + wait_pool_sum
+                    if amount > total_available:
+                        warnings.append(f"成交金额({amount})可能超过可用资金(现金:{cash_balance} + 等待池:{wait_pool_sum} = {total_available})")
+                except Exception as e:
+                    warnings.append(f"无法计算可用资金: {e}")
+    
+    # 9. 价格与金额/份额的一致性检查
+    if price is not None:
+        expected_amount = price * shares
+        if abs(amount - expected_amount) > Decimal('0.01'):
+            warnings.append(f"成交金额({amount})与价格×份额({expected_amount})不一致")
+    
+    is_valid = len(errors) == 0
+    
+    return TradeValidationResult(
+        is_valid=is_valid,
+        errors=errors,
+        warnings=warnings
+    )
+
+
+def calc_default_fee(amount: Decimal, fee_rate: Decimal = Decimal('0.000845'), fee_min: Decimal = Decimal('0.20')) -> Decimal:
+    """
+    计算默认手续费
+    
+    Args:
+        amount: 成交金额
+        fee_rate: 手续费率（默认万0.845）
+        fee_min: 最低手续费（默认0.20）
+    
+    Returns:
+        手续费金额
+    """
+    fee = amount * fee_rate
+    return max(fee, fee_min)
+
+
+def apply_fund_deduction(
+    product_id: int,
+    account_id: int,
+    amount: Decimal,
+    trade_type: str
+) -> TradeDeductionResult:
+    """
+    应用资金扣减（等待池优先，不足部分从现金池扣除）
+    
+    Args:
+        product_id: 产品ID
+        account_id: 账户ID
+        amount: 成交金额（含费）
+        trade_type: 交易类型（BUY/SELL）
+    
+    Returns:
+        TradeDeductionResult
+    """
+    wait_pool_deducted = Decimal('0')
+    cash_pool_deducted = Decimal('0')
+    
+    if trade_type == 'BUY':
+        # 买入：先扣等待池，再扣现金池
+        # 获取等待池余额
+        wait_pool = get_pending_pool(product_id, account_id)
+        wait_pool_before = Decimal(str(wait_pool['pending_amount'])) if wait_pool else Decimal('0')
+        
+        # 先扣等待池
+        wait_pool_deducted = min(amount, wait_pool_before)
+        if wait_pool_deducted > 0:
+            # 使用 reduce_pending_amount 直接扣减指定账户的等待池
+            from core.pending_buy_service import reduce_pending_amount
+            reduce_pending_amount(product_id, account_id, wait_pool_deducted, reason="场内买入成交扣减")
+            wait_pool_after = wait_pool_before - wait_pool_deducted
+        else:
+            wait_pool_after = wait_pool_before
+        
+        # 剩余部分从现金池扣除（通过ledger记录）
+        remaining = amount - wait_pool_deducted
+        if remaining > 0:
+            # 获取账户代码
+            account = get_account_by_id(account_id)
+            if account:
+                account_code = account.get('account_code')
+                cash_pool_before = calc_account_balance(account_code)
+                
+                # 在ledger中记录支出（用于扣减现金池）
+                from data.data_store import append_ledger
+                append_ledger({
+                    'event_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'entry_type': 'expense',
+                    'amount': float(remaining),
+                    'category_l1': '场内交易',
+                    'category_l2': '买入',
+                    'account_from': account_code,
+                    'note': f'场内买入成交扣减（产品ID:{product_id}）'
+                })
+                
+                cash_pool_after = calc_account_balance(account_code)
+                cash_pool_deducted = cash_pool_before - cash_pool_after
+            else:
+                logger.warning(f"无法找到账户: account_id={account_id}")
+                cash_pool_before = Decimal('0')
+                cash_pool_after = Decimal('0')
+        else:
+            cash_pool_before = Decimal('0')
+            cash_pool_after = Decimal('0')
+    
+    elif trade_type == 'SELL':
+        # 卖出：增加现金池（通过ledger记录收入）
+        account = get_account_by_id(account_id)
+        if account:
+            account_code = account.get('account_code')
+            cash_pool_before = calc_account_balance(account_code)
+            
+            # 在ledger中记录收入（用于增加现金池）
+            from data.data_store import append_ledger
+            append_ledger({
+                'event_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'entry_type': 'income',
+                'amount': float(amount),
+                'category_l1': '场内交易',
+                'category_l2': '卖出',
+                'account_to': account_code,
+                'note': f'场内卖出成交到账（产品ID:{product_id}）'
+            })
+            
+            cash_pool_after = calc_account_balance(account_code)
+            cash_pool_deducted = cash_pool_after - cash_pool_before  # 注意：这里是增加，所以是正数
+        else:
+            logger.warning(f"无法找到账户: account_id={account_id}")
+            cash_pool_before = Decimal('0')
+            cash_pool_after = Decimal('0')
+        
+        wait_pool_before = Decimal('0')
+        wait_pool_after = Decimal('0')
+    else:
+        # 其他类型（DIV_CASH等）：不扣减等待池
+        wait_pool_before = Decimal('0')
+        wait_pool_after = Decimal('0')
+        cash_pool_before = Decimal('0')
+        cash_pool_after = Decimal('0')
+    
+    total_deducted = wait_pool_deducted + (cash_pool_deducted if trade_type == 'BUY' else Decimal('0'))
+    
+    return TradeDeductionResult(
+        wait_pool_deducted=wait_pool_deducted,
+        cash_pool_deducted=cash_pool_deducted if trade_type == 'BUY' else -cash_pool_deducted,  # SELL时返回负数表示增加
+        total_deducted=total_deducted,
+        wait_pool_before=wait_pool_before,
+        wait_pool_after=wait_pool_after,
+        cash_pool_before=cash_pool_before,
+        cash_pool_after=cash_pool_after
+    )
+
+
+def persist_trade_record(
+    product_id: int,
+    account_id: int,
+    trade_date: date,
+    trade_time: datetime,
+    trade_type: str,
+    amount: Decimal,
+    shares: Decimal,
+    price: Optional[Decimal] = None,
+    fee: Optional[Decimal] = None,
+    tax: Decimal = Decimal('0'),
+    other_fee: Decimal = Decimal('0'),
+    remark: Optional[str] = None
+) -> int:
+    """
+    保存成交记录到 trade_fills 表
+    
+    Args:
+        product_id: 产品ID
+        account_id: 账户ID
+        trade_date: 成交日期
+        trade_time: 成交时间
+        trade_type: 交易类型（BUY/SELL）
+        amount: 成交金额
+        shares: 成交份额
+        price: 成交价（可选，若不填则用amount/shares计算）
+        fee: 手续费（可选）
+        tax: 印花税（默认0）
+        other_fee: 其他费用（默认0）
+        remark: 备注
+    
+    Returns:
+        插入的记录ID
+    """
+    # 如果没有提供价格，从金额和份额计算
+    if price is None:
+        price = amount / shares if shares > 0 else Decimal('0')
+    
+    # 如果没有提供手续费，使用默认计算
+    if fee is None:
+        fee = calc_default_fee(amount)
+    
+    # 转换trade_type为side（BUY/SELL）
+    side = 'BUY' if trade_type == 'BUY' else 'SELL'
+    
+    sql = """
+        INSERT INTO trade_fills (
+            trade_date, trade_time, product_id, account_id, side,
+            qty, price, amount, fee, tax, other_fee,
+            remark, source
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'MANUAL'
+        )
+    """
+    
+    params = (
+        trade_date,
+        trade_time,
+        product_id,
+        account_id,
+        side,
+        float(shares),
+        float(price),
+        float(amount),
+        float(fee),
+        float(tax),
+        float(other_fee),
+        remark,
+    )
+    
+    record_id = execute_insert(sql, params)
+    logger.info(f"保存场内成交记录: product_id={product_id}, account_id={account_id}, "
+                f"type={trade_type}, amount={amount}, shares={shares}, record_id={record_id}")
+    
+    return record_id
+
+
+
+
+def update_snapshot_if_needed(trade_date: date) -> None:
+    """
+    如果需要，更新快照（暂时不实现，因为快照是定时任务）
+    
+    Args:
+        trade_date: 成交日期
+    """
+    # 快照更新由定时任务处理，这里只记录日志
+    logger.debug(f"快照将在下次定时任务时更新: trade_date={trade_date}")
+
+
+def refresh_advisor_suggestion(product_id: int) -> Optional[Dict]:
+    """
+    刷新Advisor建议
+    
+    Args:
+        product_id: 产品ID
+    
+    Returns:
+        最新建议字典
+    """
+    try:
+        from advisor.advisor_service import run_for_product
+        suggestion = run_for_product(product_id)
+        logger.info(f"刷新Advisor建议: product_id={product_id}")
+        return suggestion
+    except Exception as e:
+        logger.error(f"刷新Advisor建议失败: product_id={product_id}, error={e}", exc_info=True)
+        return None
+
+
+def save_exchange_trade(
+    product_id: int,
+    account_id: int,
+    trade_date: date,
+    trade_time: datetime,
+    trade_type: str,
+    amount: Decimal,
+    shares: Decimal,
+    price: Optional[Decimal] = None,
+    fee: Optional[Decimal] = None,
+    tax: Decimal = Decimal('0'),
+    other_fee: Decimal = Decimal('0'),
+    remark: Optional[str] = None
+) -> Tuple[bool, str, Dict]:
+    """
+    保存场内成交（完整闭环）
+    
+    Args:
+        product_id: 产品ID
+        account_id: 账户ID
+        trade_date: 成交日期
+        trade_time: 成交时间
+        trade_type: 交易类型（BUY/SELL）
+        amount: 成交金额
+        shares: 成交份额
+        price: 成交价（可选）
+        fee: 手续费（可选）
+        tax: 印花税（默认0）
+        other_fee: 其他费用（默认0）
+        remark: 备注
+    
+    Returns:
+        (success, message, result_dict)
+        result_dict包含：
+        - record_id: 记录ID
+        - holdings_before: 持仓前
+        - holdings_after: 持仓后
+        - deduction_result: 扣减结果
+        - suggestion: 最新建议
+    """
+    try:
+        # 1. 验证输入
+        validation = validate_trade_input(
+            product_id, account_id, trade_type, amount, shares, price, fee, trade_date
+        )
+        
+        if not validation.is_valid:
+            error_msg = "; ".join(validation.errors)
+            return False, f"验证失败: {error_msg}", {}
+        
+        # 2. 获取持仓前状态
+        holdings_before = calc_exchange_holdings(product_id)
+        
+        # 3. 应用资金扣减
+        deduction_result = apply_fund_deduction(product_id, account_id, amount, trade_type)
+        
+        # 4. 保存成交记录
+        record_id = persist_trade_record(
+            product_id, account_id, trade_date, trade_time, trade_type,
+            amount, shares, price, fee, tax, other_fee, remark
+        )
+        
+        # 5. 重新计算持仓
+        holdings_after = calc_exchange_holdings(product_id)
+        
+        # 6. 更新快照（如果需要）
+        update_snapshot_if_needed(trade_date)
+        
+        # 7. 刷新Advisor建议
+        suggestion = refresh_advisor_suggestion(product_id)
+        
+        result = {
+            'record_id': record_id,
+            'holdings_before': holdings_before,
+            'holdings_after': holdings_after,
+            'deduction_result': deduction_result,
+            'suggestion': suggestion,
+            'warnings': validation.warnings
+        }
+        
+        return True, "保存成功", result
+        
+    except Exception as e:
+        logger.error(f"保存场内成交失败: {e}", exc_info=True)
+        return False, f"保存失败: {str(e)}", {}
+
+
+def get_pending_amount_sum(product_id: int, account_id: Optional[int] = None) -> Decimal:
+    """
+    获取等待池余额总和
+    
+    Args:
+        product_id: 产品ID
+        account_id: 账户ID（可选）
+    
+    Returns:
+        等待池余额总和
+    """
+    from core.pending_buy_service import get_pending_pool, get_all_pending_pools
+    
+    if account_id:
+        pool = get_pending_pool(product_id, account_id)
+        return Decimal(str(pool['pending_amount'])) if pool else Decimal('0')
+    else:
+        pools = get_all_pending_pools()
+        total = Decimal('0')
+        for pool in pools:
+            if pool['product_id'] == product_id:
+                total += Decimal(str(pool['pending_amount']))
+        return total
+

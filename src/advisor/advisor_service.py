@@ -389,33 +389,19 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
         # 14. 溢价刹车处理（全局统一处理）
         output = apply_premium_brake_to_output(output, product, premium_rate)
         
-        # 15. 非交易日处理：非交易日时，不执行买入
-        # 关键：只有在 planned_amount > 0 时，才进入等待池
+        # 15. 非交易日处理：非交易日时，不执行买入，也不进入等待池（预算冻结）
+        # 关键：非交易日 moved_to_wait_pool=0，预算冻结，下一交易日开盘前重新评估
         if not trade_day:
-            if planned_amount > 0:
-                # 有买入意图，全部进入等待池
-                output = AdviceOutput(
-                    action='WAIT',
-                    suggest_amount=Decimal('0'),
-                    suggest_ratio=None,
-                    limit_price_hint=output.limit_price_hint,
-                    premium_rate=output.premium_rate,
-                    moved_to_wait_pool=planned_amount,  # 使用planned_amount而不是budget_for_execution
-                    reason=f"{output.reason} 非交易日，不执行买入操作，全部预算进入等待池。",
-                    new_state_json=output.new_state_json
-                )
-            else:
-                # 没有买入意图，不进入等待池
-                output = AdviceOutput(
-                    action='WAIT',
-                    suggest_amount=Decimal('0'),
-                    suggest_ratio=None,
-                    limit_price_hint=output.limit_price_hint,
-                    premium_rate=output.premium_rate,
-                    moved_to_wait_pool=Decimal('0'),
-                    reason=f"{output.reason} 非交易日，且本轮无买入意图（planned_amount=0），不进入等待池。",
-                    new_state_json=output.new_state_json
-                )
+            output = AdviceOutput(
+                action='WAIT',
+                suggest_amount=Decimal('0'),
+                suggest_ratio=None,
+                limit_price_hint=output.limit_price_hint,
+                premium_rate=output.premium_rate,
+                moved_to_wait_pool=Decimal('0'),  # 非交易日不入等待池
+                reason=f"{output.reason} 市场关闭：预算冻结，下一交易日开盘前重新评估。",
+                new_state_json=output.new_state_json
+            )
         
         # 16. 计算最终执行金额和等待池金额
         # 关键：等待池增加规则（只在有买入意图时）
