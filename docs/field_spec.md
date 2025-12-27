@@ -53,7 +53,7 @@ id, date, product_id, product_code, action, amount, shares, fee, nav, nav_date, 
 | 字段 | 定义 | 数据类型 | 约束 |
 |------|------|----------|------|
 | date | 该条流水发生日期 | YYYY-MM-DD | 必填 |
-| product_code | 产品代码 | string | 必填，需在 products.json 中存在 |
+| product_code | 产品代码 | string | 必填，需在 products 表中存在 |
 | action | 交易类型 | string | 必填，枚举值见上表（存储小写） |
 | amount | 金额 | Decimal | 非负；buy_debit=扣款含手续费；sell_confirm=到账净额 |
 | shares | 份额 | Decimal | 正数；精度≥0.0001；确认/赎回/分红时必填 |
@@ -244,8 +244,10 @@ id, date, product_id, product_code, action, amount, shares, fee, nav, nav_date, 
 ### 2.1 数据库表字段（固定）
 
 ```
-id, order_id, product_id, product_code, order_type, amount, fee, shares, requested_at, trade_date, nav_date, confirm_date, holding_days, sell_fee_rate, status, note, created_at, updated_at
+id, order_id, product_id, product_code, order_type, amount, fee, shares, requested_at, trade_date, nav_date, confirm_date, holding_days, sell_fee_rate, status, note, created_at
 ```
+
+**注意**：`orders` 表没有 `updated_at` 字段，只有 `created_at` 字段。
 
 ### 2.2 order_type 枚举
 
@@ -335,7 +337,7 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 - 这样做的好处是：修改任何历史记录后，后续所有记录的余额会**自动正确**
 - 无需手动更新历史余额，避免数据不一致问题
 
-**账户组定义**（来自 `accounts.json`）：
+**账户组定义**（来自 `account_groups` 表）：
 - 余利宝组：ylb_life（生活费）、ylb_project（项目资金）
 - 稳利宝组：wlb_life（生活费）、wlb_project（项目资金）
 
@@ -353,7 +355,7 @@ parent_balance_after: ylb_life + ylb_project 的总余额（截止该时间）
 ### 4.1 数据库表字段（固定）
 
 ```
-id, fetch_date, product_id, product_code, product_name, category, nav_date, nav, shares, value, pnl_day, cost, unrealized_pnl, return_rate, cash_in_transit, total_value, principal_total, total_redemption, total_pnl, real_return, fetched_at, created_at
+id, fetch_date, product_id, product_code, product_name, category, nav_date, nav, shares, value, pnl_day, cost, unrealized_pnl, return_rate, cash_in_transit, total_value, principal_total, total_redemption, total_pnl, real_return, data_status, fetched_at, created_at
 ```
 
 ### 4.2 中文表头映射
@@ -378,6 +380,7 @@ id, fetch_date, product_id, product_code, product_name, category, nav_date, nav,
 | total_redemption | 累计赎回 |
 | total_pnl | 总盈亏 |
 | real_return | 真实收益率 |
+| data_status | 数据状态 |
 | fetched_at | 采集时间 |
 
 ### 4.3 字段定义与公式
@@ -386,7 +389,7 @@ id, fetch_date, product_id, product_code, product_name, category, nav_date, nav,
 |------|------|------|----------|
 | fetch_date | 快照生成日期 | YYYY-MM-DD | 每次运行 |
 | product_code | 产品代码 | - | 固定 |
-| product_name | 产品名称 | 来自 products.json | 固定 |
+| product_name | 产品名称 | 来自 products 表 | 固定 |
 | category | 分类 | fund/bank | 固定 |
 | nav_date | 用于估值的净值日期 | 可能滞后 T+1 | 净值更新 |
 | nav | 单位净值 | Decimal | 净值更新 |
@@ -402,6 +405,7 @@ id, fetch_date, product_id, product_code, product_name, category, nav_date, nav,
 | total_redemption | 累计赎回金额 | `Σ sell_confirm.amount`（到账净额） | 赎回确认 |
 | **total_pnl** | **生命周期总盈亏** | `total_value + total_redemption - principal_total` | 净值变/扣款/确认/赎回 |
 | real_return | 真实收益率 | `total_pnl / principal_total × 100%` | 同上 |
+| data_status | 数据状态 | ok/carried_forward/missing/holiday | 每次运行 |
 | fetched_at | 采集时间 | YYYY-MM-DD HH:MM:SS.mmm | 每次运行 |
 
 ### 4.4 关键口径说明
@@ -453,8 +457,10 @@ id, fetch_date, product_id, product_code, product_name, category, nav_date, nav,
 ### 5.1 数据库表字段（固定）
 
 ```
-id, fetch_date, account_id, account_name, account_type, balance, related_product, product_value, diff, yesterday_pnl, unrealized_pnl, total_pnl, note, created_at
+id, fetch_date, account_id, account_name, account_type, balance, related_product, product_value, diff, note, created_at
 ```
+
+**注意**：`yesterday_pnl`、`unrealized_pnl`、`total_pnl` 字段在代码中计算并在 UI 中显示，但**不存储**在数据库中。这些字段仅在查询时动态计算。
 
 ### 5.2 中文表头映射
 
@@ -475,9 +481,12 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 
 ### 5.3 account_type 枚举
 
+**注意**：`daily_balance` 表中的 `account_type` 字段类型为 `varchar(30)`，存储小写值。`accounts` 表中的 `account_type` 字段类型为 `enum('CASH','BUCKET','FUND_MAPPED','PRODUCT_SUB','FUND_TOTAL','SUMMARY')`，存储大写值。
+
 | account_type | 含义 | 余额计算规则 |
 |--------------|------|--------------|
 | cash | 现金账户（余利宝、银行卡等） | `Σ ledger 入账 - Σ ledger 出账` |
+| bucket | 现金桶账户（未来扩展） | `Σ ledger 入账 - Σ ledger 出账` |
 | fund_mapped | 货币基金映射账户（小荷包） | `关联产品市值 + 当日收益`（收益自动入账） |
 | product_sub | 产品子账户（稳利宝各子账户） | `Σ ledger 入账 - Σ ledger 出账` |
 | fund_total | 基金账户汇总 | `Σ daily_snapshot 表基金市值`（排除 fund_mapped 关联产品） |
@@ -488,17 +497,21 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 | 字段 | 定义 | 公式 | 变化触发 |
 |------|------|------|----------|
 | fetch_date | 快照生成日期 | YYYY-MM-DD | 每次同步 |
-| account_id | 账户唯一标识 | 来自 accounts.json | 固定 |
-| account_name | 账户显示名称 | 来自 accounts.json | 固定 |
+| account_id | 账户唯一标识 | 来自 accounts 表 | 固定 |
+| account_name | 账户显示名称 | 来自 accounts 表 | 固定 |
 | account_type | 账户类型 | 见上表枚举 | 固定 |
 | balance | 账户余额（本金分桶） | 见上表计算规则 | ledger 变动 |
-| related_product | 关联产品代码 | 来自 accounts.json.linked_product | 固定 |
+| related_product | 关联产品代码 | 来自 accounts 表的 product_id 关联 | 固定 |
 | product_value | 展示市值 | 见 5.5 说明 | 净值变动 |
 | diff | 收益/差异 | 见 5.5 说明 | 净值变动 |
-| yesterday_pnl | 昨日收益 | 前一天的 pnl_day（仅基金、余利宝生活费、稳利宝） | 净值变动 |
-| unrealized_pnl | 持有收益 | 浮动盈亏（仅基金、余利宝生活费、稳利宝） | 净值变动 |
-| total_pnl | 累计收益 | 生命周期总盈亏（仅基金、余利宝生活费、稳利宝） | 净值变动 |
-| note | 备注 | 来自 accounts.json 或动态生成 | 净值变动 |
+| note | 备注 | 来自 accounts 表或动态生成 | 净值变动 |
+
+**动态计算字段**（不存储在数据库，仅在查询时计算）：
+- `yesterday_pnl`：昨日收益（前一天的 pnl_day，仅基金、余利宝生活费、稳利宝）
+- `unrealized_pnl`：持有收益（浮动盈亏，仅基金、余利宝生活费、稳利宝）
+- `total_pnl`：累计收益（生命周期总盈亏，仅基金、余利宝生活费、稳利宝）
+
+**注意**：这些动态计算字段在 `snapshot_service.py` 的 `read_latest_daily_balance()` 函数中计算，用于 UI 显示，但不写入数据库。
 
 ### 5.5 product_value 与 diff 字段说明
 
@@ -829,7 +842,513 @@ real_return=1.36% (=6.79/500)
 | related_product | 关联产品 |
 | product_value | 产品市值 |
 | diff | 差异 |
-| yesterday_pnl | 昨日收益 |
-| unrealized_pnl | 持有收益 |
-| total_pnl | 累计收益 |
 | note | 备注 |
+
+---
+
+## 6. nav 表（净值历史表）
+
+### 6.1 数据库表字段（固定）
+
+```
+id, product_id, product_code, nav_date, nav, acc_nav, daily_return, dividend, fetched_at
+```
+
+### 6.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID（外键） | bigint |
+| product_code | 产品代码 | string |
+| nav_date | 净值日期 | YYYY-MM-DD |
+| nav | 单位净值 | Decimal(20,6) |
+| acc_nav | 累计净值 | Decimal(20,6)（可空） |
+| daily_return | 日收益率 | Decimal(10,6)（可空） |
+| dividend | 分红 | Decimal(20,2)（可空） |
+| fetched_at | 采集时间 | timestamp |
+
+### 6.3 唯一键
+
+- `(product_code, nav_date)` - 同一产品同一日期只能有一条记录
+
+---
+
+## 7. products 表（产品配置表）
+
+### 7.1 数据库表字段（固定）
+
+```
+id, code, channel, market, asset_type, currency, is_qdii, track_index, product_name, category, source, buy_fee_rate, sell_fee_rate, buy_confirm_offset, sell_confirm_offset, cutoff_time, product_code, note, is_active, created_at, updated_at
+```
+
+### 7.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| code | 交易代码/基金代码 | varchar(32) |
+| channel | 渠道 | enum('EXCHANGE','OTC') |
+| market | 市场类型 | enum('SH','SZ','NA') |
+| asset_type | 资产类型 | enum('ETF','LOF','FUND','MMF','BANK_WM_NAV','BANK_WM_BOX') |
+| currency | 货币类型 | enum('CNY','USD','HKD') |
+| is_qdii | 是否QDII | tinyint(1) |
+| track_index | 跟踪指数 | varchar(64)（可空） |
+| product_name | 产品名称 | varchar(128) |
+| category | 分类 | varchar(20)（fund/bank） |
+| source | 数据源 | varchar(32)（fund/cmbc/akshare） |
+| buy_fee_rate | 申购费率 | decimal(10,6) |
+| sell_fee_rate | 赎回费率 | decimal(10,6) |
+| buy_confirm_offset | 买入确认延迟交易日数 | int |
+| sell_confirm_offset | 赎回确认延迟交易日数 | int |
+| cutoff_time | 交易截止时间 | varchar(10)（如 '15:00'） |
+| product_code | 产品代码（兼容字段，等于code） | varchar(32) |
+| note | 备注 | varchar(500)（可空） |
+| is_active | 是否启用 | tinyint(1) |
+
+### 7.3 唯一键
+
+- `(code, channel, market)` - 同一代码可以同时存在场外和场内版本
+
+---
+
+## 8. accounts 表（账户配置表）
+
+### 8.1 数据库表字段（固定）
+
+```
+id, account_code, account_id, account_name, account_type, parent_account_id, product_id, currency, note, is_active, created_at, updated_at
+```
+
+### 8.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| account_code | 账户代码（唯一标识） | varchar(64) |
+| account_id | 账户ID（兼容字段，等于account_code） | varchar(64) |
+| account_name | 账户名称 | varchar(128) |
+| account_type | 账户类型 | enum('CASH','BUCKET','FUND_MAPPED','PRODUCT_SUB','FUND_TOTAL','SUMMARY') |
+| parent_account_id | 父账户ID | bigint（可空） |
+| product_id | 账户背后绑定的产品ID | bigint（可空） |
+| currency | 货币类型 | enum('CNY','USD','HKD') |
+| note | 备注 | varchar(500)（可空） |
+| is_active | 是否启用 | tinyint(1) |
+
+---
+
+## 9. account_groups 表（账户组配置表）
+
+### 9.1 数据库表字段（固定）
+
+```
+id, group_code, group_name, linked_product_id, profit_account_id, created_at, updated_at
+```
+
+### 9.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| group_code | 组代码（如 wenlibao/ylb） | varchar(64) |
+| group_name | 组名称 | varchar(100) |
+| linked_product_id | 关联产品ID（如稳利宝） | bigint（可空） |
+| profit_account_id | 收益归属账户ID | bigint（可空） |
+
+### 9.3 唯一键
+
+- `group_code` - 组代码唯一
+
+---
+
+## 10. categories 表（分类配置表）
+
+### 10.1 数据库表字段（固定）
+
+```
+id, entry_type, category_l1, category_l2, display_order, is_active, created_at, updated_at
+```
+
+### 10.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| entry_type | 记账类型 | enum('expense','income') |
+| category_l1 | 一级分类 | varchar(50) |
+| category_l2 | 二级分类 | varchar(50)（可空） |
+| display_order | 显示顺序 | int |
+| is_active | 是否启用 | tinyint(1) |
+
+### 10.3 唯一键
+
+- `(entry_type, category_l1, category_l2)` - 同一类型下分类唯一
+
+---
+
+## 11. account_pool_rules 表（资金池分配规则表）
+
+### 11.1 数据库表字段（固定）
+
+```
+id, from_account_id, to_product_id, ratio, min_amount, round_step, is_active, created_at, updated_at
+```
+
+### 11.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| from_account_id | 来源账户ID（如余利宝理财金） | bigint |
+| to_product_id | 目标产品ID（基金/ETF/LOF） | bigint |
+| ratio | 分配比例（如 0.35 表示 35%） | decimal(10,6) |
+| min_amount | 最小分配金额 | decimal(18,2) |
+| round_step | 取整粒度（如 1/10/100） | decimal(18,2) |
+| is_active | 是否启用 | tinyint(1) |
+
+### 11.3 唯一键
+
+- `(from_account_id, to_product_id)` - 同一账户到同一产品的规则唯一
+
+---
+
+## 12. dca_plan 表（定投计划表）
+
+### 12.1 数据库表字段（固定）
+
+```
+id, product_id, from_account_id, weekday, amount, enabled, created_at, updated_at
+```
+
+### 12.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID | bigint |
+| from_account_id | 来源账户ID | bigint |
+| weekday | 定投日期（星期几） | enum('MON','TUE','WED','THU','FRI','SAT','SUN') |
+| amount | 定投金额 | decimal(18,2) |
+| enabled | 是否启用 | tinyint(1) |
+
+---
+
+## 13. task_dca 表（定投任务表）
+
+### 13.1 数据库表字段（固定）
+
+```
+id, plan_id, task_date, product_id, from_account_id, planned_amount, premium_rate, executed_amount, pending_amount, status, reason, created_at, updated_at
+```
+
+### 13.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| plan_id | 关联计划ID（可为空，手动任务） | bigint（可空） |
+| task_date | 任务日期 | date |
+| product_id | 产品ID | bigint |
+| from_account_id | 来源账户ID | bigint |
+| planned_amount | 计划金额 | decimal(18,2) |
+| premium_rate | 溢价率（QDII） | decimal(10,6)（可空） |
+| executed_amount | 执行金额（实际买入） | decimal(18,2) |
+| pending_amount | 待买入金额（溢价刹车扣留） | decimal(18,2) |
+| status | 对账状态 | enum('PENDING','MATCH','PARTIAL','MISS') |
+| reason | 原因说明 | varchar(255)（可空） |
+
+### 13.3 唯一键
+
+- `(task_date, product_id, from_account_id)` - 同一日期同一产品同一账户的任务唯一
+
+---
+
+## 14. pending_buy_pool 表（待买入池表）
+
+### 14.1 数据库表字段（固定）
+
+```
+id, product_id, from_account_id, pending_amount, reason, created_at, updated_at
+```
+
+### 14.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID | bigint |
+| from_account_id | 来源账户ID | bigint |
+| pending_amount | 待买入金额（累加） | decimal(18,2) |
+| reason | 扣留原因（溢价刹车等） | varchar(255)（可空） |
+
+### 14.3 唯一键
+
+- `(product_id, from_account_id)` - 同一产品同一账户的待买入池唯一
+
+---
+
+## 15. job_config 表（任务调度配置表）
+
+### 15.1 数据库表字段（固定）
+
+```
+id, job_code, cron_expr, enabled, last_run_at, last_status, last_message, created_at, updated_at
+```
+
+### 15.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| job_code | 任务代码 | varchar(64) |
+| cron_expr | Cron表达式 | varchar(64) |
+| enabled | 是否启用 | tinyint(1) |
+| last_run_at | 最后执行时间 | datetime（可空） |
+| last_status | 最后执行状态 | enum('OK','FAIL')（可空） |
+| last_message | 最后执行消息 | varchar(255)（可空） |
+
+### 15.3 唯一键
+
+- `job_code` - 任务代码唯一
+
+---
+
+## 16. market_quote_rt 表（场内实时行情表）
+
+### 16.1 数据库表字段（固定）
+
+```
+id, product_id, quote_time, price, prev_close, pct_chg, volume, amount, iopv, premium_rate, open_price, high_price, low_price, turnover_rate, amplitude, source, created_at
+```
+
+### 16.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID | bigint |
+| quote_time | 行情时间（精确到秒） | datetime |
+| price | 当前价格 | decimal(18,6) |
+| prev_close | 昨收价 | decimal(18,6)（可空） |
+| pct_chg | 涨跌幅（%） | decimal(10,6)（可空） |
+| volume | 成交量 | decimal(20,2)（可空） |
+| amount | 成交额 | decimal(20,2)（可空） |
+| iopv | IOPV实时估值（基金份额参考净值） | decimal(18,6)（可空） |
+| premium_rate | 溢价率（小数，如 0.0123 表示 1.23%） | decimal(10,6)（可空） |
+| open_price | 开盘价 | decimal(18,6)（可空） |
+| high_price | 最高价 | decimal(18,6)（可空） |
+| low_price | 最低价 | decimal(18,6)（可空） |
+| turnover_rate | 换手率（小数） | decimal(10,6)（可空） |
+| amplitude | 振幅（小数） | decimal(10,6)（可空） |
+| source | 数据源 | varchar(32)（默认 'AKSHARE'） |
+
+### 16.3 唯一键
+
+- `(product_id, quote_time, source)` - 同一产品同一时间同一数据源的行情唯一
+
+---
+
+## 17. market_bar_d 表（场内日K线表）
+
+### 17.1 数据库表字段（固定）
+
+```
+id, product_id, trade_date, open_price, high_price, low_price, close_price, volume, amount, prev_close, source, created_at
+```
+
+### 17.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID | bigint |
+| trade_date | 交易日期 | date |
+| open_price | 开盘价 | decimal(18,6)（可空） |
+| high_price | 最高价 | decimal(18,6)（可空） |
+| low_price | 最低价 | decimal(18,6)（可空） |
+| close_price | 收盘价 | decimal(18,6) |
+| volume | 成交量 | decimal(20,2)（可空） |
+| amount | 成交额 | decimal(20,2)（可空） |
+| prev_close | 昨收价 | decimal(18,6)（可空） |
+| source | 数据源 | varchar(32)（默认 'AKSHARE'） |
+
+### 17.3 唯一键
+
+- `(product_id, trade_date, source)` - 同一产品同一日期同一数据源的K线唯一
+
+---
+
+## 18. qdii_premium_rt 表（QDII溢价率表）
+
+### 18.1 数据库表字段（固定）
+
+```
+id, product_id, quote_time, iopv, premium_rate, source, created_at
+```
+
+### 18.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID | bigint |
+| quote_time | 行情时间 | datetime |
+| iopv | IOPV（基金份额参考净值） | decimal(18,6)（可空） |
+| premium_rate | 溢价率（如 0.0123 表示 1.23%） | decimal(10,6) |
+| source | 数据源 | varchar(32)（默认 'AKSHARE'） |
+
+### 18.3 唯一键
+
+- `(product_id, quote_time, source)` - 同一产品同一时间同一数据源的溢价率唯一
+
+---
+
+## 19. trade_fills 表（场内成交流水表）
+
+### 19.1 数据库表字段（固定）
+
+```
+id, trade_date, trade_time, product_id, side, qty, price, amount, fee, tax, other_fee, broker_order_id, remark, source, created_at
+```
+
+### 19.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| trade_date | 成交日期 | date |
+| trade_time | 成交时间（精确到秒） | datetime |
+| product_id | 产品ID | bigint |
+| side | 买卖方向 | enum('BUY','SELL') |
+| qty | 成交数量（份额/股数） | decimal(18,6) |
+| price | 成交价 | decimal(18,6) |
+| amount | 成交金额（含费） | decimal(18,2) |
+| fee | 手续费（佣金等） | decimal(18,2) |
+| tax | 印花税（ETF通常0） | decimal(18,2) |
+| other_fee | 其他费用 | decimal(18,2) |
+| broker_order_id | 券商订单号（用于去重） | varchar(64)（可空） |
+| remark | 备注 | varchar(255)（可空） |
+| source | 数据来源 | enum('IMPORT','MANUAL') |
+
+### 19.3 唯一键
+
+- `(source, broker_order_id)` - 同一数据源同一券商订单号唯一
+
+---
+
+## 20. product_nav_range 表（产品净值范围表）
+
+### 20.1 数据库表字段（固定）
+
+```
+id, product_code, product_name, earliest_nav_date, latest_nav_date, record_count, updated_at, created_at
+```
+
+### 20.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_code | 产品代码 | varchar(32) |
+| product_name | 产品名称 | varchar(128)（可空） |
+| earliest_nav_date | 最早净值日期 | date（可空） |
+| latest_nav_date | 最新净值日期 | date（可空） |
+| record_count | 记录数 | int |
+| updated_at | 更新时间 | timestamp |
+| created_at | 创建时间 | timestamp |
+
+### 20.3 唯一键
+
+- `product_code` - 产品代码唯一
+
+---
+
+## 21. strategy_config 表（策略配置表）
+
+### 21.1 数据库表字段（固定）
+
+```
+id, strategy_key, strategy_version, param_set_id, param_json, is_active, created_at, updated_at
+```
+
+### 21.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| strategy_key | 策略标识 | varchar(64) |
+| strategy_version | 策略版本 | varchar(32)（默认 'default'） |
+| param_set_id | 参数组合ID | varchar(64) |
+| param_json | 参数JSON | text |
+| is_active | 是否启用 | tinyint(1) |
+
+### 21.3 唯一键
+
+- `(strategy_key, strategy_version, param_set_id)` - 策略参数组合唯一
+
+---
+
+## 22. backtest_summary 表（回测汇总表）
+
+### 22.1 数据库表字段（固定）
+
+```
+id, product_id, strategy_key, strategy_version, param_set_id, start_date, end_date, initial_cash, final_value, total_return, annual_return, max_drawdown, trade_count, total_fees, fee_ratio, wait_pool_ratio, created_at
+```
+
+### 22.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| product_id | 产品ID | bigint |
+| strategy_key | 策略标识 | varchar(64) |
+| strategy_version | 策略版本 | varchar(32) |
+| param_set_id | 参数组合ID | varchar(64) |
+| start_date | 回测开始日期 | date |
+| end_date | 回测结束日期 | date |
+| initial_cash | 初始现金 | decimal(20,2) |
+| final_value | 最终总资产 | decimal(20,2) |
+| total_return | 总收益率 | decimal(10,6) |
+| annual_return | 年化收益率 | decimal(10,6) |
+| max_drawdown | 最大回撤 | decimal(10,6) |
+| trade_count | 成交次数 | int |
+| total_fees | 手续费总额 | decimal(20,2) |
+| fee_ratio | 手续费占收益比例 | decimal(10,6) |
+| wait_pool_ratio | wait_pool滞留比例 | decimal(10,6) |
+
+---
+
+## 23. backtest_daily 表（回测每日数据表）
+
+### 23.1 数据库表字段（固定）
+
+```
+id, summary_id, trade_date, nav, cash_pool, wait_pool, holdings_value, total_value, drawdown, fee_cum, created_at
+```
+
+### 23.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| summary_id | 关联backtest_summary.id | bigint |
+| trade_date | 交易日期 | date |
+| nav | 净值/收盘价 | decimal(18,6) |
+| cash_pool | 可用现金池 | decimal(20,2) |
+| wait_pool | 等待池 | decimal(20,2) |
+| holdings_value | 持仓市值 | decimal(20,2) |
+| total_value | 总资产 | decimal(20,2) |
+| drawdown | 当前回撤 | decimal(10,6) |
+| fee_cum | 累计手续费 | decimal(20,2) |
+
+### 23.3 唯一键
+
+- `(summary_id, trade_date)` - 同一回测同一日期的数据唯一
+
+---
+
+## 24. backtest_trades 表（回测成交表）
+
+### 24.1 数据库表字段（固定）
+
+```
+id, summary_id, trade_date, side, amount, price, shares, fee, reasons, created_at
+```
+
+### 24.2 字段定义
+
+| 字段 | 定义 | 数据类型 |
+|------|------|----------|
+| summary_id | 关联backtest_summary.id | bigint |
+| trade_date | 成交日期 | date |
+| side | 买卖方向 | enum('BUY','SELL') |
+| amount | 成交金额 | decimal(20,2) |
+| price | 成交价格 | decimal(18,6) |
+| shares | 成交份额 | decimal(20,6) |
+| fee | 手续费 | decimal(20,2) |
+| reasons | 成交原因（JSON数组） | text（可空） |
+
+---

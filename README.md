@@ -352,10 +352,12 @@ pnl_day = prev_day_shares × (nav_today - nav_prev)
 
 交易流水记录所有交易事件，支持**扣款/确认分离模式**，同时兼容传统 buy 模式。
 
-**数据库表字段（固定 11 列）**：
+**数据库表字段（固定 13 列）**：
 ```
-id, date, product_id, product_code, action, amount, shares, fee, nav, nav_date, order_id, note, created_at
+id, product_id, date, product_code, action, amount, shares, fee, nav, nav_date, order_id, note, created_at
 ```
+
+**注意**：实际数据库表包含 `product_id` 字段（外键关联 products 表），字段顺序与文档中略有不同。
 
 **成本口径（统一规则）**：
 ```
@@ -371,7 +373,7 @@ cost = amount - fee  （净申购额入账）
 | `buy` | 兼容模式（当天扣款+确认） | date, product_code, amount, shares, nav, nav_date | shares += shares, cost += (amount-fee), principal_total += amount |
 | `sell` | 卖出（兼容模式） | date, product_code, shares, nav, nav_date | shares -= shares, cost 按比例减少 |
 | `sell_confirm` | 赎回确认（自动结算生成） | date, product_code, shares, amount, fee, nav, nav_date, order_id | shares -= shares, cost 按比例减少, amount=到账净额 |
-| `dividend` | 分红 | date, product_code, shares | shares += shares（成本不变） |
+| `dividend` | 分红（红利再投） | date, product_code, shares, nav, nav_date | shares += shares（成本不变） |
 
 **order_id 规则**：
 - `buy_debit`：必须提供 order_id（tx_cli 自动生成）
@@ -394,10 +396,12 @@ cost = amount - fee  （净申购额入账）
 
 用户只需录入"扣款/赎回发起"，系统通过 `tx_cli settle` 自动生成确认事件写入 `transactions` 表。
 
-**数据库表字段（固定 15 列）**：
+**数据库表字段（固定 17 列）**：
 ```
-id, order_id, product_id, product_code, order_type, amount, fee, shares, requested_at, trade_date, nav_date, confirm_date, holding_days, sell_fee_rate, status, note, created_at, updated_at
+id, order_id, product_id, product_code, order_type, amount, fee, shares, requested_at, trade_date, nav_date, confirm_date, holding_days, sell_fee_rate, status, note, created_at
 ```
+
+**注意**：`orders` 表没有 `updated_at` 字段。
 
 **字段说明**：
 
@@ -443,7 +447,7 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 
 ### daily_snapshot 表（日快照）- 完整字段定义
 
-**数据库表字段（固定 20 列）**：
+**数据库表字段（固定 22 列）**：
 
 | 字段名 | 中文名 | 说明 |
 |--------|-------|------|
@@ -467,6 +471,7 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 | `total_redemption` | 累计赎回 | 卖出到账净额累计 |
 | `total_pnl` | 生命周期总盈亏 | **total_value + total_redemption - principal_total** |
 | `real_return` | 真实收益率 | total_pnl / principal_total × 100% |
+| `data_status` | 数据状态 | ok/carried_forward/missing/holiday（用于缺数据兜底） |
 | `fetched_at` | 采集时间 | 毫秒精度 |
 | `created_at` | 创建时间 | 数据库自动生成 |
 
@@ -474,7 +479,7 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 
 ### 产品配置（数据库表：products）
 
-**重要变更**：所有产品配置已迁移到 MySQL 数据库，不再使用 JSON 文件。
+**重要变更**：所有产品配置已迁移到 MySQL 数据库的 `products` 表中，不再使用 JSON 文件。
 
 **核心字段**：
 - `code`: 产品代码（如 163406）
@@ -501,6 +506,50 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 **163406 分离规则**：
 - 163406 场外基金（channel=OTC, market=NA）和 163406 LOF（channel=EXCHANGE, market=SH）是两个独立产品
 - 通过 `(code, channel, market)` 唯一键区分
+
+---
+
+## 📊 数据库表总览
+
+系统共包含 **24 张数据库表**，分为以下几类：
+
+### 核心业务表（6张）
+1. **transactions** - 交易流水表（所有投资交易记录）
+2. **orders** - 理财任务队列表（待结算订单）
+3. **ledger** - 生活账本表（日常收支记录）
+4. **daily_snapshot** - 产品日快照表（每日资产快照）
+5. **daily_balance** - 账户余额快照表（每日账户余额）
+6. **nav** - 净值历史表（所有产品历史净值）
+
+### 配置表（6张）
+7. **products** - 产品配置表（产品基本信息、费率等）
+8. **accounts** - 账户配置表（账户基本信息）
+9. **account_groups** - 账户组配置表（账户组关系）
+10. **categories** - 分类配置表（生活记账分类）
+11. **account_pool_rules** - 资金池分配规则表（资金池分配比例）
+12. **job_config** - 任务调度配置表（APScheduler任务配置）
+
+### 定投相关表（3张）
+13. **dca_plan** - 定投计划表（按星期几定投的计划）
+14. **task_dca** - 定投任务表（每日生成的定投任务）
+15. **pending_buy_pool** - 待买入池表（溢价刹车扣留的资金）
+
+### 场内交易表（4张）
+16. **market_quote_rt** - 场内实时行情表（交易时间每分钟采集）
+17. **market_bar_d** - 场内日K线表（历史K线数据）
+18. **qdii_premium_rt** - QDII溢价率表（QDII ETF溢价率）
+19. **trade_fills** - 场内成交流水表（场内交易成交记录）
+
+### 策略实验室表（4张）
+20. **strategy_config** - 策略配置表（策略参数配置）
+21. **backtest_summary** - 回测汇总表（回测结果汇总）
+22. **backtest_daily** - 回测每日数据表（回测每日数据）
+23. **backtest_trades** - 回测成交表（回测逐笔成交记录）
+
+### 辅助表（1张）
+24. **product_nav_range** - 产品净值范围表（产品净值日期范围统计）
+
+**详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)**
 
 ---
 
@@ -569,6 +618,16 @@ python tx_cli.py check       # 数据校验
 - 详细日志输出处理结果
 
 ### 策略回测（可选）
+
+策略实验室（Strategy Lab）是一个独立的回测引擎模块，用于验证策略参数，不侵入生产执行模块。
+
+**数据库表**：
+- `strategy_config`：策略参数配置
+- `backtest_summary`：回测汇总结果
+- `backtest_daily`：每日回测数据
+- `backtest_trades`：逐笔成交记录
+
+**使用方法**：
 ```bash
 # 列出可用产品和策略
 python scripts/run_backtest.py --list
@@ -577,6 +636,18 @@ python scripts/run_backtest.py --strategies
 # 运行回测
 python scripts/run_backtest.py --product 163406 --strategy pure_sip
 ```
+
+**策略实现**：
+- `SimpleStrategy`：固定周频/月频买入
+- `DrawdownStrategy`：回撤触发加仓
+- `PercentileStrategy`：滚动N日分位判断
+- `ProfitRecycleStrategy`：利润回收策略（动态锁定池、深跌释放、高估收割）
+
+**注意事项**：
+- 所有结果写入数据库表，不输出CSV
+- 每个 Decision 必须包含 reasons（可解释性）
+- 所有策略参数存储在 `strategy_config` 表
+- 回测独立，不侵入生产执行模块，不触发下单
 
 ### 账户余额快照
 
@@ -594,6 +665,8 @@ python scripts/run_backtest.py --product 163406 --strategy pure_sip
 - `yesterday_pnl`：昨日收益（前一天的 pnl_day）
 - `unrealized_pnl`：持有收益（浮动盈亏）
 - `total_pnl`：累计收益（生命周期总盈亏）
+
+**注意**：这些收益字段在 UI 中动态计算显示，但**不存储**在 `daily_balance` 数据库表中。
 
 ---
 
@@ -769,6 +842,96 @@ pip install -r requirements.txt
 - **产品管理**：通过 UI 或数据库直接管理产品配置
 - **账户管理**：支持账户层级和产品关联
 - **资金池规则**：通过 UI 配置资金池分配规则
+
+---
+
+---
+
+## 📊 数据库表总览
+
+系统共包含 **24 张数据库表**，分为以下几类：
+
+### 核心业务表（6张）
+1. **transactions** - 交易流水表
+2. **orders** - 理财任务队列表
+3. **ledger** - 生活账本表
+4. **daily_snapshot** - 产品日快照表
+5. **daily_balance** - 账户余额快照表
+6. **nav** - 净值历史表
+
+### 配置表（6张）
+7. **products** - 产品配置表
+8. **accounts** - 账户配置表
+9. **account_groups** - 账户组配置表
+10. **categories** - 分类配置表
+11. **account_pool_rules** - 资金池分配规则表
+12. **job_config** - 任务调度配置表
+
+### 定投相关表（3张）
+13. **dca_plan** - 定投计划表
+14. **task_dca** - 定投任务表
+15. **pending_buy_pool** - 待买入池表
+
+### 场内交易表（4张）
+16. **market_quote_rt** - 场内实时行情表
+17. **market_bar_d** - 场内日K线表
+18. **qdii_premium_rt** - QDII溢价率表
+19. **trade_fills** - 场内成交流水表
+
+### 策略实验室表（4张）
+20. **strategy_config** - 策略配置表
+21. **backtest_summary** - 回测汇总表
+22. **backtest_daily** - 回测每日数据表
+23. **backtest_trades** - 回测成交表
+
+### 辅助表（1张）
+24. **product_nav_range** - 产品净值范围表
+
+详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)
+
+---
+
+---
+
+## 📋 完整数据库表列表
+
+系统共包含 **24 张数据库表**，详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)：
+
+### 核心业务表（6张）
+1. `transactions` - 交易流水表（所有投资交易记录）
+2. `orders` - 理财任务队列表（待结算订单）
+3. `ledger` - 生活账本表（日常收支记录）
+4. `daily_snapshot` - 产品日快照表（每日资产快照）
+5. `daily_balance` - 账户余额快照表（每日账户余额）
+6. `nav` - 净值历史表（所有产品历史净值）
+
+### 配置表（6张）
+7. `products` - 产品配置表（产品基本信息、费率等）
+8. `accounts` - 账户配置表（账户基本信息）
+9. `account_groups` - 账户组配置表（账户组关系）
+10. `categories` - 分类配置表（生活记账分类）
+11. `account_pool_rules` - 资金池分配规则表（资金池分配比例）
+12. `job_config` - 任务调度配置表（APScheduler任务配置）
+
+### 定投相关表（3张）
+13. `dca_plan` - 定投计划表（按星期几定投的计划）
+14. `task_dca` - 定投任务表（每日生成的定投任务）
+15. `pending_buy_pool` - 待买入池表（溢价刹车扣留的资金）
+
+### 场内交易表（4张）
+16. `market_quote_rt` - 场内实时行情表（交易时间每分钟采集）
+17. `market_bar_d` - 场内日K线表（历史K线数据）
+18. `qdii_premium_rt` - QDII溢价率表（QDII ETF溢价率）
+19. `trade_fills` - 场内成交流水表（场内交易成交记录）
+
+### 策略实验室表（4张）
+20. `strategy_config` - 策略配置表（策略参数配置）
+21. `backtest_summary` - 回测汇总表（回测结果汇总）
+22. `backtest_daily` - 回测每日数据表（回测每日数据）
+23. `backtest_trades` - 回测成交表（回测逐笔成交记录）
+
+### 辅助表（1张）
+24. `product_nav_range` - 产品净值范围表（产品净值日期范围统计）
 
 ---
 
