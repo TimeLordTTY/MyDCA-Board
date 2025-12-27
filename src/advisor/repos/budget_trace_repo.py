@@ -115,3 +115,4 @@ def get_traces_by_time_range(
     return execute_query(sql, tuple(params) if params else None)
 
 
+

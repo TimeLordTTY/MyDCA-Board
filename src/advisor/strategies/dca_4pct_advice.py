@@ -245,3 +245,4 @@ class Dca4PctAdvice(StrategyAdviceInterface):
         return max(closes)
 
 
+

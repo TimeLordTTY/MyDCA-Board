@@ -100,3 +100,4 @@ CREATE TABLE `budget_trace` (
 SELECT '等待池与预算逻辑完善 - 数据库迁移完成！' AS result;
 
 
+
