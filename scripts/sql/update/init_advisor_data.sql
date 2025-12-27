@@ -132,3 +132,4 @@ WHERE NOT EXISTS (SELECT 1 FROM job_config WHERE job_code = 'advisor_suggestion_
 SELECT 'Advisor 初始化数据完成！' AS result;
 
 
+

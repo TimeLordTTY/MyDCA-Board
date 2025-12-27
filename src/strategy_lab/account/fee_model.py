@@ -65,3 +65,4 @@ class FeeModel:
         return cls.calculate(amount, is_exchange)
 
 
+

@@ -278,3 +278,4 @@ def get_sell_fee_rate(product: Dict, holding_days: int) -> float:
     return 0.0
 
 
+
