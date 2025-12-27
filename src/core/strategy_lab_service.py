@@ -239,6 +239,96 @@ def run_backtest(
         }
 
 
+def delete_backtest_summary(summary_id: int) -> bool:
+    """
+    删除回测汇总及其关联数据
+    
+    Args:
+        summary_id: 汇总ID
+    
+    Returns:
+        是否删除成功
+    """
+    from data.db_connector import execute_one
+    
+    try:
+        # 删除关联的每日记录
+        execute_one("DELETE FROM backtest_daily WHERE summary_id = %s", (summary_id,))
+        
+        # 删除关联的成交记录
+        execute_one("DELETE FROM backtest_trades WHERE summary_id = %s", (summary_id,))
+        
+        # 删除汇总记录
+        execute_one("DELETE FROM backtest_summary WHERE id = %s", (summary_id,))
+        
+        return True
+    except Exception as e:
+        logger.error(f"删除回测汇总失败: {e}", exc_info=True)
+        return False
+
+
+def get_product_data_range(product_id: int) -> Optional[Dict]:
+    """
+    获取产品的行情数据范围
+    
+    Args:
+        product_id: 产品ID
+    
+    Returns:
+        数据范围信息，格式：{earliest_date, latest_date, record_count, channel}
+    """
+    from data.db_connector import execute_one
+    
+    # 获取产品信息
+    product = get_product_by_id(product_id)
+    if not product:
+        return None
+    
+    channel = product.get('channel', 'OTC')
+    product_code = product.get('code', '')
+    
+    if channel == 'EXCHANGE':
+        # 场内：从 market_bar_d 表查询
+        sql = """
+            SELECT 
+                MIN(trade_date) as earliest_date,
+                MAX(trade_date) as latest_date,
+                COUNT(*) as record_count
+            FROM market_bar_d
+            WHERE product_id = %s
+        """
+        row = execute_one(sql, (product_id,))
+    else:
+        # 场外：从 nav 表查询
+        sql = """
+            SELECT 
+                MIN(nav_date) as earliest_date,
+                MAX(nav_date) as latest_date,
+                COUNT(*) as record_count
+            FROM nav
+            WHERE product_code = %s
+        """
+        row = execute_one(sql, (product_code,))
+    
+    if not row or not row.get('earliest_date'):
+        return {
+            'earliest_date': None,
+            'latest_date': None,
+            'record_count': 0,
+            'channel': channel
+        }
+    
+    earliest = row.get('earliest_date')
+    latest = row.get('latest_date')
+    
+    return {
+        'earliest_date': earliest.strftime('%Y-%m-%d') if earliest else None,
+        'latest_date': latest.strftime('%Y-%m-%d') if latest else None,
+        'record_count': int(row.get('record_count', 0)),
+        'channel': channel
+    }
+
+
 def run_param_comparison(
     product_id: int,
     strategy_key: str,

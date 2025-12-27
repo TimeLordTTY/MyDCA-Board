@@ -46,6 +46,17 @@ def update_job_status(job_code: str, status: str, message: str = None):
 def run_rt_quote_job():
     """执行实时行情采集任务"""
     try:
+        # 检查是否是交易日
+        from utils.trade_calendar import is_trade_day
+        from datetime import date
+        
+        today = date.today()
+        if not is_trade_day(today):
+            logger.debug(f"今日 {today} 非交易日，跳过实时行情采集")
+            # 使用 'OK' 状态，因为跳过是正常行为，不是错误
+            update_job_status('rt_quote_1m', 'OK', f'非交易日已跳过: {today}')
+            return
+        
         from core.market_quote_service import collect_realtime_quotes
         
         logger.info("开始执行实时行情采集任务")
