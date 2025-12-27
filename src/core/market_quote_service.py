@@ -27,6 +27,10 @@ def save_realtime_quote(product_id: int, quote_data: Dict, source: str = 'AKSHAR
     try:
         quote_time = quote_data.get('quote_time', datetime.now())
         
+        # 对齐到分钟（秒置00）
+        if isinstance(quote_time, datetime):
+            quote_time = quote_time.replace(second=0, microsecond=0)
+        
         # UPSERT: 如果存在相同 (product_id, quote_time, source)，则更新；否则插入
         # 尝试保存新字段，如果字段不存在会失败，则回退到基础字段
         try:
@@ -118,6 +122,10 @@ def save_daily_bar(product_id: int, bar_data: Dict, source: str = 'AKSHARE') -> 
         是否成功
     """
     try:
+        # 验证product_id有效性
+        if not product_id or product_id <= 0:
+            logger.error(f"无效的product_id: {product_id}")
+            return False
         sql = """
             INSERT INTO market_bar_d (
                 product_id, trade_date, open_price, high_price, low_price, close_price,
@@ -211,8 +219,10 @@ def collect_realtime_quotes(product_ids: Optional[List[int]] = None) -> Dict[int
     from data.product_service import get_products
     
     if product_ids is None:
-        # 获取所有场内产品
+        # 获取所有场内产品（channel='EXCHANGE' 且 market='SH'或'SZ'）
         products = get_products(channel='EXCHANGE', is_active=True)
+        # 进一步筛选：market必须是SH或SZ（排除NA）
+        products = [p for p in products if p.get('market') in ['SH', 'SZ']]
         product_ids = [p['id'] for p in products]
     
     result = {}
@@ -242,6 +252,17 @@ def collect_realtime_quotes(product_ids: Optional[List[int]] = None) -> Dict[int
                 premium = fetch_qdii_premium(code, market)
                 if premium:
                     save_qdii_premium(product_id, premium)
+            
+            # 自动触发指标计算（异步，不阻塞）
+            if success:
+                try:
+                    from advisor.indicator_job import calculate_indicators_for_product
+                    calculate_indicators_for_product(product_id)
+                    # 自动触发建议生成
+                    from advisor.advisor_service import run_for_product
+                    run_for_product(product_id)
+                except Exception as e:
+                    logger.warning(f"自动计算指标失败: product_id={product_id}, error={e}")
         else:
             result[product_id] = False
     
@@ -317,7 +338,10 @@ def collect_historical_daily_bars(
     import time
     
     if product_ids is None:
+        # 获取所有场内产品（channel='EXCHANGE' 且 market != 'NA'）
         products = get_products(channel='EXCHANGE', is_active=True)
+        # 进一步筛选：market必须是SH或SZ（排除NA）
+        products = [p for p in products if p.get('market') in ['SH', 'SZ']]
         product_ids = [p['id'] for p in products]
     
     result = {}
@@ -331,11 +355,24 @@ def collect_historical_daily_bars(
         
         code = product.get('code')
         market = product.get('market')
+        channel = product.get('channel')
         product_name = product.get('product_name', code)
         
-        if market == 'NA':
-            result[product_id] = {'success': False, 'total_count': 0, 'error': '非场内产品'}
+        # 严格检查：确保是场内产品
+        # 1. channel必须是EXCHANGE
+        if channel != 'EXCHANGE':
+            logger.warning(f"产品 {code} ({product_name}) 不是场内产品（channel={channel}），跳过")
+            result[product_id] = {'success': False, 'total_count': 0, 'error': f'非场内产品（channel={channel}）'}
             continue
+        
+        # 2. market必须是SH或SZ，不能是NA
+        if market == 'NA' or market not in ['SH', 'SZ']:
+            logger.warning(f"产品 {code} ({product_name}) 不是场内产品（market={market}, channel={channel}），跳过")
+            result[product_id] = {'success': False, 'total_count': 0, 'error': f'非场内产品（market={market}, channel={channel}）'}
+            continue
+        
+        # 记录使用的产品信息（用于排查问题）
+        logger.info(f"采集产品: product_id={product_id}, code={code}, market={market}, channel={channel}, name={product_name}")
         
         logger.info(f"开始采集 {code} ({product_name}) 的历史日K数据...")
         
@@ -368,13 +405,16 @@ def collect_historical_daily_bars(
                 if bars:
                     batch_count = 0
                     for bar in bars:
+                        # 确保使用正确的product_id保存
                         if save_daily_bar(product_id, bar):
                             batch_count += 1
+                        else:
+                            logger.warning(f"  保存失败: product_id={product_id}, trade_date={bar.get('trade_date')}")
                     
                     total_count += batch_count
-                    logger.info(f"  ✓ 保存 {batch_count} 条数据（累计 {total_count} 条）")
+                    logger.info(f"  ✓ 保存 {batch_count} 条数据（累计 {total_count} 条，product_id={product_id}）")
                 else:
-                    logger.warning(f"  ⚠ 未获取到数据")
+                    logger.warning(f"  ⚠ 未获取到数据（code={code}, market={market}）")
                 
                 # 避免请求过快，稍作延迟
                 time.sleep(0.5)
@@ -513,7 +553,18 @@ def fetch_and_save_realtime_quote(product_id: int, symbol: str) -> bool:
         market = product.get('market', 'SH')
         quote = fetch_realtime_quote(symbol, market)
         if quote:
-            return save_realtime_quote(product_id, quote)
+            success = save_realtime_quote(product_id, quote)
+            # 自动触发指标计算（异步，不阻塞）
+            if success:
+                try:
+                    from advisor.indicator_job import calculate_indicators_for_product
+                    calculate_indicators_for_product(product_id)
+                    # 自动触发建议生成
+                    from advisor.advisor_service import run_for_product
+                    run_for_product(product_id)
+                except Exception as e:
+                    logger.warning(f"自动计算指标失败: product_id={product_id}, error={e}")
+            return success
         return False
     except Exception as e:
         logger.error(f"获取实时行情失败: {e}", exc_info=True)

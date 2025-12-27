@@ -518,18 +518,24 @@ def render_product_quote():
                     st.info("⏰ 当前为非交易时间段（交易时间：9:00-11:30, 13:00-15:00）")
         
         # 手动刷新按钮（保留，用于立即刷新）
-        if st.button("🔄 立即刷新", key="manual_refresh_quote"):
-            with st.spinner("正在获取最新行情..."):
+        if st.button("🔄 立即刷新行情", key="manual_refresh_quote", use_container_width=True):
+            with st.spinner("正在获取最新行情并计算指标..."):
                 try:
                     if channel == 'EXCHANGE':
                         fetch_and_save_realtime_quote(selected_product_id, product_code)
                         if product.get('is_qdii'):
                             fetch_and_save_qdii_premium(selected_product_id, product_code)
+                        # 自动触发指标计算
+                        from advisor.indicator_job import calculate_indicators_for_product
+                        calculate_indicators_for_product(selected_product_id)
+                        # 自动触发建议生成
+                        from advisor.advisor_service import run_for_product
+                        run_for_product(selected_product_id)
                     else:
                         # 场外产品触发净值采集
                         from core.nav_collector import collect_and_store
                         collect_and_store()
-                    st.success("✅ 行情已更新")
+                    st.success("✅ 行情已更新，指标已计算，建议已生成")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ 刷新失败: {e}")
@@ -567,17 +573,17 @@ def _render_exchange_quote(product, product_id):
             price_val = latest_quote.get('price')
             if price_val is not None:
                 price = float(price_val)
-                st.metric("最新价", f"{price:.4f}")
+                st.metric("最新价", f"{price:.4f}", help="当前最新成交价，用于判断买入时机")
             else:
-                st.metric("最新价", "N/A")
+                st.metric("最新价", "N/A", help="当前最新成交价，用于判断买入时机")
         with col2:
             # IOPV 实时估值
             iopv_val = latest_quote.get('iopv')
             if iopv_val is not None:
                 iopv = float(iopv_val)
-                st.metric("IOPV实时估值", f"{iopv:.4f}")
+                st.metric("IOPV实时估值", f"{iopv:.4f}", help="ETF的实时参考净值（Indicative Optimized Portfolio Value），用于计算溢价率。溢价率 = (最新价 - IOPV) / IOPV")
             else:
-                st.metric("IOPV实时估值", "N/A")
+                st.metric("IOPV实时估值", "N/A", help="ETF的实时参考净值（Indicative Optimized Portfolio Value），用于计算溢价率")
         with col3:
             # 溢价率（从实时行情中获取，如果没有则从 QDII 溢价率表获取）
             premium_rate_val = latest_quote.get('premium_rate')
@@ -593,16 +599,18 @@ def _render_exchange_quote(product, product_id):
                 else:
                     delta_color = "inverse"
                     label = "❌ 等待池"
-                st.metric("溢价率", f"{premium_rate:.2f}%", delta=label, delta_color=delta_color)
+                st.metric("溢价率", f"{premium_rate:.2f}%", delta=label, delta_color=delta_color, 
+                         help="溢价率 = (最新价 - IOPV) / IOPV × 100%。QDII产品买入规则：≤1%正常买入，1%-2%半买，>2%进入等待池")
             else:
-                st.metric("溢价率", "N/A")
+                st.metric("溢价率", "N/A", help="溢价率 = (最新价 - IOPV) / IOPV × 100%。QDII产品买入规则：≤1%正常买入，1%-2%半买，>2%进入等待池")
         with col4:
             pct_chg_val = latest_quote.get('pct_chg')
             if pct_chg_val is not None:
                 pct_chg = float(pct_chg_val) * 100
-                st.metric("涨跌幅", f"{pct_chg:.2f}%", delta=f"{pct_chg:.2f}%")
+                st.metric("涨跌幅", f"{pct_chg:.2f}%", delta=f"{pct_chg:.2f}%", 
+                         help="当日涨跌幅 = (最新价 - 昨收价) / 昨收价 × 100%")
             else:
-                st.metric("涨跌幅", "N/A")
+                st.metric("涨跌幅", "N/A", help="当日涨跌幅 = (最新价 - 昨收价) / 昨收价 × 100%")
         
         # ========== ② 基础价格时间序列（用于高低位判断） ==========
         st.divider()
@@ -612,30 +620,30 @@ def _render_exchange_quote(product, product_id):
             open_val = latest_quote.get('open')
             if open_val is not None:
                 open_price = float(open_val)
-                st.metric("开盘价", f"{open_price:.4f}")
+                st.metric("开盘价", f"{open_price:.4f}", help="当日开盘价，用于判断价格波动范围")
             else:
-                st.metric("开盘价", "N/A")
+                st.metric("开盘价", "N/A", help="当日开盘价，用于判断价格波动范围")
         with col2:
             high_val = latest_quote.get('high')
             if high_val is not None:
                 high_price = float(high_val)
-                st.metric("最高价", f"{high_price:.4f}")
+                st.metric("最高价", f"{high_price:.4f}", help="当日最高价，用于判断价格波动范围")
             else:
-                st.metric("最高价", "N/A")
+                st.metric("最高价", "N/A", help="当日最高价，用于判断价格波动范围")
         with col3:
             low_val = latest_quote.get('low')
             if low_val is not None:
                 low_price = float(low_val)
-                st.metric("最低价", f"{low_price:.4f}")
+                st.metric("最低价", f"{low_price:.4f}", help="当日最低价，用于判断价格波动范围")
             else:
-                st.metric("最低价", "N/A")
+                st.metric("最低价", "N/A", help="当日最低价，用于判断价格波动范围")
         with col4:
             prev_close_val = latest_quote.get('prev_close')
             if prev_close_val is not None:
                 prev_close = float(prev_close_val)
-                st.metric("昨收价", f"{prev_close:.4f}")
+                st.metric("昨收价", f"{prev_close:.4f}", help="前一交易日的收盘价，用于计算涨跌幅和判断价格相对位置")
             else:
-                st.metric("昨收价", "N/A")
+                st.metric("昨收价", "N/A", help="前一交易日的收盘价，用于计算涨跌幅和判断价格相对位置")
         with col5:
             # 使用自定义显示方式，避免 st.metric 的截断问题
             quote_time = latest_quote.get('quote_time', '')
@@ -669,30 +677,30 @@ def _render_exchange_quote(product, product_id):
             volume_val = latest_quote.get('volume')
             if volume_val is not None:
                 volume = float(volume_val)
-                st.metric("成交量", f"{volume:,.0f}")
+                st.metric("成交量", f"{volume:,.0f}", help="当日累计成交量（手数），用于判断流动性。成交量越大，流动性越好")
             else:
-                st.metric("成交量", "N/A")
+                st.metric("成交量", "N/A", help="当日累计成交量（手数），用于判断流动性")
         with col2:
             amount_val = latest_quote.get('amount')
             if amount_val is not None:
                 amount = float(amount_val)
-                st.metric("成交额", f"{amount:,.2f}")
+                st.metric("成交额", f"{amount:,.2f}", help="当日累计成交额（元），用于判断流动性。成交额 = 成交量 × 成交价")
             else:
-                st.metric("成交额", "N/A")
+                st.metric("成交额", "N/A", help="当日累计成交额（元），用于判断流动性")
         with col3:
             turnover_rate_val = latest_quote.get('turnover_rate')
             if turnover_rate_val is not None:
                 turnover_rate = float(turnover_rate_val) * 100
-                st.metric("换手率", f"{turnover_rate:.2f}%")
+                st.metric("换手率", f"{turnover_rate:.2f}%", help="换手率 = 成交量 / 流通股本 × 100%，用于判断交易活跃度。换手率越高，交易越活跃")
             else:
-                st.metric("换手率", "N/A")
+                st.metric("换手率", "N/A", help="换手率 = 成交量 / 流通股本 × 100%，用于判断交易活跃度")
         with col4:
             amplitude_val = latest_quote.get('amplitude')
             if amplitude_val is not None:
                 amplitude = float(amplitude_val) * 100
-                st.metric("振幅", f"{amplitude:.2f}%")
+                st.metric("振幅", f"{amplitude:.2f}%", help="振幅 = (最高价 - 最低价) / 昨收价 × 100%，用于判断价格波动幅度")
             else:
-                st.metric("振幅", "N/A")
+                st.metric("振幅", "N/A", help="振幅 = (最高价 - 最低价) / 昨收价 × 100%，用于判断价格波动幅度")
         
         # ========== QDII 溢价率决策建议（如果溢价率未在实时行情中） ==========
         if product.get('is_qdii'):
@@ -708,19 +716,394 @@ def _render_exchange_quote(product, product_id):
                     
                     col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("溢价率", f"{premium_rate:.2f}%")
+                        st.metric("溢价率", f"{premium_rate:.2f}%", 
+                                 help="溢价率 = (最新价 - IOPV) / IOPV × 100%。QDII产品买入规则：≤1%正常买入，1%-2%半买，>2%进入等待池")
                     with col2:
-                        st.metric("IOPV", f"{iopv:.4f}")
+                        st.metric("IOPV", f"{iopv:.4f}", 
+                                 help="ETF的实时参考净值（Indicative Optimized Portfolio Value），用于计算溢价率")
                     with col3:
                         # 买入建议
                         if premium_rate <= 1:
-                            st.metric("买入建议", "✅ 正常买入", delta="100%")
+                            st.metric("买入建议", "✅ 正常买入", delta="100%", 
+                                     help="溢价率≤1%，建议正常买入100%预算")
                         elif premium_rate <= 3:
-                            st.metric("买入建议", "⚠️ 买入一半", delta="50%")
+                            st.metric("买入建议", "⚠️ 买入一半", delta="50%", 
+                                     help="溢价率1%-3%，建议买入50%预算，剩余50%进入等待池")
                         else:
-                            st.metric("买入建议", "❌ 暂停买入", delta="0%")
+                            st.metric("买入建议", "❌ 暂停买入", delta="0%", 
+                                     help="溢价率>3%，建议暂停买入，全部预算进入等待池")
                 else:
                     st.info("暂无溢价率数据")
+        
+        # ========== 技术指标展示 ==========
+        st.divider()
+        st.markdown("**📈 技术指标**")
+        try:
+            from advisor.repos.indicator_daily_repo import get_latest_indicator
+            from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
+            from advisor.advisor_service import get_strategy_config
+            
+            bind = get_bind_by_product_id(product_id)
+            indicator = None
+            window_days = 750
+            
+            if bind:
+                param_json = get_strategy_config(bind.get('strategy_code', ''), bind.get('param_set_id', 'default'))
+                if param_json:
+                    window_days = param_json.get('window_days', 750)
+                    indicator = get_latest_indicator(product_id, window_days)
+            
+            if indicator:
+                price_val = latest_quote.get('price')
+                current_price = float(price_val) if price_val is not None else None
+                
+                # 获取指标值
+                pct_rank = indicator.get('pct_rank')
+                q_buy_price = indicator.get('q_buy_price')
+                peak_close = indicator.get('peak_close')
+                drawdown_from_peak = indicator.get('drawdown_from_peak')
+                ma20 = indicator.get('ma20')
+                ma60 = indicator.get('ma60')
+                
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    if pct_rank is not None:
+                        pct_rank_pct = float(pct_rank) * 100
+                        st.metric("分位排名", f"{pct_rank_pct:.2f}%", 
+                                 help=f"当前价格在最近{window_days}个交易日中的分位位置（0-100%）。分位越高，说明当前价格处于历史高位。")
+                    else:
+                        st.metric("分位排名", "N/A", 
+                                 help=f"当前价格在最近{window_days}个交易日中的分位位置。指标未计算。")
+                
+                with col2:
+                    if q_buy_price is not None:
+                        q_buy = float(q_buy_price)
+                        if current_price is not None:
+                            price_diff = ((current_price - q_buy) / q_buy * 100) if q_buy > 0 else 0
+                            delta_label = f"{price_diff:+.2f}%" if abs(price_diff) > 0.01 else "0%"
+                            st.metric("买入阈值价", f"{q_buy:.4f}", delta=delta_label,
+                                     help=f"分位策略的买入触发价格。当前价{'高于' if current_price > q_buy else '低于'}阈值价{abs(price_diff):.2f}%。")
+                        else:
+                            st.metric("买入阈值价", f"{q_buy:.4f}",
+                                     help="分位策略的买入触发价格。当前价 ≤ 阈值价时触发买入信号。")
+                    else:
+                        st.metric("买入阈值价", "N/A",
+                                 help="分位策略的买入触发价格。指标未计算。")
+                
+                with col3:
+                    if peak_close is not None:
+                        peak = float(peak_close)
+                        st.metric("峰值价格", f"{peak:.4f}",
+                                 help=f"最近{window_days}个交易日内的最高收盘价。用于计算回撤幅度。")
+                    else:
+                        st.metric("峰值价格", "N/A",
+                                 help=f"最近{window_days}个交易日内的最高收盘价。指标未计算。")
+                
+                with col4:
+                    if drawdown_from_peak is not None:
+                        drawdown_pct = abs(float(drawdown_from_peak)) * 100
+                        st.metric("回撤幅度", f"{drawdown_pct:.2f}%",
+                                 help=f"相对峰值的回撤百分比。回撤越大，说明价格从高点下跌越多，可能是买入机会。")
+                    else:
+                        st.metric("回撤幅度", "N/A",
+                                 help="相对峰值的回撤百分比。指标未计算。")
+                
+                col5, col6 = st.columns(2)
+                
+                with col5:
+                    if ma20 is not None:
+                        ma20_val = float(ma20)
+                        if current_price is not None:
+                            price_ma20_ratio = (current_price / ma20_val * 100) if ma20_val > 0 else 0
+                            st.metric("MA20", f"{ma20_val:.4f}", delta=f"{price_ma20_ratio:.1f}%",
+                                     help=f"20日移动平均线。当前价/MA20 = {price_ma20_ratio:.1f}%，表示当前价{'高于' if price_ma20_ratio > 100 else '低于'}MA20的{abs(price_ma20_ratio - 100):.1f}%。")
+                        else:
+                            st.metric("MA20", f"{ma20_val:.4f}",
+                                     help="20日移动平均线。用于判断价格趋势。")
+                    else:
+                        st.metric("MA20", "N/A",
+                                 help="20日移动平均线。指标未计算。")
+                
+                with col6:
+                    if ma60 is not None:
+                        ma60_val = float(ma60)
+                        if current_price is not None:
+                            price_ma60_ratio = (current_price / ma60_val * 100) if ma60_val > 0 else 0
+                            st.metric("MA60", f"{ma60_val:.4f}", delta=f"{price_ma60_ratio:.1f}%",
+                                     help=f"60日移动平均线。当前价/MA60 = {price_ma60_ratio:.1f}%，表示当前价{'高于' if price_ma60_ratio > 100 else '低于'}MA60的{abs(price_ma60_ratio - 100):.1f}%。")
+                        else:
+                            st.metric("MA60", f"{ma60_val:.4f}",
+                                     help="60日移动平均线。用于判断价格趋势。")
+                    else:
+                        st.metric("MA60", "N/A",
+                                 help="60日移动平均线。指标未计算。")
+            else:
+                st.info("指标未就绪：产品未绑定策略或指标未计算。指标会在实时行情更新时自动计算。")
+        except Exception as e:
+            st.warning(f"加载指标失败: {e}")
+        
+        # ========== 生产建议展示 ==========
+        st.divider()
+        st.markdown("**💡 生产建议（Advisor）**")
+        try:
+            from advisor.repos.advisor_suggestion_repo import get_latest_suggestion
+            from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
+            from core.pending_buy_service import get_pending_pool
+            
+            suggestion = get_latest_suggestion(product_id)
+            bind = get_bind_by_product_id(product_id)
+            
+            if bind:
+                strategy_code = bind.get('strategy_code', '')
+                param_set_id = bind.get('param_set_id', '')
+                
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    st.info(f"**当前策略**: {strategy_code}@{param_set_id}")
+                    st.caption(f"策略类型：{strategy_code}（percentile=分位策略，drawdown=回撤策略，profit_recycle=利润回收策略，simple=简单策略）。参数集：{param_set_id}（通常为default，可在策略实验室中创建不同参数集）。")
+                
+                if suggestion:
+                    action = suggestion.get('action', 'HOLD')
+                    suggest_amount = float(suggestion.get('suggest_amount', 0))
+                    suggest_ratio = suggestion.get('suggest_ratio')
+                    moved_to_wait_pool = float(suggestion.get('moved_to_wait_pool', 0))
+                    reason = suggestion.get('reason', '')
+                    as_of_time = suggestion.get('as_of_time', '')
+                    premium_rate_sug = suggestion.get('premium_rate')
+                    
+                    # 实时计算实际预算（用于显示，包括小于最小金额的情况）
+                    from advisor.advisor_service import get_budget_amount
+                    from core.pending_buy_service import get_all_pending_pools
+                    from decimal import Decimal
+                    actual_budget = get_budget_amount(product_id, include_below_min=True)
+                    pending_pools = get_all_pending_pools()
+                    product_pending = [p for p in pending_pools if p.get('product_id') == product_id] if pending_pools else []
+                    total_pending = sum(float(p.get('pending_amount', 0)) for p in product_pending)
+                    total_budget = float(actual_budget) + total_pending
+                    
+                    # 检查持仓情况
+                    from core.exchange_holdings_calculator import calculate_exchange_holdings
+                    holding_info = calculate_exchange_holdings(product_id)
+                    has_holding = holding_info.get('shares', Decimal('0')) > Decimal('0')
+                    
+                    # 动作颜色和标签
+                    if action == 'BUY':
+                        action_color = "🟢"
+                        action_label = "建仓" if not has_holding else "买入"
+                        action_help = "建议买入。当前价格满足策略买入条件，且预算充足。如果没有持仓则为建仓，已有持仓则为加仓。"
+                    elif action == 'WAIT':
+                        action_color = "🟡"
+                        action_label = "等待"
+                        action_help = "建议等待。资金已进入等待池，等待条件满足后再买入。具体原因请查看下方原因说明。"
+                    else:
+                        action_color = "⚪"
+                        if not has_holding:
+                            action_label = "等待建仓"
+                            action_help = "当前价格未满足策略买入条件（如当前价高于阈值价），暂不建议建仓。等待价格回落至买入阈值时再建仓。"
+                        else:
+                            action_label = "持有"
+                            action_help = "建议持有。当前价格未满足策略买入条件，但已有持仓，继续持有等待更好的买入时机。"
+                    
+                    with col2:
+                        st.info(f"**建议动作**: {action_color} {action_label}")
+                        st.caption(action_help)
+                    
+                    col1, col2, col3, col4, col5 = st.columns(5)
+                    with col1:
+                        st.metric("实际预算", f"¥{total_budget:.2f}", 
+                                 help="实际可用预算 = 资金池分配预算 + 等待池累计金额。资金池分配预算 = Σ(各账户余额) × 分配比例，需满足最小金额约束。等待池金额是之前因各种原因暂缓买入的资金。")
+                    with col2:
+                        st.metric("建议金额", f"¥{suggest_amount:.2f}", 
+                                 help="策略建议的买入金额。计算逻辑：min(实际预算, 理想成交额, 每日最大买入额)。如果建议金额为0，说明当前不满足买入条件。")
+                    with col3:
+                        if suggest_ratio:
+                            st.metric("建议比例", f"{float(suggest_ratio)*100:.0f}%", 
+                                     help=f"建议买入比例。当前建议买入 {float(suggest_ratio)*100:.0f}% 的预算，剩余 {100-float(suggest_ratio)*100:.0f}% 进入等待池。通常出现在溢价率1%-2%时的半买策略。")
+                        else:
+                            st.metric("建议比例", "100%", 
+                                     help="建议买入比例。100%表示建议使用全部预算买入，0%表示全部进入等待池。")
+                    with col4:
+                        if moved_to_wait_pool > 0:
+                            st.metric("进入等待池", f"¥{moved_to_wait_pool:.2f}", delta="等待",
+                                     help="本次建议中进入等待池的金额。等待池用于暂存因溢价过高、预算不足等原因无法立即买入的资金，等待条件满足后再使用。")
+                        else:
+                            st.metric("进入等待池", "¥0.00",
+                                     help="本次建议中进入等待池的金额。0表示本次预算全部用于买入或建议持有。")
+                    with col5:
+                        if premium_rate_sug:
+                            st.metric("溢价率", f"{float(premium_rate_sug)*100:.2f}%",
+                                     help=f"QDII产品的溢价率 = (最新价 - IOPV) / IOPV × 100%。当前溢价率 {float(premium_rate_sug)*100:.2f}%。买入规则：≤1%正常买入，1%-2%半买，>2%进入等待池。")
+                        else:
+                            st.metric("溢价率", "N/A",
+                                     help="QDII产品的溢价率 = (最新价 - IOPV) / IOPV × 100%。非QDII产品或溢价率数据缺失时显示N/A。")
+                    
+                    # 等待池累计金额（已在上面计算，这里只显示）
+                    if total_pending > 0:
+                        st.info(f"**等待池累计金额**: ¥{total_pending:.2f}")
+                        st.caption("该产品所有账户的等待池金额总和。等待池用于暂存因溢价过高、预算不足最小成交额、指标未就绪等原因无法立即买入的资金。等待池金额会参与下次预算计算，当条件满足时自动使用。")
+                    
+                    # 计算逻辑说明
+                    st.markdown("**📊 计算逻辑**")
+                    with st.expander("查看预算计算公式和阈值价计算逻辑", expanded=False):
+                        # 预算计算公式
+                        st.markdown("**预算计算公式：**")
+                        from advisor.advisor_service import get_budget_amount
+                        from data.db_connector import execute_query
+                        from core.ledger_service import calc_account_balance
+                        from decimal import Decimal
+                        
+                        # 获取资金池规则详情
+                        sql_rules = """
+                            SELECT apr.from_account_id, apr.ratio, apr.min_amount, apr.round_step,
+                                   a.account_code, a.account_name
+                            FROM account_pool_rules apr
+                            INNER JOIN accounts a ON apr.from_account_id = a.id
+                            WHERE apr.to_product_id = %s 
+                              AND apr.is_active = 1
+                              AND a.is_active = 1
+                        """
+                        rules_detail = execute_query(sql_rules, (product_id,))
+                        
+                        if rules_detail:
+                            total_pool_balance = Decimal('0')
+                            account_details = []
+                            for rule in rules_detail:
+                                account_code = rule.get('account_code', '')
+                                account_name = rule.get('account_name', '')
+                                if account_code:
+                                    try:
+                                        balance = calc_account_balance(account_code)
+                                        total_pool_balance += balance
+                                        account_details.append({
+                                            'name': account_name,
+                                            'code': account_code,
+                                            'balance': balance
+                                        })
+                                    except:
+                                        pass
+                            
+                            if account_details:
+                                min_amount = float(rules_detail[0].get('min_amount', 0))
+                                round_step = float(rules_detail[0].get('round_step', 1))
+                                
+                                st.markdown(f"**1. 各账户按比例分配 = Σ(账户余额 × 该账户分配比例)**")
+                                allocated = Decimal('0')
+                                for rule in rules_detail:
+                                    account_code = rule.get('account_code', '')
+                                    account_name = rule.get('account_name', '')
+                                    ratio = float(rule.get('ratio', 0))
+                                    if account_code:
+                                        for acc in account_details:
+                                            if acc['code'] == account_code:
+                                                account_allocated = acc['balance'] * Decimal(str(ratio))
+                                                allocated += account_allocated
+                                                st.caption(f"   - {account_name} ({account_code}): ¥{acc['balance']:.2f} × {ratio*100:.2f}% = ¥{account_allocated:.2f}")
+                                                break
+                                st.caption(f"   **合计**: ¥{allocated:.2f}")
+                                
+                                st.markdown(f"**3. 应用最小金额约束**")
+                                if allocated < Decimal(str(min_amount)):
+                                    st.caption(f"   ¥{allocated:.2f} < ¥{min_amount:.2f} (最小金额) → 预算 = ¥0.00")
+                                else:
+                                    st.caption(f"   ¥{allocated:.2f} ≥ ¥{min_amount:.2f} (最小金额) → 继续")
+                                
+                                if round_step > 0 and allocated >= Decimal(str(min_amount)):
+                                    st.markdown(f"**4. 取整（粒度={round_step}）**")
+                                    allocated_rounded = (allocated / Decimal(str(round_step))).quantize(Decimal('1'), rounding='ROUND_DOWN') * Decimal(str(round_step))
+                                    st.caption(f"   = ¥{allocated:.2f} → ¥{allocated_rounded:.2f}")
+                                
+                                st.markdown(f"**5. 最终预算 = 分配金额 + 等待池金额**")
+                                st.caption(f"   = ¥{float(actual_budget):.2f} + ¥{total_pending:.2f} = ¥{total_budget:.2f}")
+                        else:
+                            st.caption("未配置资金池规则")
+                        
+                        # 阈值价计算逻辑（仅对percentile策略）
+                        if strategy_code == 'percentile':
+                            st.markdown("**阈值价（q_buy_price）计算公式：**")
+                            from advisor.repos.indicator_daily_repo import get_latest_indicator
+                            from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
+                            from advisor.advisor_service import get_strategy_config
+                            from data.db_connector import execute_query, execute_one
+                            from datetime import date, timedelta
+                            
+                            bind_detail = get_bind_by_product_id(product_id)
+                            if bind_detail:
+                                param_json_detail = get_strategy_config(strategy_code, bind_detail.get('param_set_id', 'default'))
+                                if param_json_detail:
+                                    window_days = param_json_detail.get('window_days', 750)
+                                    buy_percentile = param_json_detail.get('buy_percentile', 0.20)
+                                    min_required = max(int(window_days * 0.6), 300)
+                                    
+                                    indicator_detail = get_latest_indicator(product_id, window_days)
+                                    if indicator_detail and indicator_detail.get('q_buy_price'):
+                                        q_buy_price = float(indicator_detail.get('q_buy_price', 0))
+                                        trade_date = indicator_detail.get('trade_date')
+                                        st.caption(f"**1. 获取最近N={window_days}个交易日的收盘价数据**")
+                                        st.caption(f"**2. 将收盘价从小到大排序**")
+                                        st.caption(f"**3. 计算买入分位对应的索引位置**")
+                                        st.caption(f"   索引 = int(数据总数 × {buy_percentile*100:.0f}%)")
+                                        st.caption(f"**4. 取该索引位置的收盘价作为阈值价**")
+                                        st.caption(f"   **q_buy_price = {q_buy_price:.4f}**（计算日期：{trade_date}）")
+                                        st.caption(f"**5. 当前价 ≤ q_buy_price 时触发买入信号**")
+                                    else:
+                                        # 诊断为什么阈值价未就绪
+                                        st.caption("**阈值价未就绪，诊断信息：**")
+                                        
+                                        # 检查历史数据量
+                                        yesterday = date.today() - timedelta(days=1)
+                                        sql_data_count = """
+                                            SELECT COUNT(*) as cnt
+                                            FROM market_bar_d
+                                            WHERE product_id = %s
+                                              AND trade_date < %s
+                                              AND trade_date >= DATE_SUB(%s, INTERVAL %s DAY)
+                                        """
+                                        data_count_row = execute_one(sql_data_count, (product_id, yesterday, yesterday, window_days))
+                                        data_count = data_count_row.get('cnt', 0) if data_count_row else 0
+                                        
+                                        st.caption(f"   - 需要至少{min_required}个交易日的数据")
+                                        st.caption(f"   - 实际可用数据：{data_count}条")
+                                        
+                                        if data_count < min_required:
+                                            st.caption(f"   - **数据不足**：缺少{min_required - data_count}条数据")
+                                            st.caption(f"   - 建议：等待更多历史数据或减少window_days参数")
+                                        else:
+                                            st.caption(f"   - 数据量充足，但指标未计算")
+                                            st.caption(f"   - 建议：检查指标计算任务（indicator_daily_update）是否正常运行")
+                                        
+                                        # 检查是否有指标记录
+                                        if indicator_detail:
+                                            st.caption(f"   - 存在指标记录，但q_buy_price为NULL（计算失败）")
+                                        else:
+                                            st.caption(f"   - 不存在指标记录（指标计算任务可能未运行）")
+                    
+                    # 原因说明
+                    st.markdown("**📝 原因说明**")
+                    # 使用markdown显示，自动适应内容，不显示滚动条
+                    # 将换行符转换为HTML换行，并保留原有格式
+                    if reason:
+                        # 转义HTML特殊字符，然后替换换行符
+                        import html
+                        escaped_reason = html.escape(reason)
+                        formatted_reason = escaped_reason.replace('\n', '<br>')
+                        st.markdown(f'<div style="padding: 10px; background-color: #f0f2f6; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">{formatted_reason}</div>', unsafe_allow_html=True)
+                    else:
+                        st.info("暂无原因说明")
+                    
+                    # 更新时间
+                    if as_of_time:
+                        if isinstance(as_of_time, str):
+                            time_str = as_of_time[:19] if len(as_of_time) >= 19 else as_of_time
+                        else:
+                            time_str = str(as_of_time)
+                        st.caption(f"最后更新时间: {time_str}")
+                else:
+                    st.warning("暂无建议数据，请等待调度器生成")
+            else:
+                st.warning("产品未绑定策略，请在产品管理页配置策略绑定")
+        except Exception as e:
+            st.warning(f"加载建议失败: {e}")
     else:
         st.warning("暂无实时行情数据，请点击刷新按钮获取")
 
@@ -2489,6 +2872,128 @@ def page_product_management():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ 删除失败: {e}")
+                    
+                    # 策略绑定编辑（仅场内产品）
+                    if product.get('channel') == 'EXCHANGE':
+                        st.divider()
+                        st.subheader("📊 策略绑定配置")
+                        try:
+                            from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id, create_or_update_bind
+                            from data.db_connector import execute_query
+                            
+                            bind = get_bind_by_product_id(selected_product_id)
+                            
+                            # 获取策略列表
+                            strategy_options = ['percentile', 'drawdown', 'profit_recycle', 'simple']
+                            current_strategy = bind.get('strategy_code', 'percentile') if bind else 'percentile'
+                            current_param_set = bind.get('param_set_id', 'default') if bind else 'default'
+                            
+                            # 获取参数集列表
+                            param_sets = []
+                            if current_strategy:
+                                sql = """
+                                    SELECT DISTINCT param_set_id
+                                    FROM strategy_config
+                                    WHERE strategy_key = %s AND is_active = 1
+                                    ORDER BY param_set_id
+                                """
+                                param_rows = execute_query(sql, (current_strategy,))
+                                param_sets = [row['param_set_id'] for row in param_rows] if param_rows else ['default']
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                new_strategy_code = st.selectbox(
+                                    "策略代码",
+                                    options=strategy_options,
+                                    index=strategy_options.index(current_strategy) if current_strategy in strategy_options else 0,
+                                    key=f"bind_strategy_{selected_product_id}"
+                                )
+                                
+                                # 根据策略代码更新参数集列表
+                                if new_strategy_code != current_strategy:
+                                    sql = """
+                                        SELECT DISTINCT param_set_id
+                                        FROM strategy_config
+                                        WHERE strategy_key = %s AND is_active = 1
+                                        ORDER BY param_set_id
+                                    """
+                                    param_rows = execute_query(sql, (new_strategy_code,))
+                                    param_sets = [row['param_set_id'] for row in param_rows] if param_rows else ['default']
+                            
+                            with col2:
+                                if param_sets:
+                                    new_param_set_id = st.selectbox(
+                                        "参数集ID",
+                                        options=param_sets,
+                                        index=param_sets.index(current_param_set) if current_param_set in param_sets else 0,
+                                        key=f"bind_param_{selected_product_id}"
+                                    )
+                                else:
+                                    new_param_set_id = st.text_input(
+                                        "参数集ID",
+                                        value=current_param_set,
+                                        key=f"bind_param_{selected_product_id}"
+                                    )
+                            
+                            col1, col2, col3, col4 = st.columns(4)
+                            with col1:
+                                min_trade = float(bind.get('min_trade_amount', 1000)) if bind else 1000.0
+                                new_min_trade = st.number_input(
+                                    "最小成交额",
+                                    value=min_trade,
+                                    min_value=0.0,
+                                    step=100.0,
+                                    key=f"bind_min_trade_{selected_product_id}"
+                                )
+                            with col2:
+                                ideal_trade = float(bind.get('ideal_trade_amount', 2000)) if bind else 2000.0
+                                new_ideal_trade = st.number_input(
+                                    "理想成交额",
+                                    value=ideal_trade,
+                                    min_value=0.0,
+                                    step=100.0,
+                                    key=f"bind_ideal_trade_{selected_product_id}"
+                                )
+                            with col3:
+                                fee_rate = float(bind.get('fee_rate', 0.000845)) if bind else 0.000845
+                                new_fee_rate = st.number_input(
+                                    "手续费率",
+                                    value=fee_rate,
+                                    min_value=0.0,
+                                    max_value=1.0,
+                                    step=0.000001,
+                                    format="%.6f",
+                                    key=f"bind_fee_rate_{selected_product_id}"
+                                )
+                            with col4:
+                                fee_min = float(bind.get('fee_min', 0.20)) if bind else 0.20
+                                new_fee_min = st.number_input(
+                                    "最低手续费",
+                                    value=fee_min,
+                                    min_value=0.0,
+                                    step=0.01,
+                                    key=f"bind_fee_min_{selected_product_id}"
+                                )
+                            
+                            if st.button("💾 保存策略绑定", key=f"save_bind_{selected_product_id}"):
+                                try:
+                                    bind_data = {
+                                        'product_id': selected_product_id,
+                                        'strategy_code': new_strategy_code,
+                                        'param_set_id': new_param_set_id,
+                                        'enabled': 1,
+                                        'min_trade_amount': new_min_trade,
+                                        'ideal_trade_amount': new_ideal_trade,
+                                        'fee_rate': new_fee_rate,
+                                        'fee_min': new_fee_min
+                                    }
+                                    create_or_update_bind(bind_data)
+                                    st.success("✅ 策略绑定保存成功！")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ 保存失败: {e}")
+                        except Exception as e:
+                            st.warning(f"策略绑定功能加载失败: {e}")
             
             st.dataframe(df, width='stretch', hide_index=True)
         else:
@@ -2783,8 +3288,10 @@ def page_pool_rules():
     with tab2:
         st.subheader("新增资金池规则")
         
-        # 账户选择
-        accounts = get_accounts(account_type='CASH', is_active=True)
+        # 账户选择：获取所有可用作资金池来源的账户（CASH + PRODUCT_SUB类型）
+        accounts_cash = get_accounts(account_type='CASH', is_active=True)
+        accounts_product_sub = get_accounts(account_type='PRODUCT_SUB', is_active=True)
+        accounts = accounts_cash + accounts_product_sub
         account_options = {}
         for a in accounts:
             account_options[a['id']] = f"{a.get('account_code', '')} - {a.get('account_name', '')}"

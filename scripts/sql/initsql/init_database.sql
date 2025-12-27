@@ -566,4 +566,86 @@ CREATE TABLE `transactions`  (
   INDEX `idx_product_id`(`product_id`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 307 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
+-- ----------------------------
+-- Table structure for product_strategy_bind
+-- ----------------------------
+DROP TABLE IF EXISTS `product_strategy_bind`;
+CREATE TABLE `product_strategy_bind`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码: percentile/profit_recycle/drawdown/simple',
+  `param_set_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '参数集ID(版本)，从 strategy_config 读取',
+  `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  `min_trade_amount` decimal(18, 2) NOT NULL DEFAULT 1000.00 COMMENT '最小有效成交金额',
+  `ideal_trade_amount` decimal(18, 2) NOT NULL DEFAULT 2000.00 COMMENT '理想成交金额',
+  `fee_rate` decimal(18, 6) NOT NULL DEFAULT 0.000845 COMMENT '手续费率（万0.845）',
+  `fee_min` decimal(18, 2) NOT NULL DEFAULT 0.20 COMMENT '最低手续费',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_product`(`product_id`) USING BTREE,
+  INDEX `idx_strategy`(`strategy_code`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品策略绑定表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for strategy_state
+-- ----------------------------
+DROP TABLE IF EXISTS `strategy_state`;
+CREATE TABLE `strategy_state`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码',
+  `state_json` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '状态JSON（利润池/峰值/上次动作日等）',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_state`(`product_id`, `strategy_code`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略状态表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for indicator_daily
+-- ----------------------------
+DROP TABLE IF EXISTS `indicator_daily`;
+CREATE TABLE `indicator_daily`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `trade_date` date NOT NULL COMMENT '指标日期（对应 market_bar_d.trade_date）',
+  `window_days` int(11) NOT NULL COMMENT '窗口N（来自策略参数）',
+  `pct_rank` decimal(9, 6) NULL DEFAULT NULL COMMENT '分位0~1（基于昨日close在窗口内的rank）',
+  `q_buy_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '买入分位对应的价格阈值（例如20%分位的close值）',
+  `q_mid_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '可选：50%分位价格',
+  `q_high_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '可选：80%分位价格',
+  `peak_close` decimal(18, 6) NULL DEFAULT NULL COMMENT '滚动窗口内峰值close',
+  `drawdown_from_peak` decimal(9, 6) NULL DEFAULT NULL COMMENT '昨日close的回撤比例',
+  `ma20` decimal(18, 6) NULL DEFAULT NULL COMMENT '20日均线',
+  `ma60` decimal(18, 6) NULL DEFAULT NULL COMMENT '60日均线',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE INDEX `uk_ind`(`product_id`, `trade_date`, `window_days`) USING BTREE,
+  INDEX `idx_date`(`trade_date`) USING BTREE,
+  INDEX `idx_prod_date`(`product_id`, `trade_date`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '日更慢指标表' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for advisor_suggestion
+-- ----------------------------
+DROP TABLE IF EXISTS `advisor_suggestion`;
+CREATE TABLE `advisor_suggestion`  (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `as_of_time` datetime NOT NULL COMMENT '建议生成时间',
+  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码',
+  `action` enum('BUY','HOLD','WAIT') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '建议动作',
+  `suggest_amount` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '建议金额',
+  `suggest_ratio` decimal(18, 6) NULL DEFAULT NULL COMMENT '建议比例（0.5=半买）',
+  `limit_price_hint` decimal(18, 6) NULL DEFAULT NULL COMMENT '限价建议',
+  `premium_rate` decimal(18, 6) NULL DEFAULT NULL COMMENT '溢价率',
+  `moved_to_wait_pool` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '进入等待池金额',
+  `reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '必须可解释中文原因',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_time`(`as_of_time`) USING BTREE,
+  INDEX `idx_prod_time`(`product_id`, `as_of_time`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表' ROW_FORMAT = Dynamic;
+
 SET FOREIGN_KEY_CHECKS = 1;

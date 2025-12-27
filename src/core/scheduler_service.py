@@ -92,6 +92,42 @@ def run_otc_update_job():
         logger.error(f"场外净值更新失败: {e}", exc_info=True)
 
 
+def run_indicator_daily_job():
+    """执行日更指标计算任务"""
+    try:
+        from advisor.indicator_job import calculate_indicators_for_all_products
+        
+        logger.info("开始执行日更指标计算任务")
+        result = calculate_indicators_for_all_products()
+        
+        message = f"成功: {result['success_count']}, 失败: {result['fail_count']}"
+        update_job_status('indicator_daily', 'OK', message)
+        logger.info(f"日更指标计算完成: {message}")
+        
+    except Exception as e:
+        error_msg = str(e)
+        update_job_status('indicator_daily', 'FAIL', error_msg)
+        logger.error(f"日更指标计算失败: {e}", exc_info=True)
+
+
+def run_advisor_suggestion_job():
+    """执行生产建议生成任务"""
+    try:
+        from advisor.advisor_service import run_for_all_products
+        
+        logger.info("开始执行生产建议生成任务")
+        result = run_for_all_products()
+        
+        message = f"成功: {result['success_count']}, 失败: {result['fail_count']}"
+        update_job_status('advisor_suggestion_1m', 'OK', message)
+        logger.info(f"生产建议生成完成: {message}")
+        
+    except Exception as e:
+        error_msg = str(e)
+        update_job_status('advisor_suggestion_1m', 'FAIL', error_msg)
+        logger.error(f"生产建议生成失败: {e}", exc_info=True)
+
+
 def start_scheduler():
     """启动调度器"""
     global _scheduler
@@ -166,6 +202,10 @@ def start_scheduler():
                 func = run_rt_quote_job
             elif job_code.startswith('otc_update_'):
                 func = run_otc_update_job
+            elif job_code == 'indicator_daily':
+                func = run_indicator_daily_job
+            elif job_code == 'advisor_suggestion_1m':
+                func = run_advisor_suggestion_job
             else:
                 logger.warning(f"未知任务代码: {job_code}")
                 continue

@@ -50,9 +50,23 @@ def fetch_realtime_quote(product_code: str, market: str) -> Optional[Dict]:
             logger.warning(f"未获取到 ETF 实时行情数据")
             return None
         
+        # 调试：检查 DataFrame 的列名和部分数据
+        logger.debug(f"fund_etf_spot_em 返回的列名: {df.columns.tolist()}")
+        logger.debug(f"fund_etf_spot_em 返回的数据行数: {len(df)}")
+        # 检查是否包含目标代码（用于调试）
+        if len(df) > 0:
+            sample_codes = [str(row.get('代码', '')).strip() for _, row in df.head(10).iterrows()]
+            logger.debug(f"fund_etf_spot_em 前10个代码示例: {sample_codes}")
+            # 检查是否包含目标代码（不区分大小写）
+            all_codes = [str(row.get('代码', '')).strip() for _, row in df.iterrows()]
+            if any(product_code in code or code.replace('sh', '').replace('sz', '').replace('SH', '').replace('SZ', '') == product_code for code in all_codes):
+                logger.debug(f"数据中包含类似 {product_code} 的代码，但匹配失败")
+        
         # 根据代码查找对应的产品
         # 代码字段可能是 "513100" 格式（不包含市场前缀）
         product_row = None
+        matched_codes = []  # 用于调试：记录匹配到的代码
+        
         for _, row in df.iterrows():
             code = str(row.get('代码', '')).strip()
             # 精确匹配代码（去除可能的空格和前缀）
@@ -61,10 +75,18 @@ def fetch_realtime_quote(product_code: str, market: str) -> Optional[Dict]:
             if code_clean == product_code or code == product_code:
                 product_row = row
                 break
+            # 记录前几个代码用于调试（如果没找到）
+            if len(matched_codes) < 5:
+                matched_codes.append(f"'{code}' (clean: '{code_clean}')")
         
         if product_row is None:
-            logger.warning(f"未找到产品 {product_code} 的实时行情")
-            return None
+            logger.warning(f"未找到产品 {product_code} (market={market}) 的实时行情")
+            logger.debug(f"尝试匹配的代码格式: product_code='{product_code}', market={market}")
+            if matched_codes:
+                logger.debug(f"数据中的前几个代码示例: {', '.join(matched_codes)}")
+            # 尝试使用其他接口：LOF 基金可能需要使用股票接口
+            logger.info(f"尝试使用股票接口获取 {product_code} (market={market}) 的实时行情...")
+            return _fetch_realtime_quote_by_stock(product_code, market)
         
         logger.info(f"[AKShare][ETF][{product_code}] 原始行响应={product_row.to_dict()}")
         
@@ -347,5 +369,156 @@ def fetch_qdii_premium(product_code: str, market: str) -> Optional[Dict]:
         
     except Exception as e:
         logger.error(f"获取 {product_code} QDII 溢价率失败: {e}", exc_info=True)
+        return None
+
+
+def _fetch_realtime_quote_by_stock(product_code: str, market: str) -> Optional[Dict]:
+    """
+    使用股票接口获取 LOF 基金的实时行情（备用方案）
+    
+    Args:
+        product_code: 产品代码（如 163406）
+        market: 市场（SH/SZ）
+    
+    Returns:
+        行情字典，格式与 fetch_realtime_quote 相同
+        如果失败返回 None
+    """
+    if not AKSHARE_AVAILABLE:
+        return None
+    
+    try:
+        # 构建股票代码：上海 sh，深圳 sz
+        if market == 'SH':
+            symbol = f"sh{product_code}"
+        elif market == 'SZ':
+            symbol = f"sz{product_code}"
+        else:
+            logger.error(f"不支持的市场类型: {market}")
+            return None
+        
+        # 尝试使用 akshare 的 LOF 基金接口（如果存在）
+        # 如果不存在，则使用股票接口
+        try:
+            # 尝试使用 fund_lof_spot_em 接口（如果存在）
+            if hasattr(ak, 'fund_lof_spot_em'):
+                df = ak.fund_lof_spot_em()
+                logger.info(f"使用 fund_lof_spot_em 接口获取 {product_code} 的实时行情")
+            else:
+                # 使用股票接口作为备用
+                df = ak.stock_zh_a_spot_em()
+                logger.info(f"使用 stock_zh_a_spot_em 接口获取 {product_code} 的实时行情")
+        except Exception as e:
+            logger.warning(f"尝试使用 LOF 接口失败，使用股票接口: {e}")
+            df = ak.stock_zh_a_spot_em()
+        
+        if df.empty:
+            logger.warning(f"未获取到股票实时行情数据")
+            return None
+        
+        # 查找对应的产品（通过代码匹配）
+        product_row = None
+        for _, row in df.iterrows():
+            code = str(row.get('代码', '')).strip()
+            # 匹配代码（去除市场前缀）
+            code_clean = code.replace('sh', '').replace('sz', '').replace('SH', '').replace('SZ', '')
+            if code_clean == product_code or code == product_code or code == symbol:
+                product_row = row
+                break
+        
+        if product_row is None:
+            logger.warning(f"未找到产品 {product_code} (market={market}) 的股票实时行情")
+            return None
+        
+        logger.info(f"[AKShare][Stock][{product_code}] 使用股票接口获取实时行情")
+        
+        # 解析字段（股票接口的字段名可能不同）
+        def safe_get(key, default=None):
+            val = product_row.get(key, default)
+            if val is None or (isinstance(val, float) and (val != val or val == float('inf') or val == float('-inf'))):
+                return default
+            return val
+        
+        def safe_decimal(key, default=None):
+            val = safe_get(key, default)
+            if val is None:
+                return None
+            try:
+                return Decimal(str(val))
+            except (ValueError, TypeError):
+                return default
+        
+        def safe_float(key, default=None):
+            val = safe_get(key, default)
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+        
+        # 获取当前时间作为行情时间
+        quote_time = datetime.now()
+        
+        # 核心字段：价格
+        price = safe_decimal('最新价', 0) or safe_decimal('现价', 0)
+        prev_close = safe_decimal('昨收', 0) or safe_decimal('前收盘', 0)
+        
+        # 涨跌幅相关
+        pct_chg = safe_float('涨跌幅')  # 可能是百分比
+        if pct_chg is not None:
+            pct_chg = pct_chg / 100.0  # 转换为小数
+        
+        # 基础价格时间序列
+        open_price = safe_decimal('开盘', 0) or safe_decimal('今开', 0)
+        high_price = safe_decimal('最高', 0)
+        low_price = safe_decimal('最低', 0)
+        
+        # 流动性指标
+        volume = safe_decimal('成交量', 0)
+        amount = safe_decimal('成交额', 0)
+        turnover_rate = safe_float('换手率')  # 换手率
+        if turnover_rate is not None:
+            turnover_rate = turnover_rate / 100.0  # 转换为小数
+        
+        # 其他指标
+        amplitude = safe_float('振幅')  # 振幅
+        if amplitude is not None:
+            amplitude = amplitude / 100.0  # 转换为小数
+        
+        # LOF 基金没有 IOPV，设置为 None
+        iopv = None
+        premium_rate = None
+        
+        result = {
+            # 核心价格字段
+            'price': price,
+            'prev_close': prev_close,
+            'pct_chg': pct_chg,
+            'volume': volume,
+            'amount': amount,
+            'quote_time': quote_time,
+            
+            # LOF 基金没有 IOPV 和溢价率
+            'iopv': iopv,
+            'premium_rate': premium_rate,
+            
+            # 基础价格时间序列
+            'open': open_price,
+            'high': high_price,
+            'low': low_price,
+            
+            # 流动性指标
+            'turnover_rate': Decimal(str(turnover_rate)) if turnover_rate is not None else None,
+            
+            # 其他指标
+            'amplitude': Decimal(str(amplitude)) if amplitude is not None else None,
+        }
+        
+        logger.info(f"获取 {product_code} 股票实时行情成功: price={result['price']}")
+        return result
+        
+    except Exception as e:
+        logger.error(f"获取 {product_code} 股票实时行情失败: {e}", exc_info=True)
         return None
 

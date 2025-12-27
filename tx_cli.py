@@ -1687,15 +1687,17 @@ def main():
         print("批量采集场内基金历史日K数据")
         print("=" * 50)
         
-        # 获取所有场内产品
+        # 获取所有场内产品（channel='EXCHANGE' 且 market != 'NA'）
         products = get_products(channel='EXCHANGE', is_active=True)
+        # 进一步筛选：market必须是SH或SZ（排除NA）
+        products = [p for p in products if p.get('market') in ['SH', 'SZ']]
         if not products:
-            print("没有找到场内产品")
+            print("没有找到场内产品（需要channel='EXCHANGE'且market='SH'或'SZ'）")
             return
         
         print(f"\n找到 {len(products)} 个场内产品：")
         for i, p in enumerate(products, 1):
-            print(f"  [{i}] {p['code']} - {p['product_name']} ({p.get('market', 'NA')})")
+            print(f"  [{i}] {p['code']} - {p['product_name']} (ID={p['id']}, market={p.get('market', 'NA')})")
         
         # 选择产品
         choice = input("\n选择产品（回车=全部，或输入序号/产品代码）: ").strip()
@@ -1706,8 +1708,9 @@ def main():
             try:
                 idx = int(choice) - 1
                 if 0 <= idx < len(products):
-                    product_ids = [products[idx]['id']]
-                    print(f"✓ 选择: {products[idx]['code']} - {products[idx]['product_name']}")
+                    selected_product = products[idx]
+                    product_ids = [selected_product['id']]
+                    print(f"✓ 选择: {selected_product['code']} - {selected_product['product_name']} (ID={selected_product['id']}, market={selected_product.get('market', 'NA')})")
                 else:
                     print("✗ 序号超出范围")
                     return
@@ -1717,11 +1720,12 @@ def main():
                 for p in products:
                     if p['code'] == choice:
                         product_ids = [p['id']]
-                        print(f"✓ 选择: {p['code']} - {p['product_name']}")
+                        print(f"✓ 选择: {p['code']} - {p['product_name']} (ID={p['id']}, market={p.get('market', 'NA')})")
                         found = True
                         break
                 if not found:
-                    print(f"✗ 未找到产品: {choice}")
+                    print(f"✗ 未找到场内产品: {choice}")
+                    print(f"  提示: 请确保输入的是场内产品代码，且该产品在列表中")
                     return
         
         # 输入开始年份
@@ -1773,6 +1777,37 @@ def main():
         
         print("-" * 50)
         print(f"总计: {success_count}/{len(results)} 个产品成功，共保存 {total_count} 条数据")
+        
+        # 采集最新实时行情
+        print("\n" + "=" * 50)
+        print("采集最新实时行情")
+        print("=" * 50)
+        
+        from core.market_quote_service import collect_realtime_quotes
+        
+        # 使用相同的产品ID列表
+        if product_ids is None:
+            # 如果没有选择特定产品，使用所有场内产品
+            product_ids = [p['id'] for p in products]
+        
+        print(f"\n开始采集 {len(product_ids)} 个产品的实时行情...")
+        print("提示: 即使当天非交易日，也会获取最后一个交易日的行情")
+        print("-" * 50)
+        
+        quote_results = collect_realtime_quotes(product_ids=product_ids)
+        
+        quote_success_count = sum(1 for success in quote_results.values() if success)
+        print(f"\n实时行情采集完成: {quote_success_count}/{len(quote_results)} 个产品成功")
+        
+        # 显示详细结果
+        for product_id, success in quote_results.items():
+            product = get_product_by_id(product_id)
+            code = product.get('code', '') if product else f"ID{product_id}"
+            name = product.get('product_name', '') if product else ''
+            status = "✓" if success else "✗"
+            print(f"  {status} {code} ({name})")
+        
+        print("=" * 50)
     else:
         print(f"未知命令: {cmd}")
         print("可用命令: add | settle | list-ledger | list-orders | list-tx | check | collect | collect-history")
