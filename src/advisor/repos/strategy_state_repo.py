@@ -46,3 +46,4 @@ def save_state(product_id: int, strategy_code: str, state_dict: Dict[str, Any]) 
         logger.error(f"保存策略状态失败: {e}", exc_info=True)
         return False
 
+

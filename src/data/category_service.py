@@ -69,3 +69,4 @@ def get_category_list(entry_type: str) -> List[Dict]:
     """
     return execute_query(sql, (entry_type,))
 
+

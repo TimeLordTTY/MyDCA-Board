@@ -21,3 +21,4 @@ CREATE TABLE product_nav_range (
     INDEX idx_latest_date (latest_nav_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='产品净值范围表';
 
+

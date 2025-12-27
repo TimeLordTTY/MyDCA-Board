@@ -64,3 +64,4 @@ class FeeModel:
         """计算卖出手续费（与 calculate 相同）"""
         return cls.calculate(amount, is_exchange)
 
+

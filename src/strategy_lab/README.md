@@ -180,3 +180,4 @@ mysql -u root -p dca < scripts/sql/update/add_strategy_lab_tables.sql
 3. **参数可配置**：所有策略参数存储在 `strategy_config` 表
 4. **回测独立**：不侵入生产执行模块，不触发下单
 
+

@@ -148,3 +148,4 @@ def clear_pending_pool(product_id: int, from_account_id: int) -> bool:
     execute_update(sql, (product_id, from_account_id))
     return True
 
+

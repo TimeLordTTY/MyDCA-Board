@@ -87,3 +87,4 @@ def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dic
     
     return output
 
+

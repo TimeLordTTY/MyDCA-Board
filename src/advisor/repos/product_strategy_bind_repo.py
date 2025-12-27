@@ -67,3 +67,4 @@ def get_all_binds() -> list:
     """
     return execute_query(sql)
 
+

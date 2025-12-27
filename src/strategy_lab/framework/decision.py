@@ -32,3 +32,4 @@ class Decision:
         if not isinstance(self.reasons, list):
             self.reasons = [str(self.reasons)] if self.reasons else []
 
+

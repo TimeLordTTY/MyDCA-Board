@@ -40,3 +40,4 @@ class DailyBar:
         """净值别名（用于兼容场外基金，返回 close）"""
         return self.close
 
+

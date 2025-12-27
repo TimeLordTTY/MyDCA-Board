@@ -57,3 +57,4 @@ class Context:
         holdings_value = self.holdings.get('value', 0.0)
         return self.cash_pool + self.wait_pool + holdings_value
 
+
