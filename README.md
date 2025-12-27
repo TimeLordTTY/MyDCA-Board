@@ -551,7 +551,7 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 25. **strategy_state** - 策略状态表（存储策略运行时状态）
 26. **indicator_daily** - 日更慢指标表（分位排名、回撤、均线等）
 27. **advisor_suggestion** - 建议输出表（存储每次生成的建议）
-28. **pending_buy_pool** - 待买入池表（因溢价/门槛暂缓买入的资金，已在定投相关表中列出）
+28. **budget_trace** - 预算追踪审计日志表（记录预算分配与延期情况）
 
 ### 辅助表（1张）
 29. **product_nav_range** - 产品净值范围表（产品净值日期范围统计）
@@ -1012,8 +1012,15 @@ pip install -r requirements.txt
 22. **backtest_daily** - 回测每日数据表
 23. **backtest_trades** - 回测成交表
 
+### 生产建议层表（Advisor，5张）
+24. **product_strategy_bind** - 产品策略绑定表（支持多策略组合）
+25. **strategy_state** - 策略状态表（存储策略运行时状态）
+26. **indicator_daily** - 日更慢指标表（分位排名、回撤、均线等）
+27. **advisor_suggestion** - 建议输出表（存储每次生成的建议）
+28. **budget_trace** - 预算追踪审计日志表（记录预算分配与延期情况）
+
 ### 辅助表（1张）
-24. **product_nav_range** - 产品净值范围表
+29. **product_nav_range** - 产品净值范围表
 
 详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)
 

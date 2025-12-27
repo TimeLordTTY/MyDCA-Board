@@ -31,10 +31,9 @@ def save_suggestion(suggestion_data: Dict[str, Any]) -> int:
                 product_id, as_of_time, strategy_code, action,
                 suggest_amount, suggest_ratio, limit_price_hint, premium_rate,
                 moved_to_wait_pool, reason,
-                cash_available, wait_pool_balance, plan_budget_today,
+                cash_available, wait_pool_balance, new_budget, wait_pool_before, planned_amount, plan_budget_today,
                 budget_for_execution, budget_to_execute, budget_to_wait_pool,
-                execute_ratio, wait_ratio, reason_blocks_json,
-                new_budget, wait_pool_before, planned_amount
+                execute_ratio, wait_ratio, reason_blocks_json
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s,
@@ -62,16 +61,16 @@ def save_suggestion(suggestion_data: Dict[str, Any]) -> int:
             suggestion_data.get('reason', ''),
             suggestion_data.get('cash_available'),
             suggestion_data.get('wait_pool_balance'),
+            suggestion_data.get('new_budget'),
+            suggestion_data.get('wait_pool_before'),
+            suggestion_data.get('planned_amount'),
             suggestion_data.get('plan_budget_today'),
             suggestion_data.get('budget_for_execution'),
             suggestion_data.get('budget_to_execute'),
             suggestion_data.get('budget_to_wait_pool'),
             suggestion_data.get('execute_ratio'),
             suggestion_data.get('wait_ratio'),
-            reason_blocks_json,
-            suggestion_data.get('new_budget'),
-            suggestion_data.get('wait_pool_before'),
-            suggestion_data.get('planned_amount')
+            reason_blocks_json
         )
     else:
         # 兼容旧模式
@@ -129,10 +128,9 @@ def get_latest_suggestion(product_id: int) -> Optional[Dict[str, Any]]:
             id, product_id, as_of_time, strategy_code, action,
             suggest_amount, suggest_ratio, limit_price_hint, premium_rate,
             moved_to_wait_pool, reason, created_at,
-            cash_available, wait_pool_balance, plan_budget_today,
+            cash_available, wait_pool_balance, new_budget, wait_pool_before, planned_amount, plan_budget_today,
             budget_for_execution, budget_to_execute, budget_to_wait_pool,
-            execute_ratio, wait_ratio, reason_blocks_json,
-            new_budget, wait_pool_before, planned_amount
+            execute_ratio, wait_ratio, reason_blocks_json
         FROM advisor_suggestion
         WHERE product_id = %s
         ORDER BY as_of_time DESC

@@ -1546,14 +1546,14 @@ created_at
 
 ---
 
-## 29. pending_buy_pool 表（待买入池表）
+## 29. budget_trace 表（预算追踪审计日志表）
 
 ### 29.1 数据库表字段（固定）
 
 ```
-id, product_id, from_account_id, pending_amount, reason,
-last_change_reason, last_change_time, version,
-updated_at, created_at
+id, product_id, as_of_time, new_budget, wait_pool_before, planned_amount,
+executed_amount, moved_to_wait, wait_pool_after,
+reason_code, reason_text, created_at
 ```
 
 ### 29.2 字段定义
@@ -1561,27 +1561,24 @@ updated_at, created_at
 | 字段 | 定义 | 数据类型 | 约束 |
 |------|------|----------|------|
 | product_id | 产品ID | bigint | 必填 |
-| from_account_id | 来源账户ID | bigint | 必填，外键关联accounts.id |
-| pending_amount | 待买入金额 | decimal(18,2) | 必填，≥0，因溢价/门槛暂缓买入的资金 |
-| reason | 原因 | varchar(255) | 可空，进入等待池的原因（兼容字段） |
-| last_change_reason | 最后变更原因 | varchar(128) | 可空，如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT |
-| last_change_time | 最后变更时间 | datetime | 可空 |
-| version | 版本号（乐观锁） | bigint | 默认0，避免并发冲突 |
+| as_of_time | 建议生成时间 | datetime | 必填 |
+| new_budget | 本轮新增预算 | decimal(18,2) | 必填 |
+| wait_pool_before | 等待池余额（before） | decimal(18,2) | 必填 |
+| planned_amount | 本轮可用于买入 | decimal(18,2) | 必填 |
+| executed_amount | 本轮建议执行金额 | decimal(18,2) | 必填 |
+| moved_to_wait | 本轮进入等待池金额 | decimal(18,2) | 必填 |
+| wait_pool_after | 等待池余额（after） | decimal(18,2) | 必填 |
+| reason_code | 原因代码 | varchar(64) | 必填，如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT |
+| reason_text | 原因说明（结构化文本） | text | 必填 |
 
 ### 29.3 唯一键
 
-- `uk_pool_product_account(product_id, from_account_id)`：同一产品同一账户只能有一条记录
+- `uk_trace(product_id, as_of_time)`：同一产品同一时间只能有一条记录
 
-### 29.4 使用规则
+### 29.4 用途说明
 
-- **等待池增加**：只在"有买入意图但被迫延期"时增加
-  - 只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
-  - 如果策略未触发（如分位太高），`moved_to_wait = 0`
-  - 非交易日：如果 `planned_amount > 0`，则全部进入等待池；如果 `planned_amount = 0`，则不进入等待池
-  - 半买处理：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
-- **等待池扣减**：只能由"真实成交导入/确认"触发
-  - 扣减顺序：先扣该产品的WAIT_POOL（等待池），不足部分再扣CASH_FREE（自由现金）
-  - 在 `buy_confirm` 或 `buy` 确认时，自动调用 `reduce_pending_amount_by_transaction` 扣减等待池
-- **避免重复累加**：检查上次建议的 `budget_to_wait_pool`，只增加"增量"部分，而不是每次都累加全部
+- **审计日志**：记录每次 Advisor 运行时的预算分配与延期情况
+- **可追溯性**：用于分析预算使用情况和等待池变化历史
+- **原因追踪**：通过 reason_code 和 reason_text 记录预算延期的具体原因
 
 ---
