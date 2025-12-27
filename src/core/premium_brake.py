@@ -59,7 +59,7 @@ def apply_premium_brake(planned_amount: Decimal, premium_rate: Optional[Decimal]
 
 def apply_premium_brake_old(premium_rate: Decimal, planned_amount: Decimal) -> Tuple[Decimal, Decimal]:
     """
-    应用溢价刹车规则（旧接口，兼容dca_service调用）
+    应用溢价刹车规则（旧接口，保留以兼容历史代码）
     
     Args:
         premium_rate: 溢价率（如 0.0123 表示 1.23%）

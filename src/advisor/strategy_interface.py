@@ -20,7 +20,7 @@ class AdviceInput:
     premium_rate: Optional[Decimal]  # qdii_premium_rt 或 quote里
     indicator: Optional[Dict[str, Any]]  # indicator_daily 最新一条（<=昨日）
     holding: Optional[Dict[str, Any]]  # 份额/成本/市值（复用现有持仓服务读）
-    budget_amount: Decimal  # 今日预算（来自：task_dca 或 account_pool_rules 计算）
+    budget_amount: Decimal  # 今日预算（来自：account_pool_rules 计算）
     pending_amount: Decimal  # pending_buy_pool 里该产品累计的待买入
     bind_config: Dict[str, Any]  # product_strategy_bind（含 min_trade_amount/fee规则）
     param_json: Dict[str, Any]  # strategy_config.params_json

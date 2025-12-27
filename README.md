@@ -91,7 +91,6 @@ MyDCA-Board/
 │   │   └── update/                   # 升级脚本
 │   │       ├── migrate_to_exchange_v1.sql  # 场内交易升级脚本
 │   │       └── import_existing_data.sql    # 初始数据导入脚本
-│   └── mydca_scheduler.py           # 调度器进程（APScheduler）
 │
 ├── docs/                            # 文档
 │   └── field_spec.md                # 字段计算规则合同（对账级规范）
@@ -109,7 +108,6 @@ MyDCA-Board/
 │   │   ├── market_quote_service.py  # 行情服务（实时/日K/QDII溢价）
 │   │   ├── premium_brake.py         # 溢价刹车逻辑
 │   │   ├── pending_buy_service.py   # 待买入池服务
-│   │   ├── dca_service.py           # 定投计划服务
 │   │   └── scheduler_service.py    # 调度器服务（APScheduler）
 │   │
 │   ├── data/                        # 数据层模块
@@ -137,9 +135,7 @@ MyDCA-Board/
 │       └── utils/                   # 回测工具
 │
 ├── scripts/                         # 辅助脚本
-│   ├── run_backtest.py              # 策略回测入口
-│   ├── export_nav_history.py        # 净值历史导出
-│   └── validate_transactions.py     # 交易流水校验
+│   └── run_backtest.py              # 策略回测入口
 │
 ├── data/                            # 数据目录（可选，用于数据导出）
 │   └── nav/                         # 净值历史数据（可选）
@@ -189,15 +185,7 @@ streamlit run ui_app.py
 
 启动后浏览器会自动打开 `http://localhost:8501`
 
-### 启动调度器（可选）
-
-调度器用于自动采集实时行情和场外净值更新：
-
-```bash
-python scripts/mydca_scheduler.py
-```
-
-**调度任务**（在 `job_config` 表中配置）：
+**注意**：调度器已集成在 UI 中，启动 UI 时会自动启动调度器。调度任务在 `job_config` 表中配置：
 - `rt_quote_1m`: 场内实时行情（交易时间每分钟）
 - `otc_update_0800/1400/2200`: 场外净值更新（每日3次）
 
@@ -561,22 +549,20 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 11. **account_pool_rules** - 资金池分配规则表（资金池分配比例）
 12. **job_config** - 任务调度配置表（APScheduler任务配置）
 
-### 定投相关表（3张）
-13. **dca_plan** - 定投计划表（按星期几定投的计划）
-14. **task_dca** - 定投任务表（每日生成的定投任务）
-15. **pending_buy_pool** - 待买入池表（溢价刹车扣留的资金）
-
 ### 场内交易表（4张）
-16. **market_quote_rt** - 场内实时行情表（交易时间每分钟采集）
-17. **market_bar_d** - 场内日K线表（历史K线数据）
-18. **qdii_premium_rt** - QDII溢价率表（QDII ETF溢价率）
-19. **trade_fills** - 场内成交流水表（场内交易成交记录）
+13. **market_quote_rt** - 场内实时行情表（交易时间每分钟采集）
+14. **market_bar_d** - 场内日K线表（历史K线数据）
+15. **qdii_premium_rt** - QDII溢价率表（QDII ETF溢价率）
+16. **trade_fills** - 场内成交流水表（场内交易成交记录）
+
+### 等待池表（1张）
+17. **pending_buy_pool** - 待买入池表（溢价刹车扣留的资金）
 
 ### 策略实验室表（4张）
-20. **strategy_config** - 策略配置表（策略参数配置）
-21. **backtest_summary** - 回测汇总表（回测结果汇总）
-22. **backtest_daily** - 回测每日数据表（回测每日数据）
-23. **backtest_trades** - 回测成交表（回测逐笔成交记录）
+18. **strategy_config** - 策略配置表（策略参数配置）
+19. **backtest_summary** - 回测汇总表（回测结果汇总）
+20. **backtest_daily** - 回测每日数据表（回测每日数据）
+21. **backtest_trades** - 回测成交表（回测逐笔成交记录）
 
 ### 生产建议层表（Advisor，5张）
 24. **product_strategy_bind** - 产品策略绑定表（支持多策略组合）
@@ -993,13 +979,6 @@ pip install -r requirements.txt
   - 溢价率 > 2%：暂停买入（0%），全部进入待买入池
 - **待买入池**：扣留的资金会累加到待买入池，可在溢价率降低时手动买入
 
-### 定投计划
-
-- **按星期定投**：支持设置每周几定投（如每周五）
-- **自动生成任务**：系统自动根据计划生成每日定投任务
-- **溢价刹车集成**：定投任务自动应用溢价刹车规则
-- **自动对账**：定投任务可与实际交易对账，标记 MATCH/PARTIAL/MISS 状态
-
 ### 调度器服务
 
 - **表驱动配置**：所有调度任务配置存储在 `job_config` 表中
@@ -1039,32 +1018,27 @@ pip install -r requirements.txt
 11. **account_pool_rules** - 资金池分配规则表
 12. **job_config** - 任务调度配置表
 
-### 定投相关表（3张）
-13. **dca_plan** - 定投计划表
-14. **task_dca** - 定投任务表
-15. **pending_buy_pool** - 待买入池表
-
 ### 场内交易表（4张）
-16. **market_quote_rt** - 场内实时行情表
+13. **market_quote_rt** - 场内实时行情表
 17. **market_bar_d** - 场内日K线表
 18. **qdii_premium_rt** - QDII溢价率表
 19. **trade_fills** - 场内成交流水表
 
 ### 策略实验室表（4张）
-20. **strategy_config** - 策略配置表
-21. **backtest_summary** - 回测汇总表
-22. **backtest_daily** - 回测每日数据表
-23. **backtest_trades** - 回测成交表
+18. **strategy_config** - 策略配置表
+19. **backtest_summary** - 回测汇总表
+20. **backtest_daily** - 回测每日数据表
+21. **backtest_trades** - 回测成交表
 
 ### 生产建议层表（Advisor，5张）
-24. **product_strategy_bind** - 产品策略绑定表（支持多策略组合）
-25. **strategy_state** - 策略状态表（存储策略运行时状态）
-26. **indicator_daily** - 日更慢指标表（分位排名、回撤、均线等）
-27. **advisor_suggestion** - 建议输出表（存储每次生成的建议）
-28. **budget_trace** - 预算追踪审计日志表（记录预算分配与延期情况）
+22. **product_strategy_bind** - 产品策略绑定表（支持多策略组合）
+23. **strategy_state** - 策略状态表（存储策略运行时状态）
+24. **indicator_daily** - 日更慢指标表（分位排名、回撤、均线等）
+25. **advisor_suggestion** - 建议输出表（存储每次生成的建议）
+26. **budget_trace** - 预算追踪审计日志表（记录预算分配与延期情况）
 
 ### 辅助表（1张）
-29. **product_nav_range** - 产品净值范围表
+27. **product_nav_range** - 产品净值范围表
 
 详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)
 
@@ -1074,7 +1048,7 @@ pip install -r requirements.txt
 
 ## 📋 完整数据库表列表
 
-系统共包含 **29 张数据库表**，详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)：
+系统共包含 **27 张数据库表**，详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)：
 
 ### 核心业务表（6张）
 1. `transactions` - 交易流水表（所有投资交易记录）
@@ -1092,25 +1066,30 @@ pip install -r requirements.txt
 11. `account_pool_rules` - 资金池分配规则表（资金池分配比例）
 12. `job_config` - 任务调度配置表（APScheduler任务配置）
 
-### 定投相关表（3张）
-13. `dca_plan` - 定投计划表（按星期几定投的计划）
-14. `task_dca` - 定投任务表（每日生成的定投任务）
-15. `pending_buy_pool` - 待买入池表（溢价刹车扣留的资金）
-
 ### 场内交易表（4张）
-16. `market_quote_rt` - 场内实时行情表（交易时间每分钟采集）
-17. `market_bar_d` - 场内日K线表（历史K线数据）
-18. `qdii_premium_rt` - QDII溢价率表（QDII ETF溢价率）
-19. `trade_fills` - 场内成交流水表（场内交易成交记录）
+13. `market_quote_rt` - 场内实时行情表（交易时间每分钟采集）
+14. `market_bar_d` - 场内日K线表（历史K线数据）
+15. `qdii_premium_rt` - QDII溢价率表（QDII ETF溢价率）
+16. `trade_fills` - 场内成交流水表（场内交易成交记录）
+
+### 等待池表（1张）
+17. `pending_buy_pool` - 待买入池表（溢价刹车扣留的资金）
 
 ### 策略实验室表（4张）
-20. `strategy_config` - 策略配置表（策略参数配置）
-21. `backtest_summary` - 回测汇总表（回测结果汇总）
-22. `backtest_daily` - 回测每日数据表（回测每日数据）
-23. `backtest_trades` - 回测成交表（回测逐笔成交记录）
+18. `strategy_config` - 策略配置表（策略参数配置）
+19. `backtest_summary` - 回测汇总表（回测结果汇总）
+20. `backtest_daily` - 回测每日数据表（回测每日数据）
+21. `backtest_trades` - 回测成交表（回测逐笔成交记录）
+
+### 生产建议层表（Advisor，5张）
+22. `product_strategy_bind` - 产品策略绑定表（支持多策略组合）
+23. `strategy_state` - 策略状态表（存储策略运行时状态）
+24. `indicator_daily` - 日更慢指标表（分位排名、回撤、均线等）
+25. `advisor_suggestion` - 建议输出表（存储每次生成的建议）
+26. `budget_trace` - 预算追踪审计日志表（记录预算分配与延期情况）
 
 ### 辅助表（1张）
-24. `product_nav_range` - 产品净值范围表（产品净值日期范围统计）
+27. `product_nav_range` - 产品净值范围表（产品净值日期范围统计）
 
 ---
 

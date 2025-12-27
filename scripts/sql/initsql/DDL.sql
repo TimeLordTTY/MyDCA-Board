@@ -282,25 +282,6 @@ CREATE TABLE `daily_snapshot`  (
 ) ENGINE = InnoDB AUTO_INCREMENT = 3042 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
--- Table structure for dca_plan
--- ----------------------------
-DROP TABLE IF EXISTS `dca_plan`;
-CREATE TABLE `dca_plan`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
-  `from_account_id` bigint(20) NOT NULL COMMENT '来源账户ID',
-  `weekday` enum('MON','TUE','WED','THU','FRI','SAT','SUN') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '定投日期（星期几）',
-  `amount` decimal(18, 2) NOT NULL COMMENT '定投金额',
-  `enabled` tinyint(1) NULL DEFAULT 1 COMMENT '是否启用',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_from_account`(`from_account_id`) USING BTREE,
-  INDEX `idx_enabled`(`enabled`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '定投计划表' ROW_FORMAT = Dynamic;
-
--- ----------------------------
 -- Table structure for indicator_daily
 -- ----------------------------
 DROP TABLE IF EXISTS `indicator_daily`;
@@ -611,31 +592,6 @@ CREATE TABLE `strategy_state`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_state`(`product_id`, `strategy_code`) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略状态表' ROW_FORMAT = DYNAMIC;
-
--- ----------------------------
--- Table structure for task_dca
--- ----------------------------
-DROP TABLE IF EXISTS `task_dca`;
-CREATE TABLE `task_dca`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `plan_id` bigint(20) NULL DEFAULT NULL COMMENT '关联计划ID（可为空，手动任务）',
-  `task_date` date NOT NULL COMMENT '任务日期',
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
-  `from_account_id` bigint(20) NOT NULL COMMENT '来源账户ID',
-  `planned_amount` decimal(18, 2) NOT NULL COMMENT '计划金额',
-  `premium_rate` decimal(10, 6) NULL DEFAULT NULL COMMENT '溢价率（QDII）',
-  `executed_amount` decimal(18, 2) NULL DEFAULT 0.00 COMMENT '执行金额（实际买入）',
-  `pending_amount` decimal(18, 2) NULL DEFAULT 0.00 COMMENT '待买入金额（溢价刹车扣留）',
-  `status` enum('PENDING','MATCH','PARTIAL','MISS') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT 'PENDING' COMMENT '对账状态',
-  `reason` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '原因说明',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_task_date_product`(`task_date`, `product_id`, `from_account_id`) USING BTREE,
-  INDEX `idx_task_date`(`task_date`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_status`(`status`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '定投任务表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for trade_fills

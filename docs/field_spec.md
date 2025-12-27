@@ -8,7 +8,7 @@
 
 **v3.0 更新**：
 - 新增场内交易相关表规范（trade_fills, market_quote_rt, market_bar_d, qdii_premium_rt）
-- 新增资金池与定投相关表规范（account_pool_rules, dca_plan, task_dca, pending_buy_pool）
+- 新增资金池相关表规范（account_pool_rules, pending_buy_pool）
 - 新增调度配置表规范（job_config）
 - 新增分类和账户组表规范（categories, account_groups）
 - 所有配置迁移到数据库，不再使用 JSON 文件
@@ -1017,56 +1017,7 @@ id, from_account_id, to_product_id, ratio, min_amount, round_step, is_active, cr
 
 ---
 
-## 12. dca_plan 表（定投计划表）
-
-### 12.1 数据库表字段（固定）
-
-```
-id, product_id, from_account_id, weekday, amount, enabled, created_at, updated_at
-```
-
-### 12.2 字段定义
-
-| 字段 | 定义 | 数据类型 |
-|------|------|----------|
-| product_id | 产品ID | bigint |
-| from_account_id | 来源账户ID | bigint |
-| weekday | 定投日期（星期几） | enum('MON','TUE','WED','THU','FRI','SAT','SUN') |
-| amount | 定投金额 | decimal(18,2) |
-| enabled | 是否启用 | tinyint(1) |
-
----
-
-## 13. task_dca 表（定投任务表）
-
-### 13.1 数据库表字段（固定）
-
-```
-id, plan_id, task_date, product_id, from_account_id, planned_amount, premium_rate, executed_amount, pending_amount, status, reason, created_at, updated_at
-```
-
-### 13.2 字段定义
-
-| 字段 | 定义 | 数据类型 |
-|------|------|----------|
-| plan_id | 关联计划ID（可为空，手动任务） | bigint（可空） |
-| task_date | 任务日期 | date |
-| product_id | 产品ID | bigint |
-| from_account_id | 来源账户ID | bigint |
-| planned_amount | 计划金额 | decimal(18,2) |
-| premium_rate | 溢价率（QDII） | decimal(10,6)（可空） |
-| executed_amount | 执行金额（实际买入） | decimal(18,2) |
-| pending_amount | 待买入金额（溢价刹车扣留） | decimal(18,2) |
-| status | 对账状态 | enum('PENDING','MATCH','PARTIAL','MISS') |
-| reason | 原因说明 | varchar(255)（可空） |
-
-### 13.3 唯一键
-
-- `(task_date, product_id, from_account_id)` - 同一日期同一产品同一账户的任务唯一
-
----
-
-## 14. pending_buy_pool 表（待买入池表）
+## 12. pending_buy_pool 表（待买入池表）
 
 ### 14.1 数据库表字段（固定）
 

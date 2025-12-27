@@ -225,45 +225,7 @@ CREATE TABLE account_pool_rules (
     UNIQUE KEY uk_pool_account_product (from_account_id, to_product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='资金池分配规则表';
 
--- 6.2 定投计划表 (dca_plan)
-DROP TABLE IF EXISTS dca_plan;
-CREATE TABLE dca_plan (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    product_id BIGINT NOT NULL COMMENT '产品ID',
-    from_account_id BIGINT NOT NULL COMMENT '来源账户ID',
-    weekday ENUM('MON','TUE','WED','THU','FRI','SAT','SUN') NOT NULL COMMENT '定投日期（星期几）',
-    amount DECIMAL(18,2) NOT NULL COMMENT '定投金额',
-    enabled TINYINT(1) DEFAULT 1 COMMENT '是否启用',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_product_id (product_id),
-    INDEX idx_from_account (from_account_id),
-    INDEX idx_enabled (enabled)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='定投计划表';
-
--- 6.3 定投任务表 (task_dca)
-DROP TABLE IF EXISTS task_dca;
-CREATE TABLE task_dca (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    plan_id BIGINT NULL COMMENT '关联计划ID（可为空，手动任务）',
-    task_date DATE NOT NULL COMMENT '任务日期',
-    product_id BIGINT NOT NULL COMMENT '产品ID',
-    from_account_id BIGINT NOT NULL COMMENT '来源账户ID',
-    planned_amount DECIMAL(18,2) NOT NULL COMMENT '计划金额',
-    premium_rate DECIMAL(10,6) NULL COMMENT '溢价率（QDII）',
-    executed_amount DECIMAL(18,2) DEFAULT 0 COMMENT '执行金额（实际买入）',
-    pending_amount DECIMAL(18,2) DEFAULT 0 COMMENT '待买入金额（溢价刹车扣留）',
-    status ENUM('PENDING','MATCH','PARTIAL','MISS') DEFAULT 'PENDING' COMMENT '对账状态',
-    reason VARCHAR(255) NULL COMMENT '原因说明',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_task_date (task_date),
-    INDEX idx_product_id (product_id),
-    INDEX idx_status (status),
-    UNIQUE KEY uk_task_date_product (task_date, product_id, from_account_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='定投任务表';
-
--- 6.4 待买入池表 (pending_buy_pool)
+-- 6.2 待买入池表 (pending_buy_pool)
 DROP TABLE IF EXISTS pending_buy_pool;
 CREATE TABLE pending_buy_pool (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
