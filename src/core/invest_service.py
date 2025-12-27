@@ -524,6 +524,25 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 }
                 append_transaction(tx_record)
                 
+                # 扣减等待池（优先扣减等待池，不足部分从现金扣除）
+                # 注意：这里使用amount（含费前），因为等待池存储的是含费前的金额
+                if product_id:
+                    try:
+                        from core.pending_buy_service import reduce_pending_amount_by_transaction
+                        # 获取交易ID（从transactions表查询）
+                        from data.data_store import load_transactions
+                        transactions = load_transactions()
+                        tx_id = None
+                        for tx in transactions:
+                            if tx.get('order_id') == order_id and tx.get('action') == 'buy_confirm':
+                                # 尝试从数据库获取ID（如果使用数据库存储）
+                                tx_id = tx.get('id')
+                                break
+                        reduce_pending_amount_by_transaction(product_id, amount, tx_id)
+                        logger.info(f"买入确认时扣减等待池: product_id={product_id}, amount={amount}, order_id={order_id}")
+                    except Exception as e:
+                        logger.warning(f"扣减等待池失败（不影响结算）: {e}", exc_info=True)
+                
             elif order_type == 'redeem_request':
                 # 赎回确认
                 shares = parse_decimal(order.get('shares', 0))
@@ -732,6 +751,25 @@ def settle_single_order(
                 'created_at': created_at
             }
             append_transaction(tx_record)
+            
+            # 扣减等待池（优先扣减等待池，不足部分从现金扣除）
+            # 注意：这里使用amount（含费前），因为等待池存储的是含费前的金额
+            if product_id:
+                try:
+                    from core.pending_buy_service import reduce_pending_amount_by_transaction
+                    # 获取交易ID（从transactions表查询）
+                    from data.data_store import load_transactions
+                    transactions = load_transactions()
+                    tx_id = None
+                    for tx in transactions:
+                        if tx.get('order_id') == order_id and tx.get('action') == 'buy_confirm':
+                            # 尝试从数据库获取ID（如果使用数据库存储）
+                            tx_id = tx.get('id')
+                            break
+                    reduce_pending_amount_by_transaction(product_id, amount, tx_id)
+                    logger.info(f"买入确认时扣减等待池: product_id={product_id}, amount={amount}, order_id={order_id}")
+                except Exception as e:
+                    logger.warning(f"扣减等待池失败（不影响结算）: {e}", exc_info=True)
             
             # 更新订单（份额和状态）
             update_order(order_id, {

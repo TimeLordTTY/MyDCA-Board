@@ -1060,7 +1060,9 @@ id, plan_id, task_date, product_id, from_account_id, planned_amount, premium_rat
 ### 14.1 数据库表字段（固定）
 
 ```
-id, product_id, from_account_id, pending_amount, reason, created_at, updated_at
+id, product_id, from_account_id, pending_amount, reason,
+last_change_reason, last_change_time, version,
+created_at, updated_at
 ```
 
 ### 14.2 字段定义
@@ -1071,10 +1073,25 @@ id, product_id, from_account_id, pending_amount, reason, created_at, updated_at
 | from_account_id | 来源账户ID | bigint |
 | pending_amount | 待买入金额（累加） | decimal(18,2) |
 | reason | 扣留原因（溢价刹车等） | varchar(255)（可空） |
+| last_change_reason | 最后变更原因 | varchar(128)（可空），如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT |
+| last_change_time | 最后变更时间 | datetime（可空） |
+| version | 版本号（乐观锁） | bigint，默认0，避免并发冲突 |
 
 ### 14.3 唯一键
 
 - `(product_id, from_account_id)` - 同一产品同一账户的待买入池唯一
+
+### 14.4 等待池业务规则
+
+- **等待池增加**：只在"有买入意图但被迫延期"时增加
+  - 只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
+  - 如果策略未触发（如分位太高），`moved_to_wait = 0`
+  - 非交易日：如果 `planned_amount > 0`，则全部进入等待池；如果 `planned_amount = 0`，则不进入等待池
+  - 半买处理：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
+- **等待池扣减**：只能由"真实成交导入/确认"触发
+  - 扣减顺序：先扣该产品的WAIT_POOL（等待池），不足部分再扣CASH_FREE（自由现金）
+  - 在 `buy_confirm` 或 `buy` 确认时，自动调用 `reduce_pending_amount_by_transaction` 扣减等待池
+- **避免重复累加**：检查上次建议的 `budget_to_wait_pool`，只增加"增量"部分，而不是每次都累加全部
 
 ---
 
@@ -1350,5 +1367,221 @@ id, summary_id, trade_date, side, amount, price, shares, fee, reasons, created_a
 | shares | 成交份额 | decimal(20,6) |
 | fee | 手续费 | decimal(20,2) |
 | reasons | 成交原因（JSON数组） | text（可空） |
+
+---
+
+## 25. product_strategy_bind 表（产品策略绑定表）
+
+### 25.1 数据库表字段（固定）
+
+```
+id, product_id, strategy_code, param_set_id, enabled, strategy_type, priority,
+min_trade_amount, ideal_trade_amount, fee_rate, fee_min,
+updated_at, created_at
+```
+
+### 25.2 字段定义
+
+| 字段 | 定义 | 数据类型 | 约束 |
+|------|------|----------|------|
+| product_id | 产品ID | bigint | 必填，外键关联products.id |
+| strategy_code | 策略代码 | varchar(64) | 必填，枚举：percentile/drawdown/profit_recycle/simple/dca_4pct |
+| param_set_id | 参数集ID | varchar(64) | 必填，关联strategy_config.param_set_id |
+| enabled | 是否启用 | tinyint(1) | 默认1，0=禁用 |
+| strategy_type | 策略类型 | enum('VETO','TRIGGER','SCORE') | 默认'TRIGGER'，VETO=否决层，TRIGGER=触发层，SCORE=强度层 |
+| priority | 优先级 | int | 默认0，数字越小越优先（同层内排序） |
+| min_trade_amount | 最小成交金额 | decimal(18,2) | 默认1000.00，BUY时必须≥此值 |
+| ideal_trade_amount | 理想成交金额 | decimal(18,2) | 默认2000.00，策略尽量接近此金额 |
+| fee_rate | 手续费率 | decimal(18,6) | 默认0.000845（万0.845） |
+| fee_min | 最低手续费 | decimal(18,2) | 默认0.20 |
+
+### 25.3 唯一键
+
+- `uk_product_strategy(product_id, strategy_code)`：同一产品同一策略只能绑定一次
+
+### 25.4 多策略组合规则
+
+- 一个产品可以绑定多个策略（不同strategy_code）
+- 执行顺序：VETO层 → TRIGGER层 → SCORE层
+- 每层内按priority排序执行
+- VETO层任一命中即停止，直接返回WAIT/HOLD/SKIP
+
+---
+
+## 26. strategy_state 表（策略状态表）
+
+### 26.1 数据库表字段（固定）
+
+```
+id, product_id, strategy_code, state_json, updated_at, created_at
+```
+
+### 26.2 字段定义
+
+| 字段 | 定义 | 数据类型 | 约束 |
+|------|------|----------|------|
+| product_id | 产品ID | bigint | 必填 |
+| strategy_code | 策略代码 | varchar(64) | 必填 |
+| state_json | 状态JSON | text | 必填，存储策略运行时状态（如利润池、峰值价格、上次动作日期等） |
+
+### 26.3 唯一键
+
+- `uk_state(product_id, strategy_code)`：同一产品同一策略只能有一条状态记录
+
+---
+
+## 27. indicator_daily 表（日更慢指标表）
+
+### 27.1 数据库表字段（固定）
+
+```
+id, product_id, trade_date, window_days,
+pct_rank, q_buy_price, q_mid_price, q_high_price,
+peak_close, drawdown_from_peak,
+ma20, ma60,
+created_at
+```
+
+### 27.2 字段定义
+
+| 字段 | 定义 | 数据类型 | 约束 |
+|------|------|----------|------|
+| product_id | 产品ID | bigint | 必填 |
+| trade_date | 指标日期 | date | 必填，对应market_bar_d.trade_date |
+| window_days | 窗口N | int | 必填，来自策略参数 |
+| pct_rank | 分位排名 | decimal(9,6) | 0~1，基于昨日close在窗口内的rank |
+| q_buy_price | 买入阈值价 | decimal(18,6) | 买入分位对应的价格阈值（如20%分位的close值） |
+| q_mid_price | 50%分位价格 | decimal(18,6) | 可选 |
+| q_high_price | 80%分位价格 | decimal(18,6) | 可选 |
+| peak_close | 峰值收盘价 | decimal(18,6) | 滚动窗口内峰值close |
+| drawdown_from_peak | 回撤幅度 | decimal(9,6) | 0~1，昨日close的回撤比例 |
+| ma20 | 20日均线 | decimal(18,6) | 20日移动平均 |
+| ma60 | 60日均线 | decimal(18,6) | 60日移动平均 |
+
+### 27.3 唯一键
+
+- `uk_ind(product_id, trade_date, window_days)`：同一产品同一日期同一窗口只能有一条记录
+
+### 27.4 计算规则
+
+- **pct_rank**：`below_count / total_count`，其中below_count是窗口内收盘价小于昨日close的数量
+- **q_buy_price**：窗口内收盘价排序后，取`int(total_count × buy_percentile)`位置的收盘价
+- **peak_close**：窗口内收盘价的最大值
+- **drawdown_from_peak**：`(yesterday_close - peak_close) / peak_close`
+- **ma20/ma60**：窗口内最近20/60个交易日的收盘价平均值
+
+---
+
+## 28. advisor_suggestion 表（建议输出表）
+
+### 28.1 数据库表字段（固定）
+
+```
+id, product_id, as_of_time, strategy_code, action,
+suggest_amount, suggest_ratio, limit_price_hint, premium_rate, moved_to_wait_pool, reason,
+cash_available, wait_pool_balance, new_budget, wait_pool_before, planned_amount, plan_budget_today,
+budget_for_execution, budget_to_execute, budget_to_wait_pool,
+execute_ratio, wait_ratio, reason_blocks_json,
+created_at
+```
+
+### 28.2 字段定义
+
+| 字段 | 定义 | 数据类型 | 约束 |
+|------|------|----------|------|
+| product_id | 产品ID | bigint | 必填 |
+| as_of_time | 建议生成时间 | datetime | 必填 |
+| strategy_code | 策略代码（主策略） | varchar(64) | 必填，用于兼容，实际可能为多策略组合 |
+| action | 建议动作 | enum('BUY','HOLD','WAIT','SKIP') | 必填 |
+| suggest_amount | 建议金额（兼容字段） | decimal(18,2) | 等于budget_to_execute |
+| suggest_ratio | 建议比例（兼容字段） | decimal(18,6) | 等于execute_ratio |
+| limit_price_hint | 限价建议 | decimal(18,6) | 可空，建议的限价 |
+| premium_rate | 溢价率 | decimal(18,6) | 可空，QDII产品的溢价率 |
+| moved_to_wait_pool | 进入等待池金额（兼容字段） | decimal(18,2) | 等于budget_to_wait_pool |
+| reason | 原因说明 | text | 必填，中文可读，≥30字 |
+| cash_available | 可用现金池余额 | decimal(18,2) | 可空，可用于今天执行的现金 |
+| wait_pool_balance | 等待池累计金额（after） | decimal(18,2) | 可空，=wait_pool_before + moved_to_wait |
+| new_budget | 本轮新增预算 | decimal(18,2) | 可空，根据资金规则计算出的"新可投入金额" |
+| wait_pool_before | 等待池余额（before） | decimal(18,2) | 可空，历史累计，before本次处理 |
+| planned_amount | 本轮可用于买入 | decimal(18,2) | 可空，=new_budget + wait_pool_before |
+| plan_budget_today | 今日计划预算（兼容字段） | decimal(18,2) | 可空，等于new_budget |
+| budget_for_execution | 本次允许用于执行的预算 | decimal(18,2) | 可空，=min(planned_amount, cash_available) |
+| budget_to_execute | 本次建议实际执行金额 | decimal(18,2) | 可空，最终BUY的金额（可能为0） |
+| budget_to_wait_pool | 本次应转入等待池的预算金额 | decimal(18,2) | 可空，由溢价刹车/门槛导致 |
+| execute_ratio | 执行比例 | decimal(18,6) | 可空，0~1，=budget_to_execute / budget_for_execution |
+| wait_ratio | 转等待池比例 | decimal(18,6) | 可空，0~1，=budget_to_wait_pool / budget_for_execution |
+| reason_blocks_json | 结构化原因列表 | text | 可空，JSON格式，包含rule_name/input_values/decision |
+
+### 28.3 唯一键
+
+- 无唯一键，允许同一产品同一时间有多条建议（历史可追溯）
+
+### 28.4 关键约束
+
+- **金额非负**：所有金额字段必须 ≥ 0
+- **planned_amount恒等式**：`planned_amount == new_budget + wait_pool_before`
+- **比例恒等式**：`budget_to_execute + budget_to_wait_pool <= planned_amount` 且 `budget_to_execute + budget_to_wait_pool <= budget_for_execution`
+- **wait_pool_after恒等式**：`wait_pool_after == wait_pool_before + moved_to_wait`（Advisor不扣减）
+- **比例计算**：`execute_ratio = budget_to_execute / budget_for_execution`（若0则0），`wait_ratio = budget_to_wait_pool / budget_for_execution`
+- **比例总和**：`execute_ratio + wait_ratio <= 1.0`（允许<1，因为可能有未分配部分）
+- **BUY约束**：action=BUY时必须满足 `min_trade_amount` & 现金足够 & 一手约束，且 `executed_amount > 0`
+- **溢价刹车**：premium>2%时必须 `budget_to_execute=0` 且 `budget_to_wait_pool=planned_amount`
+
+### 28.5 reason_blocks_json 格式
+
+```json
+[
+  {
+    "rule_name": "策略组合",
+    "input_values": {"strategies": ["percentile", "dca_4pct"]},
+    "decision": "BUY"
+  },
+  {
+    "rule_name": "溢价刹车",
+    "input_values": {"premium_rate": 0.015},
+    "decision": "半买"
+  }
+]
+```
+
+---
+
+## 29. pending_buy_pool 表（待买入池表）
+
+### 29.1 数据库表字段（固定）
+
+```
+id, product_id, from_account_id, pending_amount, reason,
+last_change_reason, last_change_time, version,
+updated_at, created_at
+```
+
+### 29.2 字段定义
+
+| 字段 | 定义 | 数据类型 | 约束 |
+|------|------|----------|------|
+| product_id | 产品ID | bigint | 必填 |
+| from_account_id | 来源账户ID | bigint | 必填，外键关联accounts.id |
+| pending_amount | 待买入金额 | decimal(18,2) | 必填，≥0，因溢价/门槛暂缓买入的资金 |
+| reason | 原因 | varchar(255) | 可空，进入等待池的原因（兼容字段） |
+| last_change_reason | 最后变更原因 | varchar(128) | 可空，如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT |
+| last_change_time | 最后变更时间 | datetime | 可空 |
+| version | 版本号（乐观锁） | bigint | 默认0，避免并发冲突 |
+
+### 29.3 唯一键
+
+- `uk_pool_product_account(product_id, from_account_id)`：同一产品同一账户只能有一条记录
+
+### 29.4 使用规则
+
+- **等待池增加**：只在"有买入意图但被迫延期"时增加
+  - 只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
+  - 如果策略未触发（如分位太高），`moved_to_wait = 0`
+  - 非交易日：如果 `planned_amount > 0`，则全部进入等待池；如果 `planned_amount = 0`，则不进入等待池
+  - 半买处理：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
+- **等待池扣减**：只能由"真实成交导入/确认"触发
+  - 扣减顺序：先扣该产品的WAIT_POOL（等待池），不足部分再扣CASH_FREE（自由现金）
+  - 在 `buy_confirm` 或 `buy` 确认时，自动调用 `reduce_pending_amount_by_transaction` 扣减等待池
+- **避免重复累加**：检查上次建议的 `budget_to_wait_pool`，只增加"增量"部分，而不是每次都累加全部
 
 ---

@@ -43,6 +43,9 @@ class AdviceOutput:
 class StrategyAdviceInterface:
     """策略建议接口（生产版）"""
     
+    # 策略类型：VETO=否决层，TRIGGER=触发层，SCORE=强度层
+    strategy_type: str = 'TRIGGER'
+    
     def evaluate(self, input_data: AdviceInput) -> AdviceOutput:
         """
         评估并输出建议

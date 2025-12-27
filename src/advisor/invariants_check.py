@@ -3,13 +3,15 @@
 硬约束自检模块
 
 在每次生成建议后自动检查并写日志，失败则降级为WAIT。
+支持AdviceOutput和AdvisorViewModel两种输入。
 """
 import logging
 from decimal import Decimal
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union
 import math
 
 from .strategy_interface import AdviceInput, AdviceOutput
+from .view_model import AdvisorViewModel
 
 logger = logging.getLogger(__name__)
 
@@ -86,5 +88,137 @@ def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dic
         )
     
     return output
+
+
+def check_viewmodel_invariants(view_model: AdvisorViewModel, product: Dict) -> Optional[AdvisorViewModel]:
+    """
+    执行ViewModel的硬约束自检
+    
+    Args:
+        view_model: AdvisorViewModel
+        product: 产品信息
+        
+    Returns:
+        修正后的ViewModel（如果自检失败则降级为WAIT），None表示通过验证
+    """
+    errors = []
+    
+    # 1. 金额非负
+    if view_model.budget_to_execute < 0:
+        errors.append(f"budget_to_execute < 0: {view_model.budget_to_execute}")
+    
+    if view_model.budget_to_wait_pool < 0:
+        errors.append(f"budget_to_wait_pool < 0: {view_model.budget_to_wait_pool}")
+    
+    if view_model.budget_for_execution < 0:
+        errors.append(f"budget_for_execution < 0: {view_model.budget_for_execution}")
+    
+    # 2. 比例与金额恒等式
+    if view_model.budget_to_execute + view_model.budget_to_wait_pool > view_model.budget_for_execution:
+        errors.append(
+            f"budget_to_execute({view_model.budget_to_execute}) + budget_to_wait_pool({view_model.budget_to_wait_pool}) "
+            f"> budget_for_execution({view_model.budget_for_execution})"
+        )
+    
+    # 3. 比例计算正确性
+    if view_model.budget_for_execution > 0:
+        expected_execute_ratio = view_model.budget_to_execute / view_model.budget_for_execution
+        expected_wait_ratio = view_model.budget_to_wait_pool / view_model.budget_for_execution
+        
+        if abs(view_model.execute_ratio - expected_execute_ratio) > Decimal('0.0001'):
+            errors.append(
+                f"execute_ratio不一致: 期望={expected_execute_ratio}, 实际={view_model.execute_ratio}"
+            )
+        if abs(view_model.wait_ratio - expected_wait_ratio) > Decimal('0.0001'):
+            errors.append(
+                f"wait_ratio不一致: 期望={expected_wait_ratio}, 实际={view_model.wait_ratio}"
+            )
+        
+        # 比例总和不能超过1（允许<1，因为可能有未分配部分）
+        if view_model.execute_ratio + view_model.wait_ratio > Decimal('1.0001'):
+            errors.append(
+                f"execute_ratio({view_model.execute_ratio}) + wait_ratio({view_model.wait_ratio}) > 1.0"
+            )
+    else:
+        # budget_for_execution=0时，比例应该都是0
+        if view_model.execute_ratio != 0 or view_model.wait_ratio != 0:
+            errors.append(
+                f"budget_for_execution=0但比例不为0: execute_ratio={view_model.execute_ratio}, wait_ratio={view_model.wait_ratio}"
+            )
+    
+    # 4. premium>2%时必须 budget_to_execute=0 且 budget_to_wait_pool=budget_for_execution
+    if product.get('is_qdii') and view_model.premium_rate is not None:
+        premium_float = float(view_model.premium_rate)
+        if premium_float > 0.02:
+            if view_model.budget_to_execute != 0:
+                errors.append(
+                    f"QDII溢价{premium_float*100:.2f}%>2%，但budget_to_execute={view_model.budget_to_execute}，应为0"
+                )
+            if view_model.budget_to_wait_pool != view_model.budget_for_execution:
+                errors.append(
+                    f"QDII溢价{premium_float*100:.2f}%>2%，但budget_to_wait_pool({view_model.budget_to_wait_pool}) "
+                    f"!= budget_for_execution({view_model.budget_for_execution})"
+                )
+    
+    # 5. action=BUY时必须满足 min_trade_amount & 现金足够 & 一手约束
+    if view_model.action == 'BUY' and view_model.budget_to_execute > 0:
+        if view_model.budget_to_execute < view_model.min_trade_amount:
+            errors.append(
+                f"BUY时budget_to_execute({view_model.budget_to_execute}) < min_trade_amount({view_model.min_trade_amount})"
+            )
+        
+        # 检查现金是否足够
+        if view_model.budget_to_execute > view_model.cash_available:
+            errors.append(
+                f"BUY时budget_to_execute({view_model.budget_to_execute}) > cash_available({view_model.cash_available})"
+            )
+        
+        # 检查一手约束（ETF/LOF）
+        if view_model.lot_size and view_model.rounded_amount:
+            if view_model.budget_to_execute != view_model.rounded_amount:
+                errors.append(
+                    f"ETF/LOF一手约束：budget_to_execute({view_model.budget_to_execute}) != rounded_amount({view_model.rounded_amount})"
+                )
+    
+    # 6. planned_amount恒等式
+    if abs(view_model.planned_amount - (view_model.new_budget + view_model.wait_pool_before)) > Decimal('0.01'):
+        errors.append(
+            f"planned_amount({view_model.planned_amount}) != new_budget({view_model.new_budget}) + wait_pool_before({view_model.wait_pool_before})"
+        )
+    
+    # 7. executed_amount + moved_to_wait <= planned_amount
+    if view_model.budget_to_execute + view_model.budget_to_wait_pool > view_model.planned_amount:
+        errors.append(
+            f"budget_to_execute({view_model.budget_to_execute}) + budget_to_wait_pool({view_model.budget_to_wait_pool}) "
+            f"> planned_amount({view_model.planned_amount})"
+        )
+    
+    # 8. wait_pool_after == wait_pool_before + moved_to_wait（Advisor不扣减）
+    expected_wait_pool_after = view_model.wait_pool_before + view_model.budget_to_wait_pool
+    if abs(view_model.wait_pool_balance - expected_wait_pool_after) > Decimal('0.01'):
+        errors.append(
+            f"wait_pool_balance({view_model.wait_pool_balance}) != wait_pool_before({view_model.wait_pool_before}) + moved_to_wait({view_model.budget_to_wait_pool})"
+        )
+    
+    # 9. 若action=BUY，则executed_amount > 0
+    if view_model.action == 'BUY' and view_model.budget_to_execute == 0:
+        errors.append(f"action=BUY但budget_to_execute=0")
+    
+    # 10. reason_blocks至少3条且每条含输入值
+    if len(view_model.reason_blocks) < 3:
+        errors.append(f"reason_blocks数量不足: {len(view_model.reason_blocks)} < 3")
+    
+    for i, block in enumerate(view_model.reason_blocks):
+        if not block.input_values:
+            errors.append(f"reason_blocks[{i}]缺少input_values")
+    
+    # 如果有错误，记录并返回None（表示需要降级）
+    if errors:
+        error_msg = "; ".join(errors)
+        logger.error(f"ViewModel自检失败: product_id={view_model}, errors={error_msg}")
+        return None
+    
+    logger.info(f"ViewModel自检通过")
+    return view_model
 
 

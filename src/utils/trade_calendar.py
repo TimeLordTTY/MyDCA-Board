@@ -136,3 +136,45 @@ def get_trade_day_or_next(d: Union[str, date, datetime]) -> date:
     return next_trade_day(d)
 
 
+def is_trade_time(dt: Union[str, datetime]) -> bool:
+    """
+    判断是否在交易时段
+    
+    交易时段：
+    - 上午：9:30-11:30
+    - 下午：13:00-15:00
+    
+    必须同时满足：
+    1. 是交易日（is_trade_day）
+    2. 在交易时段内
+    
+    Args:
+        dt: 日期时间（支持 str 'YYYY-MM-DD HH:MM:SS'、datetime）
+    
+    Returns:
+        bool: 是否在交易时段
+    """
+    if isinstance(dt, str):
+        dt = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
+    elif isinstance(dt, date) and not isinstance(dt, datetime):
+        # 如果是date对象，转换为当天的datetime（默认9:30）
+        dt = datetime.combine(dt, datetime.min.time().replace(hour=9, minute=30))
+    
+    # 首先判断是否是交易日
+    if not is_trade_day(dt):
+        return False
+    
+    # 判断是否在交易时段
+    time_only = dt.time()
+    
+    # 上午时段：9:30-11:30
+    morning_start = datetime.strptime('09:30', '%H:%M').time()
+    morning_end = datetime.strptime('11:30', '%H:%M').time()
+    
+    # 下午时段：13:00-15:00
+    afternoon_start = datetime.strptime('13:00', '%H:%M').time()
+    afternoon_end = datetime.strptime('15:00', '%H:%M').time()
+    
+    return (morning_start <= time_only <= morning_end) or (afternoon_start <= time_only <= afternoon_end)
+
+

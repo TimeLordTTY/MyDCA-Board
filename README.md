@@ -511,7 +511,7 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 
 ## 📊 数据库表总览
 
-系统共包含 **24 张数据库表**，分为以下几类：
+系统共包含 **29 张数据库表**，分为以下几类：
 
 ### 核心业务表（6张）
 1. **transactions** - 交易流水表（所有投资交易记录）
@@ -546,8 +546,15 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 22. **backtest_daily** - 回测每日数据表（回测每日数据）
 23. **backtest_trades** - 回测成交表（回测逐笔成交记录）
 
+### 生产建议层表（Advisor，5张）
+24. **product_strategy_bind** - 产品策略绑定表（支持多策略组合）
+25. **strategy_state** - 策略状态表（存储策略运行时状态）
+26. **indicator_daily** - 日更慢指标表（分位排名、回撤、均线等）
+27. **advisor_suggestion** - 建议输出表（存储每次生成的建议）
+28. **pending_buy_pool** - 待买入池表（因溢价/门槛暂缓买入的资金，已在定投相关表中列出）
+
 ### 辅助表（1张）
-24. **product_nav_range** - 产品净值范围表（产品净值日期范围统计）
+29. **product_nav_range** - 产品净值范围表（产品净值日期范围统计）
 
 **详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)**
 
@@ -725,6 +732,127 @@ pip install -r requirements.txt
 
 ---
 
+## 💡 生产建议层（Advisor）
+
+### 架构概述
+
+生产建议层（Advisor）是一个**信号评估系统**，不参与自动下单，只输出买入/持有/等待建议及详细原因。系统采用**三层策略组合架构**（VETO/TRIGGER/SCORE），支持每个产品绑定多个策略。
+
+### 核心特性
+
+1. **不自动下单**：只输出建议/理由，人工执行
+2. **日线指标用"到昨天为止"的日K计算**，盘中只用实时价 `last_price` 代入判断
+3. **多策略组合**：每个产品可以绑定多个策略，采用"三层结构：否决优先 + 多触发 + 强度评估"
+4. **ETF溢价刹车**：QDII产品必须执行溢价刹车（≤1%正常买，1%-2%半买，>2%全部等待池）
+5. **数字自洽**：UI上的每个数字必须自洽，不能出现"建议金额=0但比例=100%"等矛盾
+
+### 三层策略架构
+
+#### VETO层（否决层）
+- 任一策略命中 → 直接返回 WAIT/HOLD/SKIP
+- 例如：分位门控（pct_rank > 70% 则拒绝买入）
+
+#### TRIGGER层（触发层）
+- 任一策略命中 → 进入SCORE层
+- 例如：分位策略（当前价 ≤ q_buy_price）、回撤策略（drawdown ≥ 4%）
+
+#### SCORE层（强度层）
+- 决定买入金额档位
+- 例如：4%定投策略（根据回撤档位决定买入金额）
+
+### 统一输出模型（AdvisorViewModel）
+
+所有建议通过 `AdvisorViewModel` 统一输出，确保UI数字自洽：
+
+**行情状态**：
+- `is_trade_day` / `is_trade_time`（分开判断）
+- `last_price` / `prev_close` / `pct_change`
+- `iopv` / `premium_rate`（QDII可用时）
+
+**慢指标（昨日）**：
+- `pct_rank`（0-1，如0.72表示72%分位）
+- `peak_close`、`drawdown_from_peak`
+- `ma20`、`ma60`、`price_over_ma20`、`price_over_ma60`
+
+**资金与预算**（核心：三个金额概念）：
+- `new_budget`：本轮新增预算（根据资金规则计算出的"新可投入金额"）
+- `wait_pool_before`：等待池余额（before，历史累计）
+- `planned_amount`：本轮可用于买入（=new_budget + wait_pool_before）
+- `cash_available`：可用现金池余额（可用于今天执行）
+- `wait_pool_balance`：等待池累计金额（after，=wait_pool_before + moved_to_wait）
+- `plan_budget_today`：今天"计划预算"（兼容字段，等于new_budget）
+- `budget_for_execution`：本次允许用于执行的预算（=min(planned_amount, cash_available)）
+- `budget_to_execute`：本次建议实际执行金额
+- `budget_to_wait_pool`：本次应转入等待池的预算金额
+
+**交易成本与门槛**：
+- `fee_rate`、`fee_min`、`min_trade_amount`、`ideal_trade_amount`
+- `estimated_fee`、`lot_size`、`suggest_shares`、`rounded_amount`（ETF/LOF一手约束）
+
+**最终建议**：
+- `action`：BUY/HOLD/WAIT/SKIP
+- `execute_ratio`：执行比例（0~1）
+- `wait_ratio`：转等待池比例（0~1）
+- `limit_price_hint`、`time_window_hint`
+- `reason_blocks`：结构化原因列表
+
+### 策略实现
+
+系统内置以下策略：
+
+1. **percentile**（分位策略）：基于滚动N日close分位判断买入时机
+2. **drawdown**（回撤策略）：根据相对高点回撤触发加仓
+3. **profit_recycle**（利润回收策略）：动态调整利润池，释放资金
+4. **simple**（简单策略）：按计划买/预算够就买
+5. **dca_4pct**（4%定投策略）：基于回撤档位触发买入，支持分位门控
+
+### 使用流程
+
+1. **配置策略绑定**：在产品管理页为每个产品绑定策略（可绑定多个）
+2. **配置资金池规则**：在资金池规则页配置账户分配比例
+3. **自动生成建议**：调度器每分钟生成一次建议（交易时段）
+4. **查看建议**：在Dashboard的产品行情处查看最新建议
+5. **人工执行**：根据建议手动下单
+
+### 等待池与预算逻辑
+
+#### 三个金额概念
+
+1. **new_budget（本轮新增预算）**：本次运行Advisor时，根据资金规则（account_pool_rules）计算出的"本轮新可投入金额"。可以是0（非定投日、或规则未分配到该产品）。
+
+2. **wait_pool_balance（等待池余额）**：之前已经决定要买、但因为条件不满足而延期的"保留资金"，按产品维度累计。跨天累计，永不凭空消失，除非被"实际成交扣减"消耗。
+
+3. **planned_amount（本轮可用于买入）**：`new_budget + wait_pool_before`。这是本轮最多可用于该产品的预算上限，不是必须全花。
+
+#### 等待池增加规则
+
+等待池只在"有买入意图但被迫延期"时增加：
+- 只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
+- 如果策略未触发（如分位太高），`moved_to_wait = 0`
+- 非交易日：如果 `planned_amount > 0`，则全部进入等待池；如果 `planned_amount = 0`，则不进入等待池
+- 半买处理：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
+
+#### 等待池扣减规则
+
+等待池减少只能由"真实成交导入/确认"触发：
+- 扣减顺序：先扣该产品的WAIT_POOL（等待池），不足部分再扣CASH_FREE（自由现金）
+- 在 `buy_confirm` 或 `buy` 确认时，自动调用 `reduce_pending_amount_by_transaction` 扣减等待池
+
+#### 避免重复累加
+
+- 检查上次建议的 `budget_to_wait_pool`，只增加"增量"部分，而不是每次都累加全部
+- 记录 `last_change_reason`（如 'NON_TRADE_DAY', 'PREMIUM_BRAKE', 'MIN_TRADE_LIMIT'）和 `last_change_time`
+
+### 关键约束
+
+- **金额非负**：所有金额字段必须 ≥ 0
+- **planned_amount恒等式**：`planned_amount == new_budget + wait_pool_before`
+- **比例恒等式**：`budget_to_execute + budget_to_wait_pool <= planned_amount` 且 `budget_to_execute + budget_to_wait_pool <= budget_for_execution`
+- **wait_pool_after恒等式**：`wait_pool_after == wait_pool_before + moved_to_wait`（Advisor不扣减）
+- **比例计算**：`execute_ratio = budget_to_execute / budget_for_execution`（若0则0），`wait_ratio = budget_to_wait_pool / budget_for_execution`
+- **BUY约束**：action=BUY时必须满足 `min_trade_amount` & 现金足够 & 一手约束，且 `executed_amount > 0`
+- **溢价刹车**：premium>2%时必须 `budget_to_execute=0` 且 `budget_to_wait_pool=planned_amount`
+
 ## 🎓 关键设计理念
 
 1. **成本口径统一**：`cost = amount - fee`（净申购额），全系统一致
@@ -849,7 +977,7 @@ pip install -r requirements.txt
 
 ## 📊 数据库表总览
 
-系统共包含 **24 张数据库表**，分为以下几类：
+系统共包含 **29 张数据库表**，分为以下几类：
 
 ### 核心业务表（6张）
 1. **transactions** - 交易流水表
@@ -895,7 +1023,7 @@ pip install -r requirements.txt
 
 ## 📋 完整数据库表列表
 
-系统共包含 **24 张数据库表**，详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)：
+系统共包含 **29 张数据库表**，详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)：
 
 ### 核心业务表（6张）
 1. `transactions` - 交易流水表（所有投资交易记录）

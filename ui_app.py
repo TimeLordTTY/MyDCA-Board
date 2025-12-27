@@ -15,7 +15,7 @@
 import sys
 from pathlib import Path
 from datetime import datetime, date
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_DOWN
 from typing import Any, Dict
 
 import streamlit as st
@@ -854,33 +854,102 @@ def _render_exchange_quote(product, product_id):
             suggestion = get_latest_suggestion(product_id)
             bind = get_bind_by_product_id(product_id)
             
-            if bind:
-                strategy_code = bind.get('strategy_code', '')
-                param_set_id = bind.get('param_set_id', '')
+            # 读取所有策略绑定（支持多策略组合）
+            from advisor.repos.product_strategy_bind_repo import get_binds_by_product_id
+            binds = get_binds_by_product_id(product_id)
+            
+            if binds:
+                # 显示策略组合
+                strategy_codes = [b.get('strategy_code', '') for b in binds]
+                strategy_types = [b.get('strategy_type', 'TRIGGER') for b in binds]
+                param_set_ids = [b.get('param_set_id', '') for b in binds]
                 
                 col1, col2 = st.columns([1, 1])
                 with col1:
-                    st.info(f"**当前策略**: {strategy_code}@{param_set_id}")
-                    st.caption(f"策略类型：{strategy_code}（percentile=分位策略，drawdown=回撤策略，profit_recycle=利润回收策略，simple=简单策略）。参数集：{param_set_id}（通常为default，可在策略实验室中创建不同参数集）。")
+                    # 显示策略组合（多个策略badges）
+                    strategy_badges = []
+                    for i, (code, stype, pid) in enumerate(zip(strategy_codes, strategy_types, param_set_ids)):
+                        type_label = {'VETO': '否决', 'TRIGGER': '触发', 'SCORE': '强度'}.get(stype, stype)
+                        strategy_badges.append(f"{code}@{pid} ({type_label})")
+                    st.info(f"**策略组合**: {' + '.join(strategy_badges)}")
+                    st.caption(f"策略类型：VETO=否决层（任一命中即拒绝），TRIGGER=触发层（任一命中即考虑），SCORE=强度层（决定买入金额）。参数集：{param_set_ids[0]}（通常为default，可在策略实验室中创建不同参数集）。")
                 
                 if suggestion:
+                    # 使用ViewModel字段（优先使用扩展字段，兼容旧数据）
+                    # 安全转换None值
+                    def safe_float(value, default=0.0):
+                        """安全转换为float，处理None值"""
+                        if value is None:
+                            return default
+                        try:
+                            return float(value)
+                        except (ValueError, TypeError):
+                            return default
+                    
                     action = suggestion.get('action', 'HOLD')
-                    suggest_amount = float(suggestion.get('suggest_amount', 0))
-                    suggest_ratio = suggestion.get('suggest_ratio')
-                    moved_to_wait_pool = float(suggestion.get('moved_to_wait_pool', 0))
+                    budget_to_execute = safe_float(suggestion.get('budget_to_execute') or suggestion.get('suggest_amount'), 0.0)
+                    budget_to_wait_pool = safe_float(suggestion.get('budget_to_wait_pool') or suggestion.get('moved_to_wait_pool'), 0.0)
+                    execute_ratio = safe_float(suggestion.get('execute_ratio') or suggestion.get('suggest_ratio'), 0.0)
+                    wait_ratio = safe_float(suggestion.get('wait_ratio'), 0.0)
+                    # 如果数据库中的值为0或缺失，使用实时计算值
+                    from advisor.advisor_service import get_budget_amount, get_pending_amount_sum
+                    from core.ledger_service import calc_account_balance
+                    from data.db_connector import execute_query
+                    
+                    # 实时计算计划预算
+                    realtime_plan_budget = get_budget_amount(product_id, include_below_min=True)
+                    plan_budget_today = safe_float(suggestion.get('plan_budget_today'), 0.0)
+                    # 如果数据库中的值为0但实时计算有值，使用实时计算值
+                    if plan_budget_today == 0.0 and realtime_plan_budget > 0:
+                        plan_budget_today = float(realtime_plan_budget)
+                    
+                    # 实时计算可用现金
+                    realtime_cash_available = Decimal('0')
+                    sql_cash = """
+                        SELECT DISTINCT apr.from_account_id, a.account_code
+                        FROM account_pool_rules apr
+                        INNER JOIN accounts a ON apr.from_account_id = a.id
+                        WHERE apr.to_product_id = %s 
+                          AND apr.is_active = 1
+                          AND a.is_active = 1
+                    """
+                    cash_rules = execute_query(sql_cash, (product_id,))
+                    for rule in cash_rules:
+                        account_code = rule.get('account_code', '')
+                        if account_code:
+                            try:
+                                balance = calc_account_balance(account_code)
+                                realtime_cash_available += Decimal(str(balance))
+                            except:
+                                pass
+                    cash_available = safe_float(suggestion.get('cash_available'), 0.0)
+                    # 如果数据库中的值为0但实时计算有值，使用实时计算值
+                    if cash_available == 0.0 and realtime_cash_available > 0:
+                        cash_available = float(realtime_cash_available)
+                    
+                    # 实时计算等待池余额
+                    realtime_wait_pool = get_pending_amount_sum(product_id) or Decimal('0')
+                    wait_pool_balance = safe_float(suggestion.get('wait_pool_balance'), 0.0)
+                    # 如果数据库中的值为0但实时计算有值，使用实时计算值
+                    if wait_pool_balance == 0.0 and realtime_wait_pool > 0:
+                        wait_pool_balance = float(realtime_wait_pool)
+                    
+                    # 重新计算budget_for_execution
+                    budget_for_execution = min(plan_budget_today, cash_available)
                     reason = suggestion.get('reason', '')
                     as_of_time = suggestion.get('as_of_time', '')
                     premium_rate_sug = suggestion.get('premium_rate')
+                    reason_blocks = suggestion.get('reason_blocks', [])
+                    limit_price_hint = suggestion.get('limit_price_hint')
+                    time_window_hint = suggestion.get('time_window_hint')
                     
-                    # 实时计算实际预算（用于显示，包括小于最小金额的情况）
-                    from advisor.advisor_service import get_budget_amount
-                    from core.pending_buy_service import get_all_pending_pools
-                    from decimal import Decimal
-                    actual_budget = get_budget_amount(product_id, include_below_min=True)
-                    pending_pools = get_all_pending_pools()
-                    product_pending = [p for p in pending_pools if p.get('product_id') == product_id] if pending_pools else []
-                    total_pending = sum(float(p.get('pending_amount', 0)) for p in product_pending)
-                    total_budget = float(actual_budget) + total_pending
+                    # 获取交易约束信息
+                    first_bind = binds[0]
+                    min_trade_amount = safe_float(first_bind.get('min_trade_amount'), 1000.0)
+                    ideal_trade_amount = safe_float(first_bind.get('ideal_trade_amount'), 2000.0)
+                    fee_rate = safe_float(first_bind.get('fee_rate'), 0.000845)
+                    fee_min = safe_float(first_bind.get('fee_min'), 0.20)
+                    estimated_fee = max(budget_to_execute * fee_rate, fee_min) if budget_to_execute > 0 else 0.0
                     
                     # 检查持仓情况
                     from core.exchange_holdings_calculator import calculate_exchange_holdings
@@ -909,39 +978,95 @@ def _render_exchange_quote(product, product_id):
                         st.info(f"**建议动作**: {action_color} {action_label}")
                         st.caption(action_help)
                     
-                    col1, col2, col3, col4, col5 = st.columns(5)
+                    # ========== 预算三件套展示 ==========
+                    st.markdown("**💰 资金与预算**")
+                    
+                    # 获取新字段（如果存在）
+                    new_budget = safe_float(suggestion.get('new_budget'), plan_budget_today)
+                    wait_pool_before = safe_float(suggestion.get('wait_pool_before'), wait_pool_balance)
+                    planned_amount = safe_float(suggestion.get('planned_amount'), new_budget + wait_pool_before)
+                    
+                    # 第一行：三个核心金额
+                    col1, col2, col3 = st.columns(3)
                     with col1:
-                        st.metric("实际预算", f"¥{total_budget:.2f}", 
-                                 help="实际可用预算 = 资金池分配预算 + 等待池累计金额。资金池分配预算 = Σ(各账户余额) × 分配比例，需满足最小金额约束。等待池金额是之前因各种原因暂缓买入的资金。")
+                        st.metric("本轮新增预算", f"¥{new_budget:.2f}",
+                                 help="本轮新增预算 = 根据资金规则（account_pool_rules）计算出的本轮新可投入金额。这是本次评估周期新产生的可支配额度。")
                     with col2:
-                        st.metric("建议金额", f"¥{suggest_amount:.2f}", 
-                                 help="策略建议的买入金额。计算逻辑：min(实际预算, 理想成交额, 每日最大买入额)。如果建议金额为0，说明当前不满足买入条件。")
+                        st.metric("待买入池余额", f"¥{wait_pool_before:.2f}",
+                                 help="待买入池余额（before）= 之前已经决定要买、但因为条件不满足而延期的保留资金，按产品维度累计。跨天累计，永不凭空消失，除非被实际成交扣减消耗。")
                     with col3:
-                        if suggest_ratio:
-                            st.metric("建议比例", f"{float(suggest_ratio)*100:.0f}%", 
-                                     help=f"建议买入比例。当前建议买入 {float(suggest_ratio)*100:.0f}% 的预算，剩余 {100-float(suggest_ratio)*100:.0f}% 进入等待池。通常出现在溢价率1%-2%时的半买策略。")
-                        else:
-                            st.metric("建议比例", "100%", 
-                                     help="建议买入比例。100%表示建议使用全部预算买入，0%表示全部进入等待池。")
+                        st.metric("本轮可用于买入", f"¥{planned_amount:.2f}",
+                                 help="本轮可用于买入 = 本轮新增预算 + 待买入池余额。这是本轮最多可用于该产品的预算上限，不是必须全花。")
+                    
+                    # 第二行：执行和延期
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("实际执行", f"¥{budget_to_execute:.2f}",
+                                 help="本次建议实际执行金额 = 最终BUY的金额（可能为0）。这是真正会用于买入的金额。")
+                    with col2:
+                        st.metric("转等待池", f"¥{budget_to_wait_pool:.2f}",
+                                 help="本次应转入等待池的预算金额 = 由溢价刹车/门槛导致无法立即买入的金额。这些资金会进入等待池，等待条件满足后再使用。")
+                    with col3:
+                        st.metric("可用现金", f"¥{cash_available:.2f}",
+                                 help="可用现金池余额 = 从所有相关账户汇总的余额（通过account_pool_rules）。这是今天可用于执行的现金总额。")
                     with col4:
-                        if moved_to_wait_pool > 0:
-                            st.metric("进入等待池", f"¥{moved_to_wait_pool:.2f}", delta="等待",
-                                     help="本次建议中进入等待池的金额。等待池用于暂存因溢价过高、预算不足等原因无法立即买入的资金，等待条件满足后再使用。")
-                        else:
-                            st.metric("进入等待池", "¥0.00",
-                                     help="本次建议中进入等待池的金额。0表示本次预算全部用于买入或建议持有。")
-                    with col5:
-                        if premium_rate_sug:
-                            st.metric("溢价率", f"{float(premium_rate_sug)*100:.2f}%",
-                                     help=f"QDII产品的溢价率 = (最新价 - IOPV) / IOPV × 100%。当前溢价率 {float(premium_rate_sug)*100:.2f}%。买入规则：≤1%正常买入，1%-2%半买，>2%进入等待池。")
+                        wait_pool_after = wait_pool_before + budget_to_wait_pool
+                        st.metric("等待池余额（after）", f"¥{wait_pool_after:.2f}",
+                                 help="等待池余额（after）= 待买入池余额（before）+ 本次转等待池金额。Advisor不扣减等待池，所以after = before + moved_to_wait。")
+                    
+                    # 等待池累计金额说明
+                    if wait_pool_balance > 0 or budget_to_wait_pool > 0:
+                        st.info(f"**等待池说明**：待买入池余额（before）= ¥{wait_pool_before:.2f}，本次转入 = ¥{budget_to_wait_pool:.2f}，等待池余额（after）= ¥{wait_pool_after:.2f}。等待池用于暂存因溢价过高、预算不足最小成交额、指标未就绪等原因无法立即买入的资金。等待池金额会参与下次预算计算，当条件满足时自动使用。")
+                    
+                    # ========== 比例展示 ==========
+                    st.markdown("**📊 执行比例**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        # 重新计算执行比例（基于实时计算的budget_for_execution）
+                        realtime_execute_ratio = (budget_to_execute / budget_for_execution) if budget_for_execution > 0 else 0.0
+                        st.metric("执行比例", f"{realtime_execute_ratio*100:.1f}%",
+                                 help=f"本次预算中用于执行的比例 = budget_to_execute / budget_for_execution × 100%。当前为 {realtime_execute_ratio*100:.1f}%，表示 {realtime_execute_ratio*100:.1f}% 的预算用于买入。")
+                    with col2:
+                        # 重新计算转等待池比例（基于实时计算的budget_for_execution）
+                        realtime_wait_ratio = (budget_to_wait_pool / budget_for_execution) if budget_for_execution > 0 else 0.0
+                        st.metric("转等待池比例", f"{realtime_wait_ratio*100:.1f}%",
+                                 help=f"本次预算中进入等待池的比例 = budget_to_wait_pool / budget_for_execution × 100%。当前为 {realtime_wait_ratio*100:.1f}%，表示 {realtime_wait_ratio*100:.1f}% 的预算进入等待池。")
+                    
+                    # ========== 交易约束与成本 ==========
+                    st.markdown("**⚙️ 交易约束与成本**")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        constraint_status = "✅ 满足" if budget_to_execute >= min_trade_amount or budget_to_execute == 0 else "❌ 不满足"
+                        st.metric("最小成交额", f"¥{min_trade_amount:.2f}", delta=constraint_status,
+                                 help=f"最小有效成交金额 = {min_trade_amount:.2f}。BUY时建议金额必须 ≥ 此值，否则进入等待池。")
+                    with col2:
+                        st.metric("理想成交额", f"¥{ideal_trade_amount:.2f}",
+                                 help=f"理想成交金额 = {ideal_trade_amount:.2f}。策略会尽量接近此金额，但可能因预算限制而调整。")
+                    with col3:
+                        st.metric("预计手续费", f"¥{estimated_fee:.2f}",
+                                 help=f"预计手续费 = max(买入金额 × {fee_rate*10000:.2f}‱, {fee_min:.2f}元)。当前为 ¥{estimated_fee:.2f}。")
+                    with col4:
+                        if premium_rate_sug is not None:
+                            premium_pct = safe_float(premium_rate_sug, 0.0) * 100
+                            if premium_pct > 2:
+                                brake_status = "🚫 全部等待"
+                            elif premium_pct > 1:
+                                brake_status = "⚠️ 半买"
+                            else:
+                                brake_status = "✅ 正常"
+                            st.metric("溢价率", f"{premium_pct:.2f}%", delta=brake_status,
+                                     help=f"QDII产品的溢价率 = (最新价 - IOPV) / IOPV × 100%。当前溢价率 {premium_pct:.2f}%。买入规则：≤1%正常买入，1%-2%半买，>2%进入等待池。")
                         else:
                             st.metric("溢价率", "N/A",
                                      help="QDII产品的溢价率 = (最新价 - IOPV) / IOPV × 100%。非QDII产品或溢价率数据缺失时显示N/A。")
                     
-                    # 等待池累计金额（已在上面计算，这里只显示）
-                    if total_pending > 0:
-                        st.info(f"**等待池累计金额**: ¥{total_pending:.2f}")
-                        st.caption("该产品所有账户的等待池金额总和。等待池用于暂存因溢价过高、预算不足最小成交额、指标未就绪等原因无法立即买入的资金。等待池金额会参与下次预算计算，当条件满足时自动使用。")
+                    # 溢价刹车结果详情
+                    if premium_rate_sug is not None and safe_float(premium_rate_sug, 0.0) > 0.01:
+                        premium_pct = safe_float(premium_rate_sug, 0.0) * 100
+                        if premium_pct > 2:
+                            st.warning(f"**溢价刹车触发**：溢价率 {premium_pct:.2f}% > 2%，全部预算进入等待池。建议窗口：{time_window_hint or '10:30-11:15/13:30-14:30'}；建议限价：{limit_price_hint or '昨收×0.998' if limit_price_hint else 'N/A'}。")
+                        elif premium_pct > 1:
+                            st.info(f"**溢价刹车触发**：溢价率 {premium_pct:.2f}% 处于(1%,2%]，执行半买策略。建议窗口：{time_window_hint or '10:30-11:15/13:30-14:30'}；建议限价：{limit_price_hint or '昨收×0.998' if limit_price_hint else 'N/A'}。")
                     
                     # 计算逻辑说明
                     st.markdown("**📊 计算逻辑**")
@@ -951,7 +1076,7 @@ def _render_exchange_quote(product, product_id):
                         from advisor.advisor_service import get_budget_amount
                         from data.db_connector import execute_query
                         from core.ledger_service import calc_account_balance
-                        from decimal import Decimal
+                        # Decimal已在文件顶部导入，无需重复导入
                         
                         # 获取资金池规则详情
                         sql_rules = """
@@ -1010,16 +1135,23 @@ def _render_exchange_quote(product, product_id):
                                 
                                 if round_step > 0 and allocated >= Decimal(str(min_amount)):
                                     st.markdown(f"**4. 取整（粒度={round_step}）**")
-                                    allocated_rounded = (allocated / Decimal(str(round_step))).quantize(Decimal('1'), rounding='ROUND_DOWN') * Decimal(str(round_step))
+                                    allocated_rounded = (allocated / Decimal(str(round_step))).quantize(Decimal('1'), rounding=ROUND_DOWN) * Decimal(str(round_step))
                                     st.caption(f"   = ¥{allocated:.2f} → ¥{allocated_rounded:.2f}")
                                 
                                 st.markdown(f"**5. 最终预算 = 分配金额 + 等待池金额**")
-                                st.caption(f"   = ¥{float(actual_budget):.2f} + ¥{total_pending:.2f} = ¥{total_budget:.2f}")
+                                # 计算实际预算和等待池金额
+                                from advisor.advisor_service import get_pending_amount_sum
+                                total_pending = get_pending_amount_sum(product_id) or Decimal('0')
+                                actual_budget = allocated_rounded if round_step > 0 and allocated >= Decimal(str(min_amount)) else allocated
+                                total_budget = actual_budget + total_pending
+                                st.caption(f"   = ¥{float(actual_budget):.2f} + ¥{float(total_pending):.2f} = ¥{float(total_budget):.2f}")
                         else:
                             st.caption("未配置资金池规则")
                         
                         # 阈值价计算逻辑（仅对percentile策略）
-                        if strategy_code == 'percentile':
+                        # 使用第一个策略的code（兼容多策略组合）
+                        first_strategy_code = strategy_codes[0] if strategy_codes else ''
+                        if first_strategy_code == 'percentile':
                             st.markdown("**阈值价（q_buy_price）计算公式：**")
                             from advisor.repos.indicator_daily_repo import get_latest_indicator
                             from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
@@ -1029,7 +1161,7 @@ def _render_exchange_quote(product, product_id):
                             
                             bind_detail = get_bind_by_product_id(product_id)
                             if bind_detail:
-                                param_json_detail = get_strategy_config(strategy_code, bind_detail.get('param_set_id', 'default'))
+                                param_json_detail = get_strategy_config(first_strategy_code, bind_detail.get('param_set_id', 'default'))
                                 if param_json_detail:
                                     window_days = param_json_detail.get('window_days', 750)
                                     buy_percentile = param_json_detail.get('buy_percentile', 0.20)
@@ -1078,12 +1210,20 @@ def _render_exchange_quote(product, product_id):
                                         else:
                                             st.caption(f"   - 不存在指标记录（指标计算任务可能未运行）")
                     
-                    # 原因说明
-                    st.markdown("**📝 原因说明**")
-                    # 使用markdown显示，自动适应内容，不显示滚动条
-                    # 将换行符转换为HTML换行，并保留原有格式
-                    if reason:
-                        # 转义HTML特殊字符，然后替换换行符
+                    # ========== 原因说明（使用reason_blocks） ==========
+                    st.markdown("**📝 建议动作的原因**")
+                    if reason_blocks:
+                        # 使用reason_blocks分条显示（只显示决策，不显示输入值）
+                        for i, block in enumerate(reason_blocks, 1):
+                            rule_name = block.get('rule_name', f'原因{i}')
+                            decision = block.get('decision', '')
+                            
+                            # 只显示决策部分，作为建议动作的原因
+                            if decision:
+                                st.markdown(f"**{i}. {rule_name}**")
+                                st.caption(decision)
+                    elif reason:
+                        # 降级：使用原始reason文本
                         import html
                         escaped_reason = html.escape(reason)
                         formatted_reason = escaped_reason.replace('\n', '<br>')
@@ -1102,6 +1242,27 @@ def _render_exchange_quote(product, product_id):
                     st.warning("暂无建议数据，请等待调度器生成")
             else:
                 st.warning("产品未绑定策略，请在产品管理页配置策略绑定")
+            
+            # 非交易日/非交易时段提示
+            if suggestion:
+                from utils.trade_calendar import is_trade_day, is_trade_time
+                from datetime import datetime
+                as_of_dt = suggestion.get('as_of_time')
+                if as_of_dt:
+                    if isinstance(as_of_dt, str):
+                        try:
+                            as_of_dt = datetime.strptime(as_of_dt[:19], '%Y-%m-%d %H:%M:%S')
+                        except:
+                            as_of_dt = None
+                    
+                    if as_of_dt:
+                        trade_day = is_trade_day(as_of_dt.date())
+                        trade_time = is_trade_time(as_of_dt)
+                        
+                        if not trade_day:
+                            st.warning("⚠️ **非交易日**：当前不在交易日，建议仅供参考，不执行买入操作。")
+                        elif not trade_time:
+                            st.info("ℹ️ **非交易时段**：当前不在交易时段（9:30-11:30或13:00-15:00），建议仅供参考；下次开盘再执行。")
         except Exception as e:
             st.warning(f"加载建议失败: {e}")
     else:
@@ -2878,39 +3039,52 @@ def page_product_management():
                         st.divider()
                         st.subheader("📊 策略绑定配置")
                         try:
-                            from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id, create_or_update_bind
-                            from data.db_connector import execute_query
+                            from advisor.repos.product_strategy_bind_repo import get_binds_by_product_id, create_or_update_bind
+                            from data.db_connector import execute_query, execute_update
                             
-                            bind = get_bind_by_product_id(selected_product_id)
+                            # 获取所有已绑定的策略
+                            binds = get_binds_by_product_id(selected_product_id)
                             
-                            # 获取策略列表
-                            strategy_options = ['percentile', 'drawdown', 'profit_recycle', 'simple']
-                            current_strategy = bind.get('strategy_code', 'percentile') if bind else 'percentile'
-                            current_param_set = bind.get('param_set_id', 'default') if bind else 'default'
+                            # 显示已绑定的策略列表
+                            if binds:
+                                st.markdown("**已绑定的策略：**")
+                                for i, bind in enumerate(binds):
+                                    strategy_code = bind.get('strategy_code', '')
+                                    param_set_id = bind.get('param_set_id', 'default')
+                                    strategy_type = bind.get('strategy_type', 'TRIGGER')
+                                    priority = bind.get('priority', 0)
+                                    type_label = {'VETO': '否决', 'TRIGGER': '触发', 'SCORE': '强度'}.get(strategy_type, strategy_type)
+                                    st.caption(f"{i+1}. {strategy_code}@{param_set_id} ({type_label}, 优先级:{priority})")
+                                    
+                                    # 删除按钮
+                                    if st.button("🗑️ 删除", key=f"delete_bind_{selected_product_id}_{bind.get('id')}"):
+                                        try:
+                                            execute_update(
+                                                "UPDATE product_strategy_bind SET enabled = 0 WHERE id = %s",
+                                                (bind.get('id'),)
+                                            )
+                                            st.success("✅ 策略绑定已删除！")
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"❌ 删除失败: {e}")
                             
-                            # 获取参数集列表
-                            param_sets = []
-                            if current_strategy:
-                                sql = """
-                                    SELECT DISTINCT param_set_id
-                                    FROM strategy_config
-                                    WHERE strategy_key = %s AND is_active = 1
-                                    ORDER BY param_set_id
-                                """
-                                param_rows = execute_query(sql, (current_strategy,))
-                                param_sets = [row['param_set_id'] for row in param_rows] if param_rows else ['default']
+                            st.divider()
+                            st.markdown("**新增策略绑定：**")
                             
-                            col1, col2 = st.columns(2)
+                            # 获取策略列表（包含dca_4pct）
+                            strategy_options = ['percentile', 'drawdown', 'profit_recycle', 'simple', 'dca_4pct']
+                            
+                            col1, col2, col3 = st.columns(3)
                             with col1:
                                 new_strategy_code = st.selectbox(
                                     "策略代码",
                                     options=strategy_options,
-                                    index=strategy_options.index(current_strategy) if current_strategy in strategy_options else 0,
                                     key=f"bind_strategy_{selected_product_id}"
                                 )
                                 
-                                # 根据策略代码更新参数集列表
-                                if new_strategy_code != current_strategy:
+                                # 获取参数集列表
+                                param_sets = []
+                                if new_strategy_code:
                                     sql = """
                                         SELECT DISTINCT param_set_id
                                         FROM strategy_config
@@ -2925,40 +3099,56 @@ def page_product_management():
                                     new_param_set_id = st.selectbox(
                                         "参数集ID",
                                         options=param_sets,
-                                        index=param_sets.index(current_param_set) if current_param_set in param_sets else 0,
                                         key=f"bind_param_{selected_product_id}"
                                     )
                                 else:
                                     new_param_set_id = st.text_input(
                                         "参数集ID",
-                                        value=current_param_set,
+                                        value='default',
                                         key=f"bind_param_{selected_product_id}"
                                     )
+                                
+                                # 策略类型选择
+                                strategy_type_options = ['VETO', 'TRIGGER', 'SCORE']
+                                new_strategy_type = st.selectbox(
+                                    "策略类型",
+                                    options=strategy_type_options,
+                                    index=1,  # 默认TRIGGER
+                                    key=f"bind_type_{selected_product_id}",
+                                    help="VETO=否决层（任一命中即拒绝），TRIGGER=触发层（任一命中即考虑），SCORE=强度层（决定买入金额）"
+                                )
+                            
+                            with col3:
+                                new_priority = st.number_input(
+                                    "优先级",
+                                    value=0,
+                                    min_value=0,
+                                    step=1,
+                                    key=f"bind_priority_{selected_product_id}",
+                                    help="数字越小越优先，同层内按此排序"
+                                )
                             
                             col1, col2, col3, col4 = st.columns(4)
                             with col1:
-                                min_trade = float(bind.get('min_trade_amount', 1000)) if bind else 1000.0
                                 new_min_trade = st.number_input(
                                     "最小成交额",
-                                    value=min_trade,
+                                    value=1000.0,
                                     min_value=0.0,
                                     step=100.0,
                                     key=f"bind_min_trade_{selected_product_id}"
                                 )
                             with col2:
-                                ideal_trade = float(bind.get('ideal_trade_amount', 2000)) if bind else 2000.0
                                 new_ideal_trade = st.number_input(
                                     "理想成交额",
-                                    value=ideal_trade,
+                                    value=2000.0,
                                     min_value=0.0,
                                     step=100.0,
                                     key=f"bind_ideal_trade_{selected_product_id}"
                                 )
                             with col3:
-                                fee_rate = float(bind.get('fee_rate', 0.000845)) if bind else 0.000845
                                 new_fee_rate = st.number_input(
                                     "手续费率",
-                                    value=fee_rate,
+                                    value=0.000845,
                                     min_value=0.0,
                                     max_value=1.0,
                                     step=0.000001,
@@ -2966,10 +3156,9 @@ def page_product_management():
                                     key=f"bind_fee_rate_{selected_product_id}"
                                 )
                             with col4:
-                                fee_min = float(bind.get('fee_min', 0.20)) if bind else 0.20
                                 new_fee_min = st.number_input(
                                     "最低手续费",
-                                    value=fee_min,
+                                    value=0.20,
                                     min_value=0.0,
                                     step=0.01,
                                     key=f"bind_fee_min_{selected_product_id}"
@@ -2982,6 +3171,8 @@ def page_product_management():
                                         'strategy_code': new_strategy_code,
                                         'param_set_id': new_param_set_id,
                                         'enabled': 1,
+                                        'strategy_type': new_strategy_type,
+                                        'priority': new_priority,
                                         'min_trade_amount': new_min_trade,
                                         'ideal_trade_amount': new_ideal_trade,
                                         'fee_rate': new_fee_rate,

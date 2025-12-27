@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 class ProfitRecycleAdvice(StrategyAdviceInterface):
     """利润回收策略生产建议版"""
     
+    strategy_type = 'TRIGGER'  # 触发层：判断是否买入
+    
     def evaluate(self, input_data: AdviceInput) -> AdviceOutput:
         """
         评估并输出建议

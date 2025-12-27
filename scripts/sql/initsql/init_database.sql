@@ -391,6 +391,9 @@ CREATE TABLE `pending_buy_pool`  (
   `from_account_id` bigint(20) NOT NULL COMMENT '来源账户ID',
   `pending_amount` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '待买入金额（累加）',
   `reason` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '扣留原因（溢价刹车等）',
+  `last_change_reason` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '最后变更原因（如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT）',
+  `last_change_time` datetime NULL DEFAULT NULL COMMENT '最后变更时间',
+  `version` bigint(20) NOT NULL DEFAULT 0 COMMENT '版本号（乐观锁，避免并发冲突）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
@@ -573,9 +576,11 @@ DROP TABLE IF EXISTS `product_strategy_bind`;
 CREATE TABLE `product_strategy_bind`  (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `product_id` bigint(20) NOT NULL COMMENT '产品ID',
-  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码: percentile/profit_recycle/drawdown/simple',
+  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码: percentile/profit_recycle/drawdown/simple/dca_4pct',
   `param_set_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '参数集ID(版本)，从 strategy_config 读取',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  `strategy_type` enum('VETO','TRIGGER','SCORE') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'TRIGGER' COMMENT '策略类型：VETO=否决层，TRIGGER=触发层，SCORE=强度层',
+  `priority` int(11) NOT NULL DEFAULT 0 COMMENT '优先级（数字越小越优先，同层内按此排序）',
   `min_trade_amount` decimal(18, 2) NOT NULL DEFAULT 1000.00 COMMENT '最小有效成交金额',
   `ideal_trade_amount` decimal(18, 2) NOT NULL DEFAULT 2000.00 COMMENT '理想成交金额',
   `fee_rate` decimal(18, 6) NOT NULL DEFAULT 0.000845 COMMENT '手续费率（万0.845）',
@@ -583,9 +588,10 @@ CREATE TABLE `product_strategy_bind`  (
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_product`(`product_id`) USING BTREE,
-  INDEX `idx_strategy`(`strategy_code`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品策略绑定表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_product_strategy`(`product_id`, `strategy_code`) USING BTREE,
+  INDEX `idx_strategy`(`strategy_code`) USING BTREE,
+  INDEX `idx_product_type`(`product_id`, `strategy_type`, `priority`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品策略绑定表（支持多策略组合）' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for strategy_state
@@ -634,18 +640,53 @@ CREATE TABLE `advisor_suggestion`  (
   `id` bigint(20) NOT NULL AUTO_INCREMENT,
   `product_id` bigint(20) NOT NULL COMMENT '产品ID',
   `as_of_time` datetime NOT NULL COMMENT '建议生成时间',
-  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码',
-  `action` enum('BUY','HOLD','WAIT') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '建议动作',
-  `suggest_amount` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '建议金额',
-  `suggest_ratio` decimal(18, 6) NULL DEFAULT NULL COMMENT '建议比例（0.5=半买）',
+  `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码（主策略，用于兼容）',
+  `action` enum('BUY','HOLD','WAIT','SKIP') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '建议动作',
+  `suggest_amount` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '建议金额（兼容字段，等于budget_to_execute）',
+  `suggest_ratio` decimal(18, 6) NULL DEFAULT NULL COMMENT '建议比例（兼容字段，等于execute_ratio）',
   `limit_price_hint` decimal(18, 6) NULL DEFAULT NULL COMMENT '限价建议',
   `premium_rate` decimal(18, 6) NULL DEFAULT NULL COMMENT '溢价率',
-  `moved_to_wait_pool` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '进入等待池金额',
+  `moved_to_wait_pool` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '进入等待池金额（兼容字段，等于budget_to_wait_pool）',
   `reason` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '必须可解释中文原因',
+  `cash_available` decimal(18, 2) NULL DEFAULT NULL COMMENT '可用现金池余额',
+  `wait_pool_balance` decimal(18, 2) NULL DEFAULT NULL COMMENT '等待池累计金额（after）',
+  `new_budget` decimal(18, 2) NULL DEFAULT NULL COMMENT '本轮新增预算（根据资金规则计算出的新可投入金额）',
+  `wait_pool_before` decimal(18, 2) NULL DEFAULT NULL COMMENT '等待池余额（before，历史累计）',
+  `planned_amount` decimal(18, 2) NULL DEFAULT NULL COMMENT '本轮可用于买入（=new_budget + wait_pool_before）',
+  `plan_budget_today` decimal(18, 2) NULL DEFAULT NULL COMMENT '今日计划预算（兼容字段，等于new_budget）',
+  `budget_for_execution` decimal(18, 2) NULL DEFAULT NULL COMMENT '本次允许用于执行的预算',
+  `budget_to_execute` decimal(18, 2) NULL DEFAULT NULL COMMENT '本次建议实际执行金额',
+  `budget_to_wait_pool` decimal(18, 2) NULL DEFAULT NULL COMMENT '本次应转入等待池的预算金额',
+  `execute_ratio` decimal(18, 6) NULL DEFAULT NULL COMMENT '执行比例（0~1）',
+  `wait_ratio` decimal(18, 6) NULL DEFAULT NULL COMMENT '转等待池比例（0~1）',
+  `reason_blocks_json` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '结构化原因列表（JSON）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_time`(`as_of_time`) USING BTREE,
   INDEX `idx_prod_time`(`product_id`, `as_of_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表（扩展支持ViewModel）' ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for budget_trace
+-- ----------------------------
+DROP TABLE IF EXISTS `budget_trace`;
+CREATE TABLE `budget_trace` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `as_of_time` datetime NOT NULL COMMENT '建议生成时间',
+  `new_budget` decimal(18, 2) NOT NULL COMMENT '本轮新增预算',
+  `wait_pool_before` decimal(18, 2) NOT NULL COMMENT '等待池余额（before）',
+  `planned_amount` decimal(18, 2) NOT NULL COMMENT '本轮可用于买入',
+  `executed_amount` decimal(18, 2) NOT NULL COMMENT '本轮建议执行金额',
+  `moved_to_wait` decimal(18, 2) NOT NULL COMMENT '本轮进入等待池金额',
+  `wait_pool_after` decimal(18, 2) NOT NULL COMMENT '等待池余额（after）',
+  `reason_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '原因代码（如NON_TRADE_DAY, PREMIUM_BRAKE）',
+  `reason_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '原因说明（结构化文本）',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`) USING BTREE,
+  UNIQUE KEY `uk_trace` (`product_id`, `as_of_time`) USING BTREE,
+  INDEX `idx_time` (`as_of_time`) USING BTREE,
+  INDEX `idx_product` (`product_id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '预算追踪审计日志表' ROW_FORMAT = Dynamic;
 
 SET FOREIGN_KEY_CHECKS = 1;
