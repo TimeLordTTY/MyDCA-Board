@@ -16,7 +16,7 @@ from .view_model import AdvisorViewModel
 logger = logging.getLogger(__name__)
 
 
-def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dict) -> AdviceOutput:
+def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dict, is_trade_day: bool = True) -> AdviceOutput:
     """
     执行硬约束自检
     
@@ -24,6 +24,7 @@ def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dic
         output: 策略输出
         input_data: 策略输入
         product: 产品信息
+        is_trade_day: 是否为交易日（用于非交易日检查）
         
     Returns:
         修正后的输出（如果自检失败则降级为WAIT）
@@ -37,7 +38,15 @@ def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dic
     if output.moved_to_wait_pool < 0:
         errors.append(f"moved_to_wait_pool < 0: {output.moved_to_wait_pool}")
     
-    # 2. 检查手续费计算
+    # 2. 【关键】非交易日检查：非交易日时 moved_to_wait_pool 必须为 0
+    if not is_trade_day:
+        if output.moved_to_wait_pool != 0:
+            errors.append(f"非交易日时 moved_to_wait_pool 必须为 0，但实际为 {output.moved_to_wait_pool}")
+        # 非交易日时 action 应为 HOLD 或 WAIT，不应为 BUY
+        if output.action == 'BUY':
+            errors.append(f"非交易日时 action 不应为 BUY，应为 HOLD 或 WAIT")
+    
+    # 3. 检查手续费计算
     if output.action == 'BUY' and output.suggest_amount > 0:
         fee_rate = float(input_data.bind_config.get('fee_rate', 0.000845))
         fee_min = float(input_data.bind_config.get('fee_min', 0.20))
@@ -46,30 +55,40 @@ def check_invariants(output: AdviceOutput, input_data: AdviceInput, product: Dic
         if math.isnan(fee) or math.isinf(fee):
             errors.append(f"手续费计算异常: fee={fee}")
     
-    # 3. 检查BUY时的最小成交额
+    # 4. 检查BUY时的最小成交额和现金足够
     if output.action == 'BUY':
         min_trade_amount = float(input_data.bind_config.get('min_trade_amount', 1000))
-        if output.suggest_amount < min_trade_amount:
-            errors.append(f"BUY时建议金额{output.suggest_amount} < 最小成交额{min_trade_amount}")
+        if output.suggest_amount > 0 and output.suggest_amount < min_trade_amount:
+            errors.append(f"BUY时建议金额{output.suggest_amount} < 最小成交额{min_trade_amount}，应降级为WAIT")
         
         # 检查预算是否足够
         total_budget = float(input_data.budget_amount + input_data.pending_amount)
-        if total_budget < min_trade_amount:
-            errors.append(f"预算不足: {total_budget} < {min_trade_amount}")
+        if output.suggest_amount > 0 and total_budget < min_trade_amount:
+            errors.append(f"预算不足: {total_budget} < {min_trade_amount}，应降级为WAIT")
     
-    # 4. 检查QDII溢价刹车
+    # 5. 检查QDII溢价刹车
     if product.get('is_qdii'):
         premium_rate = output.premium_rate
         if premium_rate is not None:
             premium_float = float(premium_rate)
             if premium_float > 0.02:
-                # 溢价>2%时，action必须WAIT
-                if output.action != 'WAIT':
-                    errors.append(f"QDII溢价{premium_float*100:.2f}%>2%，但action={output.action}，应强制WAIT")
+                # 溢价>2%时，suggest_amount 必须为 0，moved_to_wait_pool 必须为本次可执行预算
+                if output.suggest_amount != 0:
+                    errors.append(f"QDII溢价{premium_float*100:.2f}%>2%，但suggest_amount={output.suggest_amount}，应为0")
+                # 注意：moved_to_wait_pool 的检查需要在advisor_service中完成（因为需要知道budget_for_execution）
     
-    # 5. 检查reason长度
-    if not output.reason or len(output.reason) < 30:
-        errors.append(f"reason长度不足30字: {len(output.reason) if output.reason else 0}")
+    # 6. 检查reason长度和内容（必须>=60字，且包含关键数值）
+    if not output.reason or len(output.reason) < 60:
+        errors.append(f"reason长度不足60字: {len(output.reason) if output.reason else 0}")
+    else:
+        # 检查reason是否包含关键数值（pct_rank、premium、budget、suggest_amount、moved_to_wait_pool）
+        reason_lower = output.reason.lower()
+        has_key_values = False
+        # 检查是否包含数值（通过检查是否包含数字和关键字段）
+        if any(keyword in reason_lower for keyword in ['分位', 'pct_rank', 'premium', '溢价', '预算', 'budget', '建议', 'suggest', '等待池', 'wait_pool']):
+            has_key_values = True
+        if not has_key_values:
+            errors.append(f"reason缺少关键数值说明（应包含：pct_rank、premium、budget、suggest_amount、moved_to_wait_pool等）")
     
     # 如果有错误，降级为WAIT
     if errors:

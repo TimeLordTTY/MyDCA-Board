@@ -6,6 +6,7 @@ AdvisorService - 生产建议服务
 """
 import logging
 import json
+import hashlib
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 from typing import Optional, Dict, Any, List
@@ -256,11 +257,34 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
                 'as_of_time': as_of_time
             }
         
+        # 验证 percentile 策略参数：必须包含 tiers
+        if first_bind['strategy_code'] == 'percentile':
+            tiers = first_param_json.get('tiers')
+            if not tiers or not isinstance(tiers, list) or len(tiers) == 0:
+                logger.warning(
+                    f"percentile策略参数配置缺失tiers: product_id={product_id}, "
+                    f"strategy_code={first_bind['strategy_code']}, param_set_id={first_bind['param_set_id']}"
+                )
+        
+        # 计算参数摘要（MD5 hash）用于日志
+        first_param_str = json.dumps(first_param_json, sort_keys=True, ensure_ascii=False)
+        first_param_hash = hashlib.md5(first_param_str.encode('utf-8')).hexdigest()[:8]
+        
+        # 记录所有绑定的策略和参数集信息
+        bind_info = []
+        for bind in binds:
+            bind_info.append(f"{bind['strategy_code']}@{bind['param_set_id']}")
+        logger.info(
+            f"Advisor建议生成开始: product_id={product_id}, "
+            f"binds=[{', '.join(bind_info)}], "
+            f"first_param_hash={first_param_hash}"
+        )
+        
         # 4. 读取策略状态（为所有策略）
         # 注意：StrategyComposer内部会为每个策略单独读取state_json
         
         # 5. 读取指标（使用最大window_days）
-        window_days = first_param_json.get('window_days', 750)
+        window_days = int(first_param_json.get('window_days', 750))
         # 使用昨天的日期查询指标（因为指标是基于昨天的收盘价计算的）
         yesterday = date.today() - timedelta(days=1)
         indicator = get_latest_indicator(product_id, window_days, max_date=yesterday)
@@ -382,6 +406,15 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
         # StrategyComposer内部会为每个策略读取param_json和state_json
         output = StrategyComposer.compose(binds, base_input_data, product)
         
+        # 记录策略评估后的关键指标
+        pct_rank_val = indicator_dict.get('pct_rank') if indicator_dict else None
+        q_buy_price_val = indicator_dict.get('q_buy_price') if indicator_dict else None
+        logger.debug(
+            f"策略评估完成: product_id={product_id}, "
+            f"pct_rank={pct_rank_val}, q_buy_price={q_buy_price_val}, "
+            f"output_action={output.action}, output_suggest_amount={output.suggest_amount}"
+        )
+        
         # 13. 判断交易日和交易时段（提前判断，用于后续逻辑）
         trade_day = is_trade_day(as_of_time.date() if isinstance(as_of_time, datetime) else as_of_time)
         trade_time = is_trade_time(as_of_time) if isinstance(as_of_time, datetime) else False
@@ -389,80 +422,114 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
         # 14. 溢价刹车处理（全局统一处理）
         output = apply_premium_brake_to_output(output, product, premium_rate)
         
-        # 15. 非交易日处理：非交易日时，不执行买入，也不进入等待池（预算冻结）
-        # 关键：非交易日 moved_to_wait_pool=0，预算冻结，下一交易日开盘前重新评估
+        # 15. 非交易日处理（必须在所有策略评估之后，但在资金池迁移之前）
+        # 关键语义：非交易日只是"今天不执行"，不是"条件否决"，因此不应自动把预算转入等待池
+        # moved_to_wait_pool 必须为 0，action 设为 HOLD 或 WAIT，reason 明确说明"休市/非交易时段，仅延后评估"
         if not trade_day:
+            # 非交易日：预算冻结，不迁移到等待池
             output = AdviceOutput(
-                action='WAIT',
+                action='HOLD',  # 使用HOLD更语义化（延后评估，而非等待条件）
                 suggest_amount=Decimal('0'),
                 suggest_ratio=None,
                 limit_price_hint=output.limit_price_hint,
                 premium_rate=output.premium_rate,
-                moved_to_wait_pool=Decimal('0'),  # 非交易日不入等待池
-                reason=f"{output.reason} 市场关闭：预算冻结，下一交易日开盘前重新评估。",
+                moved_to_wait_pool=Decimal('0'),  # 非交易日不入等待池（关键约束）
+                reason=f"{output.reason} 【非交易日】市场关闭：预算冻结，下一交易日开盘前重新评估。",
                 new_state_json=output.new_state_json
             )
-        
-        # 16. 计算最终执行金额和等待池金额
-        # 关键：等待池增加规则（只在有买入意图时）
-        # 只有当 planned_amount > 0 且策略触发买入意图时，才进入等待池
-        budget_to_execute = output.suggest_amount
-        budget_to_wait_pool = output.moved_to_wait_pool
-        
-        # 如果策略未触发（如分位太高，action=HOLD且suggest_amount=0），且planned_amount=0，则不进入等待池
-        if planned_amount == 0:
-            # 没有买入意图，不进入等待池
-            budget_to_wait_pool = Decimal('0')
+            # 非交易日时，直接跳过后续的资金池迁移逻辑，设置最终值
             budget_to_execute = Decimal('0')
-        elif output.action != 'BUY' and output.suggest_amount == 0 and budget_to_wait_pool == 0:
-            # 策略未触发买入，且没有其他原因进入等待池，则不进入等待池
             budget_to_wait_pool = Decimal('0')
-        
-        # 溢价刹车特殊处理：如果溢价>2%，全部预算进入等待池
-        if premium_rate and float(premium_rate) > 0.02:
-            budget_to_execute = Decimal('0')
-            budget_to_wait_pool = planned_amount  # 使用planned_amount
-        # 如果溢价1%-2%，半买，另一半进入等待池
-        elif premium_rate and 0.01 < float(premium_rate) <= 0.02:
-            if output.action == 'BUY':
-                # 半买逻辑已在apply_premium_brake_to_output中处理
-                # 但需要确保budget_to_wait_pool不超过planned_amount
-                if budget_to_execute + budget_to_wait_pool > planned_amount:
+            
+            # 跳过后续的资金池迁移逻辑，直接到比例计算
+            logger.info(f"产品 {product_id} 非交易日：预算冻结，moved_to_wait_pool=0")
+        else:
+            # 16. 交易日：计算最终执行金额和等待池金额
+            # 关键：等待池只记录"被规则否决而延期执行的资金"
+            # 只有在 VETO 的"规则否决类原因"触发时，才允许把预算迁移到 WAIT_BUY
+            # 例如：QDII溢价过高、最小成交额不足、风控上限等
+            
+            budget_to_execute = output.suggest_amount
+            budget_to_wait_pool = output.moved_to_wait_pool
+            
+            # 16.1 如果策略未触发买入（如分位太高，action=HOLD且suggest_amount=0），且没有规则否决原因
+            # 则不应进入等待池（这是正常的"不买"决策，不是"延期执行"）
+            if planned_amount == 0:
+                # 没有买入意图，不进入等待池
+                budget_to_wait_pool = Decimal('0')
+                budget_to_execute = Decimal('0')
+            elif output.action != 'BUY' and output.suggest_amount == 0 and budget_to_wait_pool == 0:
+                # 策略未触发买入，且没有其他原因进入等待池，则不进入等待池
+                budget_to_wait_pool = Decimal('0')
+            
+            # 16.2 溢价刹车特殊处理（规则否决类原因）
+            # 如果溢价>2%，全部预算进入等待池（这是规则否决，不是非交易日）
+            if premium_rate and float(premium_rate) > 0.02:
+                budget_to_execute = Decimal('0')
+                budget_to_wait_pool = budget_for_execution  # 使用budget_for_execution（可执行预算）
+            # 如果溢价1%-2%，半买，另一半进入等待池
+            elif premium_rate and 0.01 < float(premium_rate) <= 0.02:
+                if output.action == 'BUY':
+                    # 半买逻辑已在apply_premium_brake_to_output中处理
+                    # 但需要确保budget_to_wait_pool不超过budget_for_execution
+                    if budget_to_execute + budget_to_wait_pool > budget_for_execution:
+                        # 按比例缩减
+                        total = budget_to_execute + budget_to_wait_pool
+                        if total > 0:
+                            budget_to_execute = budget_for_execution * (budget_to_execute / total)
+                            budget_to_wait_pool = budget_for_execution * (budget_to_wait_pool / total)
+                        else:
+                            budget_to_execute = Decimal('0')
+                            budget_to_wait_pool = budget_for_execution
+                else:
+                    # 如果原本不是BUY，保持原样
+                    if budget_to_execute + budget_to_wait_pool > budget_for_execution:
+                        budget_to_wait_pool = budget_for_execution - budget_to_execute
+            else:
+                # 正常情况：确保不超过budget_for_execution
+                if budget_to_execute + budget_to_wait_pool > budget_for_execution:
                     # 按比例缩减
                     total = budget_to_execute + budget_to_wait_pool
                     if total > 0:
-                        budget_to_execute = planned_amount * (budget_to_execute / total)
-                        budget_to_wait_pool = planned_amount * (budget_to_wait_pool / total)
+                        budget_to_execute = budget_for_execution * (budget_to_execute / total)
+                        budget_to_wait_pool = budget_for_execution * (budget_to_wait_pool / total)
                     else:
                         budget_to_execute = Decimal('0')
-                        budget_to_wait_pool = planned_amount
-            else:
-                # 如果原本不是BUY，保持原样
-                if budget_to_execute + budget_to_wait_pool > planned_amount:
-                    budget_to_wait_pool = planned_amount - budget_to_execute
-        else:
-            # 正常情况：确保不超过planned_amount
-            if budget_to_execute + budget_to_wait_pool > planned_amount:
-                # 按比例缩减
+                        budget_to_wait_pool = budget_for_execution
+            
+            # 16.3 确保：实际执行 + 转等待池 <= budget_for_execution（现金限制）
+            if budget_to_execute + budget_to_wait_pool > budget_for_execution:
+                # 受现金限制，按比例缩减
                 total = budget_to_execute + budget_to_wait_pool
                 if total > 0:
-                    budget_to_execute = planned_amount * (budget_to_execute / total)
-                    budget_to_wait_pool = planned_amount * (budget_to_wait_pool / total)
+                    budget_to_execute = budget_for_execution * (budget_to_execute / total)
+                    budget_to_wait_pool = budget_for_execution * (budget_to_wait_pool / total)
                 else:
                     budget_to_execute = Decimal('0')
-                    budget_to_wait_pool = planned_amount
+                    budget_to_wait_pool = budget_for_execution
         
-        # 确保：实际执行 + 转等待池 <= planned_amount
-        # 同时确保不超过budget_for_execution（现金限制）
-        if budget_to_execute + budget_to_wait_pool > budget_for_execution:
-            # 受现金限制，按比例缩减
-            total = budget_to_execute + budget_to_wait_pool
-            if total > 0:
-                budget_to_execute = budget_for_execution * (budget_to_execute / total)
-                budget_to_wait_pool = budget_for_execution * (budget_to_wait_pool / total)
-            else:
-                budget_to_execute = Decimal('0')
-                budget_to_wait_pool = budget_for_execution
+        # 16.4 执行自检（在最终计算之前）
+        # 更新output的moved_to_wait_pool为最终值，用于自检
+        output_for_check = AdviceOutput(
+            action=output.action,
+            suggest_amount=budget_to_execute,
+            suggest_ratio=output.suggest_ratio,
+            limit_price_hint=output.limit_price_hint,
+            premium_rate=output.premium_rate,
+            moved_to_wait_pool=budget_to_wait_pool,
+            reason=output.reason,
+            new_state_json=output.new_state_json
+        )
+        # 执行自检（传入trade_day用于非交易日检查）
+        output_checked = check_invariants(output_for_check, base_input_data, product, trade_day)
+        
+        # 如果自检失败，使用修正后的输出
+        if output_checked.action == 'WAIT' and (output_checked.suggest_amount != budget_to_execute or output_checked.moved_to_wait_pool != budget_to_wait_pool):
+            logger.warning(f"产品 {product_id} 自检失败，使用修正后的输出: {output_checked.reason}")
+            budget_to_execute = output_checked.suggest_amount
+            budget_to_wait_pool = output_checked.moved_to_wait_pool
+            output.action = output_checked.action
+            output.reason = output_checked.reason
         
         # 17. 计算比例
         execute_ratio = (budget_to_execute / budget_for_execution) if budget_for_execution > 0 else Decimal('0')
@@ -623,11 +690,59 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
             wait_ratio=wait_ratio,
             limit_price_hint=output.limit_price_hint,
             time_window_hint="10:30-11:15/13:30-14:30" if product.get('is_qdii') else None,
+            park_cash_hint=None,  # 将在下面计算
             reason_blocks=reason_blocks,
             strategy_codes=strategy_codes
         )
         
-        # 19. 自检验收（使用ViewModel）
+        # 19. 计算PARK_CASH提示（停机坪建议）
+        # 当出现以下情况之一时，建议将等待资金临时停放到货基/现金管理：
+        # 1. 连续X个交易日该产品 action=WAIT 且等待池累计金额超过阈值
+        # 2. 本次预算因 VETO 全额进入 WAIT_BUY
+        park_cash_hint = None
+        
+        # 检查条件1：连续WAIT且等待池累计金额超过阈值
+        # 阈值：等待池累计金额 >= 5000 元（可配置，但先写死）
+        wait_pool_threshold = Decimal('5000')
+        consecutive_wait_days = 3  # 连续3个交易日
+        
+        if wait_pool_after >= wait_pool_threshold and output.action in ['WAIT', 'HOLD']:
+            # 查询最近N个交易日的建议记录
+            sql_recent = """
+                SELECT action, budget_to_wait_pool, as_of_time
+                FROM advisor_suggestion
+                WHERE product_id = %s
+                  AND as_of_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+                ORDER BY as_of_time DESC
+                LIMIT %s
+            """
+            recent_suggestions = execute_query(sql_recent, (product_id, consecutive_wait_days * 2, consecutive_wait_days))
+            
+            # 检查是否连续N个交易日都是WAIT/HOLD
+            if len(recent_suggestions) >= consecutive_wait_days:
+                all_wait = all(s.get('action') in ['WAIT', 'HOLD'] for s in recent_suggestions[:consecutive_wait_days])
+                if all_wait:
+                    park_cash_hint = f"等待池累计金额{wait_pool_after:.2f}元已超过阈值{wait_pool_threshold:.2f}元，且连续{consecutive_wait_days}个交易日均为WAIT/HOLD。建议将等待资金临时停放到货基/现金管理（如稳利宝、余利宝），减少资金闲置。"
+        
+        # 检查条件2：本次预算因VETO全额进入等待池
+        if budget_to_wait_pool > 0 and budget_to_execute == 0 and output.action in ['WAIT', 'HOLD']:
+            if budget_to_wait_pool == budget_for_execution:
+                # 全额进入等待池
+                if not park_cash_hint:  # 如果条件1未触发，才设置条件2的提示
+                    park_cash_hint = f"本次预算{budget_for_execution:.2f}元因规则否决（{output.reason[:50]}...）全额进入等待池。建议将等待资金临时停放到货基/现金管理，等待条件满足后再买入。"
+        
+        # 更新view_model的park_cash_hint
+        view_model.park_cash_hint = park_cash_hint
+        
+        # 如果有park_cash_hint，添加到reason_blocks中（用于UI展示）
+        if park_cash_hint:
+            view_model.reason_blocks.append(ReasonBlock(
+                rule_name="停机坪建议",
+                input_values={"wait_pool_after": float(wait_pool_after), "budget_to_wait_pool": float(budget_to_wait_pool)},
+                decision=park_cash_hint
+            ))
+        
+        # 20. 自检验收（使用ViewModel）
         validation_errors = view_model.validate()
         if validation_errors:
             logger.warning(f"ViewModel验证失败: {validation_errors}")
@@ -643,7 +758,7 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
                 decision="降级为WAIT"
             ))
         
-        # 20. 更新output以匹配ViewModel
+        # 21. 更新output以匹配ViewModel
         output.suggest_amount = view_model.budget_to_execute
         output.moved_to_wait_pool = view_model.budget_to_wait_pool
         
@@ -670,13 +785,14 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
             'budget_to_wait_pool': float(view_model.budget_to_wait_pool),
             'execute_ratio': float(view_model.execute_ratio),
             'wait_ratio': float(view_model.wait_ratio),
-            'reason_blocks': [{"rule_name": b.rule_name, "input_values": b.input_values, "decision": b.decision} for b in view_model.reason_blocks]
+            'reason_blocks': [{"rule_name": b.rule_name, "input_values": b.input_values, "decision": b.decision} for b in view_model.reason_blocks],
+            'park_cash_hint': view_model.park_cash_hint  # 停机坪建议（可选）
         }
         save_suggestion(suggestion_data)
         
         # 21.1 保存 budget_trace（审计日志）
         try:
-            from repos.budget_trace_repo import save_budget_trace
+            from .repos.budget_trace_repo import save_budget_trace
             
             # 构建结构化的reason_text（包含5个区块）
             reason_text_parts = []
@@ -811,6 +927,18 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
             # 更新第一个策略的状态（兼容旧逻辑）
             save_state(product_id, strategy_codes[0], output.new_state_json)
         
+        # 记录最终决策日志
+        pct_rank_val = indicator_dict.get('pct_rank') if indicator_dict else None
+        q_buy_price_val = indicator_dict.get('q_buy_price') if indicator_dict else None
+        logger.info(
+            f"Advisor建议生成完成: product_id={product_id}, "
+            f"strategy_codes={strategy_codes}, param_set_ids={[b['param_set_id'] for b in binds]}, "
+            f"params_hash={first_param_hash}, "
+            f"pct_rank={pct_rank_val}, q_buy_price={q_buy_price_val}, "
+            f"decision={view_model.action}, suggest_amount={view_model.budget_to_execute:.2f}, "
+            f"moved_to_wait_pool={view_model.budget_to_wait_pool:.2f}"
+        )
+        
         return {
             'product_id': product_id,
             'action': view_model.action,
@@ -831,10 +959,12 @@ def apply_premium_brake_to_output(output: AdviceOutput, product: Dict, premium_r
     """
     溢价刹车处理（全局统一处理）
     
-    规则：
-    - premium_rate <= 0.01：不改策略输出
-    - 0.01 < premium_rate <= 0.02：半买
-    - premium_rate > 0.02：强制WAIT
+    规则（分段买入/等待，可配置）：
+    - premium_rate <= 0.01 (1%)：正常买入（100%）
+    - 0.01 < premium_rate <= 0.02 (1%-2%)：半买（50%），剩余50%进入等待池
+    - premium_rate > 0.02 (2%)：不买（0%），全部进入等待池
+    
+    reason必须包含：premium值、区间、买入比例、迁移金额
     """
     if not product.get('is_qdii'):
         # 非QDII产品，不需要溢价刹车
@@ -842,50 +972,167 @@ def apply_premium_brake_to_output(output: AdviceOutput, product: Dict, premium_r
     
     if premium_rate is None:
         # 溢价率缺失，必须WAIT
+        original_amount = output.suggest_amount + output.moved_to_wait_pool
         return AdviceOutput(
             action='WAIT',
             suggest_amount=Decimal('0'),
             suggest_ratio=None,
             limit_price_hint=output.limit_price_hint,
             premium_rate=None,
-            moved_to_wait_pool=output.suggest_amount + output.moved_to_wait_pool,
-            reason=f"{output.reason} 溢价率缺失，避免误买，全部进入等待池。",
+            moved_to_wait_pool=original_amount,
+            reason=f"{output.reason} 【溢价刹车】溢价率缺失，避免误买，全部预算{original_amount:.2f}元进入等待池。",
             new_state_json=output.new_state_json
         )
     
     premium_float = float(premium_rate)
+    original_suggest_amount = output.suggest_amount
+    original_moved_to_wait = output.moved_to_wait_pool
     
     if premium_float > 0.02:
-        # 溢价>2%，强制WAIT
+        # 溢价>2%，强制WAIT，全部进入等待池
+        total_to_wait = original_suggest_amount + original_moved_to_wait
         return AdviceOutput(
             action='WAIT',
             suggest_amount=Decimal('0'),
             suggest_ratio=None,
             limit_price_hint=output.limit_price_hint,
             premium_rate=premium_rate,
-            moved_to_wait_pool=output.suggest_amount + output.moved_to_wait_pool,
-            reason=f"{output.reason} 当前溢价={premium_float*100:.2f}%，超过2%阈值，执行溢价刹车，全部进入等待池。建议窗口10:30-11:15/13:30-14:30；建议限价=昨收*0.998。",
+            moved_to_wait_pool=total_to_wait,
+            reason=f"{output.reason} 【溢价刹车】premium={premium_float*100:.2f}%，落在>2%区间，买入比例=0%，迁移金额={total_to_wait:.2f}元（全部预算进入等待池）。建议窗口10:30-11:15/13:30-14:30；建议限价=昨收*0.998。",
             new_state_json=output.new_state_json
         )
     elif premium_float > 0.01:
-        # 1%<溢价<=2%，半买
-        if output.action == 'BUY':
-            half_amount = output.suggest_amount / Decimal('2')
+        # 1%<溢价<=2%，半买（50%），剩余50%进入等待池
+        if output.action == 'BUY' and original_suggest_amount > 0:
+            half_amount = original_suggest_amount / Decimal('2')
+            remaining_to_wait = original_suggest_amount - half_amount + original_moved_to_wait
             return AdviceOutput(
                 action=output.action,
                 suggest_amount=half_amount,
                 suggest_ratio=Decimal('0.5'),
                 limit_price_hint=output.limit_price_hint,
                 premium_rate=premium_rate,
-                moved_to_wait_pool=half_amount + output.moved_to_wait_pool,
-                reason=f"{output.reason} 当前溢价={premium_float*100:.2f}%，处于(1%,2%]，执行半买；建议窗口10:30-11:15/13:30-14:30；建议限价=昨收*0.998。",
+                moved_to_wait_pool=remaining_to_wait,
+                reason=f"{output.reason} 【溢价刹车】premium={premium_float*100:.2f}%，落在1%-2%区间，买入比例=50%，买入金额={half_amount:.2f}元，迁移金额={remaining_to_wait:.2f}元进入等待池。",
                 new_state_json=output.new_state_json
             )
-        # 如果原本是HOLD，保持HOLD
-        return output
+        else:
+            # 如果原本不是BUY或suggest_amount=0，保持原样（但需要说明溢价情况）
+            if original_suggest_amount == 0:
+                return AdviceOutput(
+                    action=output.action,
+                    suggest_amount=Decimal('0'),
+                    suggest_ratio=None,
+                    limit_price_hint=output.limit_price_hint,
+                    premium_rate=premium_rate,
+                    moved_to_wait_pool=original_moved_to_wait,
+                    reason=f"{output.reason} 【溢价刹车】premium={premium_float*100:.2f}%，落在1%-2%区间，但策略未触发买入，无资金迁移。",
+                    new_state_json=output.new_state_json
+                )
+            return output
     else:
-        # 溢价<=1%，正常处理
+        # premium <= 1%，正常买入（不改策略输出，但说明溢价情况）
+        if original_suggest_amount > 0:
+            return AdviceOutput(
+                action=output.action,
+                suggest_amount=output.suggest_amount,
+                suggest_ratio=output.suggest_ratio,
+                limit_price_hint=output.limit_price_hint,
+                premium_rate=premium_rate,
+                moved_to_wait_pool=output.moved_to_wait_pool,
+                reason=f"{output.reason} 【溢价刹车】premium={premium_float*100:.2f}%，落在≤1%区间，买入比例=100%，正常买入。",
+                new_state_json=output.new_state_json
+            )
         return output
+
+
+def debug_dump_product_config(product_id: int) -> Dict[str, Any]:
+    """
+    调试函数：输出产品的完整配置信息
+    
+    Args:
+        product_id: 产品ID
+        
+    Returns:
+        包含绑定记录、参数配置、指标、建议的字典
+    """
+    result = {
+        'product_id': product_id,
+        'binds': [],
+        'params': {},
+        'indicators': {},
+        'suggestion': None
+    }
+    
+    # 1. 查询当前绑定记录
+    binds = get_binds_by_product_id(product_id)
+    for bind in binds:
+        result['binds'].append({
+            'strategy_code': bind.get('strategy_code'),
+            'param_set_id': bind.get('param_set_id'),
+            'priority': bind.get('priority'),
+            'enabled': bind.get('enabled'),
+            'strategy_type': bind.get('strategy_type')
+        })
+    
+    # 2. 查询参数配置（包含 hash 和 updated_at）
+    for bind in binds:
+        strategy_code = bind.get('strategy_code')
+        param_set_id = bind.get('param_set_id')
+        param_json = get_strategy_config(strategy_code, param_set_id)
+        
+        if param_json:
+            param_str = json.dumps(param_json, sort_keys=True, ensure_ascii=False)
+            param_hash = hashlib.md5(param_str.encode('utf-8')).hexdigest()[:8]
+            
+            # 查询 updated_at
+            sql = """
+                SELECT updated_at
+                FROM strategy_config
+                WHERE strategy_key = %s AND param_set_id = %s AND is_active = 1
+                LIMIT 1
+            """
+            param_row = execute_one(sql, (strategy_code, param_set_id))
+            param_updated_at = param_row.get('updated_at') if param_row else None
+            
+            result['params'][f"{strategy_code}@{param_set_id}"] = {
+                'param_json': param_json,
+                'param_hash': param_hash,
+                'updated_at': str(param_updated_at) if param_updated_at else None
+            }
+    
+    # 3. 查询指标（最新 trade_date 和关键字段）
+    if binds:
+        first_bind = binds[0]
+        first_param_json = get_strategy_config(first_bind['strategy_code'], first_bind['param_set_id'])
+        if first_param_json:
+            window_days = first_param_json.get('window_days', 750)
+            indicator = get_latest_indicator(product_id, window_days)
+            if indicator:
+                result['indicators'] = {
+                    'trade_date': str(indicator.get('trade_date')),
+                    'window_days': indicator.get('window_days'),
+                    'pct_rank': indicator.get('pct_rank'),
+                    'q_buy_price': indicator.get('q_buy_price'),
+                    'peak_close': indicator.get('peak_close'),
+                    'drawdown_from_peak': indicator.get('drawdown_from_peak'),
+                    'ma20': indicator.get('ma20'),
+                    'ma60': indicator.get('ma60')
+                }
+    
+    # 4. 查询最新建议
+    from .repos.advisor_suggestion_repo import get_latest_suggestion
+    suggestion = get_latest_suggestion(product_id)
+    if suggestion:
+        result['suggestion'] = {
+            'action': suggestion.get('action'),
+            'suggest_amount': suggestion.get('suggest_amount'),
+            'moved_to_wait_pool': suggestion.get('moved_to_wait_pool'),
+            'reason': suggestion.get('reason'),
+            'as_of_time': str(suggestion.get('as_of_time')) if suggestion.get('as_of_time') else None
+        }
+    
+    return result
 
 
 def run_for_all_products(as_of_time: Optional[datetime] = None) -> Dict[str, Any]:

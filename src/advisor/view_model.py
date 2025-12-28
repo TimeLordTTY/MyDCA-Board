@@ -68,6 +68,7 @@ class AdvisorViewModel:
     wait_ratio: Decimal  # 本次预算中进入等待池的比例（0~1）
     limit_price_hint: Optional[Decimal]  # 限价建议
     time_window_hint: Optional[str]  # 建议交易窗口（如"10:30-11:15/13:30-14:30"）
+    park_cash_hint: Optional[str]  # 停机坪建议（建议将等待资金临时停放到货基/现金管理）
     reason_blocks: List[ReasonBlock] = field(default_factory=list)  # 结构化原因列表
     
     # ========== 策略组合信息 ==========

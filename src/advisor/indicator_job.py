@@ -17,18 +17,17 @@ from .repos.product_strategy_bind_repo import get_bind_by_product_id
 logger = logging.getLogger(__name__)
 
 
-def calculate_percentile_indicator(product_id: int, trade_date: date, window_days: int, buy_percentile: float) -> Optional[Dict[str, Any]]:
+def calculate_percentile_indicator(product_id: int, trade_date: date, window_days: int) -> Optional[Dict[str, Any]]:
     """
-    计算分位指标
+    计算分位指标（仅计算 pct_rank，不再计算 q_buy_price）
     
     Args:
         product_id: 产品ID
         trade_date: 交易日期
         window_days: 窗口天数
-        buy_percentile: 买入分位（0-1之间，如0.20表示20%）
         
     Returns:
-        指标字典，包含 q_buy_price, pct_rank 等
+        指标字典，包含 pct_rank, q_mid_price, q_high_price（不再包含 q_buy_price）
     """
     # 获取窗口内的收盘价数据
     sql = """
@@ -70,18 +69,12 @@ def calculate_percentile_indicator(product_id: int, trade_date: date, window_day
     
     yesterday_close = float(row_yesterday['close_price'])
     
-    # 计算分位
+    # 计算分位排名（pct_rank）
     closes_sorted = sorted(closes)
     below_count = sum(1 for c in closes_sorted if c < yesterday_close)
     pct_rank = below_count / len(closes_sorted) if closes_sorted else 0.0
     
-    # 计算买入分位对应的价格阈值
-    buy_index = int(len(closes_sorted) * buy_percentile)
-    if buy_index >= len(closes_sorted):
-        buy_index = len(closes_sorted) - 1
-    q_buy_price = closes_sorted[buy_index]
-    
-    # 计算50%和80%分位价格（可选）
+    # 计算50%和80%分位价格（用于展示，不用于买入判断）
     mid_index = int(len(closes_sorted) * 0.5)
     high_index = int(len(closes_sorted) * 0.8)
     q_mid_price = closes_sorted[mid_index] if mid_index < len(closes_sorted) else None
@@ -89,7 +82,6 @@ def calculate_percentile_indicator(product_id: int, trade_date: date, window_day
     
     return {
         'pct_rank': pct_rank,
-        'q_buy_price': q_buy_price,
         'q_mid_price': q_mid_price,
         'q_high_price': q_high_price
     }
@@ -224,7 +216,7 @@ def calculate_indicators_for_product(product_id: int, trade_date: Optional[date]
         logger.warning(f"解析参数失败: strategy_code={strategy_code}, param_set_id={param_set_id}")
         return 0
     
-    window_days = params.get('window_days', 750)
+    window_days = int(params.get('window_days', 750))
     
     # 计算指标
     indicator_data = {
@@ -232,7 +224,7 @@ def calculate_indicators_for_product(product_id: int, trade_date: Optional[date]
         'trade_date': trade_date,
         'window_days': window_days,
         'pct_rank': None,
-        'q_buy_price': None,
+        'q_buy_price': None,  # 保留字段以兼容旧数据，但不再计算
         'q_mid_price': None,
         'q_high_price': None,
         'peak_close': None,
@@ -243,8 +235,14 @@ def calculate_indicators_for_product(product_id: int, trade_date: Optional[date]
     
     # 根据策略类型计算对应指标
     if strategy_code == 'percentile':
-        buy_percentile = params.get('buy_percentile', 0.20)
-        percentile_ind = calculate_percentile_indicator(product_id, trade_date, window_days, buy_percentile)
+        # 验证参数：必须包含 tiers
+        tiers = params.get('tiers')
+        if not tiers or not isinstance(tiers, list) or len(tiers) == 0:
+            logger.error(f"percentile策略参数配置缺失: strategy_code={strategy_code}, param_set_id={param_set_id}, 必须提供 tiers 参数")
+            return 0
+        
+        # 只计算 pct_rank（不依赖 buy_percentile，不再计算 q_buy_price）
+        percentile_ind = calculate_percentile_indicator(product_id, trade_date, window_days)
         if percentile_ind:
             indicator_data.update(percentile_ind)
     

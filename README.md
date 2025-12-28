@@ -784,7 +784,7 @@ pip install -r requirements.txt
 
 #### TRIGGER层（触发层）
 - 任一策略命中 → 进入SCORE层
-- 例如：分位策略（当前价 ≤ q_buy_price）、回撤策略（drawdown ≥ 4%）
+- 例如：分位策略（根据 pct_rank 命中 tiers 档位）、回撤策略（drawdown ≥ 4%）
 
 #### SCORE层（强度层）
 - 决定买入金额档位
@@ -854,13 +854,25 @@ pip install -r requirements.txt
 
 3. **planned_amount（本轮可用于买入）**：`new_budget + wait_pool_before`。这是本轮最多可用于该产品的预算上限，不是必须全花。
 
-#### 等待池增加规则
+#### 等待池增加规则（关键语义修正）
 
-等待池只在"有买入意图但被迫延期"时增加：
-- 只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
-- 如果策略未触发（如分位太高），`moved_to_wait = 0`
-- 非交易日：如果 `planned_amount > 0`，则全部进入等待池；如果 `planned_amount = 0`，则不进入等待池
-- 半买处理：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
+**等待池语义**：WAIT_BUY 只记录"被规则否决而延期执行的资金"，不包括非交易日冻结的预算。
+
+**等待池增加条件**（必须同时满足）：
+1. **交易日**：非交易日时 `moved_to_wait_pool` 必须为 0（预算冻结，不迁移）
+2. **规则否决**：只有在 VETO 的"规则否决类原因"触发时，才允许把预算迁移到 WAIT_BUY
+   - QDII溢价过高（>2%全部等待，1%-2%半买）
+   - 最小成交额不足（<min_trade_amount）
+   - 风控上限等
+3. **有买入意图**：只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
+   - 如果策略未触发（如分位太高，action=HOLD且suggest_amount=0），`moved_to_wait = 0`
+
+**非交易日处理**：
+- 非交易日时，action=HOLD，`moved_to_wait_pool = 0`
+- reason明确说明"【非交易日】市场关闭：预算冻结，下一交易日开盘前重新评估"
+- 预算冻结，不迁移到等待池（这是"延后评估"，不是"条件否决"）
+
+**半买处理**：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
 
 #### 等待池扣减规则
 
@@ -881,7 +893,9 @@ pip install -r requirements.txt
 - **wait_pool_after恒等式**：`wait_pool_after == wait_pool_before + moved_to_wait`（Advisor不扣减）
 - **比例计算**：`execute_ratio = budget_to_execute / budget_for_execution`（若0则0），`wait_ratio = budget_to_wait_pool / budget_for_execution`
 - **BUY约束**：action=BUY时必须满足 `min_trade_amount` & 现金足够 & 一手约束，且 `executed_amount > 0`
-- **溢价刹车**：premium>2%时必须 `budget_to_execute=0` 且 `budget_to_wait_pool=planned_amount`
+- **溢价刹车**：premium>2%时必须 `budget_to_execute=0` 且 `budget_to_wait_pool=budget_for_execution`（全部可执行预算进入等待池）
+- **非交易日约束**：非交易日时 `moved_to_wait_pool` 必须为 0（预算冻结，不迁移）
+- **reason可解释性**：reason长度>=60字，且必须包含关键数值（pct_rank、premium、budget、suggest_amount、moved_to_wait_pool等）
 
 ## 🎓 关键设计理念
 

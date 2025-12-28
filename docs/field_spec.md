@@ -1043,12 +1043,23 @@ created_at, updated_at
 
 - `(product_id, from_account_id)` - 同一产品同一账户的待买入池唯一
 
-### 14.4 等待池业务规则
+### 14.4 等待池业务规则（关键语义修正）
 
-- **等待池增加**：只在"有买入意图但被迫延期"时增加
-  - 只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
-  - 如果策略未触发（如分位太高），`moved_to_wait = 0`
-  - 非交易日：如果 `planned_amount > 0`，则全部进入等待池；如果 `planned_amount = 0`，则不进入等待池
+**等待池语义**：WAIT_BUY 只记录"被规则否决而延期执行的资金"，不包括非交易日冻结的预算。
+
+- **等待池增加**：只在"有买入意图但被规则否决而延期"时增加
+  - **必须同时满足**：
+    1. **交易日**：非交易日时 `moved_to_wait_pool` 必须为 0（预算冻结，不迁移）
+    2. **规则否决**：只有在 VETO 的"规则否决类原因"触发时，才允许把预算迁移到 WAIT_BUY
+       - QDII溢价过高（>2%全部等待，1%-2%半买）
+       - 最小成交额不足（<min_trade_amount）
+       - 风控上限等
+    3. **有买入意图**：只有当 `planned_amount > 0` 且策略触发买入意图时，才进入等待池
+  - 如果策略未触发（如分位太高，action=HOLD且suggest_amount=0），`moved_to_wait = 0`（这是正常的"不买"决策，不是"延期执行"）
+  - **非交易日处理**：
+    - 非交易日时，action=HOLD，`moved_to_wait_pool = 0`
+    - reason明确说明"【非交易日】市场关闭：预算冻结，下一交易日开盘前重新评估"
+    - 预算冻结，不迁移到等待池（这是"延后评估"，不是"条件否决"）
   - 半买处理：`executed_amount = floor_to_trade_unit(planned_amount * execute_ratio)`，`remainder_amount = planned_amount - executed_amount`，`moved_to_wait = remainder_amount`
 - **等待池扣减**：只能由"真实成交导入/确认"触发
   - 扣减顺序：先扣该产品的WAIT_POOL（等待池），不足部分再扣CASH_FREE（自由现金）
@@ -1242,7 +1253,7 @@ id, strategy_key, strategy_version, param_set_id, param_json, is_active, created
 | strategy_key | 策略标识 | varchar(64) |
 | strategy_version | 策略版本 | varchar(32)（默认 'default'） |
 | param_set_id | 参数组合ID | varchar(64) |
-| param_json | 参数JSON | text |
+| param_json | 参数JSON | text | 支持tiers参数（percentile策略阶梯强度模式） |
 | is_active | 是否启用 | tinyint(1) |
 
 ### 21.3 唯一键
@@ -1398,7 +1409,7 @@ id, product_id, strategy_code, state_json, updated_at, created_at
 
 ```
 id, product_id, trade_date, window_days,
-pct_rank, q_buy_price, q_mid_price, q_high_price,
+pct_rank, q_mid_price, q_high_price,
 peak_close, drawdown_from_peak,
 ma20, ma60,
 created_at
@@ -1412,7 +1423,6 @@ created_at
 | trade_date | 指标日期 | date | 必填，对应market_bar_d.trade_date |
 | window_days | 窗口N | int | 必填，来自策略参数 |
 | pct_rank | 分位排名 | decimal(9,6) | 0~1，基于昨日close在窗口内的rank |
-| q_buy_price | 买入阈值价 | decimal(18,6) | 买入分位对应的价格阈值（如20%分位的close值） |
 | q_mid_price | 50%分位价格 | decimal(18,6) | 可选 |
 | q_high_price | 80%分位价格 | decimal(18,6) | 可选 |
 | peak_close | 峰值收盘价 | decimal(18,6) | 滚动窗口内峰值close |
@@ -1427,7 +1437,7 @@ created_at
 ### 27.4 计算规则
 
 - **pct_rank**：`below_count / total_count`，其中below_count是窗口内收盘价小于昨日close的数量
-- **q_buy_price**：窗口内收盘价排序后，取`int(total_count × buy_percentile)`位置的收盘价
+- **pct_rank**：当前价格在窗口内收盘价中的分位排名（0-1之间，如0.25表示25%分位）
 - **peak_close**：窗口内收盘价的最大值
 - **drawdown_from_peak**：`(yesterday_close - peak_close) / peak_close`
 - **ma20/ma60**：窗口内最近20/60个交易日的收盘价平均值
@@ -1446,6 +1456,8 @@ budget_for_execution, budget_to_execute, budget_to_wait_pool,
 execute_ratio, wait_ratio, reason_blocks_json,
 created_at
 ```
+
+**注意**：`park_cash_hint`（停机坪建议）存储在 `reason_blocks_json` 中，rule_name="停机坪建议"
 
 ### 28.2 字段定义
 
@@ -1487,9 +1499,37 @@ created_at
 - **比例计算**：`execute_ratio = budget_to_execute / budget_for_execution`（若0则0），`wait_ratio = budget_to_wait_pool / budget_for_execution`
 - **比例总和**：`execute_ratio + wait_ratio <= 1.0`（允许<1，因为可能有未分配部分）
 - **BUY约束**：action=BUY时必须满足 `min_trade_amount` & 现金足够 & 一手约束，且 `executed_amount > 0`
-- **溢价刹车**：premium>2%时必须 `budget_to_execute=0` 且 `budget_to_wait_pool=planned_amount`
+- **溢价刹车**：premium>2%时必须 `budget_to_execute=0` 且 `budget_to_wait_pool=budget_for_execution`（全部可执行预算进入等待池）
+- **非交易日约束**：非交易日时 `moved_to_wait_pool` 必须为 0（预算冻结，不迁移）
+- **reason可解释性**：reason长度>=60字，且必须包含关键数值（pct_rank、premium、budget、suggest_amount、moved_to_wait_pool等）
 
-### 28.5 reason_blocks_json 格式
+### 28.5 percentile策略tiers参数格式（阶梯强度模式）
+
+percentile策略支持两种参数模式：
+
+**1. 阶梯强度模式（推荐）**：
+```json
+{
+  "window_days": 750,
+  "tiers": [
+    {"max_rank": 0.20, "suggest_ratio": 1.00, "label":"极低估"},
+    {"max_rank": 0.40, "suggest_ratio": 1.00, "label":"偏低估"},
+    {"max_rank": 0.60, "suggest_ratio": 0.50, "label":"中性轻买"},
+    {"max_rank": 1.01, "suggest_ratio": 0.00, "label":"偏高不买"}
+  ],
+  "max_buy_per_day": 2000
+}
+```
+
+**说明**：
+- 仅支持 tiers 模式（阶梯强度），不再支持 buy_percentile 模式
+- 根据 pct_rank 命中对应 tier，得出 suggest_ratio，再计算 suggest_amount = budget_for_execution * suggest_ratio
+- tiers按max_rank从小到大排序，根据pct_rank命中对应tier
+- suggest_ratio决定买入比例（0.0=不买，0.5=半买，1.0=全买）
+- 最终suggest_amount = budget_for_execution * suggest_ratio
+- 如果参数集中没有 tiers 或 tiers 为空，策略将返回 HOLD 并提示"参数配置缺失：必须提供 tiers 参数"
+
+### 28.6 reason_blocks_json 格式
 
 ```json
 [

@@ -544,28 +544,53 @@ def render_product_quote():
                 else:
                     st.info("⏰ 当前为非交易时间段（交易时间：9:00-11:30, 13:00-15:00）")
         
-        # 手动刷新按钮（保留，用于立即刷新）
+        # 手动刷新按钮（保留，用于立即刷新所有产品）
         if st.button("🔄 立即刷新行情", key="manual_refresh_quote", use_container_width=True):
-            with st.spinner("正在获取最新行情并计算指标..."):
+            with st.spinner("正在获取所有产品最新行情并计算指标..."):
                 try:
-                    if channel == 'EXCHANGE':
-                        fetch_and_save_realtime_quote(selected_product_id, product_code)
-                        if product.get('is_qdii'):
-                            fetch_and_save_qdii_premium(selected_product_id, product_code)
-                        # 自动触发指标计算
-                        from advisor.indicator_job import calculate_indicators_for_product
-                        calculate_indicators_for_product(selected_product_id)
-                        # 自动触发建议生成
-                        from advisor.advisor_service import run_for_product
-                        run_for_product(selected_product_id)
-                    else:
-                        # 场外产品触发净值采集
+                    from core.market_quote_service import collect_realtime_quotes
+                    from advisor.indicator_job import calculate_indicators_for_all_products
+                    from advisor.advisor_service import run_for_all_products
+                    from data.product_service import get_products
+                    
+                    # 获取所有活跃产品
+                    all_products = get_products(is_active=True)
+                    exchange_products = [p for p in all_products if p.get('channel') == 'EXCHANGE']
+                    otc_products = [p for p in all_products if p.get('channel') == 'OTC']
+                    
+                    success_count = 0
+                    fail_count = 0
+                    
+                    # 刷新场内产品行情
+                    if exchange_products:
+                        product_ids = [p['id'] for p in exchange_products]
+                        results = collect_realtime_quotes(product_ids)
+                        success_count += sum(1 for v in results.values() if v)
+                        fail_count += sum(1 for v in results.values() if not v)
+                    
+                    # 刷新场外产品净值
+                    if otc_products:
                         from core.nav_collector import collect_and_store
                         collect_and_store()
-                    st.success("✅ 行情已更新，指标已计算，建议已生成")
+                    
+                    # 为所有场内产品计算指标
+                    if exchange_products:
+                        indicator_results = calculate_indicators_for_all_products()
+                        success_count += indicator_results.get('success_count', 0)
+                        fail_count += indicator_results.get('fail_count', 0)
+                    
+                    # 为所有场内产品生成建议
+                    if exchange_products:
+                        advisor_results = run_for_all_products()
+                        success_count += advisor_results.get('success_count', 0)
+                        fail_count += advisor_results.get('fail_count', 0)
+                    
+                    st.success(f"✅ 刷新完成！成功: {success_count}, 失败: {fail_count}")
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ 刷新失败: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
         
         st.divider()
         
@@ -804,19 +829,37 @@ def _render_exchange_quote(product, product_id):
                                  help=f"当前价格在最近{window_days}个交易日中的分位位置。指标未计算。")
                 
                 with col2:
-                    if q_buy_price is not None:
-                        q_buy = float(q_buy_price)
-                        if current_price is not None:
-                            price_diff = ((current_price - q_buy) / q_buy * 100) if q_buy > 0 else 0
-                            delta_label = f"{price_diff:+.2f}%" if abs(price_diff) > 0.01 else "0%"
-                            st.metric("买入阈值价", f"{q_buy:.4f}", delta=delta_label,
-                                     help=f"分位策略的买入触发价格。当前价{'高于' if current_price > q_buy else '低于'}阈值价{abs(price_diff):.2f}%。")
-                        else:
-                            st.metric("买入阈值价", f"{q_buy:.4f}",
-                                     help="分位策略的买入触发价格。当前价 ≤ 阈值价时触发买入信号。")
+                    # 获取策略参数以显示命中档位（不再显示 q_buy_price）
+                    from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
+                    from advisor.advisor_service import get_strategy_config
+                    bind_detail = get_bind_by_product_id(product_id)
+                    matched_tier_label = None
+                    matched_tier_ratio = None
+                    if bind_detail and bind_detail.get('strategy_code') == 'percentile':
+                        param_json_detail = get_strategy_config('percentile', bind_detail.get('param_set_id', 'default'))
+                        if param_json_detail and pct_rank is not None:
+                            tiers = param_json_detail.get('tiers')
+                            if tiers and isinstance(tiers, list):
+                                pct_rank_float = float(pct_rank)
+                                for tier in tiers:
+                                    max_rank = float(tier.get('max_rank', 1.01))
+                                    if pct_rank_float < max_rank:
+                                        matched_tier_label = tier.get('label', '未知档位')
+                                        matched_tier_ratio = float(tier.get('suggest_ratio', 0.0))
+                                        break
+                    
+                    if matched_tier_label:
+                        pct_rank_display = float(pct_rank) * 100 if pct_rank is not None else 0
+                        matched_tier_ratio_pct = float(matched_tier_ratio) * 100
+                        st.metric("命中档位", matched_tier_label,
+                                 delta=f"建议比例{matched_tier_ratio_pct:.0f}%",
+                                 help=f"根据分位排名{pct_rank_display:.2f}%命中的策略档位，决定买入建议比例。")
+                    elif pct_rank is not None:
+                        st.metric("命中档位", "未命中",
+                                 help="分位排名未命中任何档位（可能分位过高）。")
                     else:
-                        st.metric("买入阈值价", "N/A",
-                                 help="分位策略的买入触发价格。指标未计算。")
+                        st.metric("命中档位", "N/A",
+                                 help="分位排名未计算，无法确定命中档位。")
                 
                 with col3:
                     if peak_close is not None:
@@ -868,7 +911,10 @@ def _render_exchange_quote(product, product_id):
             else:
                 st.info("指标未就绪：产品未绑定策略或指标未计算。指标会在实时行情更新时自动计算。")
         except Exception as e:
-            st.warning(f"加载指标失败: {e}")
+            import traceback
+            st.error(f"加载指标失败: {e}")
+            st.exception(e)
+            logger.error(f"加载指标失败: {e}", exc_info=True)
         
         # ========== 生产建议展示 ==========
         st.divider()
@@ -996,7 +1042,7 @@ def _render_exchange_quote(product, product_id):
                         action_color = "⚪"
                         if not has_holding:
                             action_label = "等待建仓"
-                            action_help = "当前价格未满足策略买入条件（如当前价高于阈值价），暂不建议建仓。等待价格回落至买入阈值时再建仓。"
+                            action_help = "当前价格未满足策略买入条件（如分位排名偏高），暂不建议建仓。等待价格回落至合适分位时再建仓。"
                         else:
                             action_label = "持有"
                             action_help = "建议持有。当前价格未满足策略买入条件，但已有持仓，继续持有等待更好的买入时机。"
@@ -1095,147 +1141,229 @@ def _render_exchange_quote(product, product_id):
                         elif premium_pct > 1:
                             st.info(f"**溢价刹车触发**：溢价率 {premium_pct:.2f}% 处于(1%,2%]，执行半买策略。建议窗口：{time_window_hint or '10:30-11:15/13:30-14:30'}；建议限价：{limit_price_hint or '昨收×0.998' if limit_price_hint else 'N/A'}。")
                     
-                    # 计算逻辑说明
-                    st.markdown("**📊 计算逻辑**")
-                    with st.expander("查看预算计算公式和阈值价计算逻辑", expanded=False):
-                        # 预算计算公式
-                        st.markdown("**预算计算公式：**")
-                        from advisor.advisor_service import get_budget_amount
-                        from data.db_connector import execute_query
-                        from core.ledger_service import calc_account_balance
-                        # Decimal已在文件顶部导入，无需重复导入
+                    # 计算逻辑说明（并排展示策略参数集，共同展开折叠）
+                    with st.expander("📊 计算逻辑 & ⚙️ 策略参数集", expanded=False):
+                        col_calc, col_param = st.columns([1, 1])
                         
-                        # 获取资金池规则详情
-                        sql_rules = """
-                            SELECT apr.from_account_id, apr.ratio, apr.min_amount, apr.round_step,
-                                   a.account_code, a.account_name
-                            FROM account_pool_rules apr
-                            INNER JOIN accounts a ON apr.from_account_id = a.id
-                            WHERE apr.to_product_id = %s 
-                              AND apr.is_active = 1
-                              AND a.is_active = 1
-                        """
-                        rules_detail = execute_query(sql_rules, (product_id,))
-                        
-                        if rules_detail:
-                            total_pool_balance = Decimal('0')
-                            account_details = []
-                            for rule in rules_detail:
-                                account_code = rule.get('account_code', '')
-                                account_name = rule.get('account_name', '')
-                                if account_code:
-                                    try:
-                                        balance = calc_account_balance(account_code)
-                                        total_pool_balance += balance
-                                        account_details.append({
-                                            'name': account_name,
-                                            'code': account_code,
-                                            'balance': balance
-                                        })
-                                    except:
-                                        pass
+                        with col_calc:
+                            st.markdown("**📊 计算逻辑**")
+                            # 预算计算公式
+                            st.markdown("**预算计算公式：**")
+                            from advisor.advisor_service import get_budget_amount
+                            from data.db_connector import execute_query
+                            from core.ledger_service import calc_account_balance
+                            # Decimal已在文件顶部导入，无需重复导入
                             
-                            if account_details:
-                                min_amount = float(rules_detail[0].get('min_amount', 0))
-                                round_step = float(rules_detail[0].get('round_step', 1))
-                                
-                                st.markdown(f"**1. 各账户按比例分配 = Σ(账户余额 × 该账户分配比例)**")
-                                allocated = Decimal('0')
+                            # 获取资金池规则详情
+                            sql_rules = """
+                                SELECT apr.from_account_id, apr.ratio, apr.min_amount, apr.round_step,
+                                       a.account_code, a.account_name
+                                FROM account_pool_rules apr
+                                INNER JOIN accounts a ON apr.from_account_id = a.id
+                                WHERE apr.to_product_id = %s 
+                                  AND apr.is_active = 1
+                                  AND a.is_active = 1
+                            """
+                            rules_detail = execute_query(sql_rules, (product_id,))
+                            
+                            if rules_detail:
+                                total_pool_balance = Decimal('0')
+                                account_details = []
                                 for rule in rules_detail:
                                     account_code = rule.get('account_code', '')
                                     account_name = rule.get('account_name', '')
-                                    ratio = float(rule.get('ratio', 0))
                                     if account_code:
-                                        for acc in account_details:
-                                            if acc['code'] == account_code:
-                                                account_allocated = acc['balance'] * Decimal(str(ratio))
-                                                allocated += account_allocated
-                                                st.caption(f"   - {account_name} ({account_code}): ¥{acc['balance']:.2f} × {ratio*100:.2f}% = ¥{account_allocated:.2f}")
-                                                break
-                                st.caption(f"   **合计**: ¥{allocated:.2f}")
+                                        try:
+                                            balance = calc_account_balance(account_code)
+                                            total_pool_balance += balance
+                                            account_details.append({
+                                                'name': account_name,
+                                                'code': account_code,
+                                                'balance': balance
+                                            })
+                                        except:
+                                            pass
                                 
-                                st.markdown(f"**3. 应用最小金额约束**")
-                                if allocated < Decimal(str(min_amount)):
-                                    st.caption(f"   ¥{allocated:.2f} < ¥{min_amount:.2f} (最小金额) → 预算 = ¥0.00")
-                                else:
-                                    st.caption(f"   ¥{allocated:.2f} ≥ ¥{min_amount:.2f} (最小金额) → 继续")
-                                
-                                if round_step > 0 and allocated >= Decimal(str(min_amount)):
-                                    st.markdown(f"**4. 取整（粒度={round_step}）**")
-                                    allocated_rounded = (allocated / Decimal(str(round_step))).quantize(Decimal('1'), rounding=ROUND_DOWN) * Decimal(str(round_step))
-                                    st.caption(f"   = ¥{allocated:.2f} → ¥{allocated_rounded:.2f}")
-                                
-                                st.markdown(f"**5. 最终预算 = 分配金额 + 等待池金额**")
-                                # 计算实际预算和等待池金额
-                                from advisor.advisor_service import get_pending_amount_sum
-                                total_pending = get_pending_amount_sum(product_id) or Decimal('0')
-                                actual_budget = allocated_rounded if round_step > 0 and allocated >= Decimal(str(min_amount)) else allocated
-                                total_budget = actual_budget + total_pending
-                                st.caption(f"   = ¥{float(actual_budget):.2f} + ¥{float(total_pending):.2f} = ¥{float(total_budget):.2f}")
-                        else:
-                            st.caption("未配置资金池规则")
-                        
-                        # 阈值价计算逻辑（仅对percentile策略）
-                        # 使用第一个策略的code（兼容多策略组合）
-                        first_strategy_code = strategy_codes[0] if strategy_codes else ''
-                        if first_strategy_code == 'percentile':
-                            st.markdown("**阈值价（q_buy_price）计算公式：**")
-                            from advisor.repos.indicator_daily_repo import get_latest_indicator
-                            from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
-                            from advisor.advisor_service import get_strategy_config
-                            from data.db_connector import execute_query, execute_one
-                            from datetime import date, timedelta
-                            
-                            bind_detail = get_bind_by_product_id(product_id)
-                            if bind_detail:
-                                param_json_detail = get_strategy_config(first_strategy_code, bind_detail.get('param_set_id', 'default'))
-                                if param_json_detail:
-                                    window_days = param_json_detail.get('window_days', 750)
-                                    buy_percentile = param_json_detail.get('buy_percentile', 0.20)
-                                    min_required = max(int(window_days * 0.6), 300)
+                                if account_details:
+                                    min_amount = float(rules_detail[0].get('min_amount', 0))
+                                    round_step = float(rules_detail[0].get('round_step', 1))
                                     
-                                    indicator_detail = get_latest_indicator(product_id, window_days)
-                                    if indicator_detail and indicator_detail.get('q_buy_price'):
-                                        q_buy_price = float(indicator_detail.get('q_buy_price', 0))
-                                        trade_date = indicator_detail.get('trade_date')
-                                        st.caption(f"**1. 获取最近N={window_days}个交易日的收盘价数据**")
-                                        st.caption(f"**2. 将收盘价从小到大排序**")
-                                        st.caption(f"**3. 计算买入分位对应的索引位置**")
-                                        st.caption(f"   索引 = int(数据总数 × {buy_percentile*100:.0f}%)")
-                                        st.caption(f"**4. 取该索引位置的收盘价作为阈值价**")
-                                        st.caption(f"   **q_buy_price = {q_buy_price:.4f}**（计算日期：{trade_date}）")
-                                        st.caption(f"**5. 当前价 ≤ q_buy_price 时触发买入信号**")
+                                    st.markdown(f"**1. 各账户按比例分配 = Σ(账户余额 × 该账户分配比例)**")
+                                    allocated = Decimal('0')
+                                    for rule in rules_detail:
+                                        account_code = rule.get('account_code', '')
+                                        account_name = rule.get('account_name', '')
+                                        ratio = float(rule.get('ratio', 0))
+                                        if account_code:
+                                            for acc in account_details:
+                                                if acc['code'] == account_code:
+                                                    account_allocated = acc['balance'] * Decimal(str(ratio))
+                                                    allocated += account_allocated
+                                                    st.caption(f"   - {account_name} ({account_code}): ¥{acc['balance']:.2f} × {ratio*100:.2f}% = ¥{account_allocated:.2f}")
+                                                    break
+                                    st.caption(f"   **合计**: ¥{allocated:.2f}")
+                                    
+                                    st.markdown(f"**3. 应用最小金额约束**")
+                                    if allocated < Decimal(str(min_amount)):
+                                        st.caption(f"   ¥{allocated:.2f} < ¥{min_amount:.2f} (最小金额) → 预算 = ¥0.00")
                                     else:
-                                        # 诊断为什么阈值价未就绪
-                                        st.caption("**阈值价未就绪，诊断信息：**")
+                                        st.caption(f"   ¥{allocated:.2f} ≥ ¥{min_amount:.2f} (最小金额) → 继续")
+                                    
+                                    if round_step > 0 and allocated >= Decimal(str(min_amount)):
+                                        st.markdown(f"**4. 取整（粒度={round_step}）**")
+                                        allocated_rounded = (allocated / Decimal(str(round_step))).quantize(Decimal('1'), rounding=ROUND_DOWN) * Decimal(str(round_step))
+                                        st.caption(f"   = ¥{allocated:.2f} → ¥{allocated_rounded:.2f}")
+                                    
+                                    st.markdown(f"**5. 最终预算 = 分配金额 + 等待池金额**")
+                                    # 计算实际预算和等待池金额
+                                    from advisor.advisor_service import get_pending_amount_sum
+                                    total_pending = get_pending_amount_sum(product_id) or Decimal('0')
+                                    actual_budget = allocated_rounded if round_step > 0 and allocated >= Decimal(str(min_amount)) else allocated
+                                    total_budget = actual_budget + total_pending
+                                    st.caption(f"   = ¥{float(actual_budget):.2f} + ¥{float(total_pending):.2f} = ¥{float(total_budget):.2f}")
+                            else:
+                                st.caption("未配置资金池规则")
+                            
+                            # 分位策略档位说明（仅对percentile策略）
+                            # 使用第一个策略的code（兼容多策略组合）
+                            first_strategy_code = strategy_codes[0] if strategy_codes else ''
+                            if first_strategy_code == 'percentile':
+                                st.markdown("**分位策略档位说明：**")
+                                from advisor.repos.indicator_daily_repo import get_latest_indicator
+                                from advisor.repos.product_strategy_bind_repo import get_bind_by_product_id
+                                from advisor.advisor_service import get_strategy_config
+                                from data.db_connector import execute_one
+                                from datetime import date, timedelta
+                                
+                                bind_detail = get_bind_by_product_id(product_id)
+                                if bind_detail:
+                                    param_json_detail = get_strategy_config(first_strategy_code, bind_detail.get('param_set_id', 'default'))
+                                    if param_json_detail:
+                                        window_days = param_json_detail.get('window_days', 750)
+                                        tiers = param_json_detail.get('tiers')
+                                        min_required = max(int(window_days * 0.6), 300)
                                         
-                                        # 检查历史数据量
-                                        yesterday = date.today() - timedelta(days=1)
-                                        sql_data_count = """
-                                            SELECT COUNT(*) as cnt
-                                            FROM market_bar_d
-                                            WHERE product_id = %s
-                                              AND trade_date < %s
-                                              AND trade_date >= DATE_SUB(%s, INTERVAL %s DAY)
+                                        indicator_detail = get_latest_indicator(product_id, window_days)
+                                        pct_rank_val = indicator_detail.get('pct_rank') if indicator_detail else None
+                                        
+                                        if tiers and isinstance(tiers, list) and pct_rank_val is not None:
+                                            pct_rank_float = float(pct_rank_val)
+                                            trade_date = indicator_detail.get('trade_date') if indicator_detail else None
+                                            
+                                            st.caption(f"**1. 获取最近N={window_days}个交易日的收盘价数据**")
+                                            st.caption(f"**2. 计算当前价格的分位排名（pct_rank）**")
+                                            pct_rank_display_val = float(pct_rank_float) * 100
+                                            st.caption(f"   **当前分位排名 = {pct_rank_display_val:.2f}%**（计算日期：{trade_date}）")
+                                            st.caption(f"**3. 根据分位排名命中对应档位：**")
+                                            
+                                            matched_tier = None
+                                            for tier in tiers:
+                                                max_rank = float(tier.get('max_rank', 1.01))
+                                                suggest_ratio = float(tier.get('suggest_ratio', 0.0))
+                                                label = tier.get('label', '未知档位')
+                                                
+                                                if pct_rank_float < max_rank and matched_tier is None:
+                                                    matched_tier = tier
+                                                    st.caption(f"   ✅ **命中档位：{label}**（max_rank<{max_rank*100:.0f}%，建议比例={suggest_ratio*100:.0f}%）")
+                                                else:
+                                                    st.caption(f"   - {label}（max_rank<{max_rank*100:.0f}%，建议比例={suggest_ratio*100:.0f}%）")
+                                            
+                                            if matched_tier:
+                                                st.caption(f"**4. 根据命中档位的建议比例计算买入金额**")
+                                        else:
+                                            # 诊断为什么分位排名未就绪
+                                            st.caption("**分位排名未就绪，诊断信息：**")
+                                            
+                                            # 检查历史数据量
+                                            yesterday = date.today() - timedelta(days=1)
+                                            sql_data_count = """
+                                                SELECT COUNT(*) as cnt
+                                                FROM market_bar_d
+                                                WHERE product_id = %s
+                                                  AND trade_date < %s
+                                                  AND trade_date >= DATE_SUB(%s, INTERVAL %s DAY)
+                                            """
+                                            data_count_row = execute_one(sql_data_count, (product_id, yesterday, yesterday, window_days))
+                                            data_count = data_count_row.get('cnt', 0) if data_count_row else 0
+                                            
+                                            st.caption(f"   - 需要至少{min_required}个交易日的数据")
+                                            st.caption(f"   - 实际可用数据：{data_count}条")
+                                            
+                                            if data_count < min_required:
+                                                st.caption(f"   - **数据不足**：缺少{min_required - data_count}条数据")
+                                                st.caption(f"   - 建议：等待更多历史数据或减少window_days参数")
+                                            else:
+                                                st.caption(f"   - 数据量充足，但指标未计算")
+                                                st.caption(f"   - 建议：检查指标计算任务（indicator_daily_update）是否正常运行")
+                                            
+                                            # 检查是否有指标记录
+                                            if indicator_detail:
+                                                st.caption(f"   - 存在指标记录，但pct_rank为NULL（计算失败）")
+                                            else:
+                                                st.caption(f"   - 不存在指标记录（指标计算任务可能未运行）")
+                                            
+                                            if not tiers or not isinstance(tiers, list) or len(tiers) == 0:
+                                                st.caption(f"   - **参数配置错误**：参数集中未找到 tiers 配置")
+                        
+                        with col_param:
+                            st.markdown("**⚙️ 策略参数集**")
+                            # 获取所有策略绑定
+                            from advisor.repos.product_strategy_bind_repo import get_binds_by_product_id
+                            from advisor.advisor_service import get_strategy_config
+                            from advisor.repos.indicator_daily_repo import get_latest_indicator
+                            from data.db_connector import execute_one
+                            import json
+                            
+                            binds = get_binds_by_product_id(product_id)
+                            if binds:
+                                for i, bind in enumerate(binds, 1):
+                                    strategy_code = bind.get('strategy_code', '')
+                                    param_set_id = bind.get('param_set_id', 'default')
+                                    strategy_type = bind.get('strategy_type', 'TRIGGER')
+                                    priority = bind.get('priority', 0)
+                                    
+                                    type_labels = {'VETO': '否决层', 'TRIGGER': '触发层', 'SCORE': '强度层'}
+                                    type_label = type_labels.get(strategy_type, strategy_type)
+                                    
+                                    st.markdown(f"**策略 {i}: {strategy_code}@{param_set_id}**")
+                                    st.caption(f"类型: {type_label} | 优先级: {priority}")
+                                    
+                                    # 获取参数配置和更新时间
+                                    param_config = get_strategy_config(strategy_code, param_set_id)
+                                    param_updated_at = None
+                                    if param_config:
+                                        # 查询参数更新时间
+                                        sql_param = """
+                                            SELECT updated_at
+                                            FROM strategy_config
+                                            WHERE strategy_key = %s AND param_set_id = %s AND is_active = 1
+                                            LIMIT 1
                                         """
-                                        data_count_row = execute_one(sql_data_count, (product_id, yesterday, yesterday, window_days))
-                                        data_count = data_count_row.get('cnt', 0) if data_count_row else 0
+                                        param_row = execute_one(sql_param, (strategy_code, param_set_id))
+                                        if param_row:
+                                            param_updated_at = param_row.get('updated_at')
                                         
-                                        st.caption(f"   - 需要至少{min_required}个交易日的数据")
-                                        st.caption(f"   - 实际可用数据：{data_count}条")
+                                        # 显示参数更新时间
+                                        if param_updated_at:
+                                            st.caption(f"📅 参数更新时间: {param_updated_at}")
                                         
-                                        if data_count < min_required:
-                                            st.caption(f"   - **数据不足**：缺少{min_required - data_count}条数据")
-                                            st.caption(f"   - 建议：等待更多历史数据或减少window_days参数")
-                                        else:
-                                            st.caption(f"   - 数据量充足，但指标未计算")
-                                            st.caption(f"   - 建议：检查指标计算任务（indicator_daily_update）是否正常运行")
-                                        
-                                        # 检查是否有指标记录
-                                        if indicator_detail:
-                                            st.caption(f"   - 存在指标记录，但q_buy_price为NULL（计算失败）")
-                                        else:
-                                            st.caption(f"   - 不存在指标记录（指标计算任务可能未运行）")
+                                        st.json(param_config)
+                                    else:
+                                        st.warning(f"⚠️ 参数集 {param_set_id} 未找到配置")
+                                    
+                                    # 获取指标交易日期
+                                    if param_config:
+                                        window_days = param_config.get('window_days', 750)
+                                        indicator = get_latest_indicator(product_id, window_days)
+                                        if indicator:
+                                            indicator_trade_date = indicator.get('trade_date')
+                                            if indicator_trade_date:
+                                                st.caption(f"📊 指标计算日期: {indicator_trade_date}")
+                                    
+                                    if i < len(binds):
+                                        st.divider()
+                            else:
+                                st.warning("⚠️ 产品未绑定策略")
                     
                     # ========== 原因说明（使用reason_blocks） ==========
                     st.markdown("**📝 建议动作的原因**")
@@ -1257,6 +1385,19 @@ def _render_exchange_quote(product, product_id):
                         st.markdown(f'<div style="padding: 10px; background-color: #f0f2f6; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">{formatted_reason}</div>', unsafe_allow_html=True)
                     else:
                         st.info("暂无原因说明")
+                    
+                    # ========== 停机坪建议（PARK_CASH） ==========
+                    # 从reason_blocks中查找"停机坪建议"
+                    park_cash_block = None
+                    for block in reason_blocks:
+                        if block.get('rule_name') == '停机坪建议':
+                            park_cash_block = block
+                            break
+                    
+                    if park_cash_block:
+                        park_cash_decision = park_cash_block.get('decision', '')
+                        if park_cash_decision:
+                            st.info(f"**🛫 停机坪建议**：{park_cash_decision}")
                     
                     # 更新时间
                     if as_of_time:
@@ -2590,96 +2731,96 @@ def page_invest():
                         st.info(f"💡 净申购额: ¥{Decimal(str(buy_amount)) - fee:.2f}")
                         
                         buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee_otc")
-                
-                with col2:
-                    # 交易日期输入（可编辑，默认当前日期）
-                    buy_trade_date = st.date_input(
-                        "交易日期", 
-                        value=date.today(), 
-                        key="buy_trade_date_otc",
-                        help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
-                    )
+        
+        with col2:
+            # 交易日期输入（可编辑，默认当前日期）
+            buy_trade_date = st.date_input(
+                "交易日期", 
+                value=date.today(), 
+                key="buy_trade_date_otc",
+                help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
+            )
+            
+            if buy_product:
+                # 使用合并的产品字典
+                product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                if product:
+                    # 根据交易日期计算净值日期和确认日期
+                    from core.invest_service import calc_confirm_date
+                    buy_confirm_offset = product.get('buy_confirm_offset', 1)
                     
-                    if buy_product:
-                        # 使用合并的产品字典
-                        product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
-                        if product:
-                            # 根据交易日期计算净值日期和确认日期
-                            from core.invest_service import calc_confirm_date
-                            buy_confirm_offset = product.get('buy_confirm_offset', 1)
-                            
-                            # 净值日期 = 交易日期
-                            buy_nav_date = buy_trade_date
-                            # 确认日期 = 交易日期 + confirm_offset 个交易日
-                            buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
-                            
-                            st.info(f"📅 净值日期: {buy_nav_date}")
-                            st.info(f"📅 确认日期: {buy_confirm_date}")
+                    # 净值日期 = 交易日期
+                    buy_nav_date = buy_trade_date
+                    # 确认日期 = 交易日期 + confirm_offset 个交易日
+                    buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
                     
-                    # 二级分类选择
-                    buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
-                    buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
-                    
-                    # 请求时间（时分秒），默认当前时间
-                    buy_time = st.text_input(
-                        "请求时间（HH:MM:SS）", 
-                        value=datetime.now().strftime('%H:%M:%S'), 
-                        key="buy_time_otc",
-                        help="扣款发生的时间，精确到秒"
-                    )
-                    buy_note = st.text_input("备注（可选）", key="buy_note_otc")
-                
-                if st.button("提交买入扣款", type="primary", key="submit_buy_otc"):
-                    if not buy_product or buy_amount <= 0:
-                        st.error("❌ 请选择产品并输入金额！")
+                    st.info(f"📅 净值日期: {buy_nav_date}")
+                    st.info(f"📅 确认日期: {buy_confirm_date}")
+            
+            # 二级分类选择
+            buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
+            buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
+            
+            # 请求时间（时分秒），默认当前时间
+            buy_time = st.text_input(
+                "请求时间（HH:MM:SS）", 
+                value=datetime.now().strftime('%H:%M:%S'), 
+                key="buy_time_otc",
+                help="扣款发生的时间，精确到秒"
+            )
+            buy_note = st.text_input("备注（可选）", key="buy_note_otc")
+        
+        if st.button("提交买入扣款", type="primary", key="submit_buy_otc"):
+            if not buy_product or buy_amount <= 0:
+                st.error("❌ 请选择产品并输入金额！")
+            else:
+                try:
+                    # 使用合并的产品字典
+                    product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                    if not product:
+                        st.error(f"❌ 产品不存在: {buy_product}")
                     else:
+                        # 解析时间
                         try:
-                            # 使用合并的产品字典
-                            product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
-                            if not product:
-                                st.error(f"❌ 产品不存在: {buy_product}")
-                            else:
-                                # 解析时间
-                                try:
-                                    time_parts = buy_time.split(':')
-                                    requested_at = datetime.combine(
-                                        buy_trade_date,
-                                        datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
-                                        else datetime.strptime(buy_time, '%H:%M').time()
-                                    )
-                                except:
-                                    requested_at = datetime.combine(buy_trade_date, datetime.now().time())
-                                
-                                order_id = add_buy_debit(
-                                    product_code=product['code'],
-                                    amount=Decimal(str(buy_amount)),
-                                    fee=Decimal(str(buy_fee_override)) if buy_fee_override > 0 else None,
-                                    requested_at=requested_at,
-                                    trade_date=buy_trade_date,
-                                    note=buy_note or None
-                                )
-                                
-                                # 同时在生活记账中添加一笔支出记录
-                                debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
-                                event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
-                                add_expense(
-                                    account_from=debit_account,
-                                    amount=Decimal(str(buy_amount)),
-                                    category_l1="理财投资",
-                                    category_l2=buy_category_l2,
-                                    event_time=event_time,
-                                    note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
-                                )
-                                
-                                st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
-                                try:
-                                    collect_nav_and_build_snapshots(silent=True)
-                                except:
-                                    pass
-                        except Exception as e:
-                            st.error(f"❌ 提交失败: {e}")
-                            import traceback
-                            st.code(traceback.format_exc())
+                            time_parts = buy_time.split(':')
+                            requested_at = datetime.combine(
+                                buy_trade_date,
+                                datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
+                                else datetime.strptime(buy_time, '%H:%M').time()
+                            )
+                        except:
+                            requested_at = datetime.combine(buy_trade_date, datetime.now().time())
+                        
+                        order_id = add_buy_debit(
+                            product_code=product['code'],
+                            amount=Decimal(str(buy_amount)),
+                            fee=Decimal(str(buy_fee_override)) if buy_fee_override > 0 else None,
+                            requested_at=requested_at,
+                            trade_date=buy_trade_date,
+                            note=buy_note or None
+                        )
+                        
+                        # 同时在生活记账中添加一笔支出记录
+                        debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
+                        event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
+                        add_expense(
+                            account_from=debit_account,
+                            amount=Decimal(str(buy_amount)),
+                            category_l1="理财投资",
+                            category_l2=buy_category_l2,
+                            event_time=event_time,
+                            note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
+                        )
+                        
+                        st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
+                        try:
+                            collect_nav_and_build_snapshots(silent=True)
+                        except:
+                            pass
+                except Exception as e:
+                    st.error(f"❌ 提交失败: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
     
     with tab2:
         st.subheader("赎回发起")
@@ -3447,19 +3588,47 @@ def page_product_management():
                                     strategy_type = bind.get('strategy_type', 'TRIGGER')
                                     priority = bind.get('priority', 0)
                                     type_label = {'VETO': '否决', 'TRIGGER': '触发', 'SCORE': '强度'}.get(strategy_type, strategy_type)
-                                    st.caption(f"{i+1}. {strategy_code}@{param_set_id} ({type_label}, 优先级:{priority})")
                                     
-                                    # 删除按钮
-                                    if st.button("🗑️ 删除", key=f"delete_bind_{selected_product_id}_{bind.get('id')}"):
-                                        try:
-                                            execute_update(
-                                                "UPDATE product_strategy_bind SET enabled = 0 WHERE id = %s",
-                                                (bind.get('id'),)
-                                            )
-                                            st.success("✅ 策略绑定已删除！")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"❌ 删除失败: {e}")
+                                    # 获取策略参数详情
+                                    from advisor.advisor_service import get_strategy_config
+                                    param_config = get_strategy_config(strategy_code, param_set_id)
+                                    
+                                    with st.expander(f"{i+1}. {strategy_code}@{param_set_id} ({type_label}, 优先级:{priority})", expanded=False):
+                                        col_info, col_action = st.columns([3, 1])
+                                        with col_info:
+                                            st.markdown(f"**策略代码**: {strategy_code}")
+                                            st.markdown(f"**参数集ID**: {param_set_id}")
+                                            st.markdown(f"**策略类型**: {type_label}")
+                                            st.markdown(f"**优先级**: {priority}")
+                                            min_trade = float(bind.get('min_trade_amount', 1000) or 1000)
+                                            ideal_trade = float(bind.get('ideal_trade_amount', 2000) or 2000)
+                                            fee_rate_val = float(bind.get('fee_rate', 0.000845) or 0.000845)
+                                            fee_min_val = float(bind.get('fee_min', 0.20) or 0.20)
+                                            
+                                            st.markdown(f"**最小成交额**: ¥{min_trade:.2f}")
+                                            st.markdown(f"**理想成交额**: ¥{ideal_trade:.2f}")
+                                            st.markdown(f"**手续费率**: {fee_rate_val*10000:.2f}‱")
+                                            st.markdown(f"**最低手续费**: ¥{fee_min_val:.2f}")
+                                            
+                                            # 显示参数详情
+                                            if param_config:
+                                                st.markdown("**参数配置**:")
+                                                st.json(param_config)
+                                            else:
+                                                st.warning("⚠️ 未找到参数配置")
+                                        
+                                        with col_action:
+                                            # 删除按钮
+                                            if st.button("🗑️ 删除绑定", key=f"delete_bind_{selected_product_id}_{bind.get('id')}", type="secondary"):
+                                                try:
+                                                    execute_update(
+                                                        "UPDATE product_strategy_bind SET enabled = 0 WHERE id = %s",
+                                                        (bind.get('id'),)
+                                                    )
+                                                    st.success("✅ 策略绑定已删除！")
+                                                    st.rerun()
+                                                except Exception as e:
+                                                    st.error(f"❌ 删除失败: {e}")
                             
                             st.divider()
                             st.markdown("**新增策略绑定：**")
@@ -3559,6 +3728,16 @@ def page_product_management():
                             
                             if st.button("💾 保存策略绑定", key=f"save_bind_{selected_product_id}"):
                                 try:
+                                    # 检查 param_set_id 是否发生变化
+                                    old_binds = get_binds_by_product_id(selected_product_id)
+                                    old_param_set_id = None
+                                    if old_binds and len(old_binds) > 0:
+                                        # 检查是否有相同 strategy_code 的绑定
+                                        for old_bind in old_binds:
+                                            if old_bind.get('strategy_code') == new_strategy_code:
+                                                old_param_set_id = old_bind.get('param_set_id')
+                                                break
+                                    
                                     bind_data = {
                                         'product_id': selected_product_id,
                                         'strategy_code': new_strategy_code,
@@ -3572,6 +3751,14 @@ def page_product_management():
                                         'fee_min': new_fee_min
                                     }
                                     create_or_update_bind(bind_data)
+                                    
+                                    # 如果 param_set_id 发生变化，立即触发指标重算
+                                    if old_param_set_id and old_param_set_id != new_param_set_id:
+                                        from advisor.indicator_job import calculate_indicators_for_product
+                                        with st.spinner("参数集已变更，正在重新计算指标..."):
+                                            calculate_indicators_for_product(selected_product_id)
+                                        st.info(f"✅ 参数集已从 {old_param_set_id} 切换到 {new_param_set_id}，指标已重新计算")
+                                    
                                     st.success("✅ 策略绑定保存成功！")
                                     st.rerun()
                                 except Exception as e:
@@ -3944,10 +4131,13 @@ def _page_backtest_run():
     st.subheader("📊 运行回测")
     
     # 策略管理标签页
-    tab_strategy, tab_backtest = st.tabs(["🔧 策略管理", "📊 运行回测"])
+    tab_strategy, tab_param, tab_backtest = st.tabs(["🔧 策略管理", "⚙️ 参数管理", "📊 运行回测"])
     
     with tab_strategy:
         _page_strategy_management()
+    
+    with tab_param:
+        _page_param_management(context="backtest_run")
     
     with tab_backtest:
         _page_backtest_run_content()
@@ -4109,6 +4299,414 @@ def _page_strategy_management():
                             st.error(f"❌ 创建失败: {result.get('error')}")
                 else:
                     st.error("请输入策略标识")
+
+
+def _page_param_management(context: str = "default"):
+    """参数管理页面
+    
+    Args:
+        context: 上下文标识，用于区分不同的调用场景，避免key重复
+    """
+    st.subheader("⚙️ 策略参数管理")
+    
+    from data.db_connector import execute_query, execute_one, execute_update
+    from advisor.advisor_service import get_strategy_config
+    import json
+    
+    # 筛选选项（使用context确保key唯一）
+    col1, col2 = st.columns(2)
+    with col1:
+        strategy_filter = st.selectbox(
+            "筛选策略",
+            options=["全部策略"] + ['percentile', 'drawdown', 'profit_recycle', 'simple', 'dca_4pct'],
+            key=f"param_mgmt_strategy_filter_{context}"
+        )
+    
+    with col2:
+        show_inactive = st.checkbox("显示已停用参数", key=f"param_mgmt_show_inactive_{context}")
+    
+    # 查询参数列表（包含绑定产品信息）
+    sql = """
+        SELECT 
+            sc.id, sc.strategy_key, sc.strategy_version, sc.param_set_id,
+            sc.param_json, sc.is_active, sc.created_at, sc.updated_at,
+            COUNT(DISTINCT psb.id) as bind_count,
+            COUNT(DISTINCT bs.id) as backtest_count,
+            GROUP_CONCAT(DISTINCT CONCAT(p.code, ':', p.product_name) ORDER BY p.code SEPARATOR '|') as bound_products
+        FROM strategy_config sc
+        LEFT JOIN product_strategy_bind psb ON sc.strategy_key = psb.strategy_code 
+            AND sc.param_set_id = psb.param_set_id 
+            AND psb.enabled = 1
+        LEFT JOIN products p ON psb.product_id = p.id
+        LEFT JOIN backtest_summary bs ON sc.strategy_key = bs.strategy_key 
+            AND sc.strategy_version = bs.strategy_version 
+            AND sc.param_set_id = bs.param_set_id
+        WHERE 1=1
+    """
+    params = []
+    
+    if strategy_filter != "全部策略":
+        sql += " AND sc.strategy_key = %s"
+        params.append(strategy_filter)
+    
+    if not show_inactive:
+        sql += " AND sc.is_active = 1"
+    
+    sql += " GROUP BY sc.id, sc.strategy_key, sc.strategy_version, sc.param_set_id, sc.param_json, sc.is_active, sc.created_at, sc.updated_at"
+    sql += " ORDER BY sc.strategy_key, sc.param_set_id, sc.created_at DESC"
+    
+    param_configs = execute_query(sql, tuple(params))
+    
+    if not param_configs:
+        st.info("暂无参数配置")
+        return
+    
+    # 显示参数列表
+    st.markdown(f"**共找到 {len(param_configs)} 个参数配置**")
+    
+    for config in param_configs:
+        config_id = config.get('id')
+        strategy_key = config.get('strategy_key')
+        strategy_version = config.get('strategy_version', 'default')
+        param_set_id = config.get('param_set_id')
+        param_json = config.get('param_json')
+        is_active = config.get('is_active', 1)
+        bind_count = config.get('bind_count', 0) or 0
+        backtest_count = config.get('backtest_count', 0) or 0
+        created_at = config.get('created_at')
+        updated_at = config.get('updated_at')
+        
+        # 解析参数JSON
+        try:
+            param_dict = json.loads(param_json) if param_json else {}
+        except:
+            param_dict = {}
+        
+        # 状态标签
+        status_label = "✅ 启用" if is_active else "❌ 停用"
+        
+        with st.expander(
+            f"{status_label} | {strategy_key}@{strategy_version}#{param_set_id} | "
+            f"绑定:{bind_count} | 回测:{backtest_count}",
+            expanded=False
+        ):
+            col_info, col_action = st.columns([3, 1])
+            
+            with col_info:
+                st.markdown(f"**策略标识**: {strategy_key}")
+                st.markdown(f"**策略版本**: {strategy_version}")
+                st.markdown(f"**参数集ID**: {param_set_id}")
+                st.markdown(f"**状态**: {'启用' if is_active else '停用'}")
+                st.markdown(f"**产品绑定数**: {bind_count}")
+                
+                # 显示绑定的产品列表
+                bound_products_str = config.get('bound_products', '')
+                if bound_products_str:
+                    bound_products = [p.split(':', 1) for p in bound_products_str.split('|') if p]
+                    if bound_products:
+                        st.markdown("**绑定的产品**:")
+                        for product_code, product_name in bound_products:
+                            st.caption(f"  • {product_code} - {product_name}")
+                elif bind_count > 0:
+                    st.caption("  (产品信息加载中...)")
+                else:
+                    st.caption("  (无绑定产品)")
+                
+                st.markdown(f"**回测结果数**: {backtest_count}")
+                st.markdown(f"**创建时间**: {created_at}")
+                st.markdown(f"**更新时间**: {updated_at}")
+                
+                st.divider()
+                st.markdown("**参数详情**:")
+                
+                # 检查是否在编辑模式
+                edit_key = f"editing_param_{config_id}_{context}"
+                is_editing = st.session_state.get(edit_key, False)
+                
+                if is_editing:
+                    # 编辑模式：动态生成参数编辑表单
+                    st.info("📝 编辑模式：修改参数值后点击保存")
+                    
+                    # 使用 session_state 保存编辑后的参数（初始化为原始参数）
+                    edited_params_key = f"edited_params_{config_id}_{context}"
+                    if edited_params_key not in st.session_state:
+                        st.session_state[edited_params_key] = json.loads(json.dumps(param_dict))  # 深拷贝
+                    
+                    edited_params = st.session_state[edited_params_key]
+                    
+                    # 用于保存所有 data_editor 的 key，以便在保存时重新读取
+                    data_editor_keys = []
+                    
+                    # 递归函数：根据参数类型生成对应的输入控件，直接修改 edited_params
+                    def render_param_editor(key: str, value: Any, param_dict_ref: dict, param_path: str = ""):
+                        """递归渲染参数编辑器，直接修改 param_dict_ref"""
+                        display_key = f"{param_path}.{key}" if param_path else key
+                        
+                        if isinstance(value, dict):
+                            # 字典类型：展开显示
+                            st.markdown(f"**{display_key}** (对象):")
+                            with st.container():
+                                for sub_key, sub_value in value.items():
+                                    render_param_editor(sub_key, sub_value, param_dict_ref[key], display_key)
+                        elif isinstance(value, list):
+                            # 列表类型：特殊处理（如 tiers）
+                            st.markdown(f"**{display_key}** (数组):")
+                            
+                            # 检查是否是 tiers 数组（包含 max_rank, suggest_ratio, label）
+                            if value and isinstance(value[0], dict) and 'max_rank' in value[0]:
+                                # tiers 数组：使用表格编辑
+                                st.caption("提示：tiers 数组包含多个档位配置，可直接在表格中编辑")
+                                
+                                # 显示当前 tiers（从 edited_params 读取，而不是原始 param_dict）
+                                tiers_data = []
+                                current_tiers = param_dict_ref.get(key, value)
+                                for i, tier in enumerate(current_tiers):
+                                    tiers_data.append({
+                                        '档位': i + 1,
+                                        'max_rank': tier.get('max_rank', 0),
+                                        'suggest_ratio': tier.get('suggest_ratio', 0),
+                                        'label': tier.get('label', '')
+                                    })
+                                
+                                if tiers_data:
+                                    df_tiers = pd.DataFrame(tiers_data)
+                                    editor_key = f"tiers_editor_{display_key}_{config_id}_{context}"
+                                    data_editor_keys.append((editor_key, key, param_dict_ref, param_path))
+                                    
+                                    edited_tiers_df = st.data_editor(
+                                        df_tiers,
+                                        key=editor_key,
+                                        num_rows="fixed",
+                                        column_config={
+                                            '档位': st.column_config.NumberColumn('档位', disabled=True),
+                                            'max_rank': st.column_config.NumberColumn('max_rank', min_value=0.0, max_value=1.0, step=0.01, format="%.2f"),
+                                            'suggest_ratio': st.column_config.NumberColumn('suggest_ratio', min_value=0.0, max_value=1.0, step=0.01, format="%.2f"),
+                                            'label': st.column_config.TextColumn('label')
+                                        }
+                                    )
+                                    
+                                    # 立即更新到 param_dict_ref（每次 rerun 时都会执行）
+                                    # 注意：st.data_editor 返回的 DataFrame 已经包含用户编辑后的值
+                                    edited_tiers = []
+                                    for _, row in edited_tiers_df.iterrows():
+                                        # 确保类型转换正确
+                                        max_rank_val = float(row['max_rank']) if pd.notna(row['max_rank']) else 0.0
+                                        suggest_ratio_val = float(row['suggest_ratio']) if pd.notna(row['suggest_ratio']) else 0.0
+                                        label_val = str(row['label']) if pd.notna(row['label']) else ''
+                                        
+                                        edited_tiers.append({
+                                            'max_rank': max_rank_val,
+                                            'suggest_ratio': suggest_ratio_val,
+                                            'label': label_val
+                                        })
+                                    
+                                    # 直接更新到 param_dict_ref
+                                    param_dict_ref[key] = edited_tiers
+                                else:
+                                    param_dict_ref[key] = []
+                            else:
+                                # 普通数组：使用文本区域编辑 JSON
+                                json_str = st.text_area(
+                                    f"{display_key} (JSON数组)",
+                                    value=json.dumps(value, ensure_ascii=False, indent=2),
+                                    key=f"list_editor_{display_key}_{config_id}_{context}",
+                                    height=150
+                                )
+                                try:
+                                    param_dict_ref[key] = json.loads(json_str)
+                                except Exception as e:
+                                    st.error(f"❌ {display_key} JSON格式错误: {e}")
+                        elif isinstance(value, (int, float)):
+                            # 数字类型
+                            if isinstance(value, int):
+                                edited_value = st.number_input(
+                                    display_key,
+                                    value=int(value),
+                                    key=f"param_{display_key}_{config_id}_{context}",
+                                    step=1
+                                )
+                                param_dict_ref[key] = int(edited_value)
+                            else:
+                                edited_value = st.number_input(
+                                    display_key,
+                                    value=float(value),
+                                    key=f"param_{display_key}_{config_id}_{context}",
+                                    step=0.01,
+                                    format="%.2f"
+                                )
+                                param_dict_ref[key] = float(edited_value)
+                        elif isinstance(value, bool):
+                            # 布尔类型
+                            edited_value = st.checkbox(
+                                display_key,
+                                value=bool(value),
+                                key=f"param_{display_key}_{config_id}_{context}"
+                            )
+                            # 直接更新到 param_dict_ref
+                            param_dict_ref[key] = bool(edited_value)
+                        elif isinstance(value, str):
+                            # 字符串类型
+                            edited_value = st.text_input(
+                                display_key,
+                                value=str(value),
+                                key=f"param_{display_key}_{config_id}_{context}"
+                            )
+                            # 直接更新到 param_dict_ref
+                            param_dict_ref[key] = str(edited_value)
+                        else:
+                            # 其他类型：使用文本区域编辑 JSON
+                            json_str = st.text_area(
+                                f"{display_key} (JSON)",
+                                value=json.dumps(value, ensure_ascii=False, indent=2),
+                                key=f"json_editor_{display_key}_{config_id}_{context}",
+                                height=100
+                            )
+                            try:
+                                param_dict_ref[key] = json.loads(json_str)
+                            except Exception as e:
+                                st.error(f"❌ {display_key} JSON格式错误: {e}")
+                    
+                    # 渲染所有参数
+                    for key, value in param_dict.items():
+                        render_param_editor(key, value, edited_params)
+                    
+                    # 保存和取消按钮
+                    col_save, col_cancel = st.columns(2)
+                    with col_save:
+                        if st.button("💾 保存修改", key=f"save_param_{config_id}_{context}", type="primary"):
+                            try:
+                                # 重新读取所有 data_editor 的值（确保获取最新的编辑结果）
+                                # 注意：st.data_editor 返回的 DataFrame 在按钮点击时已经是最新的
+                                # 但为了确保，我们从 session_state 读取（如果存在）
+                                for editor_key, param_key, param_dict_ref, param_path in data_editor_keys:
+                                    # 从 session_state 读取编辑后的 DataFrame
+                                    if editor_key in st.session_state:
+                                        edited_df = st.session_state[editor_key]
+                                        
+                                        # 转换回字典列表
+                                        edited_tiers = []
+                                        for _, row in edited_df.iterrows():
+                                            max_rank_val = float(row['max_rank']) if pd.notna(row['max_rank']) else 0.0
+                                            suggest_ratio_val = float(row['suggest_ratio']) if pd.notna(row['suggest_ratio']) else 0.0
+                                            label_val = str(row['label']) if pd.notna(row['label']) else ''
+                                            
+                                            edited_tiers.append({
+                                                'max_rank': max_rank_val,
+                                                'suggest_ratio': suggest_ratio_val,
+                                                'label': label_val
+                                            })
+                                        
+                                        # 更新到 edited_params（通过 param_dict_ref 的引用）
+                                        param_dict_ref[param_key] = edited_tiers
+                                
+                                # 更新 session_state
+                                st.session_state[edited_params_key] = edited_params
+                                
+                                # 更新数据库
+                                param_json_str = json.dumps(edited_params, ensure_ascii=False)
+                                execute_update(
+                                    "UPDATE strategy_config SET param_json = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                                    (param_json_str, config_id)
+                                )
+                                
+                                # 清除编辑状态
+                                st.session_state[edit_key] = False
+                                if edited_params_key in st.session_state:
+                                    del st.session_state[edited_params_key]
+                                
+                                st.success("✅ 参数已保存！")
+                                
+                                # 如果参数被产品绑定，提示需要重新计算指标
+                                if bind_count > 0:
+                                    st.info(f"💡 提示：该参数已被 {bind_count} 个产品绑定，建议刷新行情以重新计算指标。")
+                                
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ 保存失败: {e}")
+                                import traceback
+                                st.exception(e)
+                    
+                    with col_cancel:
+                        if st.button("❌ 取消", key=f"cancel_param_{config_id}_{context}"):
+                            st.session_state[edit_key] = False
+                            if edited_params_key in st.session_state:
+                                del st.session_state[edited_params_key]
+                            st.rerun()
+                else:
+                    # 只读模式：显示 JSON
+                    st.json(param_dict)
+                    
+                    # 编辑按钮
+                    if st.button("✏️ 编辑参数", key=f"edit_param_{config_id}_{context}"):
+                        st.session_state[edit_key] = True
+                        st.rerun()
+            
+            with col_action:
+                # 删除按钮（使用context确保key唯一）
+                delete_key = f"delete_param_{config_id}_{context}"
+                confirm_key = f"confirm_delete_param_{config_id}_{context}"
+                cancel_key = f"cancel_delete_param_{config_id}_{context}"
+                
+                # 检查是否在确认删除状态
+                if st.session_state.get(confirm_key, False):
+                    # 显示确认提示
+                    if bind_count > 0 or backtest_count > 0:
+                        st.warning(f"⚠️ 该参数已被 {bind_count} 个产品绑定，且有 {backtest_count} 个回测结果。删除将同时删除绑定关系和回测结果。")
+                    else:
+                        st.warning(f"⚠️ 确定要删除该参数配置吗？")
+                    
+                    col_yes, col_no = st.columns(2)
+                    with col_yes:
+                        if st.button("✅ 确认删除", key=f"yes_{confirm_key}_{context}", type="primary"):
+                            try:
+                                # 1. 删除产品绑定关系
+                                if bind_count > 0:
+                                    execute_update(
+                                        "UPDATE product_strategy_bind SET enabled = 0 WHERE strategy_code = %s AND param_set_id = %s",
+                                        (strategy_key, param_set_id)
+                                    )
+                                    st.info(f"✅ 已删除 {bind_count} 个产品绑定关系")
+                                
+                                # 2. 删除回测结果（级联删除关联数据）
+                                if backtest_count > 0:
+                                    # 获取所有相关的回测汇总ID
+                                    summary_ids_sql = """
+                                        SELECT id FROM backtest_summary 
+                                        WHERE strategy_key = %s 
+                                          AND strategy_version = %s 
+                                          AND param_set_id = %s
+                                    """
+                                    summary_ids = execute_query(summary_ids_sql, (strategy_key, strategy_version, param_set_id))
+                                    
+                                    deleted_backtest_count = 0
+                                    for summary_row in summary_ids:
+                                        summary_id = summary_row.get('id')
+                                        if delete_backtest_summary(summary_id):
+                                            deleted_backtest_count += 1
+                                    
+                                    st.info(f"✅ 已删除 {deleted_backtest_count} 个回测结果")
+                                
+                                # 3. 删除参数配置
+                                execute_update(
+                                    "UPDATE strategy_config SET is_active = 0 WHERE id = %s",
+                                    (config_id,)
+                                )
+                                
+                                st.session_state[confirm_key] = False
+                                st.success(f"✅ 参数配置已删除！")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ 删除失败: {e}")
+                    
+                    with col_no:
+                        if st.button("❌ 取消", key=f"no_{cancel_key}_{context}"):
+                            st.session_state[confirm_key] = False
+                            st.rerun()
+                else:
+                    # 显示删除按钮
+                    if st.button("🗑️ 删除参数", key=delete_key, type="secondary"):
+                        st.session_state[confirm_key] = True
+                        st.rerun()
 
 
 def _page_backtest_run_content():
