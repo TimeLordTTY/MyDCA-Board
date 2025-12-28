@@ -11,7 +11,7 @@
  Target Server Version : 50744 (5.7.44-log)
  File Encoding         : 65001
 
- Date: 28/12/2025 01:54:54
+ Date: 28/12/2025 16:37:28
 */
 
 SET NAMES utf8mb4;
@@ -137,12 +137,18 @@ INSERT INTO `indicator_daily` VALUES (4, 17, '2025-12-26', 750, 0.951807, 1.3370
 INSERT INTO `indicator_daily` VALUES (5, 18, '2025-12-26', 750, 0.720884, 0.479000, 0.618000, 0.755000, 0.876000, -0.162100, 0.742550, 0.782917, '2025-12-27 16:50:19');
 INSERT INTO `indicator_daily` VALUES (6, 22, '2025-12-26', 750, 0.977912, 1.807000, 1.999000, 2.198000, 2.488000, -0.012058, 2.447550, 2.399933, '2025-12-27 16:50:19');
 INSERT INTO `indicator_daily` VALUES (7, 20, '2025-12-26', 750, 0.568273, 1.309000, 1.392000, 1.443000, 1.509000, -0.070245, 1.424750, 1.439250, '2025-12-27 16:50:19');
+INSERT INTO `indicator_daily` VALUES (98, 23, '2025-12-27', 750, 0.971888, NULL, 1.525000, 1.660000, 2.171000, -0.037310, 2.042000, 2.035550, '2025-12-28 04:20:06');
+INSERT INTO `indicator_daily` VALUES (100, 17, '2025-12-27', 750, 0.949799, NULL, 1.500000, 1.676000, 2.000000, -0.035500, 1.928600, 1.907400, '2025-12-28 04:20:12');
+INSERT INTO `indicator_daily` VALUES (102, 18, '2025-12-27', 750, 0.726908, NULL, 0.618000, 0.755000, 0.876000, -0.157534, 0.741800, 0.780800, '2025-12-28 04:20:16');
+INSERT INTO `indicator_daily` VALUES (104, 22, '2025-12-27', 750, 0.981928, NULL, 1.999000, 2.199000, 2.488000, -0.010852, 2.447450, 2.403117, '2025-12-28 04:20:20');
+INSERT INTO `indicator_daily` VALUES (106, 20, '2025-12-27', 750, 0.550201, NULL, 1.392000, 1.443000, 1.509000, -0.071571, 1.422400, 1.439350, '2025-12-28 04:20:24');
+INSERT INTO `indicator_daily` VALUES (108, 19, '2025-12-27', 750, 0.997992, NULL, 6.006000, 7.486000, 9.650000, 0.000000, 9.284850, 9.025150, '2025-12-28 04:20:30');
 
 -- ----------------------------
 -- Records of job_config
 -- ----------------------------
 INSERT INTO `job_config` VALUES (1, 'rt_quote_1m', '*/1 9-11,13-14 * * 1-5', 1, '2025-12-27 14:59:13', 'OK', '成功: 5/6', '2025-12-25 02:30:31', '2025-12-27 14:59:13');
-INSERT INTO `job_config` VALUES (2, 'otc_update_0800', '0 8 * * *', 1, '2025-12-27 22:00:08', 'OK', '场外净值更新完成', '2025-12-25 02:30:31', '2025-12-27 22:00:07');
+INSERT INTO `job_config` VALUES (2, 'otc_update_0800', '0 8 * * *', 1, '2025-12-28 14:00:04', 'OK', '场外净值更新完成', '2025-12-25 02:30:31', '2025-12-28 14:00:04');
 INSERT INTO `job_config` VALUES (3, 'otc_update_1400', '0 14 * * *', 1, NULL, NULL, NULL, '2025-12-25 02:30:31', '2025-12-25 02:30:31');
 INSERT INTO `job_config` VALUES (4, 'otc_update_2200', '0 22 * * *', 1, NULL, NULL, NULL, '2025-12-25 02:30:31', '2025-12-25 02:30:31');
 INSERT INTO `job_config` VALUES (9, 'indicator_daily', '0 22 * * *', 1, '2025-12-27 22:00:07', 'OK', '成功: 6, 失败: 0', '2025-12-27 13:24:24', '2025-12-27 22:00:06');
@@ -152,7 +158,7 @@ INSERT INTO `job_config` VALUES (10, 'advisor_suggestion_1m', '*/1 9-11,13-14 * 
 -- Records of product_nav_range
 -- ----------------------------
 INSERT INTO `product_nav_range` VALUES (1, '000307', '易方达黄金ETF联接A', '2016-05-26', '2025-12-25', 2338, '2025-12-27 02:25:38', '2025-12-27 02:25:38');
-INSERT INTO `product_nav_range` VALUES (2, '000686', '建信嘉薪宝货币市场基金A类', '2025-12-20', '2025-12-27', 8, '2025-12-27 08:00:00', '2025-12-27 02:25:38');
+INSERT INTO `product_nav_range` VALUES (2, '000686', '建信嘉薪宝货币市场基金A类', '2025-12-20', '2025-12-28', 9, '2025-12-28 04:54:58', '2025-12-27 02:25:38');
 INSERT INTO `product_nav_range` VALUES (3, '015299', '华夏纳斯达克100ETF联接(QDII)A', '2022-04-14', '2025-12-24', 900, '2025-12-27 02:25:38', '2025-12-27 02:25:38');
 INSERT INTO `product_nav_range` VALUES (4, '016452', '南方纳斯达克100指数(QDII)A', '2022-11-29', '2025-12-24', 721, '2025-12-27 02:25:38', '2025-12-27 02:25:38');
 INSERT INTO `product_nav_range` VALUES (5, '017641', '摩根标普500指数(QDII)A', '2023-04-06', '2025-12-24', 645, '2025-12-27 02:25:38', '2025-12-27 02:25:38');
@@ -171,13 +177,13 @@ INSERT INTO `product_nav_range` VALUES (16, 'FBAE41126E', '民生理财贵竹固
 -- ----------------------------
 -- Records of product_strategy_bind
 -- ----------------------------
-INSERT INTO `product_strategy_bind` VALUES (1, 18, 'percentile', 'default', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
-INSERT INTO `product_strategy_bind` VALUES (2, 17, 'percentile', 'default', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
-INSERT INTO `product_strategy_bind` VALUES (3, 22, 'percentile', 'default', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
-INSERT INTO `product_strategy_bind` VALUES (4, 20, 'percentile', 'default', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
-INSERT INTO `product_strategy_bind` VALUES (5, 19, 'percentile', 'default', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
-INSERT INTO `product_strategy_bind` VALUES (6, 23, 'percentile', 'default', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
-INSERT INTO `product_strategy_bind` VALUES (7, 19, 'profit_recycle', 'd7fa2b85567e0395', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-27 20:21:01', '2025-12-27 20:20:32');
+INSERT INTO `product_strategy_bind` VALUES (1, 18, 'percentile', '513180', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:10:28', '2025-12-27 13:24:24');
+INSERT INTO `product_strategy_bind` VALUES (2, 17, 'percentile', '513100', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:10:28', '2025-12-27 13:24:24');
+INSERT INTO `product_strategy_bind` VALUES (3, 22, 'percentile', '513500', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:10:28', '2025-12-27 13:24:24');
+INSERT INTO `product_strategy_bind` VALUES (4, 20, 'percentile', '515450', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:10:28', '2025-12-27 13:24:24');
+INSERT INTO `product_strategy_bind` VALUES (5, 19, 'percentile', '518880', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:10:28', '2025-12-27 13:24:24');
+INSERT INTO `product_strategy_bind` VALUES (6, 23, 'percentile', '163406', 1, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:10:28', '2025-12-27 13:24:24');
+INSERT INTO `product_strategy_bind` VALUES (7, 19, 'profit_recycle', 'd7fa2b85567e0395', 0, 'TRIGGER', 0, 1000.00, 2000.00, 0.000845, 0.20, '2025-12-28 04:24:26', '2025-12-27 20:20:32');
 
 -- ----------------------------
 -- Records of products
@@ -209,12 +215,18 @@ INSERT INTO `products` VALUES (23, '163406', 'EXCHANGE', 'SZ', 'LOF', 'CNY', 0, 
 -- Records of strategy_config
 -- ----------------------------
 INSERT INTO `strategy_config` VALUES (1, 'profit_recycle', 'v11', 'd7fa2b85567e0395', '{\"ma_window\": 250, \"high_bias\": 0.2, \"lock_ratio_low\": 0.0, \"lock_ratio_mid\": 0.05, \"lock_ratio_high\": 0.2, \"deep_dip_levels\": [{\"threshold\": -0.1, \"use_ratio\": 0.5}, {\"threshold\": -0.15, \"use_ratio\": 1.0}], \"allow_multi_deep_dip\": true, \"rebound_reset_rate\": 0.05, \"debounce_days\": 30, \"take_profit_enabled\": true, \"take_profit_bias\": 0.18, \"take_profit_sell_ratio\": 0.05, \"take_profit_cooldown_days\": 60, \"near_peak_ratio\": 0.98, \"premium_brake_enabled\": true, \"premium_t1\": 0.01, \"premium_t2\": 0.02}', 1, '2025-12-27 03:31:14', '2025-12-27 10:53:43');
-INSERT INTO `strategy_config` VALUES (3, 'percentile', 'default', 'c636783ac7e173ad', '{\"base_amount\": 1000.0, \"window\": 250, \"buy_percentile\": 20.0, \"hold_percentile\": 80.0}', 1, '2025-12-27 03:40:55', '2025-12-27 10:53:13');
+INSERT INTO `strategy_config` VALUES (3, 'percentile', 'default', 'c636783ac7e173ad', '{\"base_amount\": 1000.0, \"window\": 250, \"buy_percentile\": 20.0, \"hold_percentile\": 80.0}', 0, '2025-12-27 03:40:55', '2025-12-28 04:26:48');
 INSERT INTO `strategy_config` VALUES (4, 'drawdown', 'default', 'a2ac2b0d388b3303', '{\"base_amount\": 1000.0, \"drawdown_thresholds\": [0.02, 0.04, 0.08], \"use_ratios\": [0.3, 0.5, 1.0], \"reset_on_new_high\": true}', 1, '2025-12-27 03:41:00', '2025-12-27 10:52:47');
 INSERT INTO `strategy_config` VALUES (5, 'simple', 'default', 'e21c49821b51c6f1', '{\"base_amount\": 1000.0, \"frequency\": \"monthly\", \"day\": 10}', 1, '2025-12-27 03:41:04', '2025-12-27 10:52:23');
 INSERT INTO `strategy_config` VALUES (82, 'percentile', 'default', 'default', '{\"window_days\": 750, \"buy_percentile\": 0.20, \"max_buy_per_day\": 2000}', 1, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
 INSERT INTO `strategy_config` VALUES (83, 'drawdown', 'default', 'default', '{\"window_days\": 750, \"levels\": [0.02, 0.04, 0.08], \"buy_amounts\": [1000, 1500, 2000]}', 1, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
 INSERT INTO `strategy_config` VALUES (84, 'profit_recycle', 'v11', 'v11', '{\"ma_window\": 250, \"high_bias\": 0.20, \"lock_ratio_low\": 0.00, \"lock_ratio_mid\": 0.05, \"lock_ratio_high\": 0.20, \"deep_dip_levels\": [{\"threshold\": -0.10, \"use_ratio\": 0.50}, {\"threshold\": -0.15, \"use_ratio\": 1.00}], \"take_profit_enabled\": true, \"take_profit_bias\": 0.18, \"take_profit_sell_ratio\": 0.05, \"take_profit_cooldown_days\": 60, \"near_peak_ratio\": 0.98, \"allow_multi_deep_dip\": true, \"rebound_reset_rate\": 0.05, \"debounce_days\": 30}', 1, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
 INSERT INTO `strategy_config` VALUES (85, 'simple', 'default', 'default', '{\"max_buy_per_day\": 2000}', 1, '2025-12-27 13:24:24', '2025-12-27 13:24:24');
+INSERT INTO `strategy_config` VALUES (86, 'percentile', 'default', '515450', '{\"window_days\": 750, \"max_buy_per_day\": 2000, \"tiers\": [{\"max_rank\": 0.3, \"suggest_ratio\": 1.50, \"label\": \"S3-极低估\"}, {\"max_rank\": 0.55, \"suggest_ratio\": 1.00, \"label\": \"S2-偏低估\"}, {\"max_rank\": 0.70, \"suggest_ratio\": 0.50, \"label\": \"S1-略偏低位\"}, {\"max_rank\": 0.85, \"suggest_ratio\": 0.25, \"label\": \"S0-不触发\"}, {\"max_rank\": 1.01, \"suggest_ratio\": 0.00, \"label\": \"VETO-分位过高\"}]}', 1, '2025-12-28 04:10:28', '2025-12-28 16:24:40');
+INSERT INTO `strategy_config` VALUES (87, 'percentile', 'default', '518880', '{\"window_days\": 750, \"max_buy_per_day\": 2000, \"tiers\": [{\"max_rank\": 0.15, \"suggest_ratio\": 1.00, \"label\": \"S3-极低估\"}, {\"max_rank\": 0.25, \"suggest_ratio\": 0.70, \"label\": \"S2-偏低估\"}, {\"max_rank\": 0.40, \"suggest_ratio\": 0.40, \"label\": \"S1-略偏低位\"}, {\"max_rank\": 0.60, \"suggest_ratio\": 0.00, \"label\": \"S0-不触发\"}, {\"max_rank\": 1.01, \"suggest_ratio\": 0.00, \"label\": \"VETO-分位过高\"}]}', 1, '2025-12-28 04:10:28', '2025-12-28 16:28:29');
+INSERT INTO `strategy_config` VALUES (88, 'percentile', 'default', '513180', '{\"window_days\": 750, \"max_buy_per_day\": 2000, \"tiers\": [{\"max_rank\": 0.20, \"suggest_ratio\": 1.00, \"label\": \"S3-极低估\"}, {\"max_rank\": 0.35, \"suggest_ratio\": 1.00, \"label\": \"S2-偏低估\"}, {\"max_rank\": 0.55, \"suggest_ratio\": 0.50, \"label\": \"S1-略偏低位\"}, {\"max_rank\": 0.75, \"suggest_ratio\": 0.25, \"label\": \"S0-不触发\"}, {\"max_rank\": 1.01, \"suggest_ratio\": 0.00, \"label\": \"VETO-分位过高\"}]}', 1, '2025-12-28 04:10:28', '2025-12-28 16:26:22');
+INSERT INTO `strategy_config` VALUES (89, 'percentile', 'default', '513100', '{\"window_days\": 750, \"max_buy_per_day\": 2000, \"tiers\": [{\"max_rank\": 0.30, \"suggest_ratio\": 1.00, \"label\": \"S3-极低估\"}, {\"max_rank\": 0.55, \"suggest_ratio\": 1.00, \"label\": \"S2-偏低估\"}, {\"max_rank\": 0.70, \"suggest_ratio\": 0.50, \"label\": \"S1-略偏低位\"}, {\"max_rank\": 0.85, \"suggest_ratio\": 0.25, \"label\": \"S0-不触发\"}, {\"max_rank\": 1.01, \"suggest_ratio\": 0.00, \"label\": \"VETO-分位过高\"}]}', 1, '2025-12-28 04:10:28', '2025-12-28 16:30:05');
+INSERT INTO `strategy_config` VALUES (90, 'percentile', 'default', '513500', '{\"window_days\": 750, \"max_buy_per_day\": 2000, \"tiers\": [{\"max_rank\": 0.30, \"suggest_ratio\": 1.00, \"label\": \"S3-极低估\"}, {\"max_rank\": 0.55, \"suggest_ratio\": 1.00, \"label\": \"S2-偏低估\"}, {\"max_rank\": 0.70, \"suggest_ratio\": 0.50, \"label\": \"S1-略偏低位\"}, {\"max_rank\": 0.85, \"suggest_ratio\": 0.25, \"label\": \"S0-不触发\"}, {\"max_rank\": 1.01, \"suggest_ratio\": 0.00, \"label\": \"VETO-分位过高\"}]}', 1, '2025-12-28 04:10:28', '2025-12-28 16:31:08');
+INSERT INTO `strategy_config` VALUES (91, 'percentile', 'default', '163406', '{\"window_days\": 750, \"max_buy_per_day\": 2000, \"tiers\": [{\"max_rank\": 0.25, \"suggest_ratio\": 1.50, \"label\": \"S3-极低估\"}, {\"max_rank\": 0.45, \"suggest_ratio\": 1.00, \"label\": \"S2-偏低估\"}, {\"max_rank\": 0.60, \"suggest_ratio\": 0.50, \"label\": \"S1-略偏低位\"}, {\"max_rank\": 0.85, \"suggest_ratio\": 0.00, \"label\": \"S0-不触发\"}, {\"max_rank\": 1.01, \"suggest_ratio\": 0.00, \"label\": \"VETO-分位过高\"}]}', 1, '2025-12-28 04:10:28', '2025-12-28 16:22:56');
 
 SET FOREIGN_KEY_CHECKS = 1;

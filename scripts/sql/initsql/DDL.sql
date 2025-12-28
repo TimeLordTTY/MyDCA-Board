@@ -11,7 +11,7 @@
  Target Server Version : 50744 (5.7.44-log)
  File Encoding         : 65001
 
- Date: 28/12/2025 01:53:18
+ Date: 28/12/2025 16:36:37
 */
 
 SET NAMES utf8mb4;
@@ -112,7 +112,7 @@ CREATE TABLE `advisor_suggestion`  (
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_time`(`as_of_time`) USING BTREE,
   INDEX `idx_prod_time`(`product_id`, `as_of_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 932 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 970 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for backtest_daily
@@ -207,7 +207,7 @@ CREATE TABLE `budget_trace`  (
   UNIQUE INDEX `uk_trace`(`product_id`, `as_of_time`) USING BTREE,
   INDEX `idx_time`(`as_of_time`) USING BTREE,
   INDEX `idx_product`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '预算追踪审计日志表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 39 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '预算追踪审计日志表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for categories
@@ -279,7 +279,7 @@ CREATE TABLE `daily_snapshot`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_date_product`(`fetch_date`, `product_code`) USING BTREE,
   INDEX `idx_product_id`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 3042 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 3218 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for indicator_daily
@@ -303,7 +303,7 @@ CREATE TABLE `indicator_daily`  (
   UNIQUE INDEX `uk_ind`(`product_id`, `trade_date`, `window_days`) USING BTREE,
   INDEX `idx_date`(`trade_date`) USING BTREE,
   INDEX `idx_prod_date`(`product_id`, `trade_date`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 98 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '日更慢指标表' ROW_FORMAT = DYNAMIC;
+) ENGINE = InnoDB AUTO_INCREMENT = 136 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '日更慢指标表' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for job_config
@@ -343,7 +343,7 @@ CREATE TABLE `ledger`  (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
   INDEX `idx_event_time`(`event_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 84 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 88 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for market_bar_d
@@ -395,7 +395,7 @@ CREATE TABLE `market_quote_rt`  (
   INDEX `idx_product_id`(`product_id`) USING BTREE,
   INDEX `idx_quote_time`(`quote_time`) USING BTREE,
   INDEX `idx_premium_rate`(`premium_rate`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 10759 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内实时行情表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 10778 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内实时行情表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for nav
@@ -414,7 +414,7 @@ CREATE TABLE `nav`  (
   PRIMARY KEY (`id`) USING BTREE,
   UNIQUE INDEX `uk_product_date`(`product_code`, `nav_date`) USING BTREE,
   INDEX `idx_product_id`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 21707 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 21883 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for orders
@@ -481,7 +481,7 @@ CREATE TABLE `product_nav_range`  (
   UNIQUE INDEX `uk_product_code`(`product_code`) USING BTREE,
   INDEX `idx_earliest_date`(`earliest_nav_date`) USING BTREE,
   INDEX `idx_latest_date`(`latest_nav_date`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 22 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品净值范围表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 23 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品净值范围表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for product_strategy_bind
@@ -557,7 +557,7 @@ CREATE TABLE `qdii_premium_rt`  (
   UNIQUE INDEX `uk_prem_product_time_source`(`product_id`, `quote_time`, `source`) USING BTREE,
   INDEX `idx_product_id`(`product_id`) USING BTREE,
   INDEX `idx_quote_time`(`quote_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 6403 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = 'QDII溢价率表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 6412 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = 'QDII溢价率表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for strategy_config
@@ -576,7 +576,7 @@ CREATE TABLE `strategy_config`  (
   UNIQUE INDEX `uk_strategy_param`(`strategy_key`, `strategy_version`, `param_set_id`) USING BTREE,
   INDEX `idx_strategy_key`(`strategy_key`) USING BTREE,
   INDEX `idx_is_active`(`is_active`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 86 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略配置表' ROW_FORMAT = Dynamic;
+) ENGINE = InnoDB AUTO_INCREMENT = 92 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for strategy_state
