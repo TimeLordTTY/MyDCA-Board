@@ -128,6 +128,94 @@ def run_advisor_suggestion_job():
         logger.error(f"生产建议生成失败: {e}", exc_info=True)
 
 
+def run_refresh_quote_job():
+    """
+    执行完整的行情刷新任务（包含行情采集、指标计算、建议生成）
+    在交易日的交易时间段内定时执行
+    """
+    try:
+        from utils.trade_calendar import is_trade_day, is_trade_time
+        from datetime import datetime, date
+        
+        now = datetime.now()
+        today = date.today()
+        
+        # 检查是否是交易日且在交易时间段内
+        if not is_trade_day(today):
+            logger.debug(f"今日 {today} 非交易日，跳过行情刷新任务")
+            update_job_status('refresh_quote_trading', 'OK', f'非交易日已跳过: {today}')
+            return
+        
+        if not is_trade_time(now):
+            logger.debug(f"当前时间 {now.strftime('%H:%M')} 不在交易时间段内，跳过行情刷新任务")
+            update_job_status('refresh_quote_trading', 'OK', f'非交易时段已跳过: {now.strftime("%H:%M")}')
+            return
+        
+        from core.market_quote_service import collect_realtime_quotes
+        from advisor.indicator_job import calculate_indicators_for_all_products
+        from advisor.advisor_service import run_for_all_products
+        from data.product_service import get_products
+        
+        logger.info("开始执行行情刷新任务（行情采集+指标计算+建议生成）")
+        
+        # 获取所有活跃产品
+        all_products = get_products(is_active=True)
+        exchange_products = [p for p in all_products if p.get('channel') == 'EXCHANGE']
+        otc_products = [p for p in all_products if p.get('channel') == 'OTC']
+        
+        success_count = 0
+        fail_count = 0
+        
+        # 1. 刷新场内产品行情
+        if exchange_products:
+            product_ids = [p['id'] for p in exchange_products]
+            results = collect_realtime_quotes(product_ids)
+            success_count += sum(1 for v in results.values() if v)
+            fail_count += sum(1 for v in results.values() if not v)
+            logger.info(f"行情采集完成: 成功={success_count}, 失败={fail_count}")
+        
+        # 2. 刷新场外产品净值
+        if otc_products:
+            try:
+                from core.nav_collector import collect_and_store
+                collect_and_store()
+                logger.info("场外净值更新完成")
+            except Exception as e:
+                logger.warning(f"场外净值更新失败: {e}")
+                fail_count += 1
+        
+        # 3. 为所有场内产品计算指标
+        if exchange_products:
+            try:
+                indicator_results = calculate_indicators_for_all_products()
+                success_count += indicator_results.get('success_count', 0)
+                fail_count += indicator_results.get('fail_count', 0)
+                logger.info(f"指标计算完成: 成功={indicator_results.get('success_count', 0)}, 失败={indicator_results.get('fail_count', 0)}")
+            except Exception as e:
+                logger.error(f"指标计算失败: {e}", exc_info=True)
+                fail_count += len(exchange_products)
+        
+        # 4. 为所有场内产品生成建议
+        if exchange_products:
+            try:
+                advisor_results = run_for_all_products()
+                success_count += advisor_results.get('success_count', 0)
+                fail_count += advisor_results.get('fail_count', 0)
+                logger.info(f"建议生成完成: 成功={advisor_results.get('success_count', 0)}, 失败={advisor_results.get('fail_count', 0)}")
+            except Exception as e:
+                logger.error(f"建议生成失败: {e}", exc_info=True)
+                fail_count += len(exchange_products)
+        
+        message = f"成功: {success_count}, 失败: {fail_count}"
+        update_job_status('refresh_quote_trading', 'OK', message)
+        logger.info(f"行情刷新任务完成: {message}")
+        
+    except Exception as e:
+        error_msg = str(e)
+        update_job_status('refresh_quote_trading', 'FAIL', error_msg)
+        logger.error(f"行情刷新任务失败: {e}", exc_info=True)
+
+
 def start_scheduler():
     """启动调度器"""
     global _scheduler

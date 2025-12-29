@@ -1502,6 +1502,54 @@ def _render_otc_quote(product, product_code):
 # Page 1: Dashboard
 # ============================================================
 def page_dashboard():
+    """
+    Dashboard页面
+    在交易日的交易时间段内，自动定时刷新行情数据
+    """
+    # 前台自动刷新逻辑：在交易时间段内定时查询数据库
+    from utils.trade_calendar import is_trade_day, is_trade_time
+    from datetime import datetime
+    import time
+    
+    # 检查是否在交易时间段内
+    now = datetime.now()
+    is_trading = is_trade_day(now.date()) and is_trade_time(now)
+    
+    # 初始化session_state中的刷新控制
+    if 'auto_refresh_enabled' not in st.session_state:
+        st.session_state.auto_refresh_enabled = True
+    if 'last_refresh_time' not in st.session_state:
+        st.session_state.last_refresh_time = time.time()
+    
+    # 如果不在交易时间段，显示提示
+    if not is_trading:
+        if not is_trade_day(now.date()):
+            st.info("⏰ 当前为非交易日，自动刷新已暂停")
+        else:
+            st.info("⏰ 当前不在交易时段（交易时间：9:30-11:30, 13:00-15:00），自动刷新已暂停")
+        # 重置刷新时间戳，避免非交易时段累积时间
+        st.session_state.last_refresh_time = time.time()
+    else:
+        # 在交易时间段内，设置自动刷新（每60秒刷新一次）
+        auto_refresh_interval = 60  # 60秒刷新一次
+        
+        # 检查是否需要刷新
+        current_time = time.time()
+        time_since_last_refresh = current_time - st.session_state.last_refresh_time
+        
+        # 显示自动刷新状态和倒计时
+        next_refresh_in = max(0, auto_refresh_interval - int(time_since_last_refresh))
+        refresh_status = st.empty()
+        if next_refresh_in > 0:
+            refresh_status.caption(f"🔄 自动刷新已启用（交易时段内每{auto_refresh_interval}秒刷新一次，{next_refresh_in}秒后刷新）")
+        else:
+            refresh_status.caption(f"🔄 自动刷新已启用（交易时段内每{auto_refresh_interval}秒刷新一次，正在刷新...）")
+            # 更新时间戳
+            st.session_state.last_refresh_time = current_time
+            # 触发页面重新渲染（数据会从数据库重新读取）
+            time.sleep(0.5)  # 短暂延迟，确保状态更新
+            st.rerun()
+    
     st.markdown('<p class="main-header">📊 Dashboard</p>', unsafe_allow_html=True)
     
     # 待结算订单（移到最上方）
