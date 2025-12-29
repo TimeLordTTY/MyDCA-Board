@@ -1378,11 +1378,30 @@ def _render_exchange_quote(product, product_id):
                                 st.markdown(f"**{i}. {rule_name}**")
                                 st.caption(decision)
                     elif reason:
-                        # 降级：使用原始reason文本
-                        import html
-                        escaped_reason = html.escape(reason)
-                        formatted_reason = escaped_reason.replace('\n', '<br>')
-                        st.markdown(f'<div style="padding: 10px; background-color: #f0f2f6; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">{formatted_reason}</div>', unsafe_allow_html=True)
+                        # 优化reason显示：解析结构化reason，分步骤展示
+                        import re
+                        # 尝试解析带【】标记的结构化reason
+                        steps = re.split(r'【(\d+)\.\s*([^】]+)】', reason)
+                        if len(steps) > 1:
+                            # 有结构化标记，按步骤展示
+                            i = 1
+                            while i < len(steps):
+                                step_num = steps[i]
+                                step_title = steps[i+1] if i+1 < len(steps) else ''
+                                step_content = steps[i+2] if i+2 < len(steps) else ''
+                                if step_title and step_content:
+                                    # 清理内容（去除多余的分隔符）
+                                    step_content = step_content.strip('；。，')
+                                    if step_content:
+                                        st.markdown(f"**{step_num}. {step_title}**")
+                                        st.caption(step_content)
+                                i += 3
+                        else:
+                            # 没有结构化标记，使用原始reason文本
+                            import html
+                            escaped_reason = html.escape(reason)
+                            formatted_reason = escaped_reason.replace('；', '<br>').replace('\n', '<br>')
+                            st.markdown(f'<div style="padding: 10px; background-color: #f0f2f6; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">{formatted_reason}</div>', unsafe_allow_html=True)
                     else:
                         st.info("暂无原因说明")
                     

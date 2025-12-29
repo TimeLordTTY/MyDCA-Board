@@ -604,7 +604,36 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
             decision=market_decision if market_decision else "无关键指标"
         ))
         
-        # 3) 否决/刹车命中
+        # 3) 策略决策详情（从策略层reason中提取）
+        strategy_decision = output.reason if output.reason else "无详细说明"
+        # 如果reason包含结构化标记【】，提取关键信息
+        import re
+        strategy_steps = []
+        if '【' in strategy_decision:
+            # 解析结构化reason
+            parts = re.split(r'【(\d+)\.\s*([^】]+)】', strategy_decision)
+            i = 1
+            while i < len(parts):
+                step_num = parts[i]
+                step_title = parts[i+1] if i+1 < len(parts) else ''
+                step_content = parts[i+2] if i+2 < len(parts) else ''
+                if step_title and step_content:
+                    # 清理内容
+                    step_content = step_content.strip('；。，')
+                    if step_content:
+                        strategy_steps.append(f"{step_num}. {step_title}: {step_content}")
+                i += 3
+        else:
+            # 降级：使用原始reason，按分号分割
+            strategy_steps = [s.strip() for s in strategy_decision.split('；') if s.strip()]
+        
+        reason_blocks.append(ReasonBlock(
+            rule_name="策略决策详情",
+            input_values={"strategy_reason": strategy_decision},
+            decision="；".join(strategy_steps[:5]) if strategy_steps else strategy_decision[:200]  # 最多显示5步或前200字符
+        ))
+        
+        # 4) 否决/刹车命中
         veto_hits = []
         veto_inputs = {}
         if not trade_day:
@@ -631,7 +660,7 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
             decision=", ".join(veto_hits) if veto_hits else "无"
         ))
         
-        # 4) 执行与延期
+        # 5) 执行与延期
         reason_blocks.append(ReasonBlock(
             rule_name="执行与延期",
             input_values={
@@ -642,7 +671,7 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
             decision=f"建议买入={budget_to_execute:.2f}，进入等待池={budget_to_wait_pool:.2f}，预计手续费={estimated_fee:.2f}"
         ))
         
-        # 5) 明日如何变化
+        # 6) 明日如何变化
         reason_blocks.append(ReasonBlock(
             rule_name="明日如何变化",
             input_values={},
@@ -882,7 +911,7 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
         if view_model.budget_to_wait_pool > 0:
             if from_account_id:
                 # 获取上次建议的budget_to_wait_pool
-                from repos.advisor_suggestion_repo import get_latest_suggestion
+                from .repos.advisor_suggestion_repo import get_latest_suggestion
                 last_suggestion = get_latest_suggestion(product_id)
                 last_moved_to_wait = Decimal('0')
                 if last_suggestion:

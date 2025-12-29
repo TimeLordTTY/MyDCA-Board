@@ -178,18 +178,18 @@ class PercentileAdvice(StrategyAdviceInterface):
         suggest_ratio_pct = float(suggest_ratio) * 100
         
         reason_parts = [
-            f"分位排名={pct_rank_pct:.2f}%，命中档位：{tier_label}（max_rank<{tier_max_rank_pct:.0f}%）",
-            f"档位建议比例={suggest_ratio_pct:.0f}%",
-            f"实际预算={budget_amount:.2f}（资金池分配={float(input_data.budget_amount):.2f}，等待池={float(input_data.pending_amount):.2f}）",
-            f"建议买入金额={suggest_amount:.2f}（预算×比例={suggest_amount_raw:.2f}，受理想成交额{ideal_trade_amount:.2f}和每日最大{max_buy_per_day:.2f}限制）"
+            f"【1. 分位排名判断】分位排名={pct_rank_pct:.2f}%，命中档位：{tier_label}（max_rank<{tier_max_rank_pct:.0f}%）",
+            f"【2. 档位建议比例】档位建议比例={suggest_ratio_pct:.0f}%",
+            f"【3. 预算计算】实际预算={budget_amount:.2f}（资金池分配={float(input_data.budget_amount):.2f}，等待池={float(input_data.pending_amount):.2f}）",
+            f"【4. 建议金额计算】建议买入金额={suggest_amount:.2f}（计算过程：预算{budget_amount:.2f} × 比例{suggest_ratio_pct:.0f}% = {suggest_amount_raw:.2f}，受理想成交额{ideal_trade_amount:.2f}和每日最大{max_buy_per_day:.2f}限制后为{suggest_amount:.2f}）"
         ]
-        reason_parts.append(f"技术指标 → {indicator_str}")
+        reason_parts.append(f"【5. 技术指标】{indicator_str}")
         
         # 预算检查
         if suggest_amount > 0:
             if suggest_amount < min_trade_amount:
-                reason_parts.append(f"预算检查 → 建议金额{suggest_amount:.2f} < 最小成交额{min_trade_amount:.2f}，差额={min_trade_amount - suggest_amount:.2f} → 进入等待池")
-                reason_parts.append(f"最终决策：WAIT（档位满足但金额不足最小成交额）")
+                reason_parts.append(f"【6. 最小成交额检查】建议金额{suggest_amount:.2f} < 最小成交额{min_trade_amount:.2f}，差额={min_trade_amount - suggest_amount:.2f} → 全部预算进入等待池")
+                reason_parts.append(f"【7. 最终决策】WAIT（档位满足但金额不足最小成交额，等待资金累积）")
                 
                 # 记录日志
                 logger.info(
@@ -210,10 +210,10 @@ class PercentileAdvice(StrategyAdviceInterface):
                     new_state_json=None
                 )
             else:
-                reason_parts.append(f"预算检查 → 建议金额{suggest_amount:.2f} ≥ 最小成交额{min_trade_amount:.2f} → 通过")
+                reason_parts.append(f"【6. 最小成交额检查】建议金额{suggest_amount:.2f} ≥ 最小成交额{min_trade_amount:.2f} → 通过")
                 fee = max(suggest_amount * 0.000845, 0.20)
-                reason_parts.append(f"费用估算 → 预计手续费={fee:.2f}（费率0.0845%，最低0.20元）")
-                reason_parts.append(f"最终决策：BUY（档位满足且金额充足）")
+                reason_parts.append(f"【7. 费用估算】预计手续费={fee:.2f}（费率0.0845%，最低0.20元）")
+                reason_parts.append(f"【8. 最终决策】BUY（档位满足且金额充足）")
                 
                 # 记录日志
                 logger.info(
@@ -235,9 +235,9 @@ class PercentileAdvice(StrategyAdviceInterface):
                 )
         else:
             # suggest_ratio=0，不买入
-            reason_parts.append(f"预算检查 → 档位建议比例=0%，不买入")
+            reason_parts.append(f"【6. 档位检查】档位建议比例=0%，不买入")
             pct_rank_pct_hold = float(pct_rank_float) * 100
-            reason_parts.append(f"最终决策：HOLD（分位排名{pct_rank_pct_hold:.2f}%偏高，等待回落）")
+            reason_parts.append(f"【7. 最终决策】HOLD（分位排名{pct_rank_pct_hold:.2f}%偏高，等待回落）")
             
             # 记录日志
             logger.info(

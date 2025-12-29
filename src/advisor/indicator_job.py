@@ -54,17 +54,18 @@ def calculate_percentile_indicator(product_id: int, trade_date: date, window_day
         logger.warning(f"有效数据不足: product_id={product_id}, 需要至少{min_required}条, 实际={len(closes)}")
         return None
     
-    # 获取昨日收盘价
-    yesterday = trade_date - timedelta(days=1)
+    # 获取最近的交易日收盘价（用于计算分位排名）
+    # 不直接使用 trade_date - 1，因为可能不是交易日
     sql_yesterday = """
         SELECT close_price
         FROM market_bar_d
-        WHERE product_id = %s AND trade_date = %s
-        ORDER BY created_at DESC
+        WHERE product_id = %s AND trade_date < %s
+        ORDER BY trade_date DESC
         LIMIT 1
     """
-    row_yesterday = execute_one(sql_yesterday, (product_id, yesterday))
+    row_yesterday = execute_one(sql_yesterday, (product_id, trade_date))
     if not row_yesterday:
+        logger.warning(f"无法获取最近交易日收盘价: product_id={product_id}, trade_date={trade_date}")
         return None
     
     yesterday_close = float(row_yesterday['close_price'])
@@ -115,17 +116,18 @@ def calculate_drawdown_indicator(product_id: int, trade_date: date, window_days:
     # 计算峰值
     peak_close = max(closes)
     
-    # 获取昨日收盘价
-    yesterday = trade_date - timedelta(days=1)
+    # 获取最近的交易日收盘价（用于计算回撤）
+    # 不直接使用 trade_date - 1，因为可能不是交易日
     sql_yesterday = """
         SELECT close_price
         FROM market_bar_d
-        WHERE product_id = %s AND trade_date = %s
-        ORDER BY created_at DESC
+        WHERE product_id = %s AND trade_date < %s
+        ORDER BY trade_date DESC
         LIMIT 1
     """
-    row_yesterday = execute_one(sql_yesterday, (product_id, yesterday))
+    row_yesterday = execute_one(sql_yesterday, (product_id, trade_date))
     if not row_yesterday:
+        logger.warning(f"无法获取最近交易日收盘价: product_id={product_id}, trade_date={trade_date}")
         return None
     
     yesterday_close = float(row_yesterday['close_price'])
