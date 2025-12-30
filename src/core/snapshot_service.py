@@ -94,20 +94,36 @@ def build_all_snapshots(fetch_date: str = None, project_root: Path = None) -> in
     for product in products:
         product_code = product['product_code']
         product_name = product['product_name']
+        channel = product.get('channel', 'OTC')
         
         products_map[product_code] = product_name
         products_order.append(product_code)
         category_map[product_code] = product.get('category', 'fund')
         market_map[product_code] = product.get('market', 'cn')
         
-        # 获取最新 NAV
-        latest_nav = get_latest_nav(product_code)
-        if latest_nav:
-            nav_date, nav = latest_nav
-            nav_records[product_code] = {
-                'nav_date': nav_date,
-                'nav': nav
-            }
+        # 获取最新 NAV（场内产品使用实时行情价格，场外产品使用净值）
+        if channel == 'EXCHANGE':
+            # 场内产品：从实时行情获取最新价格
+            from core.market_quote_service import get_latest_quote
+            from data.product_service import get_product_by_code
+            product_info = get_product_by_code(product_code)
+            if product_info and product_info.get('id'):
+                quote = get_latest_quote(product_info['id'])
+                if quote and quote.get('price'):
+                    # 使用当前日期作为 nav_date，价格作为 nav
+                    nav_records[product_code] = {
+                        'nav_date': fetch_date,
+                        'nav': quote.get('price')
+                    }
+        else:
+            # 场外产品：从净值表获取
+            latest_nav = get_latest_nav(product_code)
+            if latest_nav:
+                nav_date, nav = latest_nav
+                nav_records[product_code] = {
+                    'nav_date': nav_date,
+                    'nav': nav
+                }
     
     # 调用 create_daily_snapshot 生成快照
     try:

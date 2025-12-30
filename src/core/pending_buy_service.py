@@ -8,14 +8,14 @@ from data.db_connector import execute_query, execute_one, execute_update, execut
 logger = logging.getLogger(__name__)
 
 
-def add_pending_amount(product_id: int, from_account_id: int, amount: Decimal, reason: str = None, last_change_reason: str = None) -> bool:
+def add_pending_amount(product_id: int, from_account_id: int, amount, reason: str = None, last_change_reason: str = None) -> bool:
     """
     增加待买入金额（累加）
     
     Args:
         product_id: 产品ID
         from_account_id: 来源账户ID
-        amount: 待买入金额
+        amount: 待买入金额（可以是 Decimal 或 float）
         reason: 扣留原因（兼容字段）
         last_change_reason: 最后变更原因（如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT）
     
@@ -24,6 +24,10 @@ def add_pending_amount(product_id: int, from_account_id: int, amount: Decimal, r
     """
     try:
         from datetime import datetime
+        
+        # 确保 amount 是 Decimal 类型
+        if not isinstance(amount, Decimal):
+            amount = Decimal(str(amount))
         
         # 先查询是否存在
         existing = get_pending_pool(product_id, from_account_id)
@@ -65,6 +69,10 @@ def add_pending_amount(product_id: int, from_account_id: int, amount: Decimal, r
         logger.error(f"增加待买入金额失败: {e}", exc_info=True)
         # 如果字段不存在，降级到旧逻辑
         try:
+            # 确保 amount 是 Decimal 类型
+            if not isinstance(amount, Decimal):
+                amount = Decimal(str(amount))
+            
             existing = get_pending_pool(product_id, from_account_id)
             if existing:
                 new_amount = Decimal(str(existing['pending_amount'])) + amount

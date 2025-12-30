@@ -940,7 +940,7 @@ def run_for_product(product_id: int, as_of_time: Optional[datetime] = None) -> O
                     
                     add_pending_amount(
                         product_id, from_account_id, 
-                        float(increment),
+                        increment,  # 直接传入 Decimal，函数内部会处理类型转换
                         reason=wait_reason,
                         last_change_reason=change_reason
                     )

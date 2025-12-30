@@ -1895,11 +1895,19 @@ def page_asset_details():
         
         # 修改账户名称并添加新账户
         processed_balance_data = []
+        fund_total_account_added = False  # 标记是否已添加基金(合计)账户
+        fund_accounts = []  # 存储基金账户，稍后统一插入
+        
         for record in balance_data:
             account_type = record.get('account_type', '')
             account_name = record.get('account_name', '')
+            account_id = record.get('account_id', '')
             
-            # 将 fund_total 账户名称改为"场外基金账户"
+            # 跳过已存在的基金(合计)账户（避免重复）
+            if account_id == 'fund_total_account' or account_name == '基金(合计)账户' or account_name == '基金(合计)':
+                continue
+            
+            # 将 fund_total 账户名称改为"场外基金账户"，并暂存到 fund_accounts
             if account_type == 'fund_total':
                 record['account_name'] = '场外基金账户'
                 # 更新为场外基金的值
@@ -1908,32 +1916,36 @@ def page_asset_details():
                 record['yesterday_pnl'] = f"{otc_fund_pnl_day:.2f}" if otc_fund_pnl_day != 0 else ''
                 record['unrealized_pnl'] = f"{otc_fund_unrealized_pnl:.2f}" if otc_fund_unrealized_pnl != 0 else ''
                 record['total_pnl'] = f"{otc_fund_total_pnl:.2f}" if otc_fund_total_pnl != 0 else ''
+                fund_accounts.append(record)  # 暂存到场外基金账户
+            else:
+                processed_balance_data.append(record)
+        
+        # 添加场外基金账户
+        if fund_accounts:
+            processed_balance_data.extend(fund_accounts)
+        
+        # 添加场内基金账户（放在场外基金账户后面）
+        processed_balance_data.append({
+            'account_id': 'exchange_fund_account',
+            'account_name': '场内基金账户',
+            'account_type': 'fund_total',
+            'balance': str(exchange_fund_value),
+            'product_value': str(exchange_fund_value),
+            'diff': '',
+            'yesterday_pnl': f"{exchange_fund_pnl_day:.2f}" if exchange_fund_pnl_day != 0 else '',
+            'unrealized_pnl': f"{exchange_fund_unrealized_pnl:.2f}" if exchange_fund_unrealized_pnl != 0 else '',
+            'total_pnl': f"{exchange_fund_total_pnl:.2f}" if exchange_fund_total_pnl != 0 else '',
+            'related_product': None,
+            'note': '场内基金账户汇总'
+        })
+        
+        # 添加基金(合计)账户（放在场外和场内基金账户后面）
+        if not fund_total_account_added:
+            total_fund_value = exchange_fund_value + otc_fund_value
+            total_fund_pnl_day = exchange_fund_pnl_day + otc_fund_pnl_day
+            total_fund_unrealized_pnl = exchange_fund_unrealized_pnl + otc_fund_unrealized_pnl
+            total_fund_total_pnl = exchange_fund_total_pnl + otc_fund_total_pnl
             
-            processed_balance_data.append(record)
-        
-        # 添加场内基金账户
-        if exchange_fund_value > 0:
-            processed_balance_data.append({
-                'account_id': 'exchange_fund_account',
-                'account_name': '场内基金账户',
-                'account_type': 'fund_total',
-                'balance': str(exchange_fund_value),
-                'product_value': str(exchange_fund_value),
-                'diff': '',
-                'yesterday_pnl': f"{exchange_fund_pnl_day:.2f}" if exchange_fund_pnl_day != 0 else '',
-                'unrealized_pnl': f"{exchange_fund_unrealized_pnl:.2f}" if exchange_fund_unrealized_pnl != 0 else '',
-                'total_pnl': f"{exchange_fund_total_pnl:.2f}" if exchange_fund_total_pnl != 0 else '',
-                'related_product': None,
-                'note': '场内基金账户汇总'
-            })
-        
-        # 添加基金(合计)账户
-        total_fund_value = exchange_fund_value + otc_fund_value
-        total_fund_pnl_day = exchange_fund_pnl_day + otc_fund_pnl_day
-        total_fund_unrealized_pnl = exchange_fund_unrealized_pnl + otc_fund_unrealized_pnl
-        total_fund_total_pnl = exchange_fund_total_pnl + otc_fund_total_pnl
-        
-        if total_fund_value > 0:
             processed_balance_data.append({
                 'account_id': 'fund_total_account',
                 'account_name': '基金(合计)账户',
@@ -1947,6 +1959,7 @@ def page_asset_details():
                 'related_product': None,
                 'note': '场内+场外基金账户合计'
             })
+            fund_total_account_added = True
         
         # 转换为 DataFrame
         df_balance = pd.DataFrame(processed_balance_data)
@@ -2529,7 +2542,7 @@ def page_ledger():
 def page_invest():
     st.markdown('<p class="main-header">📈 理财录入</p>', unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["💳 买入扣款", "📤 赎回发起", "📝 补录历史"])
+    tab1, tab2, tab3 = st.tabs(["💳 买入/成交", "📤 赎回发起", "📝 补录历史"])
     
     # 获取产品选项（需要包含 channel 字段）
     all_products = get_products(is_active=True)
@@ -2562,8 +2575,6 @@ def page_invest():
         all_product_names.append(display_name)
     
     with tab1:
-        st.subheader("买入扣款")
-        
         # 选择场内/场外（默认场内）
         buy_channel = st.radio(
             "交易类型",
@@ -2574,8 +2585,22 @@ def page_invest():
         )
         
         # 根据选择显示不同的产品列表
+        # 使用容器来隔离场内和场外模式的内容
+        otc_placeholder = st.empty()
+        
         if buy_channel == "场内":
-            # 场内模式：使用场内成交录入
+            # 清空场外模式的内容
+            with otc_placeholder:
+                st.empty()
+            
+            # 场内模式：使用场内成交录入（自动扣款和确认）
+            st.subheader("场内成交录入")
+            st.info("💡 场内交易：提交成交记录后会自动从账户扣款并创建买入确认记录，无需单独提交买入扣款")
+            
+            # 清空场外模式的session state，避免按钮残留
+            if 'submit_buy_otc' in st.session_state:
+                del st.session_state['submit_buy_otc']
+            
             if not exchange_product_names:
                 st.warning("⚠️ 暂无场内产品，请先在产品管理中添加场内ETF/LOF产品")
             else:
@@ -2712,6 +2737,10 @@ def page_invest():
                                 
                                 # 显示详细信息
                                 if result:
+                                    buy_confirm_order_id = result.get('buy_confirm_order_id')
+                                    if buy_confirm_order_id:
+                                        st.info(f"📝 已自动创建买入确认记录，订单号: {buy_confirm_order_id}")
+                                    
                                     holdings_before = result.get('holdings_before', {})
                                     holdings_after = result.get('holdings_after', {})
                                     deduction_result = result.get('deduction_result')
@@ -2777,117 +2806,128 @@ def page_invest():
                             st.error(f"❌ 提交失败: {e}")
                             import traceback
                             st.code(traceback.format_exc())
-        else:
+        elif buy_channel == "场外":
             # 场外模式：使用原有的买入扣款逻辑
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # 场外产品列表（默认显示场外产品）
-                buy_product = st.selectbox("选择产品", otc_product_names if otc_product_names else all_product_names, key="buy_product_otc")
-                buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount_otc")
+            with otc_placeholder.container():
+                st.subheader("场外买入扣款")
                 
-                if buy_product and buy_amount > 0:
-                    # 使用合并的产品字典
-                    product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
-                    if product:
-                        from core.invest_service import calc_buy_fee
-                        from decimal import Decimal
-                        fee = calc_buy_fee(product['code'], Decimal(str(buy_amount)))
-                        buy_fee_rate = float(product.get('buy_fee_rate') or 0)
-                        st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {buy_fee_rate*100:.2f}%）")
-                        st.info(f"💡 净申购额: ¥{Decimal(str(buy_amount)) - fee:.2f}")
-                        
-                        buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee_otc")
-        
-        with col2:
-            # 交易日期输入（可编辑，默认当前日期）
-            buy_trade_date = st.date_input(
-                "交易日期", 
-                value=date.today(), 
-                key="buy_trade_date_otc",
-                help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
-            )
-            
-            if buy_product:
-                # 使用合并的产品字典
-                product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
-                if product:
-                    # 根据交易日期计算净值日期和确认日期
-                    from core.invest_service import calc_confirm_date
-                    buy_confirm_offset = product.get('buy_confirm_offset', 1)
+                # 清空场内模式的session state，避免按钮残留
+                if 'submit_buy_exchange' in st.session_state:
+                    del st.session_state['submit_buy_exchange']
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # 场外产品列表（默认显示场外产品）
+                    buy_product = st.selectbox("选择产品", otc_product_names if otc_product_names else all_product_names, key="buy_product_otc")
+                    buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount_otc")
                     
-                    # 净值日期 = 交易日期
-                    buy_nav_date = buy_trade_date
-                    # 确认日期 = 交易日期 + confirm_offset 个交易日
-                    buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
+                    buy_fee_override = 0.0  # 默认值
+                    if buy_product and buy_amount > 0:
+                        # 使用合并的产品字典
+                        product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                        if product:
+                            from core.invest_service import calc_buy_fee
+                            from decimal import Decimal
+                            fee = calc_buy_fee(product['code'], Decimal(str(buy_amount)))
+                            buy_fee_rate = float(product.get('buy_fee_rate') or 0)
+                            st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {buy_fee_rate*100:.2f}%）")
+                            st.info(f"💡 净申购额: ¥{Decimal(str(buy_amount)) - fee:.2f}")
+                            
+                            buy_fee_override = st.number_input("手续费（可覆盖）", min_value=0.0, value=float(fee), step=0.01, key="buy_fee_otc")
+                
+                with col2:
+                    # 交易日期输入（可编辑，默认当前日期）
+                    buy_trade_date = st.date_input(
+                        "交易日期", 
+                        value=date.today(), 
+                        key="buy_trade_date_otc",
+                        help="扣款发生的日期，修改后会自动计算净值日期和确认日期"
+                    )
                     
-                    st.info(f"📅 净值日期: {buy_nav_date}")
-                    st.info(f"📅 确认日期: {buy_confirm_date}")
-            
-            # 二级分类选择
-            buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
-            buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
-            
-            # 请求时间（时分秒），默认当前时间
-            buy_time = st.text_input(
-                "请求时间（HH:MM:SS）", 
-                value=datetime.now().strftime('%H:%M:%S'), 
-                key="buy_time_otc",
-                help="扣款发生的时间，精确到秒"
-            )
-            buy_note = st.text_input("备注（可选）", key="buy_note_otc")
-        
-        if st.button("提交买入扣款", type="primary", key="submit_buy_otc"):
-            if not buy_product or buy_amount <= 0:
-                st.error("❌ 请选择产品并输入金额！")
-            else:
-                try:
-                    # 使用合并的产品字典
-                    product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
-                    if not product:
-                        st.error(f"❌ 产品不存在: {buy_product}")
+                    if buy_product:
+                        # 使用合并的产品字典
+                        product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                        if product:
+                            # 根据交易日期计算净值日期和确认日期
+                            from core.invest_service import calc_confirm_date
+                            buy_confirm_offset = product.get('buy_confirm_offset', 1)
+                            
+                            # 净值日期 = 交易日期
+                            buy_nav_date = buy_trade_date
+                            # 确认日期 = 交易日期 + confirm_offset 个交易日
+                            buy_confirm_date = calc_confirm_date(buy_trade_date, buy_confirm_offset)
+                            
+                            st.info(f"📅 净值日期: {buy_nav_date}")
+                            st.info(f"📅 确认日期: {buy_confirm_date}")
+                    
+                    # 二级分类选择
+                    buy_category_l2_options = ["基金定投", "定期理财", "基金补仓"]
+                    buy_category_l2 = st.selectbox("交易类型", buy_category_l2_options, key="buy_category_l2")
+                    
+                    # 请求时间（时分秒），默认当前时间
+                    buy_time = st.text_input(
+                        "请求时间（HH:MM:SS）", 
+                        value=datetime.now().strftime('%H:%M:%S'), 
+                        key="buy_time_otc",
+                        help="扣款发生的时间，精确到秒"
+                    )
+                    buy_note = st.text_input("备注（可选）", key="buy_note_otc")
+                
+                if st.button("提交买入扣款", type="primary", key="submit_buy_otc"):
+                    if not buy_product or buy_amount <= 0:
+                        st.error("❌ 请选择产品并输入金额！")
                     else:
-                        # 解析时间
                         try:
-                            time_parts = buy_time.split(':')
-                            requested_at = datetime.combine(
-                                buy_trade_date,
-                                datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
-                                else datetime.strptime(buy_time, '%H:%M').time()
-                            )
-                        except:
-                            requested_at = datetime.combine(buy_trade_date, datetime.now().time())
-                        
-                        order_id = add_buy_debit(
-                            product_code=product['code'],
-                            amount=Decimal(str(buy_amount)),
-                            fee=Decimal(str(buy_fee_override)) if buy_fee_override > 0 else None,
-                            requested_at=requested_at,
-                            trade_date=buy_trade_date,
-                            note=buy_note or None
-                        )
-                        
-                        # 同时在生活记账中添加一笔支出记录
-                        debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
-                        event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
-                        add_expense(
-                            account_from=debit_account,
-                            amount=Decimal(str(buy_amount)),
-                            category_l1="理财投资",
-                            category_l2=buy_category_l2,
-                            event_time=event_time,
-                            note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
-                        )
-                        
-                        st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
-                        try:
-                            collect_nav_and_build_snapshots(silent=True)
-                        except:
-                            pass
-                except Exception as e:
-                    st.error(f"❌ 提交失败: {e}")
-                    import traceback
-                    st.code(traceback.format_exc())
+                            # 使用合并的产品字典
+                            product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                            if not product:
+                                st.error(f"❌ 产品不存在: {buy_product}")
+                            else:
+                                # 解析时间
+                                try:
+                                    time_parts = buy_time.split(':')
+                                    requested_at = datetime.combine(
+                                        buy_trade_date,
+                                        datetime.strptime(buy_time, '%H:%M:%S').time() if len(time_parts) == 3 
+                                        else datetime.strptime(buy_time, '%H:%M').time()
+                                    )
+                                except:
+                                    requested_at = datetime.combine(buy_trade_date, datetime.now().time())
+                                
+                                order_id = add_buy_debit(
+                                    product_code=product['code'],
+                                    amount=Decimal(str(buy_amount)),
+                                    fee=Decimal(str(buy_fee_override)) if buy_fee_override > 0 else None,
+                                    requested_at=requested_at,
+                                    trade_date=buy_trade_date,
+                                    note=buy_note or None
+                                )
+                                
+                                # 同时在生活记账中添加一笔支出记录
+                                debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
+                                event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
+                                add_expense(
+                                    account_from=debit_account,
+                                    amount=Decimal(str(buy_amount)),
+                                    category_l1="理财投资",
+                                    category_l2=buy_category_l2,
+                                    event_time=event_time,
+                                    note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
+                                )
+                                
+                                st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
+                                try:
+                                    collect_nav_and_build_snapshots(silent=True)
+                                except:
+                                    pass
+                        except Exception as e:
+                            st.error(f"❌ 提交失败: {e}")
+                            import traceback
+                            st.code(traceback.format_exc())
+        else:
+            # 如果既不是场内也不是场外（理论上不应该发生），显示提示
+            st.warning("⚠️ 请选择交易类型（场内或场外）")
     
     with tab2:
         st.subheader("赎回发起")

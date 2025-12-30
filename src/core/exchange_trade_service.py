@@ -49,7 +49,7 @@ class TradeDeductionResult:
 
 def validate_trade_input(
     product_id: int,
-    account_id: int,
+    account_id,  # 可以是 int (数据库主键id) 或 str (account_code)
     trade_type: str,
     amount: Decimal,
     shares: Decimal,
@@ -62,7 +62,7 @@ def validate_trade_input(
     
     Args:
         product_id: 产品ID
-        account_id: 账户ID
+        account_id: 账户ID（可以是整数类型的数据库主键id，或字符串类型的account_code）
         trade_type: 交易类型（BUY/SELL/FEE/TAX）
         amount: 成交金额
         shares: 成交份额
@@ -83,8 +83,18 @@ def validate_trade_input(
     elif product.get('channel') != 'EXCHANGE':
         errors.append(f"产品不是场内产品: {product.get('code')}")
     
-    # 2. 验证账户
-    account = get_account_by_id(account_id)
+    # 2. 验证账户（支持 account_id 整数或 account_code 字符串）
+    account = None
+    if isinstance(account_id, int):
+        # 如果是整数，按数据库主键id查找
+        account = get_account_by_id(account_id)
+    elif isinstance(account_id, str):
+        # 如果是字符串，按 account_code 查找
+        from data.account_service import get_account_by_code
+        account = get_account_by_code(account_id)
+    else:
+        errors.append(f"账户ID类型无效: account_id={account_id} (类型: {type(account_id).__name__})")
+    
     if not account:
         errors.append(f"账户不存在: account_id={account_id}")
     
@@ -161,9 +171,27 @@ def calc_default_fee(amount: Decimal, fee_rate: Decimal = Decimal('0.000845'), f
     return max(fee, fee_min)
 
 
+def _get_account_by_id_or_code(account_id) -> Optional[Dict]:
+    """
+    根据 account_id（可以是整数或字符串）获取账户
+    
+    Args:
+        account_id: 账户ID（可以是整数类型的数据库主键id，或字符串类型的account_code）
+    
+    Returns:
+        账户字典，如果不存在则返回 None
+    """
+    if isinstance(account_id, int):
+        return get_account_by_id(account_id)
+    elif isinstance(account_id, str):
+        from data.account_service import get_account_by_code
+        return get_account_by_code(account_id)
+    return None
+
+
 def apply_fund_deduction(
     product_id: int,
-    account_id: int,
+    account_id,  # 可以是 int (数据库主键id) 或 str (account_code)
     amount: Decimal,
     trade_type: str
 ) -> TradeDeductionResult:
@@ -172,7 +200,7 @@ def apply_fund_deduction(
     
     Args:
         product_id: 产品ID
-        account_id: 账户ID
+        account_id: 账户ID（可以是整数类型的数据库主键id，或字符串类型的account_code）
         amount: 成交金额（含费）
         trade_type: 交易类型（BUY/SELL）
     
@@ -184,16 +212,29 @@ def apply_fund_deduction(
     
     if trade_type == 'BUY':
         # 买入：先扣等待池，再扣现金池
+        # 将 account_id（可能是 account_code 字符串）转换为数据库主键 id
+        account_db_id = account_id
+        if isinstance(account_id, str):
+            account = _get_account_by_id_or_code(account_id)
+            if account:
+                account_db_id = account.get('id')
+            else:
+                logger.warning(f"无法找到账户: account_id={account_id}，等待池扣减将跳过")
+                account_db_id = None
+        
         # 获取等待池余额
-        wait_pool = get_pending_pool(product_id, account_id)
-        wait_pool_before = Decimal(str(wait_pool['pending_amount'])) if wait_pool else Decimal('0')
+        wait_pool = None
+        wait_pool_before = Decimal('0')
+        if account_db_id is not None:
+            wait_pool = get_pending_pool(product_id, account_db_id)
+            wait_pool_before = Decimal(str(wait_pool['pending_amount'])) if wait_pool else Decimal('0')
         
         # 先扣等待池
         wait_pool_deducted = min(amount, wait_pool_before)
-        if wait_pool_deducted > 0:
+        if wait_pool_deducted > 0 and account_db_id is not None:
             # 使用 reduce_pending_amount 直接扣减指定账户的等待池
             from core.pending_buy_service import reduce_pending_amount
-            reduce_pending_amount(product_id, account_id, wait_pool_deducted, reason="场内买入成交扣减")
+            reduce_pending_amount(product_id, account_db_id, wait_pool_deducted, reason="场内买入成交扣减")
             wait_pool_after = wait_pool_before - wait_pool_deducted
         else:
             wait_pool_after = wait_pool_before
@@ -202,7 +243,7 @@ def apply_fund_deduction(
         remaining = amount - wait_pool_deducted
         if remaining > 0:
             # 获取账户代码
-            account = get_account_by_id(account_id)
+            account = _get_account_by_id_or_code(account_id)
             if account:
                 account_code = account.get('account_code')
                 cash_pool_before = calc_account_balance(account_code)
@@ -231,7 +272,7 @@ def apply_fund_deduction(
     
     elif trade_type == 'SELL':
         # 卖出：增加现金池（通过ledger记录收入）
-        account = get_account_by_id(account_id)
+        account = _get_account_by_id_or_code(account_id)
         if account:
             account_code = account.get('account_code')
             cash_pool_before = calc_account_balance(account_code)
@@ -279,7 +320,7 @@ def apply_fund_deduction(
 
 def persist_trade_record(
     product_id: int,
-    account_id: int,
+    account_id,  # 可以是 int (数据库主键id) 或 str (account_code)
     trade_date: date,
     trade_time: datetime,
     trade_type: str,
@@ -296,7 +337,7 @@ def persist_trade_record(
     
     Args:
         product_id: 产品ID
-        account_id: 账户ID
+        account_id: 账户ID（可以是整数类型的数据库主键id，或字符串类型的account_code）
         trade_date: 成交日期
         trade_time: 成交时间
         trade_type: 交易类型（BUY/SELL）
@@ -322,6 +363,16 @@ def persist_trade_record(
     # 转换trade_type为side（BUY/SELL）
     side = 'BUY' if trade_type == 'BUY' else 'SELL'
     
+    # 将 account_id（可能是 account_code 字符串）转换为数据库主键 id
+    account_db_id = account_id
+    if isinstance(account_id, str):
+        account = _get_account_by_id_or_code(account_id)
+        if account:
+            account_db_id = account.get('id')
+        else:
+            logger.error(f"无法找到账户: account_id={account_id}")
+            raise ValueError(f"账户不存在: account_id={account_id}")
+    
     sql = """
         INSERT INTO trade_fills (
             trade_date, trade_time, product_id, account_id, side,
@@ -336,7 +387,7 @@ def persist_trade_record(
         trade_date,
         trade_time,
         product_id,
-        account_id,
+        account_db_id,  # 使用转换后的数据库主键 id
         side,
         float(shares),
         float(price),
@@ -452,10 +503,51 @@ def save_exchange_trade(
         # 5. 重新计算持仓
         holdings_after = calc_exchange_holdings(product_id)
         
-        # 6. 更新快照（如果需要）
+        # 6. 对于买入交易，自动创建 buy_confirm 记录（场内交易直接确认）
+        buy_confirm_order_id = None
+        if trade_type == 'BUY':
+            try:
+                from data.product_service import get_product_by_id
+                from data.data_store import append_transaction, format_decimal
+                from datetime import datetime
+                
+                product = get_product_by_id(product_id)
+                if product:
+                    product_code = product.get('code')
+                    # 计算成交价（作为确认净值）
+                    confirm_nav = price if price else (amount / shares if shares > 0 else Decimal('0'))
+                    
+                    # 生成订单号（用于关联，格式：EXCHANGE_产品代码_日期时间）
+                    buy_confirm_order_id = f"EXCHANGE_{product_code}_{trade_time.strftime('%Y%m%d_%H%M%S')}"
+                    
+                    # 创建 buy_confirm 记录
+                    confirm_date_str = trade_date.strftime('%Y-%m-%d')
+                    confirm_time_str = trade_time.strftime('%H:%M:%S')
+                    created_at = f"{confirm_date_str} {confirm_time_str}"
+                    
+                    tx_record = {
+                        'date': confirm_date_str,
+                        'product_id': product_id,
+                        'product_code': product_code,
+                        'action': 'buy_confirm',
+                        'amount': '',  # 买入确认不记录金额
+                        'shares': format_decimal(shares, 6),
+                        'fee': format_decimal(fee, 2) if fee else '0',
+                        'nav': str(confirm_nav),
+                        'nav_date': confirm_date_str,
+                        'order_id': buy_confirm_order_id,
+                        'note': remark or f'场内买入成交确认',
+                        'created_at': created_at
+                    }
+                    append_transaction(tx_record)
+                    logger.info(f"场内买入自动确认: product_id={product_id}, shares={shares}, nav={confirm_nav}, order_id={buy_confirm_order_id}")
+            except Exception as e:
+                logger.warning(f"创建买入确认记录失败（不影响成交记录）: {e}", exc_info=True)
+        
+        # 7. 更新快照（如果需要）
         update_snapshot_if_needed(trade_date)
         
-        # 7. 刷新Advisor建议
+        # 8. 刷新Advisor建议
         suggestion = refresh_advisor_suggestion(product_id)
         
         result = {
@@ -464,7 +556,8 @@ def save_exchange_trade(
             'holdings_after': holdings_after,
             'deduction_result': deduction_result,
             'suggestion': suggestion,
-            'warnings': validation.warnings
+            'warnings': validation.warnings,
+            'buy_confirm_order_id': buy_confirm_order_id  # 新增：买入确认订单号
         }
         
         return True, "保存成功", result

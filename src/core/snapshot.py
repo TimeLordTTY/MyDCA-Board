@@ -210,6 +210,33 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
     calc = HoldingsCalculator()
     all_holdings_data = calc.get_all_holdings_data_as_of(fetch_date)
     
+    # 获取场内产品持仓数据（基于 trade_fills）
+    from data.product_service import get_products
+    from core.exchange_holdings_calculator import calculate_exchange_holdings
+    exchange_products = get_products(channel='EXCHANGE', is_active=True)
+    exchange_holdings_map = {}  # {product_code: holdings_dict}
+    for product in exchange_products:
+        product_code = product.get('code', '')
+        product_id = product.get('id')
+        if product_id:
+            try:
+                holdings = calculate_exchange_holdings(product_id, asof_date=fetch_date)
+                # 即使持仓为0也记录，确保快照中有该产品
+                if holdings:
+                    # 将场内持仓数据转换为快照格式
+                    exchange_holdings_map[product_code] = {
+                        'shares': Decimal(str(holdings.get('current_qty', 0))),
+                        'cost': Decimal(str(holdings.get('total_cost', 0))),
+                        'cash_in_transit': Decimal('0'),  # 场内无在途资金
+                        'principal_total': Decimal(str(holdings.get('total_cost', 0))),  # 使用总成本作为本金
+                        'total_redemption': Decimal('0'),  # 场内暂不支持赎回
+                        'realized_pnl': Decimal(str(holdings.get('realized_pnl', 0))),
+                        'unrealized_pnl': Decimal(str(holdings.get('unrealized_pnl', 0))),
+                        'total_pnl': Decimal(str(holdings.get('total_pnl', 0)))
+                    }
+            except Exception as e:
+                logger.warning(f"计算场内产品 {product_code} 持仓失败: {e}")
+    
     # 读取所有现有快照，按 (fetch_date, product_code) 索引
     all_snapshots = read_all_snapshots()
     existing_map = {}
@@ -217,6 +244,21 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
         row_fetch_date = row.get('fetch_date', '')[:10]
         key = (row_fetch_date, row['product_code'])
         existing_map[key] = row
+    
+    # 处理有持仓但没有 nav_records 的场内产品（确保所有有持仓的场内产品都生成快照）
+    for product_code, holdings_data in exchange_holdings_map.items():
+        if product_code not in nav_records:
+            # 有持仓但没有价格数据，尝试获取实时行情
+            from data.product_service import get_product_by_code
+            from core.market_quote_service import get_latest_quote
+            product_info = get_product_by_code(product_code)
+            if product_info and product_info.get('id'):
+                quote = get_latest_quote(product_info['id'])
+                if quote and quote.get('price'):
+                    nav_records[product_code] = {
+                        'nav_date': fetch_date,
+                        'nav': quote.get('price')
+                    }
     
     # 统计
     new_count = 0
@@ -229,8 +271,17 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
         nav_date = nav_record['nav_date']  # 净值日期
         key = (fetch_date, product_code)  # 唯一键：采集日期 + 产品
         
-        # 获取持仓数据
-        if product_code in all_holdings_data:
+        # 获取持仓数据：优先使用场内持仓，其次使用场外持仓
+        if product_code in exchange_holdings_map:
+            # 场内产品：使用 trade_fills 计算的持仓
+            h = exchange_holdings_map[product_code]
+            shares = h["shares"]
+            cost = h["cost"]
+            cash_in_transit = h["cash_in_transit"]
+            principal_total = h["principal_total"]
+            total_redemption = h["total_redemption"]
+        elif product_code in all_holdings_data:
+            # 场外产品：使用 transactions 计算的持仓
             h = all_holdings_data[product_code]
             shares = h["shares"]
             cost = h["cost"]

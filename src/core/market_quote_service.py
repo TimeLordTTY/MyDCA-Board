@@ -1,7 +1,7 @@
 """场内行情服务 - 行情数据入库与管理"""
 import logging
 from datetime import datetime, date
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from decimal import Decimal
 
 from data.db_connector import execute_query, execute_one, execute_update, execute_insert
@@ -206,17 +206,67 @@ def save_qdii_premium(product_id: int, premium_data: Dict, source: str = 'AKSHAR
         return False
 
 
-def collect_realtime_quotes(product_ids: Optional[List[int]] = None) -> Dict[int, bool]:
+def _collect_single_quote(product_id: int) -> Tuple[int, bool]:
     """
-    批量采集实时行情
+    采集单个产品的实时行情（用于并行处理）
+    
+    Args:
+        product_id: 产品ID
+    
+    Returns:
+        (product_id, success) 元组
+    """
+    try:
+        product = get_product_by_id(product_id)
+        if not product:
+            logger.warning(f"产品不存在: product_id={product_id}")
+            return (product_id, False)
+        
+        code = product.get('code')
+        market = product.get('market')
+        
+        if market == 'NA':
+            logger.warning(f"产品 {code} 不是场内产品，跳过")
+            return (product_id, False)
+        
+        # 获取实时行情
+        quote = fetch_realtime_quote(code, market)
+        if quote:
+            success = save_realtime_quote(product_id, quote)
+            
+            # 如果是 QDII，同时采集溢价率
+            if product.get('is_qdii'):
+                try:
+                    premium = fetch_qdii_premium(code, market)
+                    if premium:
+                        save_qdii_premium(product_id, premium)
+                except Exception as e:
+                    logger.warning(f"采集QDII溢价率失败: product_id={product_id}, error={e}")
+            
+            # 注意：指标计算和建议生成不在并行任务中执行，避免数据库连接冲突
+            # 这些操作将在主线程中批量处理或由其他任务触发
+            
+            return (product_id, success)
+        else:
+            return (product_id, False)
+    except Exception as e:
+        logger.error(f"采集实时行情失败: product_id={product_id}, error={e}", exc_info=True)
+        return (product_id, False)
+
+
+def collect_realtime_quotes(product_ids: Optional[List[int]] = None, max_workers: int = 5) -> Dict[int, bool]:
+    """
+    批量采集实时行情（使用线程池并行处理）
     
     Args:
         product_ids: 产品ID列表，None 表示采集所有场内产品
+        max_workers: 最大并发线程数（默认5，避免过多并发导致API限流）
     
     Returns:
         {product_id: success} 字典
     """
     from data.product_service import get_products
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     
     if product_ids is None:
         # 获取所有场内产品（channel='EXCHANGE' 且 market='SH'或'SZ'）
@@ -225,46 +275,30 @@ def collect_realtime_quotes(product_ids: Optional[List[int]] = None) -> Dict[int
         products = [p for p in products if p.get('market') in ['SH', 'SZ']]
         product_ids = [p['id'] for p in products]
     
+    if not product_ids:
+        return {}
+    
     result = {}
-    for product_id in product_ids:
-        product = get_product_by_id(product_id)
-        if not product:
-            logger.warning(f"产品不存在: product_id={product_id}")
-            result[product_id] = False
-            continue
+    
+    # 使用线程池并行采集
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 提交所有任务
+        future_to_product = {
+            executor.submit(_collect_single_quote, product_id): product_id 
+            for product_id in product_ids
+        }
         
-        code = product.get('code')
-        market = product.get('market')
-        
-        if market == 'NA':
-            logger.warning(f"产品 {code} 不是场内产品，跳过")
-            result[product_id] = False
-            continue
-        
-        # 获取实时行情
-        quote = fetch_realtime_quote(code, market)
-        if quote:
-            success = save_realtime_quote(product_id, quote)
-            result[product_id] = success
-            
-            # 如果是 QDII，同时采集溢价率
-            if product.get('is_qdii'):
-                premium = fetch_qdii_premium(code, market)
-                if premium:
-                    save_qdii_premium(product_id, premium)
-            
-            # 自动触发指标计算（异步，不阻塞）
-            if success:
-                try:
-                    from advisor.indicator_job import calculate_indicators_for_product
-                    calculate_indicators_for_product(product_id)
-                    # 自动触发建议生成
-                    from advisor.advisor_service import run_for_product
-                    run_for_product(product_id)
-                except Exception as e:
-                    logger.warning(f"自动计算指标失败: product_id={product_id}, error={e}")
-        else:
-            result[product_id] = False
+        # 收集结果
+        for future in as_completed(future_to_product):
+            product_id = future_to_product[future]
+            try:
+                pid, success = future.result()
+                result[pid] = success
+            except Exception as e:
+                logger.error(f"采集任务异常: product_id={product_id}, error={e}", exc_info=True)
+                result[product_id] = False
+    
+    logger.info(f"实时行情采集完成: 成功={sum(1 for v in result.values() if v)}/{len(result)}")
     
     return result
 
