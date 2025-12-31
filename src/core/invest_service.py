@@ -175,7 +175,8 @@ def add_redeem_request(
     requested_at: datetime = None,
     trade_date: date = None,
     redeem_account: str = None,
-    note: str = None
+    note: str = None,
+    fee_override: Decimal = None
 ) -> str:
     """
     添加赎回发起
@@ -188,6 +189,7 @@ def add_redeem_request(
         trade_date: 交易日期（可选，默认根据requested_at计算）
         redeem_account: 赎回账户（可选，默认余利宝理财金）
         note: 备注（默认产品名称）
+        fee_override: 手续费覆盖值（可选，如果提供则使用此值，否则按费率计算）
     
     Returns:
         order_id: 生成的订单号
@@ -263,6 +265,12 @@ def add_redeem_request(
     else:
         note_with_account = note
     
+    # 如果提供了手续费覆盖值，将其存储在note中（格式：...|fee_override:手续费金额）
+    if fee_override is not None and fee_override > 0:
+        fee_str = format_decimal(fee_override, 2)
+        note_with_account = f"{note_with_account}|fee_override:{fee_str}"
+        logger.info(f"add_redeem_request: 设置手续费覆盖值: {fee_override} (格式化后: {fee_str}), order_id={order_id}")
+    
     # 写入 orders
     order_record = {
         'order_id': order_id,
@@ -270,7 +278,7 @@ def add_redeem_request(
         'product_code': product_code,
         'order_type': 'redeem_request',
         'amount': '',
-        'fee': '',
+        'fee': format_decimal(fee_override, 2) if fee_override is not None and fee_override > 0 else '',
         'shares': format_decimal(shares, 4),
         'requested_at': requested_at.strftime('%Y-%m-%d %H:%M:%S'),
         'trade_date': str(trade_date),
@@ -551,7 +559,36 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 
                 # 计算到账金额
                 gross = shares * nav
-                fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                
+                # 检查是否有手续费覆盖值（从订单的note中解析，或从fee字段读取）
+                fee_override = None
+                order_note = order.get('note', '')
+                if '|fee_override:' in order_note:
+                    try:
+                        fee_override_str = order_note.split('|fee_override:')[1].split('|')[0].strip()
+                        if fee_override_str:  # 确保不是空字符串
+                            fee_override = parse_decimal(fee_override_str)
+                            logger.info(f"settle_orders: 从note中解析到手续费覆盖值: {fee_override}, order_id={order_id}")
+                    except Exception as e:
+                        logger.warning(f"settle_orders: 解析note中的手续费覆盖值失败: {e}, order_id={order_id}")
+                
+                # 如果订单的fee字段有值，也尝试使用（优先级低于note中的值）
+                if fee_override is None or fee_override == 0:
+                    order_fee_str = order.get('fee', '')
+                    if order_fee_str and order_fee_str.strip():
+                        try:
+                            fee_override = parse_decimal(order_fee_str)
+                            if fee_override > 0:
+                                logger.info(f"settle_orders: 从订单fee字段读取到手续费覆盖值: {fee_override}, order_id={order_id}")
+                        except Exception as e:
+                            logger.warning(f"settle_orders: 解析订单fee字段失败: {e}, order_id={order_id}")
+                
+                # 如果提供了手续费覆盖值，使用它；否则按费率计算
+                if fee_override is not None and fee_override > 0:
+                    fee = fee_override
+                else:
+                    fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                
                 amount = gross - fee
                 
                 # 获取 product_id（使用之前已获取的 product）
@@ -794,7 +831,38 @@ def settle_single_order(
             
             # 计算到账金额
             gross = shares * nav
-            fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            
+            # 检查是否有手续费覆盖值（从订单的note中解析，或从fee字段读取）
+            fee_override = None
+            order_note = order.get('note', '')
+            if '|fee_override:' in order_note:
+                try:
+                    fee_override_str = order_note.split('|fee_override:')[1].split('|')[0].strip()
+                    if fee_override_str:  # 确保不是空字符串
+                        fee_override = parse_decimal(fee_override_str)
+                        logger.info(f"settle_single_order: 从note中解析到手续费覆盖值: {fee_override}, order_id={order_id}")
+                except Exception as e:
+                    logger.warning(f"settle_single_order: 解析note中的手续费覆盖值失败: {e}, order_id={order_id}")
+            
+            # 如果订单的fee字段有值，也尝试使用（优先级低于note中的值）
+            if fee_override is None or fee_override == 0:
+                order_fee_str = order.get('fee', '')
+                if order_fee_str and order_fee_str.strip():
+                    try:
+                        fee_override = parse_decimal(order_fee_str)
+                        if fee_override > 0:
+                            logger.info(f"settle_single_order: 从订单fee字段读取到手续费覆盖值: {fee_override}, order_id={order_id}")
+                    except Exception as e:
+                        logger.warning(f"settle_single_order: 解析订单fee字段失败: {e}, order_id={order_id}")
+            
+            # 如果提供了手续费覆盖值，使用它；否则按费率计算
+            if fee_override is not None and fee_override > 0:
+                fee = fee_override
+                logger.info(f"settle_single_order: 使用手续费覆盖值: {fee}, order_id={order_id}")
+            else:
+                fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                logger.info(f"settle_single_order: 按费率计算手续费: {fee} (费率={sell_fee_rate}, 总金额={gross}), order_id={order_id}")
+            
             amount = gross - fee
             
             # 获取 product_id（使用之前已获取的 product）

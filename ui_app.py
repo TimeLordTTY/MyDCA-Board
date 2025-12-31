@@ -2521,13 +2521,24 @@ def page_ledger():
                 col_confirm, col_cancel = st.columns(2)
                 with col_confirm:
                     if st.button("✅ 确认删除", type="primary", key="do_delete_ledger"):
-                        from data.data_store import delete_ledger
-                        if delete_ledger(selected_record['id']):
-                            st.success("✅ 删除成功！")
+                        from core.cascade_delete import cascade_delete_ledger
+                        result = cascade_delete_ledger(selected_record['id'], selected_record)
+                        if result['ledger_deleted']:
+                            msg = "✅ 删除成功！"
+                            if result['transactions_deleted'] > 0:
+                                msg += f" 已删除 {result['transactions_deleted']} 条关联理财记录"
+                            if result['order_deleted']:
+                                msg += f"，已删除关联订单"
+                            if result['errors']:
+                                msg += f"\n⚠️ 部分删除失败: {', '.join(result['errors'])}"
+                            st.success(msg)
                             st.session_state.pop('pending_delete_ledger_id', None)
                             st.rerun()
                         else:
-                            st.error("❌ 删除失败")
+                            error_msg = "❌ 删除失败"
+                            if result['errors']:
+                                error_msg += f": {', '.join(result['errors'])}"
+                            st.error(error_msg)
                 with col_cancel:
                     if st.button("❌ 取消", key="cancel_delete_ledger"):
                         st.session_state.pop('pending_delete_ledger_id', None)
@@ -2940,12 +2951,13 @@ def page_invest():
             redeem_shares = st.number_input("赎回份额", min_value=0.01, step=100.0, key="redeem_shares")
             redeem_holding_days = st.number_input("持有天数", min_value=1, step=1, value=30, key="redeem_holding_days")
             
+            # 显示赎回费率
             if redeem_product:
                 product = all_product_dict[redeem_product]
                 product_config = get_product(product['code'])
                 if product_config:
                     fee_rate = get_sell_fee_rate(product_config, redeem_holding_days)
-                    st.info(f"💡 赎回费率: {float(fee_rate)*100:.2f}%")
+                    st.info(f"💡 赎回费率: {float(fee_rate)*100:.2f}%（手续费将在结算时根据净值自动计算，也可手动填写）")
         
         with col2:
             # 交易日期输入（可编辑，默认当前日期）
@@ -2997,6 +3009,16 @@ def page_invest():
             )
             redeem_account = account_dict[redeem_account_name]
             
+            # 手续费输入（可选，默认按费率计算）
+            redeem_fee_override = st.number_input(
+                "手续费（可选，默认按费率计算）",
+                min_value=0.0,
+                step=0.01,
+                value=0.0,
+                key="redeem_fee_override",
+                help="如果不填或填0，将按费率自动计算；如果填写，将使用此值"
+            )
+            
             redeem_note = st.text_input("备注（可选）", key="redeem_note")
         
         if st.button("提交赎回发起", type="primary", key="submit_redeem"):
@@ -3016,6 +3038,9 @@ def page_invest():
                     except:
                         requested_at = datetime.combine(redeem_request_date, datetime.now().time())
                     
+                    # 如果用户填写了手续费，则传入；否则传None，让系统按费率计算
+                    fee_override = Decimal(str(redeem_fee_override)) if redeem_fee_override > 0 else None
+                    
                     order_id = add_redeem_request(
                         product_code=product['code'],
                         shares=Decimal(str(redeem_shares)),
@@ -3023,7 +3048,8 @@ def page_invest():
                         requested_at=requested_at,
                         trade_date=redeem_trade_date,
                         redeem_account=redeem_account,
-                        note=redeem_note or None
+                        note=redeem_note or None,
+                        fee_override=fee_override
                     )
                     st.success(f"✅ 赎回发起已提交！订单号: {order_id}")
                     try:
@@ -3332,6 +3358,16 @@ def page_invest():
                 with col2:
                     edit_shares = st.number_input("份额", value=float(selected_record.get('shares', 0) or 0), step=0.01, format="%.4f", key="tx_edit_shares")
                     edit_nav = st.number_input("净值", value=float(selected_record.get('nav', 0) or 0), step=0.0001, format="%.4f", key="tx_edit_nav")
+                    # 如果是赎回类型（sell_confirm），显示手续费编辑
+                    edit_fee = None
+                    if selected_record.get('action') in ['sell_confirm', 'sell']:
+                        edit_fee = st.number_input(
+                            "手续费", 
+                            value=float(selected_record.get('fee', 0) or 0), 
+                            step=0.01, 
+                            key="tx_edit_fee",
+                            help="赎回手续费"
+                        )
                     edit_note = st.text_input("备注", value=selected_record.get('note', '') or '', key="tx_edit_note")
                 
                 col_save, col_delete = st.columns([3, 1])
@@ -3345,6 +3381,7 @@ def page_invest():
                             'amount': str(edit_amount) if edit_amount else None,
                             'shares': str(edit_shares) if edit_shares else None,
                             'nav': str(edit_nav) if edit_nav else None,
+                            'fee': str(edit_fee) if edit_fee is not None and edit_fee > 0 else None,
                             'note': edit_note
                         }
                         if update_transaction_entry(selected_record['id'], updated_record):
@@ -3364,13 +3401,26 @@ def page_invest():
                     col_confirm, col_cancel = st.columns(2)
                     with col_confirm:
                         if st.button("✅ 确认删除", type="primary", key="do_delete_tx"):
-                            from data.data_store import delete_transaction
-                            if delete_transaction(selected_record['id']):
-                                st.success("✅ 删除成功！")
+                            from core.cascade_delete import cascade_delete_transaction
+                            result = cascade_delete_transaction(selected_record['id'], selected_record)
+                            if result['transaction_deleted']:
+                                msg = "✅ 删除成功！"
+                                if result['order_deleted']:
+                                    msg += f" 已删除关联订单"
+                                if result['related_transactions_deleted'] > 0:
+                                    msg += f"，已删除 {result['related_transactions_deleted']} 条关联理财记录"
+                                if result['ledgers_deleted'] > 0:
+                                    msg += f"，已删除 {result['ledgers_deleted']} 条关联记账记录"
+                                if result['errors']:
+                                    msg += f"\n⚠️ 部分删除失败: {', '.join(result['errors'])}"
+                                st.success(msg)
                                 st.session_state.pop('pending_delete_tx_id', None)
                                 st.rerun()
                             else:
-                                st.error("❌ 删除失败")
+                                error_msg = "❌ 删除失败"
+                                if result['errors']:
+                                    error_msg += f": {', '.join(result['errors'])}"
+                                st.error(error_msg)
                     with col_cancel:
                         if st.button("❌ 取消", key="cancel_delete_tx"):
                             st.session_state.pop('pending_delete_tx_id', None)
@@ -3487,15 +3537,77 @@ def page_orders():
         # 分页
         df_page = paginate_dataframe(df_all, "all_orders", page_size=50)
         
-        # 选择订单进行重新结算
+        # 选择订单进行删除或重新结算
         if len(df_page) > 0:
-            st.caption("💡 选择已完成的订单可以重新结算（删除确认记录并重置订单状态）")
-            selected_indices = st.multiselect(
-                "选择要重新结算的订单（仅限已完成状态）",
-                options=df_page.index.tolist(),
-                format_func=lambda idx: f"{df_page.loc[idx, '订单号']} - {df_page.loc[idx, '产品代码']}",
-                key="resettle_order_select"
-            )
+            st.caption("💡 选择订单可以删除或重新结算")
+            
+            tab_delete, tab_resettle = st.tabs(["🗑️ 删除订单", "🔄 重新结算"])
+            
+            with tab_delete:
+                selected_indices_delete = st.multiselect(
+                    "选择要删除的订单",
+                    options=df_page.index.tolist(),
+                    format_func=lambda idx: f"{df_page.loc[idx, '订单号']} - {df_page.loc[idx, '产品代码']} - {df_page.loc[idx, '状态']}",
+                    key="delete_order_select"
+                )
+                
+                if selected_indices_delete:
+                    selected_orders_delete = []
+                    for idx in selected_indices_delete:
+                        order_row = df_page.loc[idx]
+                        order_id = order_row['订单号']
+                        # 从原始订单列表中找到对应的订单
+                        for order in all_orders:
+                            if order.get('order_id') == order_id:
+                                selected_orders_delete.append(order)
+                                break
+                    
+                    if selected_orders_delete:
+                        st.warning(f"⚠️ 将删除 {len(selected_orders_delete)} 个订单。这将：\n1. 删除订单本身\n2. 删除对应的理财记录（buy_debit/buy_confirm 或 redeem_request/sell_confirm）\n3. 删除对应的记账记录")
+                        
+                        if st.button("🗑️ 确认删除", type="primary", key="do_delete_orders"):
+                            from core.cascade_delete import cascade_delete_order
+                            
+                            success_count = 0
+                            error_count = 0
+                            
+                            for order in selected_orders_delete:
+                                order_id = order.get('order_id')
+                                try:
+                                    result = cascade_delete_order(order_id)
+                                    if result['order_deleted']:
+                                        success_count += 1
+                                        if result['transactions_deleted'] > 0 or result['ledgers_deleted'] > 0:
+                                            st.info(f"✅ 订单 {order_id} 已删除，同时删除了 {result['transactions_deleted']} 条理财记录和 {result['ledgers_deleted']} 条记账记录")
+                                    else:
+                                        error_count += 1
+                                        if result['errors']:
+                                            st.error(f"❌ 删除订单失败 {order_id}: {', '.join(result['errors'])}")
+                                        else:
+                                            st.error(f"❌ 删除订单失败: {order_id}")
+                                except Exception as e:
+                                    error_count += 1
+                                    st.error(f"❌ 删除订单异常 {order_id}: {e}")
+                            
+                            if success_count > 0:
+                                st.success(f"✅ 成功删除 {success_count} 个订单！")
+                                # 刷新快照
+                                try:
+                                    from core.snapshot_service import collect_nav_and_build_snapshots
+                                    collect_nav_and_build_snapshots(silent=True)
+                                except:
+                                    pass
+                                st.rerun()
+                            else:
+                                st.error(f"❌ 删除失败 {error_count} 个订单")
+            
+            with tab_resettle:
+                selected_indices = st.multiselect(
+                    "选择要重新结算的订单（仅限已完成状态）",
+                    options=df_page.index.tolist(),
+                    format_func=lambda idx: f"{df_page.loc[idx, '订单号']} - {df_page.loc[idx, '产品代码']}",
+                    key="resettle_order_select"
+                )
             
             if selected_indices:
                 selected_orders = []

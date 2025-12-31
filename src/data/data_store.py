@@ -354,6 +354,13 @@ def order_exists(order_id: str) -> bool:
     return result and int(result.get('cnt', 0)) > 0
 
 
+def delete_order(order_id: str) -> bool:
+    """删除订单"""
+    sql = "DELETE FROM orders WHERE order_id = %s"
+    affected = execute_update(sql, (order_id,))
+    return affected > 0
+
+
 # ============================================================
 # ledger - 生活账本
 # ============================================================
