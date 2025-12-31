@@ -1000,7 +1000,41 @@ def preview_settle(order_id: str) -> Dict:
         
         # 赎回订单使用交易日期（nav_date）的净值计算金额
         gross = shares * nav
-        fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        
+        # 检查是否有手续费覆盖值（从订单的note中解析，或从fee字段读取）
+        fee_override = None
+        order_note = order.get('note', '')
+        if '|fee_override:' in order_note:
+            try:
+                # 解析格式：...|fee_override:0.99|... 或 ...|fee_override:0.99
+                parts = order_note.split('|fee_override:')
+                if len(parts) > 1:
+                    fee_override_str = parts[1].split('|')[0].strip()
+                    if fee_override_str:  # 确保不是空字符串
+                        fee_override = parse_decimal(fee_override_str)
+                        logger.debug(f"preview_settle: 从note中解析到手续费覆盖值: {fee_override}, order_id={order_id}, note={order_note}")
+            except Exception as e:
+                logger.warning(f"preview_settle: 解析note中的手续费覆盖值失败: {e}, order_id={order_id}, note={order_note}")
+        
+        # 如果订单的fee字段有值，也尝试使用（优先级低于note中的值）
+        if fee_override is None or fee_override == 0:
+            order_fee_str = order.get('fee', '')
+            if order_fee_str and order_fee_str.strip():
+                try:
+                    fee_override = parse_decimal(order_fee_str)
+                    if fee_override > 0:
+                        logger.debug(f"preview_settle: 从订单fee字段读取到手续费覆盖值: {fee_override}, order_id={order_id}")
+                except Exception as e:
+                    logger.warning(f"preview_settle: 解析订单fee字段失败: {e}, order_id={order_id}")
+        
+        # 如果提供了手续费覆盖值，使用它；否则按费率计算
+        if fee_override is not None and fee_override > 0:
+            fee = fee_override
+            logger.debug(f"preview_settle: 使用手续费覆盖值: {fee}, order_id={order_id}")
+        else:
+            fee = (gross * sell_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            logger.debug(f"preview_settle: 按费率计算手续费: {fee} (费率={sell_fee_rate}, 总金额={gross}), order_id={order_id}")
+        
         amount = gross - fee
         
         return {
