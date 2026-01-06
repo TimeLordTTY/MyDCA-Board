@@ -21,9 +21,17 @@ def _safe_float(value, default=0.0):
 
 
 def save_suggestion(suggestion_data: Dict[str, Any]) -> int:
-    """保存建议（支持扩展字段）"""
+    """保存建议（每个 product_id 只保留一条记录，使用 INSERT ... ON DUPLICATE KEY UPDATE）"""
     # 检查是否有新字段，如果没有则使用兼容模式
     has_new_fields = 'new_budget' in suggestion_data or 'planned_amount' in suggestion_data
+    
+    import json
+    reason_blocks_json = None
+    if suggestion_data.get('reason_blocks'):
+        try:
+            reason_blocks_json = json.dumps(suggestion_data['reason_blocks'], ensure_ascii=False)
+        except (TypeError, ValueError):
+            logger.warning("序列化reason_blocks失败")
     
     if has_new_fields:
         sql = """
@@ -39,15 +47,29 @@ def save_suggestion(suggestion_data: Dict[str, Any]) -> int:
                 %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s
             )
+            ON DUPLICATE KEY UPDATE
+                as_of_time = VALUES(as_of_time),
+                strategy_code = VALUES(strategy_code),
+                action = VALUES(action),
+                suggest_amount = VALUES(suggest_amount),
+                suggest_ratio = VALUES(suggest_ratio),
+                limit_price_hint = VALUES(limit_price_hint),
+                premium_rate = VALUES(premium_rate),
+                moved_to_wait_pool = VALUES(moved_to_wait_pool),
+                reason = VALUES(reason),
+                cash_available = VALUES(cash_available),
+                wait_pool_balance = VALUES(wait_pool_balance),
+                new_budget = VALUES(new_budget),
+                wait_pool_before = VALUES(wait_pool_before),
+                planned_amount = VALUES(planned_amount),
+                plan_budget_today = VALUES(plan_budget_today),
+                budget_for_execution = VALUES(budget_for_execution),
+                budget_to_execute = VALUES(budget_to_execute),
+                budget_to_wait_pool = VALUES(budget_to_wait_pool),
+                execute_ratio = VALUES(execute_ratio),
+                wait_ratio = VALUES(wait_ratio),
+                reason_blocks_json = VALUES(reason_blocks_json)
         """
-        import json
-        reason_blocks_json = None
-        if suggestion_data.get('reason_blocks'):
-            try:
-                reason_blocks_json = json.dumps(suggestion_data['reason_blocks'], ensure_ascii=False)
-            except (TypeError, ValueError):
-                logger.warning("序列化reason_blocks失败")
-        
         params = (
             suggestion_data['product_id'],
             suggestion_data['as_of_time'],
@@ -86,15 +108,26 @@ def save_suggestion(suggestion_data: Dict[str, Any]) -> int:
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
+            ON DUPLICATE KEY UPDATE
+                as_of_time = VALUES(as_of_time),
+                strategy_code = VALUES(strategy_code),
+                action = VALUES(action),
+                suggest_amount = VALUES(suggest_amount),
+                suggest_ratio = VALUES(suggest_ratio),
+                limit_price_hint = VALUES(limit_price_hint),
+                premium_rate = VALUES(premium_rate),
+                moved_to_wait_pool = VALUES(moved_to_wait_pool),
+                reason = VALUES(reason),
+                cash_available = VALUES(cash_available),
+                wait_pool_balance = VALUES(wait_pool_balance),
+                plan_budget_today = VALUES(plan_budget_today),
+                budget_for_execution = VALUES(budget_for_execution),
+                budget_to_execute = VALUES(budget_to_execute),
+                budget_to_wait_pool = VALUES(budget_to_wait_pool),
+                execute_ratio = VALUES(execute_ratio),
+                wait_ratio = VALUES(wait_ratio),
+                reason_blocks_json = VALUES(reason_blocks_json)
         """
-        import json
-        reason_blocks_json = None
-        if suggestion_data.get('reason_blocks'):
-            try:
-                reason_blocks_json = json.dumps(suggestion_data['reason_blocks'], ensure_ascii=False)
-            except (TypeError, ValueError):
-                logger.warning("序列化reason_blocks失败")
-        
         params = (
             suggestion_data['product_id'],
             suggestion_data['as_of_time'],
@@ -121,7 +154,7 @@ def save_suggestion(suggestion_data: Dict[str, Any]) -> int:
 
 
 def get_latest_suggestion(product_id: int) -> Optional[Dict[str, Any]]:
-    """获取最新建议（包含扩展字段，兼容字段不存在的情况）"""
+    """获取产品建议（每个 product_id 只有一条记录，不再需要按时间排序）"""
     # 先尝试查询包含新字段的SQL
     sql_with_new_fields = """
         SELECT 
@@ -133,7 +166,6 @@ def get_latest_suggestion(product_id: int) -> Optional[Dict[str, Any]]:
             execute_ratio, wait_ratio, reason_blocks_json
         FROM advisor_suggestion
         WHERE product_id = %s
-        ORDER BY as_of_time DESC
         LIMIT 1
     """
     
@@ -148,7 +180,6 @@ def get_latest_suggestion(product_id: int) -> Optional[Dict[str, Any]]:
             execute_ratio, wait_ratio, reason_blocks_json
         FROM advisor_suggestion
         WHERE product_id = %s
-        ORDER BY as_of_time DESC
         LIMIT 1
     """
     
@@ -192,7 +223,12 @@ def get_suggestions_by_time_range(
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None
 ) -> List[Dict[str, Any]]:
-    """按时间范围获取建议"""
+    """
+    按时间范围获取建议
+    
+    注意：现在每个 product_id 只保留一条最新建议记录，不再保留历史建议。
+    时间范围参数主要用于过滤，但实际返回的是每个产品的当前建议。
+    """
     sql = """
         SELECT 
             s.id, s.product_id, s.as_of_time, s.strategy_code, s.action,

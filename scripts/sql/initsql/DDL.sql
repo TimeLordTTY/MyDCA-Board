@@ -110,9 +110,9 @@ CREATE TABLE `advisor_suggestion`  (
   `reason_blocks_json` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '结构化原因列表（JSON）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_time`(`as_of_time`) USING BTREE,
-  INDEX `idx_prod_time`(`product_id`, `as_of_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 970 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表' ROW_FORMAT = DYNAMIC;
+  UNIQUE KEY `uk_product` (`product_id`) USING BTREE COMMENT '每个产品只保留一条建议记录',
+  INDEX `idx_product_id` (`product_id`) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 970 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表（每个产品只保留一条最新建议）' ROW_FORMAT = DYNAMIC;
 
 -- ----------------------------
 -- Table structure for backtest_daily

@@ -2067,10 +2067,10 @@ def page_asset_details():
                     group_totals[group] = {'balance': Decimal('0'), 'accounts': []}
                 group_totals[group]['balance'] += balance
                 group_totals[group]['accounts'].append(account_code)
-        elif account_type_display == 'fund_mapped' and linked_product and linked_product in daily_map:
-            # 小荷包：使用产品市值
-            product_info = daily_map[linked_product]
-            product_value = Decimal(str(product_info.get('total_value', 0) or 0))
+        elif account_type_display == 'fund_mapped':
+            # 基金映射账户（如小荷包）：直接使用账户的 balance 字段
+            # 不使用 daily_snapshot 中的 total_value，因为可能不准确
+            product_value = balance
         
         balance_data.append({
             'account_id': account_code,
@@ -2101,6 +2101,15 @@ def page_asset_details():
         group_balance = group_info['balance']
         group_profit = group_product_value - group_balance
         
+        # 计算该组的总份额（从组内账户累加）
+        group_total_shares = Decimal('0')
+        for record in balance_data:
+            if record.get('group') == group_code and record.get('account_type') == 'product_sub':
+                try:
+                    group_total_shares += Decimal(str(record.get('shares', 0) or 0))
+                except:
+                    pass
+        
         # 更新profit_account的product_value和diff
         profit_account_code = group_config.get('profit_account')
         if profit_account_code:
@@ -2116,7 +2125,7 @@ def page_asset_details():
             'account_name': f'{group_name}(合计)',
             'account_type': 'summary',
             'balance': str(group_balance),
-            'shares': '0',  # 汇总行没有份额
+            'shares': str(group_total_shares),  # 汇总行显示组内份额总和
             'product_value': str(group_product_value),
             'diff': str(group_profit),
             'related_product': linked_product_code,
@@ -2292,8 +2301,8 @@ def page_asset_details():
         # 转换为 DataFrame
         df_balance = pd.DataFrame(processed_balance_data)
         
-        # 选择显示的列（添加收益字段和份额字段，去掉备注）
-        display_cols = ['account_name', 'account_type', 'balance', 'shares', 'product_value', 'diff', 
+        # 选择显示的列（去掉余额和差异列，只保留市值和份额）
+        display_cols = ['account_name', 'account_type', 'shares', 'product_value', 
                        'yesterday_pnl', 'unrealized_pnl', 'total_pnl']
         display_cols = [c for c in display_cols if c in df_balance.columns]
         
@@ -2301,28 +2310,41 @@ def page_asset_details():
         col_names = {
             'account_name': '账户名称',
             'account_type': '类型',
-            'balance': '余额',
             'shares': '份额',
-            'product_value': '产品市值',
-            'diff': '差异',
+            'product_value': '市值',
             'yesterday_pnl': '昨日收益',
             'unrealized_pnl': '持有收益',
             'total_pnl': '累计收益'
         }
         
-        # 格式化份额列（仅对 product_sub 类型显示，其他类型显示为空）
+        # 格式化份额列（product_sub 和 summary 类型显示数值，其他类型显示为空）
         if 'shares' in df_balance.columns:
             for idx, row in df_balance.iterrows():
                 account_type = row.get('account_type', '')
                 shares_val = row.get('shares', '0')
-                if account_type == 'product_sub':
+                # product_sub 和 summary（如稳利宝合计）显示份额
+                if account_type in ('product_sub', 'summary'):
                     try:
                         shares_decimal = Decimal(str(shares_val))
-                        df_balance.at[idx, 'shares'] = f"{shares_decimal:.6f}" if shares_decimal > 0 else '-'
+                        if shares_decimal > 0:
+                            # 总是显示实际数值（保留2位小数）
+                            df_balance.at[idx, 'shares'] = f"{shares_decimal:.2f}"
+                        else:
+                            df_balance.at[idx, 'shares'] = '-'
                     except:
                         df_balance.at[idx, 'shares'] = '-'
                 else:
                     df_balance.at[idx, 'shares'] = '-'
+        
+        # 格式化市值列（保留2位小数）
+        if 'product_value' in df_balance.columns:
+            for idx, row in df_balance.iterrows():
+                pv_val = row.get('product_value', '0')
+                try:
+                    pv_decimal = Decimal(str(pv_val))
+                    df_balance.at[idx, 'product_value'] = f"{pv_decimal:.2f}"
+                except:
+                    df_balance.at[idx, 'product_value'] = '0.00'
         
         df_display = df_balance[display_cols].copy()
         df_display = df_display.rename(columns=col_names)
@@ -2353,31 +2375,117 @@ def page_asset_details():
         all_products = get_products(is_active=True)
 
         # 一个产品代码可能同时存在场内和场外两个版本（如 163406），
-        # 因此这里为每个 code 记录「有哪些 channel」，
-        # 场内视图：只要有 EXCHANGE 版本，就视为场内产品
-        # 场外视图：只要有 OTC 版本，就视为场外产品
+        # 因此这里为每个 code 记录「有哪些 channel」，以及对应的 product_id
+        # 场内视图：只显示场内产品的持仓
+        # 场外视图：只显示场外产品的持仓
         product_channels_map: Dict[str, set] = {}
+        # 记录 (code, channel) -> product_id 的映射
+        code_channel_to_product_id: Dict[tuple, int] = {}
         for p in all_products:
             code = p.get("code", "")
             ch = p.get("channel", "OTC")
+            pid = p.get("id")
             if not code:
                 continue
             if code not in product_channels_map:
                 product_channels_map[code] = set()
             product_channels_map[code].add(ch)
+            code_channel_to_product_id[(code, ch)] = pid
+        
+        # 找出同时有场内和场外版本的产品代码
+        dual_channel_codes = {code for code, channels in product_channels_map.items() if len(channels) > 1}
 
         if holdings_channel == "场内":
-            daily_data = [
-                r
-                for r in daily_data
-                if "EXCHANGE" in product_channels_map.get(r.get("product_code", ""), set())
-            ]
+            # 场内视图：
+            # 1. 对于只有场内版本的产品，使用 daily_snapshot 数据
+            # 2. 对于同时有场内和场外版本的产品，使用场内实际持仓数据
+            filtered_data = []
+            for r in daily_data:
+                code = r.get("product_code", "")
+                channels = product_channels_map.get(code, set())
+                if "EXCHANGE" not in channels:
+                    continue  # 该产品没有场内版本，跳过
+                
+                if code in dual_channel_codes:
+                    # 同时有场内和场外版本，使用场内实际持仓数据
+                    exchange_product_id = code_channel_to_product_id.get((code, "EXCHANGE"))
+                    if exchange_product_id:
+                        from core.exchange_holdings_calculator import calculate_exchange_holdings
+                        from core.market_quote_service import get_latest_quote
+                        try:
+                            holdings = calculate_exchange_holdings(exchange_product_id)
+                            quote = get_latest_quote(exchange_product_id)
+                            price = Decimal(str(quote.get('price', 0))) if quote else Decimal('0')
+                            shares = Decimal(str(holdings.get('current_qty', 0))) if holdings else Decimal('0')
+                            value = shares * price
+                            r_copy = dict(r)
+                            r_copy['shares'] = str(shares)
+                            r_copy['value'] = str(value)
+                            r_copy['nav'] = str(price)
+                            r_copy['total_pnl'] = str(holdings.get('total_pnl', 0)) if holdings else '0'
+                            filtered_data.append(r_copy)
+                        except Exception as e:
+                            logger.warning(f"计算场内持仓失败: {code}, error={e}")
+                            # 计算失败时仍显示，但份额为0
+                            r_copy = dict(r)
+                            r_copy['shares'] = '0'
+                            r_copy['value'] = '0'
+                            filtered_data.append(r_copy)
+                else:
+                    # 只有场内版本，直接使用 daily_snapshot 数据
+                    filtered_data.append(r)
+            daily_data = filtered_data
         else:
-            daily_data = [
-                r
-                for r in daily_data
-                if "OTC" in product_channels_map.get(r.get("product_code", ""), set())
-            ]
+            # 场外视图：
+            # 1. 对于只有场外版本的产品，使用 daily_snapshot 数据
+            # 2. 对于同时有场内和场外版本的产品，使用场外实际持仓数据
+            filtered_data = []
+            for r in daily_data:
+                code = r.get("product_code", "")
+                channels = product_channels_map.get(code, set())
+                if "OTC" not in channels:
+                    continue  # 该产品没有场外版本，跳过
+                
+                if code in dual_channel_codes:
+                    # 同时有场内和场外版本，使用场外实际持仓数据
+                    from core.holdings_calculator import HoldingsCalculator
+                    from data.nav_reader import get_latest_nav
+                    try:
+                        calc = HoldingsCalculator()
+                        all_holdings = calc.get_all_holdings_data_as_of(date.today().strftime('%Y-%m-%d'))
+                        nav_data = get_latest_nav(code)
+                        nav = Decimal(str(nav_data[1])) if nav_data else Decimal('0')
+                        
+                        if code in all_holdings:
+                            h = all_holdings[code]
+                            shares = Decimal(str(h.get('shares', 0)))
+                            value = shares * nav
+                            r_copy = dict(r)
+                            r_copy['shares'] = str(shares)
+                            r_copy['value'] = str(value)
+                            r_copy['nav'] = str(nav)
+                            r_copy['cost'] = str(h.get('cost', 0))
+                            cost = Decimal(str(h.get('cost', 0)))
+                            unrealized_pnl = value - cost if cost > 0 else Decimal('0')
+                            r_copy['unrealized_pnl'] = str(unrealized_pnl)
+                            filtered_data.append(r_copy)
+                        else:
+                            # 没有持仓数据，显示份额为0
+                            r_copy = dict(r)
+                            r_copy['shares'] = '0'
+                            r_copy['value'] = '0'
+                            r_copy['nav'] = str(nav)
+                            filtered_data.append(r_copy)
+                    except Exception as e:
+                        logger.warning(f"计算场外持仓失败: {code}, error={e}")
+                        r_copy = dict(r)
+                        r_copy['shares'] = '0'
+                        r_copy['value'] = '0'
+                        filtered_data.append(r_copy)
+                else:
+                    # 只有场外版本，直接使用 daily_snapshot 数据
+                    filtered_data.append(r)
+            daily_data = filtered_data
     
     if daily_data:
         df_daily = pd.DataFrame(daily_data)
@@ -2666,7 +2774,8 @@ def page_ledger():
             # 构建选项
             expense_options = []
             for i, e in enumerate(expenses):
-                label = f"{e.get('event_time', '')[:16]} | ¥{e.get('amount', '')} | {e.get('category_l1', '')} | {e.get('note', '')[:20]}"
+                note = e.get('note') or ''
+                label = f"{(e.get('event_time') or '')[:16]} | ¥{e.get('amount', '')} | {e.get('category_l1', '')} | {note[:20]}"
                 expense_options.append((label, i, e))
             
             selected_idx = st.selectbox(
@@ -2860,11 +2969,31 @@ def page_ledger():
                         'account_to': edit_account_to,
                         'note': edit_note
                     }
-                    if update_ledger_entry(selected_record['id'], updated_record):
-                        st.success("✅ 保存成功！")
-                        st.rerun()
+                    
+                    # 检查是否是转账记录，如果是则同时更新配对记录
+                    if edit_cat_l1 == '转账':
+                        from core.cascade_delete import update_transfer_pair_ledger
+                        result = update_transfer_pair_ledger(selected_record['id'], selected_record, updated_record)
+                        if result['main_updated']:
+                            msg = "✅ 保存成功！"
+                            if result['pair_updated']:
+                                msg += " 已同步更新转账配对记录"
+                            if result['errors']:
+                                msg += f"\n⚠️ {', '.join(result['errors'])}"
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            error_msg = "❌ 保存失败"
+                            if result['errors']:
+                                error_msg += f": {', '.join(result['errors'])}"
+                            st.error(error_msg)
                     else:
-                        st.error("❌ 保存失败")
+                        # 非转账记录，直接更新
+                        if update_ledger_entry(selected_record['id'], updated_record):
+                            st.success("✅ 保存成功！")
+                            st.rerun()
+                        else:
+                            st.error("❌ 保存失败")
             
             with col_delete:
                 if st.button("🗑️ 删除", type="secondary", key="delete_ledger_edit", width='stretch'):
@@ -2880,10 +3009,14 @@ def page_ledger():
                         result = cascade_delete_ledger(selected_record['id'], selected_record)
                         if result['ledger_deleted']:
                             msg = "✅ 删除成功！"
+                            if result.get('transfer_pair_deleted'):
+                                msg += " 已同时删除转账配对记录"
                             if result['transactions_deleted'] > 0:
                                 msg += f" 已删除 {result['transactions_deleted']} 条关联理财记录"
                             if result['order_deleted']:
                                 msg += f"，已删除关联订单"
+                            if result.get('shares_restored'):
+                                msg += f"（已恢复 {len(result['shares_restored'])} 笔份额）"
                             if result['errors']:
                                 msg += f"\n⚠️ 部分删除失败: {', '.join(result['errors'])}"
                             st.success(msg)
@@ -3573,14 +3706,34 @@ def page_invest():
                 redeem_from_balance = get_account_balance(redeem_from_account)
                 main_account_shares = account_shares_map.get(redeem_from_account, Decimal('0'))
                 
-                # 获取当前净值用于估算
+                # 获取确认日期的净值用于计算固定金额所需份额
+                # 优先使用确认日期的净值，如果没有再使用最新净值
                 estimated_nav = Decimal('1.5')  # 默认值
+                nav_source = "默认"
                 if redeem_product:
                     product = all_product_dict[redeem_product]
-                    from data.nav_reader import get_nav
-                    nav_result = get_nav(product['code'], str(redeem_trade_date))
-                    if nav_result:
-                        estimated_nav = nav_result
+                    from data.nav_reader import get_nav, get_latest_nav
+                    
+                    # 1. 首先尝试获取确认日期的净值（已在上面计算）
+                    if redeem_confirm_date:
+                        nav_result = get_nav(product['code'], str(redeem_confirm_date))
+                        if nav_result:
+                            estimated_nav = nav_result
+                            nav_source = f"确认日 {redeem_confirm_date}"
+                    
+                    # 2. 如果没有确认日期净值，尝试交易日期净值
+                    if nav_source == "默认":
+                        nav_result = get_nav(product['code'], str(redeem_trade_date))
+                        if nav_result:
+                            estimated_nav = nav_result
+                            nav_source = f"交易日 {redeem_trade_date}"
+                    
+                    # 3. 如果都没有，使用最新净值
+                    if nav_source == "默认":
+                        latest_nav = get_latest_nav(product['code'])
+                        if latest_nav:
+                            estimated_nav = latest_nav[1]
+                            nav_source = f"最新 {latest_nav[0]}"
                 
                 st.caption(
                     f"{redeem_from_account_name} 当前余额：¥{format_decimal(redeem_from_balance)} | 实际持有份额：{main_account_shares:.6f}"
@@ -3595,38 +3748,74 @@ def page_invest():
                 
                 if use_fixed_amount:
                     redeem_fixed_amount = st.number_input(
-                        "固定赎回金额",
+                        "主账户固定赎回金额",
                         min_value=0.01,
                         step=100.0,
                         key="redeem_fixed_amount",
-                        help="必须赎回的固定金额（如：房租账户必须赎回4000）"
+                        help="主账户必须赎回的固定金额（如：房租账户必须赎回4000），剩余份额由其他账户补充"
                     )
                     
-                    # 计算固定金额需要的份额
+                    # 计算主账户固定金额对应的份额
                     if estimated_nav > 0:
-                        fixed_shares_needed = Decimal(str(redeem_fixed_amount)) / estimated_nav
-                        st.caption(f"按当前净值 {estimated_nav:.4f} 估算，需要份额：{fixed_shares_needed:.6f}")
+                        main_account_fixed_shares = (Decimal(str(redeem_fixed_amount)) / estimated_nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+                        st.caption(f"主账户按净值 {estimated_nav:.4f}（{nav_source}）赎回份额：{main_account_fixed_shares:.6f}")
                 
-                # 检查主账户份额是否充足
+                # 检查主账户份额是否充足，并计算需要补充的份额
                 if redeem_shares > 0:
-                    if use_fixed_amount and redeem_fixed_amount:
-                        # 计算固定金额需要的份额
-                        shares_needed = (Decimal(str(redeem_fixed_amount)) / estimated_nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
-                    else:
-                        # 使用总赎回份额
-                        shares_needed = Decimal(str(redeem_shares))
+                    total_redeem_shares = Decimal(str(redeem_shares))  # 总赎回份额
                     
-                    if main_account_shares < shares_needed:
-                        # 份额不足，需要补充账户
-                        remaining_shares = shares_needed - main_account_shares
-                        remaining_amount = remaining_shares * estimated_nav
+                    if use_fixed_amount and redeem_fixed_amount:
+                        # 固定金额模式：主账户赎回固定金额对应的份额，剩余由其他账户补充
+                        main_account_fixed_shares = (Decimal(str(redeem_fixed_amount)) / estimated_nav).quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
                         
-                        st.warning(
-                            f"⚠️ 主账户份额不足！\n"
-                            f"- 主账户当前份额：{main_account_shares:.6f}\n"
-                            f"- 需要份额：{shares_needed:.6f}\n"
-                            f"- 还需份额：{remaining_shares:.6f}（按净值 {estimated_nav:.4f} 计算约合 ¥{remaining_amount:.2f}）"
-                        )
+                        # 检查主账户是否有足够份额赎回固定金额
+                        if main_account_shares < main_account_fixed_shares:
+                            st.error(f"❌ 主账户份额不足！需要 {main_account_fixed_shares:.6f} 份额（固定金额 ¥{redeem_fixed_amount}），但只有 {main_account_shares:.6f}")
+                            shares_needed = main_account_fixed_shares  # 仍然标记需要的份额
+                        else:
+                            shares_needed = main_account_fixed_shares  # 主账户需要赎回的份额
+                        
+                        # 计算剩余需要从其他账户补充的份额
+                        remaining_shares = total_redeem_shares - main_account_fixed_shares
+                        if remaining_shares > Decimal('0.000001'):
+                            remaining_amount = remaining_shares * estimated_nav
+                            st.info(
+                                f"📊 赎回份额分配：\n"
+                                f"- 总赎回份额：{total_redeem_shares:.6f}\n"
+                                f"- 主账户赎回：{main_account_fixed_shares:.6f}（固定金额 ¥{redeem_fixed_amount}）\n"
+                                f"- 需要其他账户补充：{remaining_shares:.6f}（约合 ¥{remaining_amount:.2f}）"
+                            )
+                    else:
+                        # 普通模式：检查主账户份额是否充足
+                        shares_needed = total_redeem_shares
+                        if main_account_shares < shares_needed:
+                            remaining_shares = shares_needed - main_account_shares
+                            remaining_amount = remaining_shares * estimated_nav
+                    
+                    # 需要补充账户的情况（普通模式：主账户不足；固定金额模式：有剩余份额）
+                    need_supplement = False
+                    if use_fixed_amount and redeem_fixed_amount:
+                        # 固定金额模式：总份额 > 主账户固定份额 时需要补充
+                        need_supplement = total_redeem_shares > main_account_fixed_shares + Decimal('0.000001')
+                        if need_supplement:
+                            remaining_shares = total_redeem_shares - main_account_fixed_shares
+                            remaining_amount = remaining_shares * estimated_nav
+                    else:
+                        # 普通模式：主账户份额不足时需要补充
+                        need_supplement = main_account_shares < shares_needed
+                        if need_supplement:
+                            remaining_shares = shares_needed - main_account_shares
+                            remaining_amount = remaining_shares * estimated_nav
+                    
+                    if need_supplement:
+                        if not (use_fixed_amount and redeem_fixed_amount):
+                            # 普通模式下显示主账户份额不足的警告
+                            st.warning(
+                                f"⚠️ 主账户份额不足！\n"
+                                f"- 主账户当前份额：{main_account_shares:.6f}\n"
+                                f"- 需要份额：{shares_needed:.6f}\n"
+                                f"- 还需份额：{remaining_shares:.6f}（按净值 {estimated_nav:.4f} 计算约合 ¥{remaining_amount:.2f}）"
+                            )
                         
                         # 显示补充账户选择
                         st.markdown("**请选择补充账户：**")
@@ -4130,11 +4319,24 @@ def page_invest():
                             'fee': str(edit_fee) if edit_fee is not None and edit_fee > 0 else None,
                             'note': edit_note
                         }
-                        if update_transaction_entry(selected_record['id'], updated_record):
-                            st.success("✅ 保存成功！")
+                        
+                        # 使用联动更新，同时更新关联的记账记录
+                        from core.cascade_delete import cascade_update_transaction
+                        result = cascade_update_transaction(selected_record['id'], selected_record, updated_record)
+                        
+                        if result['transaction_updated']:
+                            msg = "✅ 保存成功！"
+                            if result['ledgers_updated'] > 0:
+                                msg += f" 已同步更新 {result['ledgers_updated']} 条关联记账记录"
+                            if result['errors']:
+                                msg += f"\n⚠️ {', '.join(result['errors'])}"
+                            st.success(msg)
                             st.rerun()
                         else:
-                            st.error("❌ 保存失败")
+                            error_msg = "❌ 保存失败"
+                            if result['errors']:
+                                error_msg += f": {', '.join(result['errors'])}"
+                            st.error(error_msg)
                 
                 with col_delete:
                     if st.button("🗑️ 删除", type="secondary", key="delete_tx_edit", width='stretch'):
@@ -4157,6 +4359,8 @@ def page_invest():
                                     msg += f"，已删除 {result['related_transactions_deleted']} 条关联理财记录"
                                 if result['ledgers_deleted'] > 0:
                                     msg += f"，已删除 {result['ledgers_deleted']} 条关联记账记录"
+                                if result.get('shares_restored'):
+                                    msg += f"（已恢复 {len(result['shares_restored'])} 笔份额）"
                                 if result['errors']:
                                     msg += f"\n⚠️ 部分删除失败: {', '.join(result['errors'])}"
                                 st.success(msg)
@@ -4316,6 +4520,7 @@ def page_orders():
                             
                             success_count = 0
                             error_count = 0
+                            total_shares_restored = 0
                             
                             for order in selected_orders_delete:
                                 order_id = order.get('order_id')
@@ -4323,8 +4528,14 @@ def page_orders():
                                     result = cascade_delete_order(order_id)
                                     if result['order_deleted']:
                                         success_count += 1
+                                        shares_count = len(result.get('shares_restored', []))
+                                        total_shares_restored += shares_count
+                                        msg = f"✅ 订单 {order_id} 已删除"
                                         if result['transactions_deleted'] > 0 or result['ledgers_deleted'] > 0:
-                                            st.info(f"✅ 订单 {order_id} 已删除，同时删除了 {result['transactions_deleted']} 条理财记录和 {result['ledgers_deleted']} 条记账记录")
+                                            msg += f"，同时删除了 {result['transactions_deleted']} 条理财记录和 {result['ledgers_deleted']} 条记账记录"
+                                        if shares_count > 0:
+                                            msg += f"（已恢复 {shares_count} 笔份额）"
+                                        st.info(msg)
                                     else:
                                         error_count += 1
                                         if result['errors']:
@@ -4336,7 +4547,10 @@ def page_orders():
                                     st.error(f"❌ 删除订单异常 {order_id}: {e}")
                             
                             if success_count > 0:
-                                st.success(f"✅ 成功删除 {success_count} 个订单！")
+                                msg = f"✅ 成功删除 {success_count} 个订单！"
+                                if total_shares_restored > 0:
+                                    msg += f"（共恢复 {total_shares_restored} 笔份额）"
+                                st.success(msg)
                                 # 刷新快照
                                 try:
                                     from core.snapshot_service import collect_nav_and_build_snapshots
@@ -4372,13 +4586,20 @@ def page_orders():
                     if st.button("🔄 确认重新结算", type="primary", key="do_resettle"):
                         from data.data_store import delete_transaction, update_order_status
                         from core.invest_service import list_recent_transactions
+                        from core.cascade_delete import restore_shares_for_order_reset
                         
                         success_count = 0
                         error_count = 0
+                        shares_restored_count = 0
                         
                         for order in selected_orders:
                             order_id = order.get('order_id')
                             try:
+                                # 0. 先恢复份额（在删除记录之前）
+                                restore_result = restore_shares_for_order_reset(order_id)
+                                if restore_result['shares_restored']:
+                                    shares_restored_count += len(restore_result['shares_restored'])
+                                
                                 # 1. 查找并删除对应的确认交易记录
                                 txs = list_recent_transactions(1000)  # 获取更多记录
                                 deleted = False
@@ -4403,7 +4624,10 @@ def page_orders():
                                 st.error(f"❌ 处理订单失败 {order_id}: {e}")
                         
                         if success_count > 0:
-                            st.success(f"✅ 成功重置 {success_count} 个订单，现在可以重新结算了！")
+                            msg = f"✅ 成功重置 {success_count} 个订单，现在可以重新结算了！"
+                            if shares_restored_count > 0:
+                                msg += f"（已恢复 {shares_restored_count} 笔份额）"
+                            st.success(msg)
                             # 刷新快照
                             try:
                                 from core.snapshot_service import collect_nav_and_build_snapshots
@@ -4415,6 +4639,125 @@ def page_orders():
                             st.error(f"❌ 重置失败 {error_count} 个订单")
         
         st.dataframe(df_page, width='stretch', hide_index=True)
+        
+        # 订单编辑功能
+        st.divider()
+        st.subheader("✏️ 编辑订单")
+        
+        # 选择要编辑的订单
+        order_options = [(o.get('order_id', ''), f"{o.get('order_id', '')} - {o.get('product_code', '')} - {'买入' if o.get('order_type') == 'buy_debit' else '赎回'}") for o in all_orders]
+        
+        if order_options:
+            selected_order_id = st.selectbox(
+                "选择要编辑的订单",
+                options=[o[0] for o in order_options],
+                format_func=lambda x: next((o[1] for o in order_options if o[0] == x), x),
+                key="edit_order_select"
+            )
+            
+            if selected_order_id:
+                # 找到选中的订单
+                selected_order = None
+                for order in all_orders:
+                    if order.get('order_id') == selected_order_id:
+                        selected_order = order
+                        break
+                
+                if selected_order:
+                    order_type = selected_order.get('order_type', '')
+                    status = selected_order.get('status', '')
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        # 只读信息
+                        st.text_input("订单号", value=selected_order_id, disabled=True, key="order_edit_id")
+                        st.text_input("产品代码", value=selected_order.get('product_code', ''), disabled=True, key="order_edit_product")
+                        st.text_input("订单类型", value='买入扣款' if order_type == 'buy_debit' else '赎回发起', disabled=True, key="order_edit_type")
+                        st.text_input("状态", value={'pending': '待处理', 'done': '已完成', 'cancelled': '已取消'}.get(status, status), disabled=True, key="order_edit_status")
+                    
+                    with col2:
+                        # 可编辑字段
+                        edit_nav_date = st.date_input(
+                            "净值日期",
+                            value=datetime.strptime(selected_order.get('nav_date', ''), '%Y-%m-%d').date() if selected_order.get('nav_date') else datetime.now().date(),
+                            key="order_edit_nav_date"
+                        )
+                        edit_confirm_date = st.date_input(
+                            "确认日期",
+                            value=datetime.strptime(selected_order.get('confirm_date', ''), '%Y-%m-%d').date() if selected_order.get('confirm_date') else datetime.now().date(),
+                            key="order_edit_confirm_date"
+                        )
+                        
+                        if order_type == 'buy_debit':
+                            edit_amount = st.number_input(
+                                "金额",
+                                value=float(selected_order.get('amount', 0) or 0),
+                                step=0.01,
+                                key="order_edit_amount"
+                            )
+                            edit_shares = None
+                        else:
+                            edit_shares = st.number_input(
+                                "份额",
+                                value=float(selected_order.get('shares', 0) or 0),
+                                step=0.01,
+                                key="order_edit_shares"
+                            )
+                            edit_amount = None
+                        
+                        edit_note = st.text_input("备注", value=selected_order.get('note', '') or '', key="order_edit_note")
+                    
+                    # 保存按钮
+                    if st.button("💾 保存订单修改", type="primary", key="save_order_edit"):
+                        # 构建更新数据
+                        updated_fields = {
+                            'nav_date': str(edit_nav_date),
+                            'confirm_date': str(edit_confirm_date),
+                        }
+                        
+                        if edit_amount is not None:
+                            updated_fields['amount'] = str(edit_amount)
+                        if edit_shares is not None:
+                            updated_fields['shares'] = str(edit_shares)
+                        
+                        # 只有备注有变化才更新
+                        original_note = selected_order.get('note', '') or ''
+                        # 提取原始备注（不含账户信息）
+                        clean_original_note = original_note
+                        for sep in ['|redeem_account:', '|redeem_from_account:', '|redeem_from_accounts:', '|redeem_supplement_accounts:', '|fee_override:']:
+                            if sep in clean_original_note:
+                                clean_original_note = clean_original_note.split(sep)[0]
+                        
+                        if edit_note != clean_original_note:
+                            # 保留原始的账户信息部分
+                            account_info = ''
+                            for sep in ['|redeem_account:', '|redeem_from_account:', '|redeem_from_accounts:', '|redeem_supplement_accounts:', '|fee_override:']:
+                                if sep in original_note:
+                                    idx = original_note.find(sep)
+                                    account_info = original_note[idx:]
+                                    break
+                            updated_fields['note'] = edit_note + account_info
+                        
+                        # 使用联动更新
+                        from core.cascade_delete import cascade_update_order
+                        result = cascade_update_order(selected_order_id, selected_order, updated_fields)
+                        
+                        if result['order_updated']:
+                            msg = "✅ 订单保存成功！"
+                            if result['transactions_updated'] > 0:
+                                msg += f" 已同步更新 {result['transactions_updated']} 条理财记录"
+                            if result['ledgers_updated'] > 0:
+                                msg += f"，{result['ledgers_updated']} 条记账记录"
+                            if result['errors']:
+                                msg += f"\n⚠️ {', '.join(result['errors'])}"
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            error_msg = "❌ 保存失败"
+                            if result['errors']:
+                                error_msg += f": {', '.join(result['errors'])}"
+                            st.error(error_msg)
     else:
         st.info("暂无订单")
 
@@ -6392,6 +6735,9 @@ def main():
         with st.spinner("正在同步数据..."):
             try:
                 result = collect_nav_and_build_snapshots()
+                # 自动更新账户余额（因为 PRODUCT_SUB 账户的余额 = 份额 × 净值）
+                from data.account_service import recalculate_all_account_balances
+                recalculate_all_account_balances()
                 st.sidebar.success(f"✅ 同步完成！")
                 st.rerun()
             except Exception as e:

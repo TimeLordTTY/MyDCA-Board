@@ -231,11 +231,14 @@ def get_account_parent_group(account_id: str) -> Optional[Dict]:
 
 def calc_account_balance(account_id: str, as_of_time: str = None, as_of_id: int = None) -> Decimal:
     """
-    计算账户余额 = 初始余额 + Σ(入账) - Σ(出账)
+    计算账户余额
+    
+    对于 PRODUCT_SUB 类型账户（如稳利宝子账户）：直接返回 accounts 表的 balance（= shares × nav）
+    对于其他账户：= Σ(入账) - Σ(出账)
     
     Args:
         account_id: 账户ID（可能是 account_code 或 account_id 字段值）
-        as_of_time: 截止时间
+        as_of_time: 截止时间（仅对非 PRODUCT_SUB 账户有效）
         as_of_id: 截止记录ID（用于处理同一时间点的多条记录）
     
     Returns:
@@ -256,6 +259,13 @@ def calc_account_balance(account_id: str, as_of_time: str = None, as_of_id: int 
     if not account:
         logger.warning(f"账户不存在: {account_id}")
         return Decimal('0')
+    
+    # 对于 PRODUCT_SUB 账户，直接返回 accounts 表的 balance（= shares × nav）
+    # 这样可以正确反映理财系统的份额变化
+    account_type = account.get('account_type', '')
+    if account_type == 'PRODUCT_SUB':
+        balance = Decimal(str(account.get('balance', 0) or 0))
+        return balance
     
     account_code = account.get('account_code') or account.get('account_id', '')
     account_id_value = account.get('account_id')

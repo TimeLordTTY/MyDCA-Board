@@ -23,7 +23,7 @@ def get_accounts(account_type: Optional[str] = None, is_active: bool = True) -> 
         SELECT 
             id, account_code, account_id, account_name, account_type,
             parent_account_id, product_id, currency, is_active, note,
-            balance, created_at, updated_at
+            balance, shares, created_at, updated_at
         FROM accounts
         WHERE 1=1
     """
@@ -47,7 +47,7 @@ def get_account_by_id(account_id: int) -> Optional[Dict]:
         SELECT 
             id, account_code, account_id, account_name, account_type,
             parent_account_id, product_id, currency, is_active, note,
-            balance, created_at, updated_at
+            balance, shares, created_at, updated_at
         FROM accounts
         WHERE id = %s
     """
@@ -60,7 +60,7 @@ def get_account_by_code(account_code: str) -> Optional[Dict]:
         SELECT 
             id, account_code, account_id, account_name, account_type,
             parent_account_id, product_id, currency, is_active, note,
-            balance, created_at, updated_at
+            balance, shares, created_at, updated_at
         FROM accounts
         WHERE account_code = %s
         LIMIT 1
@@ -75,7 +75,7 @@ def get_accounts_by_group(group_code: str) -> List[Dict]:
         SELECT 
             a.id, a.account_code, a.account_id, a.account_name, a.account_type,
             a.parent_account_id, a.product_id, a.currency, a.is_active, a.note,
-            a.balance
+            a.balance, a.shares
         FROM accounts a
         INNER JOIN account_groups ag ON ag.linked_product_id = a.product_id
         WHERE ag.group_code = %s AND a.is_active = 1
@@ -256,7 +256,7 @@ def get_account_shares(account_code: str) -> Decimal:
 
 def update_account_shares(account_code: str, shares: Decimal, operation: str = 'set') -> bool:
     """
-    更新账户份额
+    更新账户份额，并自动更新 PRODUCT_SUB 账户的余额（余额 = 份额 × 净值）
     
     Args:
         account_code: 账户代码
@@ -280,7 +280,61 @@ def update_account_shares(account_code: str, shares: Decimal, operation: str = '
         return False
     
     execute_update(sql, params)
+    
+    # 对于 PRODUCT_SUB 账户，自动更新余额（余额 = 份额 × 净值）
+    _update_product_sub_account_balance(account_code)
+    
     return True
+
+
+def _update_product_sub_account_balance(account_code: str) -> None:
+    """
+    更新 PRODUCT_SUB 账户的余额（余额 = 份额 × 净值）
+    
+    内部函数，在份额更新后自动调用
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+    from data.product_service import get_product_by_id
+    from data.nav_reader import get_latest_nav
+    
+    # 获取账户信息
+    sql = "SELECT account_type, product_id, shares FROM accounts WHERE account_code = %s"
+    result = execute_one(sql, (account_code,))
+    
+    if not result:
+        return
+    
+    account_type = result.get('account_type')
+    product_id = result.get('product_id')
+    current_shares = Decimal(str(result.get('shares', 0))) if result.get('shares') else Decimal('0')
+    
+    # 只处理 PRODUCT_SUB 账户
+    if account_type != 'PRODUCT_SUB' or not product_id:
+        return
+    
+    # 获取产品代码
+    product = get_product_by_id(product_id)
+    if not product:
+        logger.warning(f"账户 {account_code} 关联的产品 {product_id} 不存在")
+        return
+    
+    product_code = product.get('code', '')
+    if not product_code:
+        return
+    
+    # 获取最新净值
+    nav_data = get_latest_nav(product_code)
+    if nav_data:
+        nav = Decimal(str(nav_data[1]))
+    else:
+        # 如果没有净值数据，使用默认值 1.0
+        nav = Decimal('1')
+        logger.warning(f"产品 {product_code} 没有净值数据，使用默认值 1.0")
+    
+    # 计算并更新余额
+    balance = (current_shares * nav).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    update_account_balance(account_code, balance)
+    logger.debug(f"更新 PRODUCT_SUB 账户 {account_code} 余额: {current_shares} × {nav} = {balance}")
 
 
 def get_all_account_shares_for_product(product_code: str) -> Dict[str, Decimal]:
@@ -319,33 +373,85 @@ def get_all_account_shares_for_product(product_code: str) -> Dict[str, Decimal]:
 
 def recalculate_all_account_balances() -> Dict[str, Decimal]:
     """
-    重新计算所有账户余额（从初始余额+所有ledger记录）
+    重新计算所有账户余额
+    
+    计算规则：
+    - PRODUCT_SUB 类型账户（如稳利宝子账户）：余额 = 份额 × 净值
+    - 其他类型账户（CASH、BUCKET 等）：余额 = 从 ledger 记录累计计算
     
     Returns:
         账户余额字典 {account_code: balance}
     """
     from decimal import Decimal
     from data.data_store import load_ledger
+    from data.product_service import get_product_by_id
+    from data.nav_reader import get_latest_nav
     
     # 从数据库获取所有账户（包含account_code）
     accounts_db = get_accounts(is_active=True)
     
-    # 初始化余额字典（所有账户初始余额为0，因为初始余额已作为income记录在ledger中）
+    # 初始化余额字典
     balances = {}
     # 建立 account_code 到 account_id 的映射，以及反向映射
     code_to_id = {}  # {account_code: account_id}
     id_to_code = {}  # {account_id: account_code}
+    # 记录 PRODUCT_SUB 类型账户及其关联的产品ID
+    product_sub_accounts = {}  # {account_code: product_id}
+    
     for account in accounts_db:
         account_code = account.get('account_code') or account.get('account_id', '')
-        account_id_value = account.get('account_id')  # 这是 account_id 字段的值（可能是字符串）
+        account_id_value = account.get('account_id')
+        account_type = account.get('account_type', '')
+        product_id = account.get('product_id')
+        
         if account_code:
             balances[account_code] = Decimal('0')
             if account_id_value:
                 account_id_str = str(account_id_value)
                 code_to_id[account_code] = account_id_str
                 id_to_code[account_id_str] = account_code
+            
+            # 记录 PRODUCT_SUB 类型账户
+            if account_type == 'PRODUCT_SUB' and product_id:
+                product_sub_accounts[account_code] = product_id
     
-    # 遍历所有ledger记录，计算余额
+    # 对于 PRODUCT_SUB 类型账户，使用 份额 × 净值 计算余额
+    for account_code, product_id in product_sub_accounts.items():
+        # 获取账户份额
+        shares = get_account_shares(account_code)
+        if shares <= 0:
+            balances[account_code] = Decimal('0')
+            continue
+        
+        # 获取产品信息和最新净值
+        product = get_product_by_id(product_id)
+        if not product:
+            logger.warning(f"账户 {account_code} 关联的产品 {product_id} 不存在")
+            continue
+        
+        product_code = product.get('code', '')
+        if not product_code:
+            logger.warning(f"产品 {product_id} 没有代码")
+            continue
+        
+        # 获取最新净值
+        nav_data = get_latest_nav(product_code)
+        if nav_data:
+            nav = Decimal(str(nav_data[1]))
+        else:
+            # 如果没有净值数据，尝试使用 1.0（如稳利宝的初始净值）
+            nav = Decimal('1')
+            logger.warning(f"产品 {product_code} 没有净值数据，使用默认值 1.0")
+        
+        # 计算余额 = 份额 × 净值
+        balance = shares * nav
+        balances[account_code] = balance.quantize(Decimal('0.01'))
+        logger.debug(f"PRODUCT_SUB 账户 {account_code}: 份额={shares}, 净值={nav}, 余额={balance}")
+    
+    # 对于非 PRODUCT_SUB 类型账户，使用 ledger 记录累计计算
+    non_product_sub_accounts = set(balances.keys()) - set(product_sub_accounts.keys())
+    
+    # 遍历所有ledger记录，计算非PRODUCT_SUB账户的余额
     ledger = load_ledger()
     for record in ledger:
         entry_type = record.get('entry_type', '').lower()
@@ -377,26 +483,27 @@ def recalculate_all_account_balances() -> Dict[str, Decimal]:
         elif account_to in id_to_code:
             matched_to_code = id_to_code[account_to]
         
+        # 只处理非 PRODUCT_SUB 账户
         # 入账：income 且 account_to
-        if entry_type == 'income' and matched_to_code:
+        if entry_type == 'income' and matched_to_code and matched_to_code in non_product_sub_accounts:
             balances[matched_to_code] += amount
         
         # 入账：transfer 且 account_to
-        elif entry_type == 'transfer' and matched_to_code:
+        elif entry_type == 'transfer' and matched_to_code and matched_to_code in non_product_sub_accounts:
             balances[matched_to_code] += amount
         
         # 出账：expense 且 account_from
-        elif entry_type == 'expense' and matched_from_code:
+        elif entry_type == 'expense' and matched_from_code and matched_from_code in non_product_sub_accounts:
             balances[matched_from_code] -= amount
         
         # 出账：transfer 且 account_from
-        elif entry_type == 'transfer' and matched_from_code:
+        elif entry_type == 'transfer' and matched_from_code and matched_from_code in non_product_sub_accounts:
             balances[matched_from_code] -= amount
     
     # 更新数据库中的余额
     for account_code, balance in balances.items():
         update_account_balance(account_code, balance)
     
-    logger.info(f"重新计算了 {len(balances)} 个账户的余额")
+    logger.info(f"重新计算了 {len(balances)} 个账户的余额（其中 {len(product_sub_accounts)} 个 PRODUCT_SUB 账户按份额×净值计算）")
     return balances
 
