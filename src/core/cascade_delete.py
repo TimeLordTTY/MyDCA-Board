@@ -20,6 +20,186 @@ def _parse_decimal(value) -> Decimal:
         return Decimal('0')
 
 
+def _delete_trade_fills_for_transaction(tx: dict) -> int:
+    """
+    删除场内交易对应的 trade_fills 记录
+    
+    根据理财记录的信息（product_id, date, shares, amount, order_id）匹配并删除对应的 trade_fills 记录。
+    
+    匹配策略（按优先级）：
+    1. 通过 order_id 提取时间进行精确匹配
+    2. 通过日期+份额+金额完全匹配
+    3. 通过日期+份额匹配（允许金额误差）
+    
+    Args:
+        tx: 理财记录（buy_confirm 或 sell_confirm）
+    
+    Returns:
+        删除的 trade_fills 记录数
+    """
+    action = tx.get('action', '')
+    if action not in ('buy_confirm', 'sell_confirm'):
+        return 0
+    
+    product_id = tx.get('product_id')
+    product_code = tx.get('product_code', '')
+    order_id = tx.get('order_id', '')
+    
+    # 尝试获取 product_id（如果为None，尝试通过product_code查找）
+    product_id_int = None
+    if product_id:
+        try:
+            product_id_int = int(product_id) if not isinstance(product_id, int) else product_id
+        except (ValueError, TypeError):
+            product_id_int = None
+            logger.warning(f"无法转换 product_id: {product_id}")
+    
+    # 如果 product_id 为 None，尝试通过 product_code 查找
+    if not product_id_int and product_code:
+        try:
+            from data.product_service import get_product_by_code
+            product = get_product_by_code(product_code)
+            if product and product.get('channel') == 'EXCHANGE':
+                product_id_int = product.get('id')
+                logger.info(f"通过 product_code 找到 product_id: {product_code} -> {product_id_int}")
+        except Exception as e:
+            logger.warning(f"通过 product_code 查找 product_id 失败: {product_code}, error={e}")
+    
+    if not product_id_int:
+        return 0
+    
+    # 检查是否是场内产品
+    from data.product_service import get_product_by_id
+    product = get_product_by_id(product_id_int)
+    if not product or product.get('channel') != 'EXCHANGE':
+        return 0
+    
+    deleted_count = 0
+    
+    try:
+        from data.db_connector import execute_update, execute_query
+        from datetime import datetime
+        
+        # 将 action 转换为 side
+        side = 'BUY' if action == 'buy_confirm' else 'SELL'
+        
+        # 获取交易信息
+        tx_date = tx.get('date', '')
+        tx_shares = tx.get('shares', '')
+        tx_amount = tx.get('amount', '')  # 买入确认时amount可能为空
+        
+        # 处理日期格式
+        if tx_date:
+            if isinstance(tx_date, str):
+                tx_date_str = tx_date
+            else:
+                tx_date_str = str(tx_date)
+        else:
+            tx_date_str = None
+        
+        # 方法1: 通过 order_id 提取时间进行精确匹配
+        # order_id 格式: EXCHANGE_{product_code}_{YYYYMMDD_HHMMSS}
+        trade_time_from_order = None
+        if order_id and order_id.startswith('EXCHANGE_'):
+            try:
+                # 从 order_id 中提取时间部分
+                parts = order_id.split('_')
+                if len(parts) >= 3:
+                    time_str = parts[-2] + '_' + parts[-1]  # YYYYMMDD_HHMMSS
+                    trade_time_from_order = datetime.strptime(time_str, '%Y%m%d_%H%M%S')
+                    logger.debug(f"从 order_id 提取时间: {order_id} -> {trade_time_from_order}")
+            except Exception as e:
+                logger.warning(f"无法从 order_id 提取时间: {order_id}, error={e}")
+        
+        # 必须同时有日期和份额才能匹配
+        if not tx_date_str or not tx_shares:
+            logger.error(f"缺少必要信息来匹配 trade_fills: date={tx_date_str}, shares={tx_shares}, product_id={product_id_int}, order_id={order_id}")
+            return 0
+        
+        shares_decimal = Decimal(str(tx_shares))
+        
+        # 优先使用时间匹配（最精确）
+        if trade_time_from_order:
+            delete_sql = """
+                DELETE FROM trade_fills
+                WHERE product_id = %s
+                  AND side = %s
+                  AND trade_time = %s
+                  AND source = 'MANUAL'
+                LIMIT 1
+            """
+            affected = execute_update(delete_sql, (product_id_int, side, trade_time_from_order))
+            if affected > 0:
+                deleted_count = affected
+                logger.info(f"删除场内成交记录（通过时间精确匹配）: product_id={product_id_int}, side={side}, time={trade_time_from_order}")
+        
+        # 如果时间匹配失败，使用日期+份额+金额匹配（完全匹配）
+        if deleted_count == 0 and tx_amount:
+            try:
+                amount_decimal = Decimal(str(tx_amount))
+                delete_sql = """
+                    DELETE FROM trade_fills
+                    WHERE product_id = %s
+                      AND side = %s
+                      AND trade_date = %s
+                      AND ABS(qty - %s) < 0.0001
+                      AND ABS(amount - %s) < 0.01
+                      AND source = 'MANUAL'
+                    LIMIT 1
+                """
+                affected = execute_update(delete_sql, (product_id_int, side, tx_date_str, float(shares_decimal), float(amount_decimal)))
+                if affected > 0:
+                    deleted_count = affected
+                    logger.info(f"删除场内成交记录（通过日期+份额+金额完全匹配）: product_id={product_id_int}, side={side}, date={tx_date_str}, shares={tx_shares}, amount={tx_amount}")
+            except Exception as e:
+                logger.warning(f"金额匹配失败: {e}")
+        
+        # 如果还是失败，使用日期+份额匹配（允许金额误差）
+        if deleted_count == 0:
+            delete_sql = """
+                DELETE FROM trade_fills
+                WHERE product_id = %s
+                  AND side = %s
+                  AND trade_date = %s
+                  AND ABS(qty - %s) < 0.0001
+                  AND source = 'MANUAL'
+                LIMIT 1
+            """
+            affected = execute_update(delete_sql, (product_id_int, side, tx_date_str, float(shares_decimal)))
+            if affected > 0:
+                deleted_count = affected
+                logger.info(f"删除场内成交记录（通过日期+份额匹配）: product_id={product_id_int}, side={side}, date={tx_date_str}, shares={tx_shares}")
+        
+        # 如果还是匹配不到，记录详细错误信息用于调试
+        if deleted_count == 0:
+            # 查找所有可能的 trade_fills 记录，用于调试
+            debug_sql = """
+                SELECT id, trade_date, trade_time, qty, amount, side, source
+                FROM trade_fills
+                WHERE product_id = %s
+                  AND side = %s
+                  AND source = 'MANUAL'
+            """
+            debug_records = execute_query(debug_sql, (product_id_int, side))
+            logger.error(f"未找到匹配的 trade_fills 记录: product_id={product_id_int}, side={side}, date={tx_date_str}, shares={tx_shares}, amount={tx_amount}, order_id={order_id}")
+            if debug_records:
+                logger.error(f"  数据库中存在的 trade_fills 记录: {debug_records}")
+                # 尝试找出为什么匹配不上
+                for rec in debug_records:
+                    rec_date = str(rec.get('trade_date', ''))
+                    rec_qty = float(rec.get('qty', 0))
+                    rec_amount = float(rec.get('amount', 0))
+                    rec_time = rec.get('trade_time')
+                    logger.error(f"    记录ID {rec.get('id')}: date={rec_date} (期望: {tx_date_str}), qty={rec_qty} (期望: {float(shares_decimal)}), amount={rec_amount} (期望: {tx_amount}), time={rec_time} (期望: {trade_time_from_order})")
+            else:
+                logger.error(f"  数据库中不存在任何匹配的 trade_fills 记录")
+    
+    except Exception as e:
+        logger.warning(f"删除场内成交记录失败: product_id={product_id_int}, error={e}", exc_info=True)
+    
+    return deleted_count
+
+
 def _restore_shares_for_transaction(tx: dict) -> Dict[str, any]:
     """
     根据交易记录恢复账户份额
@@ -343,8 +523,17 @@ def find_related_ledger_by_order_id(order_id: str) -> List[dict]:
     
     for ledger in all_ledgers:
         note = ledger.get('note', '') or ''
-        # 检查备注中是否包含订单号
-        if f'(订单号: {order_id})' in note or f'(订单号:{order_id})' in note:
+        # 检查备注中是否包含订单号（支持多种格式）
+        # 格式1: (订单号: {order_id})
+        # 格式2: (订单号:{order_id})
+        # 格式3: (订单号: {order_id}, ...) - 场内买入确认格式
+        # 格式4: 订单号: {order_id}
+        if (f'(订单号: {order_id})' in note or 
+            f'(订单号:{order_id})' in note or
+            f'(订单号: {order_id},' in note or
+            f'(订单号:{order_id},' in note or
+            f'订单号: {order_id}' in note or
+            f'订单号:{order_id}' in note):
             related_ledgers.append(ledger)
     
     return related_ledgers
@@ -524,6 +713,7 @@ def cascade_delete_transaction(tx_id: int, tx: dict) -> dict:
         'order_deleted': False,
         'related_transactions_deleted': 0,
         'ledgers_deleted': 0,
+        'trade_fills_deleted': 0,  # 场内成交记录删除数
         'shares_restored': [],  # 份额恢复记录
         'errors': []
     }
@@ -598,12 +788,26 @@ def cascade_delete_transaction(tx_id: int, tx: dict) -> dict:
                 except Exception as e:
                     result['errors'].append(f"删除订单异常: order_id={order_id}, error={e}")
         
-        # 2. 查找并删除关联的记账记录
+        # 2. 如果是场内买入/卖出确认，删除对应的 trade_fills 记录
+        if action in ('buy_confirm', 'sell_confirm'):
+            trade_fills_deleted = _delete_trade_fills_for_transaction(tx)
+            result['trade_fills_deleted'] = trade_fills_deleted
+        
+        # 3. 查找并删除关联的记账记录
         related_ledgers = find_related_ledger_by_order_id(order_id) if order_id else []
+        affected_accounts = set()  # 记录受影响的账户
         for ledger in related_ledgers:
             ledger_id = ledger.get('id')
             if ledger_id:
                 try:
+                    # 记录受影响的账户（用于后续重新计算余额）
+                    account_from = ledger.get('account_from', '')
+                    account_to = ledger.get('account_to', '')
+                    if account_from:
+                        affected_accounts.add(account_from)
+                    if account_to:
+                        affected_accounts.add(account_to)
+                    
                     if delete_ledger(ledger_id):
                         result['ledgers_deleted'] += 1
                     else:
@@ -611,7 +815,20 @@ def cascade_delete_transaction(tx_id: int, tx: dict) -> dict:
                 except Exception as e:
                     result['errors'].append(f"删除记账记录异常: ledger_id={ledger_id}, error={e}")
         
-        # 3. 删除理财记录本身
+        # 重新计算受影响的账户余额
+        if affected_accounts:
+            from core.ledger_service import calc_account_balance
+            from data.account_service import update_account_balance
+            for account_code in affected_accounts:
+                try:
+                    new_balance = calc_account_balance(account_code)
+                    update_account_balance(account_code, new_balance)
+                    logger.info(f"已重新计算账户余额: {account_code} = {new_balance}")
+                except Exception as e:
+                    result['errors'].append(f"重新计算账户余额失败: account={account_code}, error={e}")
+                    logger.warning(f"重新计算账户余额失败: account={account_code}, error={e}")
+        
+        # 4. 删除理财记录本身
         if delete_transaction(tx_id):
             result['transaction_deleted'] = True
         else:
@@ -790,6 +1007,7 @@ def cascade_delete_ledger(ledger_id: int, ledger: dict) -> dict:
         'transactions_deleted': 0,
         'order_deleted': False,
         'transfer_pair_deleted': False,  # 新增：是否删除了转账配对记录
+        'trade_fills_deleted': 0,  # 场内成交记录删除数
         'shares_restored': [],  # 份额恢复记录
         'errors': []
     }
@@ -808,7 +1026,7 @@ def cascade_delete_ledger(ledger_id: int, ledger: dict) -> dict:
             if order_id:
                 order_ids.add(order_id)
         
-        # 2. 先恢复份额，再删除关联的理财记录
+        # 2. 先恢复份额，删除场内成交记录，再删除关联的理财记录
         for tx in related_txs:
             tx_id = tx.get('id')
             action = tx.get('action', '')
@@ -820,6 +1038,10 @@ def cascade_delete_ledger(ledger_id: int, ledger: dict) -> dict:
                     result['shares_restored'].append(restore_result)
                 elif restore_result['error']:
                     result['errors'].append(f"恢复份额失败: {restore_result['error']}")
+                
+                # 删除场内成交记录（如果是场内产品）
+                trade_fills_deleted = _delete_trade_fills_for_transaction(tx)
+                result['trade_fills_deleted'] += trade_fills_deleted
             
             if tx_id:
                 try:

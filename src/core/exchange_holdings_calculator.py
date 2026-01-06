@@ -15,10 +15,13 @@ def calculate_exchange_holdings(product_id: int, asof_date: Optional[str] = None
     计算场内持仓（基于 trade_fills）
     
     计算公式：
-    - 加权成本：avg_cost = Σ(buy_qty × buy_price) / Σ(buy_qty)
+    - 加权成本：avg_cost = Σ(buy_qty × buy_price + buy_fee + buy_tax + buy_other_fee) / Σ(buy_qty)
+      注意：成本包含费用，费用计入持仓成本
     - 当前持仓：current_qty = Σ(buy_qty) - Σ(sell_qty)
     - 已实现盈亏：realized_pnl = Σ((sell_price - avg_cost_at_sell) × sell_qty - sell_fee - sell_tax)
+      注意：卖出时的成本已包含买入费用，卖出费用从收益中扣除
     - 未实现盈亏：unrealized_pnl = (current_price - avg_cost) × current_qty
+      注意：avg_cost 已包含买入费用
     - 总费用：total_fees = Σ(fee + tax + other_fee)
     
     Args:
@@ -65,7 +68,7 @@ def calculate_exchange_holdings(product_id: int, asof_date: Optional[str] = None
     
     # 计算买入累计
     total_buy_qty = Decimal('0')
-    total_buy_cost = Decimal('0')  # Σ(qty × price)
+    total_buy_cost = Decimal('0')  # Σ(qty × price + fee + tax + other_fee) - 包含费用
     total_buy_fees = Decimal('0')
     
     for record in buy_records:
@@ -76,7 +79,8 @@ def calculate_exchange_holdings(product_id: int, asof_date: Optional[str] = None
         other_fee = Decimal(str(record.get('other_fee', 0)))
         
         total_buy_qty += qty
-        total_buy_cost += qty * price
+        # 成本 = 成交金额 + 费用（费用应该计入成本）
+        total_buy_cost += qty * price + fee + tax + other_fee
         total_buy_fees += fee + tax + other_fee
     
     # 计算卖出累计

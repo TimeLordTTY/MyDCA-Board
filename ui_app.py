@@ -2406,34 +2406,30 @@ def page_asset_details():
                 if "EXCHANGE" not in channels:
                     continue  # 该产品没有场内版本，跳过
                 
-                if code in dual_channel_codes:
-                    # 同时有场内和场外版本，使用场内实际持仓数据
-                    exchange_product_id = code_channel_to_product_id.get((code, "EXCHANGE"))
-                    if exchange_product_id:
-                        from core.exchange_holdings_calculator import calculate_exchange_holdings
-                        from core.market_quote_service import get_latest_quote
-                        try:
-                            holdings = calculate_exchange_holdings(exchange_product_id)
-                            quote = get_latest_quote(exchange_product_id)
-                            price = Decimal(str(quote.get('price', 0))) if quote else Decimal('0')
-                            shares = Decimal(str(holdings.get('current_qty', 0))) if holdings else Decimal('0')
-                            value = shares * price
-                            r_copy = dict(r)
-                            r_copy['shares'] = str(shares)
-                            r_copy['value'] = str(value)
-                            r_copy['nav'] = str(price)
-                            r_copy['total_pnl'] = str(holdings.get('total_pnl', 0)) if holdings else '0'
-                            filtered_data.append(r_copy)
-                        except Exception as e:
-                            logger.warning(f"计算场内持仓失败: {code}, error={e}")
-                            # 计算失败时仍显示，但份额为0
-                            r_copy = dict(r)
-                            r_copy['shares'] = '0'
-                            r_copy['value'] = '0'
-                            filtered_data.append(r_copy)
-                else:
-                    # 只有场内版本，直接使用 daily_snapshot 数据
-                    filtered_data.append(r)
+                # 所有场内产品都使用实时计算的持仓数据（不依赖daily_snapshot缓存）
+                exchange_product_id = code_channel_to_product_id.get((code, "EXCHANGE"))
+                if exchange_product_id:
+                    from core.exchange_holdings_calculator import calculate_exchange_holdings
+                    from core.market_quote_service import get_latest_quote
+                    try:
+                        holdings = calculate_exchange_holdings(exchange_product_id)
+                        quote = get_latest_quote(exchange_product_id)
+                        price = Decimal(str(quote.get('price', 0))) if quote else Decimal('0')
+                        shares = Decimal(str(holdings.get('current_qty', 0))) if holdings else Decimal('0')
+                        value = shares * price
+                        r_copy = dict(r)
+                        r_copy['shares'] = str(shares)
+                        r_copy['value'] = str(value)
+                        r_copy['nav'] = str(price)
+                        r_copy['total_pnl'] = str(holdings.get('total_pnl', 0)) if holdings else '0'
+                        filtered_data.append(r_copy)
+                    except Exception as e:
+                        logger.warning(f"计算场内持仓失败: {code}, error={e}")
+                        # 计算失败时仍显示，但份额为0
+                        r_copy = dict(r)
+                        r_copy['shares'] = '0'
+                        r_copy['value'] = '0'
+                        filtered_data.append(r_copy)
             daily_data = filtered_data
         else:
             # 场外视图：
@@ -4359,6 +4355,8 @@ def page_invest():
                                     msg += f"，已删除 {result['related_transactions_deleted']} 条关联理财记录"
                                 if result['ledgers_deleted'] > 0:
                                     msg += f"，已删除 {result['ledgers_deleted']} 条关联记账记录"
+                                if result.get('trade_fills_deleted', 0) > 0:
+                                    msg += f"，已删除 {result['trade_fills_deleted']} 条场内成交记录"
                                 if result.get('shares_restored'):
                                     msg += f"（已恢复 {len(result['shares_restored'])} 笔份额）"
                                 if result['errors']:

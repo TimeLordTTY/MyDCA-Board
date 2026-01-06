@@ -193,7 +193,9 @@ def apply_fund_deduction(
     product_id: int,
     account_id,  # 可以是 int (数据库主键id) 或 str (account_code)
     amount: Decimal,
-    trade_type: str
+    trade_type: str,
+    order_id: Optional[str] = None,  # 新增：订单号，用于关联记账记录
+    event_time: Optional[str] = None  # 新增：记账时间，如果不提供则使用当前时间
 ) -> TradeDeductionResult:
     """
     应用资金扣减（等待池优先，不足部分从现金池扣除）
@@ -241,32 +243,52 @@ def apply_fund_deduction(
         
         # 剩余部分从现金池扣除（通过ledger记录）
         remaining = amount - wait_pool_deducted
-        if remaining > 0:
-            # 获取账户代码
-            account = _get_account_by_id_or_code(account_id)
-            if account:
-                account_code = account.get('account_code')
-                cash_pool_before = calc_account_balance(account_code)
-                
-                # 在ledger中记录支出（用于扣减现金池）
-                from data.data_store import append_ledger
-                append_ledger({
-                    'event_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'entry_type': 'expense',
-                    'amount': float(remaining),
-                    'category_l1': '场内交易',
-                    'category_l2': '买入',
-                    'account_from': account_code,
-                    'note': f'场内买入成交扣减（产品ID:{product_id}）'
-                })
-                
-                cash_pool_after = calc_account_balance(account_code)
-                cash_pool_deducted = cash_pool_before - cash_pool_after
+        
+        # 获取账户代码
+        account = _get_account_by_id_or_code(account_id)
+        if account:
+            account_code = account.get('account_code')
+            cash_pool_before = calc_account_balance(account_code)
+            
+            # 无论是否有现金扣减，都要创建记账记录（买入确认必须记录）
+            # 使用"买入确认"分类，与场外交易保持一致
+            from core.ledger_service import add_expense
+            from data.product_service import get_product_by_id
+            product = get_product_by_id(product_id)
+            product_name = product.get('product_name', f'产品ID:{product_id}') if product else f'产品ID:{product_id}'
+            
+            # 构建备注：说明总金额和等待池扣减情况，并包含订单号用于关联
+            note = f"{product_name} 场内买入成交确认"
+            if wait_pool_deducted > 0:
+                if remaining > 0:
+                    note += f"（总金额: {amount}，等待池扣减: {wait_pool_deducted}，现金扣减: {remaining}）"
+                else:
+                    note += f"（总金额: {amount}，全部从等待池扣减）"
             else:
-                logger.warning(f"无法找到账户: account_id={account_id}")
-                cash_pool_before = Decimal('0')
-                cash_pool_after = Decimal('0')
+                note += f"（总金额: {amount}，全部从现金扣减）"
+            if order_id:
+                note += f" (订单号: {order_id})"
+            
+            # 记账金额：如果有现金扣减，记录现金扣减金额；如果没有现金扣减（全部从等待池扣减），记录 0
+            # 这样账户余额不会错误减少，但记账记录会存在，备注中会说明总金额和等待池扣减情况
+            ledger_amount = remaining if remaining > 0 else Decimal('0')
+            
+            # 使用传入的交易时间，如果没有则使用当前时间
+            ledger_event_time = event_time if event_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            add_expense(
+                account_from=account_code,
+                amount=ledger_amount,  # 如果有现金扣减，记录现金扣减金额；否则记录 0
+                category_l1="理财投资",
+                category_l2="买入确认",
+                event_time=ledger_event_time,
+                note=note
+            )
+            
+            cash_pool_after = calc_account_balance(account_code)
+            cash_pool_deducted = cash_pool_before - cash_pool_after
         else:
+            logger.warning(f"无法找到账户: account_id={account_id}")
             cash_pool_before = Decimal('0')
             cash_pool_after = Decimal('0')
     
@@ -278,16 +300,28 @@ def apply_fund_deduction(
             cash_pool_before = calc_account_balance(account_code)
             
             # 在ledger中记录收入（用于增加现金池）
-            from data.data_store import append_ledger
-            append_ledger({
-                'event_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'entry_type': 'income',
-                'amount': float(amount),
-                'category_l1': '场内交易',
-                'category_l2': '卖出',
-                'account_to': account_code,
-                'note': f'场内卖出成交到账（产品ID:{product_id}）'
-            })
+            # 使用"卖出确认"分类，与场外交易保持一致
+            from core.ledger_service import add_income
+            from data.product_service import get_product_by_id
+            product = get_product_by_id(product_id)
+            product_name = product.get('product_name', f'产品ID:{product_id}') if product else f'产品ID:{product_id}'
+            
+            # 构建备注：包含订单号用于关联
+            note = f"{product_name} 场内卖出成交确认"
+            if order_id:
+                note += f" (订单号: {order_id})"
+            
+            # 使用传入的交易时间，如果没有则使用当前时间
+            ledger_event_time = event_time if event_time else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            add_income(
+                account_to=account_code,
+                amount=amount,
+                category_l1="理财投资",
+                category_l2="卖出确认",
+                event_time=ledger_event_time,
+                note=note
+            )
             
             cash_pool_after = calc_account_balance(account_code)
             cash_pool_deducted = cash_pool_after - cash_pool_before  # 注意：这里是增加，所以是正数
@@ -372,6 +406,30 @@ def persist_trade_record(
         else:
             logger.error(f"无法找到账户: account_id={account_id}")
             raise ValueError(f"账户不存在: account_id={account_id}")
+    
+    # 检查是否已存在相同的记录（防止重复创建）
+    # 匹配条件：product_id, side, trade_date, trade_time, qty, amount（允许小误差）
+    check_sql = """
+        SELECT id FROM trade_fills
+        WHERE product_id = %s
+          AND side = %s
+          AND trade_date = %s
+          AND trade_time = %s
+          AND ABS(qty - %s) < 0.0001
+          AND ABS(amount - %s) < 0.01
+          AND source = 'MANUAL'
+        LIMIT 1
+    """
+    existing = execute_one(check_sql, (
+        product_id, side, trade_date, trade_time, float(shares), float(amount)
+    ))
+    
+    if existing:
+        existing_id = existing.get('id')
+        logger.warning(f"已存在相同的成交记录: trade_fills id={existing_id}, "
+                      f"product_id={product_id}, date={trade_date}, time={trade_time}, "
+                      f"qty={shares}, amount={amount}")
+        return existing_id  # 返回已存在的记录ID，不重复创建
     
     sql = """
         INSERT INTO trade_fills (
@@ -491,63 +549,114 @@ def save_exchange_trade(
         # 2. 获取持仓前状态
         holdings_before = calc_exchange_holdings(product_id)
         
-        # 3. 应用资金扣减
-        deduction_result = apply_fund_deduction(product_id, account_id, amount, trade_type)
+        # 3. 计算总金额（含手续费）
+        # 如果没有提供手续费，使用默认计算
+        if fee is None:
+            fee = calc_default_fee(amount)
+        total_amount = amount + fee + tax + other_fee  # 买入时，总金额 = 成交金额 + 所有费用
         
-        # 4. 保存成交记录
+        # 4. 生成订单号（用于关联记账记录和交易记录）
+        from data.product_service import get_product_by_id
+        product = get_product_by_id(product_id)
+        product_code = product.get('code') if product else f'PRODUCT_{product_id}'
+        order_id = f"EXCHANGE_{product_code}_{trade_time.strftime('%Y%m%d_%H%M%S')}"
+        
+        # 5. 应用资金扣减（传入含手续费的总金额、订单号和交易时间）
+        # 将 trade_time 转换为字符串格式用于记账记录
+        event_time_str = trade_time.strftime('%Y-%m-%d %H:%M:%S') if isinstance(trade_time, datetime) else str(trade_time)
+        deduction_result = apply_fund_deduction(product_id, account_id, total_amount, trade_type, order_id, event_time_str)
+        
+        # 6. 保存成交记录
         record_id = persist_trade_record(
             product_id, account_id, trade_date, trade_time, trade_type,
             amount, shares, price, fee, tax, other_fee, remark
         )
         
-        # 5. 重新计算持仓
+        # 7. 重新计算持仓
         holdings_after = calc_exchange_holdings(product_id)
         
-        # 6. 对于买入交易，自动创建 buy_confirm 记录（场内交易直接确认）
+        # 8. 对于买入/卖出交易，自动创建 buy_confirm/sell_confirm 记录（场内交易直接确认）
         buy_confirm_order_id = None
+        sell_confirm_order_id = None
         if trade_type == 'BUY':
             try:
-                from data.product_service import get_product_by_id
                 from data.data_store import append_transaction, format_decimal
-                from datetime import datetime
                 
-                product = get_product_by_id(product_id)
-                if product:
-                    product_code = product.get('code')
-                    # 计算成交价（作为确认净值）
-                    confirm_nav = price if price else (amount / shares if shares > 0 else Decimal('0'))
-                    
-                    # 生成订单号（用于关联，格式：EXCHANGE_产品代码_日期时间）
-                    buy_confirm_order_id = f"EXCHANGE_{product_code}_{trade_time.strftime('%Y%m%d_%H%M%S')}"
-                    
-                    # 创建 buy_confirm 记录
-                    confirm_date_str = trade_date.strftime('%Y-%m-%d')
-                    confirm_time_str = trade_time.strftime('%H:%M:%S')
-                    created_at = f"{confirm_date_str} {confirm_time_str}"
-                    
-                    tx_record = {
-                        'date': confirm_date_str,
-                        'product_id': product_id,
-                        'product_code': product_code,
-                        'action': 'buy_confirm',
-                        'amount': '',  # 买入确认不记录金额
-                        'shares': format_decimal(shares, 6),
-                        'fee': format_decimal(fee, 2) if fee else '0',
-                        'nav': str(confirm_nav),
-                        'nav_date': confirm_date_str,
-                        'order_id': buy_confirm_order_id,
-                        'note': remark or f'场内买入成交确认',
-                        'created_at': created_at
-                    }
-                    append_transaction(tx_record)
-                    logger.info(f"场内买入自动确认: product_id={product_id}, shares={shares}, nav={confirm_nav}, order_id={buy_confirm_order_id}")
+                # 使用已生成的订单号
+                buy_confirm_order_id = order_id
+                
+                # 计算成交价（作为确认净值）
+                confirm_nav = price if price else (amount / shares if shares > 0 else Decimal('0'))
+                
+                # 创建 buy_confirm 记录
+                confirm_date_str = trade_date.strftime('%Y-%m-%d')
+                confirm_time_str = trade_time.strftime('%H:%M:%S')
+                created_at = f"{confirm_date_str} {confirm_time_str}"
+                
+                tx_record = {
+                    'date': confirm_date_str,
+                    'product_id': product_id,
+                    'product_code': product_code,
+                    'action': 'buy_confirm',
+                    'amount': '',  # 买入确认不记录金额
+                    'shares': format_decimal(shares, 6),
+                    'fee': format_decimal(fee, 2) if fee else '0',
+                    'nav': str(confirm_nav),
+                    'nav_date': confirm_date_str,
+                    'order_id': buy_confirm_order_id,
+                    'note': remark or f'场内买入成交确认',
+                    'created_at': created_at
+                }
+                append_transaction(tx_record)
+                logger.info(f"场内买入自动确认: product_id={product_id}, shares={shares}, nav={confirm_nav}, order_id={buy_confirm_order_id}")
+                # 注意：记账记录已在 apply_fund_deduction 中创建（买入确认支出）
             except Exception as e:
                 logger.warning(f"创建买入确认记录失败（不影响成交记录）: {e}", exc_info=True)
         
-        # 7. 更新快照（如果需要）
+        elif trade_type == 'SELL':
+            # 对于卖出交易，创建 sell_confirm 记录
+            try:
+                from data.data_store import append_transaction, format_decimal
+                
+                # 使用已生成的订单号
+                sell_confirm_order_id = order_id
+                
+                # 计算成交价（作为确认净值）
+                confirm_nav = price if price else (amount / shares if shares > 0 else Decimal('0'))
+                
+                # 创建 sell_confirm 记录
+                confirm_date_str = trade_date.strftime('%Y-%m-%d')
+                confirm_time_str = trade_time.strftime('%H:%M:%S')
+                created_at = f"{confirm_date_str} {confirm_time_str}"
+                
+                # 计算手续费（如果未提供）
+                total_fee = fee + tax + other_fee if fee else calc_default_fee(amount)
+                gross_amount = amount + total_fee  # 卖出总金额（含费）
+                
+                tx_record = {
+                    'date': confirm_date_str,
+                    'product_id': product_id,
+                    'product_code': product_code,
+                    'action': 'sell_confirm',
+                    'amount': format_decimal(amount, 2),  # 卖出到账净额
+                    'shares': format_decimal(shares, 6),
+                    'fee': format_decimal(total_fee, 2),
+                    'nav': str(confirm_nav),
+                    'nav_date': confirm_date_str,
+                    'order_id': sell_confirm_order_id,
+                    'note': remark or f'场内卖出成交确认',
+                    'created_at': created_at
+                }
+                append_transaction(tx_record)
+                logger.info(f"场内卖出自动确认: product_id={product_id}, shares={shares}, nav={confirm_nav}, order_id={sell_confirm_order_id}")
+                # 注意：记账记录已在 apply_fund_deduction 中创建（卖出确认收入）
+            except Exception as e:
+                logger.warning(f"创建卖出确认记录失败（不影响成交记录）: {e}", exc_info=True)
+        
+        # 8. 更新快照（如果需要）
         update_snapshot_if_needed(trade_date)
         
-        # 8. 刷新Advisor建议
+        # 9. 刷新Advisor建议
         suggestion = refresh_advisor_suggestion(product_id)
         
         result = {
