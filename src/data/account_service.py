@@ -237,6 +237,86 @@ def update_account_balance(account_code: str, balance: Decimal) -> bool:
     return True
 
 
+def get_account_shares(account_code: str) -> Decimal:
+    """
+    获取账户份额
+    
+    Args:
+        account_code: 账户代码
+    
+    Returns:
+        账户份额，如果不存在则返回0
+    """
+    sql = "SELECT shares FROM accounts WHERE account_code = %s"
+    result = execute_one(sql, (account_code,))
+    if result and result.get('shares') is not None:
+        return Decimal(str(result['shares']))
+    return Decimal('0')
+
+
+def update_account_shares(account_code: str, shares: Decimal, operation: str = 'set') -> bool:
+    """
+    更新账户份额
+    
+    Args:
+        account_code: 账户代码
+        shares: 份额变化量（或新值）
+        operation: 操作类型 'set'（设置）/'increase'（增加）/'decrease'（减少）
+    
+    Returns:
+        是否更新成功
+    """
+    if operation == 'set':
+        sql = "UPDATE accounts SET shares = %s WHERE account_code = %s"
+        params = (str(shares), account_code)
+    elif operation == 'increase':
+        sql = "UPDATE accounts SET shares = COALESCE(shares, 0) + %s WHERE account_code = %s"
+        params = (str(shares), account_code)
+    elif operation == 'decrease':
+        sql = "UPDATE accounts SET shares = GREATEST(COALESCE(shares, 0) - %s, 0) WHERE account_code = %s"
+        params = (str(shares), account_code)
+    else:
+        logger.warning(f"未知的份额操作类型: {operation}")
+        return False
+    
+    execute_update(sql, params)
+    return True
+
+
+def get_all_account_shares_for_product(product_code: str) -> Dict[str, Decimal]:
+    """
+    获取产品下所有子账户的份额
+    
+    Args:
+        product_code: 产品代码
+    
+    Returns:
+        账户份额字典 {account_code: shares}
+    """
+    from data.product_service import get_product_by_code
+    
+    product = get_product_by_code(product_code)
+    if not product or not product.get('id'):
+        return {}
+    
+    product_id = product['id']
+    sql = """
+        SELECT account_code, shares
+        FROM accounts
+        WHERE product_id = %s AND account_type = 'PRODUCT_SUB' AND is_active = 1
+    """
+    results = execute_query(sql, (product_id,))
+    
+    shares_dict = {}
+    for row in results:
+        account_code = row.get('account_code')
+        shares = row.get('shares')
+        if account_code:
+            shares_dict[account_code] = Decimal(str(shares)) if shares is not None else Decimal('0')
+    
+    return shares_dict
+
+
 def recalculate_all_account_balances() -> Dict[str, Decimal]:
     """
     重新计算所有账户余额（从初始余额+所有ledger记录）

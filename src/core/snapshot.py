@@ -295,6 +295,22 @@ def create_daily_snapshot(nav_records, holdings_map, products_map, snapshot_path
             cash_in_transit = Decimal('0')
             principal_total = Decimal('0')
             total_redemption = Decimal('0')
+            
+            # 调试：如果场外产品没有匹配到持仓数据，记录警告
+            # 检查是否有相似的产品代码在 all_holdings_data 中
+            if product_code not in exchange_holdings_map:
+                # 这是场外产品，但没有匹配到持仓数据
+                available_codes = list(all_holdings_data.keys())
+                if available_codes:
+                    logger.warning(
+                        f"场外产品 {product_code} ({product_name}) 没有匹配到持仓数据。"
+                        f"可用的 product_code: {available_codes[:10]}"  # 只显示前10个
+                    )
+                else:
+                    logger.debug(
+                        f"场外产品 {product_code} ({product_name}) 没有匹配到持仓数据，"
+                        f"且 all_holdings_data 为空（可能没有交易记录）"
+                    )
         
         # 确保所有输入都是 Decimal
         shares = to_dec(shares)
