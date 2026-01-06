@@ -234,13 +234,37 @@ def calc_account_balance(account_id: str, as_of_time: str = None, as_of_id: int 
     计算账户余额 = 初始余额 + Σ(入账) - Σ(出账)
     
     Args:
-        account_id: 账户ID
+        account_id: 账户ID（可能是 account_code 或 account_id 字段值）
         as_of_time: 截止时间
         as_of_id: 截止记录ID（用于处理同一时间点的多条记录）
     
     Returns:
         账户余额（截止到指定时间和ID的记录，包含该记录）
     """
+    from data.account_service import get_account_by_code, get_accounts
+    
+    # 获取账户信息，建立 account_code 和 account_id 的映射
+    account = get_account_by_code(account_id)
+    if not account:
+        # 如果 account_id 不是 account_code，尝试通过 account_id 字段查找
+        accounts = get_accounts(is_active=True)
+        for acc in accounts:
+            if str(acc.get('account_id', '')) == str(account_id):
+                account = acc
+                break
+    
+    if not account:
+        logger.warning(f"账户不存在: {account_id}")
+        return Decimal('0')
+    
+    account_code = account.get('account_code') or account.get('account_id', '')
+    account_id_value = account.get('account_id')
+    
+    # 建立匹配值列表（account_code 和 account_id 都匹配）
+    match_values = [account_code]
+    if account_id_value:
+        match_values.append(str(account_id_value))
+    
     ledger = load_ledger()
     balance = Decimal('0')
     
@@ -263,23 +287,29 @@ def calc_account_balance(account_id: str, as_of_time: str = None, as_of_id: int 
         except:
             amount = Decimal('0')
         
-        account_from = record.get('account_from', '')
-        account_to = record.get('account_to', '')
+        account_from = str(record.get('account_from', '') or '')
+        account_to = str(record.get('account_to', '') or '')
         
-        # 入账：income 且 account_to == account_id
-        if entry_type == 'income' and account_to == account_id:
+        # 清理账户代码：移除可能的 |fee_override: 等后缀（兼容旧数据）
+        if '|fee_override' in account_from or 'fee_override' in account_from:
+            account_from = account_from.split('|fee_override')[0].split('fee_override')[0].rstrip('|:').strip()
+        if '|fee_override' in account_to or 'fee_override' in account_to:
+            account_to = account_to.split('|fee_override')[0].split('fee_override')[0].rstrip('|:').strip()
+        
+        # 入账：income 且 account_to 匹配
+        if entry_type == 'income' and account_to in match_values:
             balance += amount
         
-        # 入账：transfer 且 account_to == account_id
-        elif entry_type == 'transfer' and account_to == account_id:
+        # 入账：transfer 且 account_to 匹配
+        elif entry_type == 'transfer' and account_to in match_values:
             balance += amount
         
-        # 出账：expense 且 account_from == account_id
-        elif entry_type == 'expense' and account_from == account_id:
+        # 出账：expense 且 account_from 匹配
+        elif entry_type == 'expense' and account_from in match_values:
             balance -= amount
         
-        # 出账：transfer 且 account_from == account_id
-        elif entry_type == 'transfer' and account_from == account_id:
+        # 出账：transfer 且 account_from 匹配
+        elif entry_type == 'transfer' and account_from in match_values:
             balance -= amount
     
     return balance
@@ -381,6 +411,10 @@ def add_expense(
     
     append_ledger(record)
     
+    # 更新账户余额
+    from data.account_service import update_account_balance
+    update_account_balance(account_from, balance_after)
+    
     # 返回时附上余额信息（不存储，仅用于显示）
     record['balance_after'] = format_decimal(balance_after, 2)
     record['parent_balance_after'] = format_decimal(parent_balance_after, 2) if parent_balance_after is not None else None
@@ -438,6 +472,10 @@ def add_income(
     
     append_ledger(record)
     
+    # 更新账户余额
+    from data.account_service import update_account_balance
+    update_account_balance(account_to, balance_after)
+    
     # 返回时附上余额信息（不存储，仅用于显示）
     record['balance_after'] = format_decimal(balance_after, 2)
     record['parent_balance_after'] = format_decimal(parent_balance_after, 2) if parent_balance_after is not None else None
@@ -469,40 +507,40 @@ def add_transfer(
     """
     if account_from == account_to:
         raise ValueError("转出和转入账户不能相同")
-    
+
     if event_time is None:
         event_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    # 计算转出账户余额（当前余额 - 本次转账）
-    current_balance = calc_account_balance(account_from)
-    balance_after = current_balance - amount
-    
-    # 检查转出账户是否有父账户组
-    parent_group = get_account_parent_group(account_from)
-    parent_balance_after = None
-    if parent_group:
-        parent_current = calc_group_balance(parent_group['accounts'])
-        parent_balance_after = parent_current - amount
-    
-    record = {
-        'event_time': event_time,
-        'entry_type': 'transfer',
-        'amount': format_decimal(amount, 2),
-        'category_l1': '转账',
-        'category_l2': '',
-        'account_from': account_from,
-        'account_to': account_to,
-        'discount': '0',
-        'reimbursable': '0',
-        'note': note
-    }
-    
-    append_ledger(record)
-    
-    # 返回时附上余额信息（不存储，仅用于显示）
-    record['balance_after'] = format_decimal(balance_after, 2)
-    record['parent_balance_after'] = format_decimal(parent_balance_after, 2) if parent_balance_after is not None else None
-    return record
+
+    # 统一使用「一出一入」两条记录来表达转账：
+    # 1) 源账户一条支出（expense）
+    # 2) 目标账户一条收入（income）
+    #
+    # 这样 ledger 中的记录与「收入-支出」的余额计算公式完全一致，
+    # 也更符合你在记账页面看到的逻辑。
+
+    # 转出账户：支出
+    expense_record = add_expense(
+        account_from=account_from,
+        amount=amount,
+        category_l1="转账",
+        category_l2="转出",
+        event_time=event_time,
+        note=note,
+    )
+
+    # 转入账户：收入
+    add_income(
+        account_to=account_to,
+        amount=amount,
+        category_l1="转账",
+        category_l2="转入",
+        event_time=event_time,
+        note=note,
+    )
+
+    # 返回转出账户这条记录（包含 balance_after / parent_balance_after），
+    # 供前端提示使用
+    return expense_record
 
 
 def add_refund(
@@ -562,6 +600,10 @@ def add_refund(
     }
     
     append_ledger(record)
+    
+    # 更新账户余额
+    from data.account_service import update_account_balance
+    update_account_balance(refund_account, balance_after)
     
     # 返回时附上余额信息（不存储，仅用于显示）
     record['balance_after'] = format_decimal(balance_after, 2)

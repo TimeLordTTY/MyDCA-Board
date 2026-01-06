@@ -139,8 +139,9 @@ def build_all_snapshots(fetch_date: str = None, project_root: Path = None) -> in
         logger.warning(f"生成快照失败: {e}")
     
     # 生成 daily_balance.csv
-    from core.daily_balance import create_daily_balance_snapshot
-    count = create_daily_balance_snapshot(project_root, fetch_date)
+    # 已废弃：不再生成 daily_balance 快照
+    # 账户余额现在直接从 accounts 表的 balance 字段读取
+    count = 0
     
     return count
 
@@ -397,88 +398,8 @@ def read_latest_daily(project_root: Path = None) -> List[Dict]:
     return execute_query(sql, (latest_date,))
 
 
-def read_latest_daily_balance(project_root: Path = None) -> List[Dict]:
-    """
-    读取最新 daily_balance 数据（从数据库），并动态添加收益字段
-    
-    Args:
-        project_root: 项目根目录（已忽略，直接从数据库读取）
-    
-    Returns:
-        最新日期的 daily_balance 记录列表（包含收益字段）
-    """
-    from data.db_connector import execute_query, execute_one
-    
-    # 获取最新日期
-    date_sql = "SELECT MAX(fetch_date) as latest_date FROM daily_balance"
-    date_result = execute_one(date_sql)
-    
-    if not date_result or not date_result.get('latest_date'):
-        return []
-    
-    latest_date = date_result['latest_date']
-    if hasattr(latest_date, 'strftime'):
-        latest_date = latest_date.strftime('%Y-%m-%d')
-    
-    # 获取该日期的所有记录
-    sql = """
-        SELECT DATE_FORMAT(fetch_date, '%%Y-%%m-%%d') as fetch_date,
-               account_id, account_name, account_type,
-               balance, related_product, product_value, diff, note
-        FROM daily_balance
-        WHERE fetch_date = %s
-        ORDER BY account_id
-    """
-    records = execute_query(sql, (latest_date,))
-    
-    # 动态添加收益字段：从 daily 数据计算
-    daily_records = read_latest_daily(project_root)
-    daily_map = {r.get('product_code'): r for r in daily_records}
-    
-    # 获取所有 fund_mapped 账户关联的产品代码（这些不计入基金总和）
-    fund_mapped_products = set()
-    for r in records:
-        if r.get('account_type') == 'fund_mapped':
-            linked = r.get('related_product')
-            if linked:
-                fund_mapped_products.add(linked)
-    
-    for record in records:
-        account_id = record.get('account_id', '')
-        account_type = record.get('account_type', '')
-        related_product = record.get('related_product', '')
-        
-        yesterday_pnl = Decimal('0')
-        unrealized_pnl = Decimal('0')
-        total_pnl = Decimal('0')
-        
-        # 基金账户：汇总所有基金产品的收益
-        if account_type == 'fund_total':
-            for code, info in daily_map.items():
-                if info.get('category') == 'fund' and code not in fund_mapped_products:
-                    yesterday_pnl += Decimal(str(info.get('pnl_day', '0') or '0'))
-                    unrealized_pnl += Decimal(str(info.get('unrealized_pnl', '0') or '0'))
-                    total_pnl += Decimal(str(info.get('total_pnl', '0') or '0'))
-        # 产品子账户（稳利宝）：从关联产品获取收益
-        elif account_type == 'product_sub' and related_product:
-            if related_product in daily_map:
-                product_info = daily_map[related_product]
-                yesterday_pnl = Decimal(str(product_info.get('pnl_day', '0') or '0'))
-                unrealized_pnl = Decimal(str(product_info.get('unrealized_pnl', '0') or '0'))
-                total_pnl = Decimal(str(product_info.get('total_pnl', '0') or '0'))
-        # 余利宝生活费：如果有关联产品，从产品获取收益
-        elif account_id == 'ylb_life' and related_product:
-            if related_product in daily_map:
-                product_info = daily_map[related_product]
-                yesterday_pnl = Decimal(str(product_info.get('pnl_day', '0') or '0'))
-                unrealized_pnl = Decimal(str(product_info.get('unrealized_pnl', '0') or '0'))
-                total_pnl = Decimal(str(product_info.get('total_pnl', '0') or '0'))
-        
-        record['yesterday_pnl'] = f"{yesterday_pnl:.2f}" if yesterday_pnl != 0 else ''
-        record['unrealized_pnl'] = f"{unrealized_pnl:.2f}" if unrealized_pnl != 0 else ''
-        record['total_pnl'] = f"{total_pnl:.2f}" if total_pnl != 0 else ''
-    
-    return records
+# 已废弃：read_latest_daily_balance 函数
+# 账户余额现在直接从 accounts 表的 balance 字段读取，不再使用 daily_balance 表
 
 
 def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
@@ -486,10 +407,8 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
     获取资产汇总信息
     
     总资产计算规则：
-    - 余利宝合计：从 daily_balance.csv 读取 ylb_life + ylb_finance 的 balance
-    - 稳利宝产品市值：从 daily.csv 读取 FBAE41126E 的 total_value（产品市值）
-    - 基金市值合计：从 daily.csv 读取所有 fund 产品的 value（市值，不含货币基金）
-    - 小荷包金额：从 daily_balance.csv 读取 couple_pocket 的 product_value（包含收益）
+    - 所有账户余额：从 accounts 表读取 balance 字段（实时数据）
+    - 产品市值（稳利宝、基金）：从 daily_snapshot 表读取（产品持仓数据）
     
     Args:
         project_root: 项目根目录
@@ -503,8 +422,9 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
     fetch_date = date.today().strftime('%Y-%m-%d')
     summary = PortfolioSummary(fetch_date=fetch_date)
     
-    # 从 daily.csv 读取产品市值
+    # 从 daily_snapshot 表读取产品市值（产品持仓数据）
     daily_records = read_latest_daily(project_root)
+    daily_map = {r.get('product_code'): r for r in daily_records}
     
     for record in daily_records:
         product_code = record.get('product_code', '')
@@ -526,32 +446,22 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
         elif category == 'fund':
             summary.fund_total += value
     
-    # 从 daily_balance.csv 读取账户余额
-    balance_records = read_latest_daily_balance(project_root)
+    # 从 accounts 表读取账户余额（实时数据）
+    from data.account_service import get_accounts
     
+    accounts_db = get_accounts(is_active=True)
     couple_pocket_value = Decimal('0')
     
-    for record in balance_records:
-        account_id = record.get('account_id', '')
-        account_type = record.get('account_type', '')
-        
-        try:
-            balance = Decimal(record.get('balance', '0') or '0')
-            product_value = Decimal(record.get('product_value', '0') or '0')
-        except:
-            continue
+    for acc in accounts_db:
+        account_code = acc.get('account_code') or acc.get('account_id', '')
+        balance = Decimal(str(acc.get('balance', 0) or 0))
         
         # 余利宝：使用 balance（账户余额）
-        if account_id in ['ylb_life', 'ylb_finance']:
+        if account_code in ['ylb_life', 'ylb_finance']:
             summary.ylb_total += balance
-        # 小荷包：使用 product_value（包含收益的市值）
-        elif account_id == 'couple_pocket':
-            couple_pocket_value = product_value
-        
-        # 更新最新日期
-        row_date = record.get('fetch_date', '')
-        if row_date:
-            summary.fetch_date = row_date
+        # 小荷包：使用 balance（账户余额）
+        elif account_code == 'couple_pocket':
+            couple_pocket_value = balance
     
     # 计算全局汇总：余利宝合计 + 稳利宝产品市值 + 基金市值 + 小荷包金额
     summary.global_value = summary.ylb_total + summary.wenlibao_total + summary.fund_total + couple_pocket_value
@@ -597,7 +507,7 @@ def get_portfolio_summary(project_root: Path = None) -> PortfolioSummary:
 
 def read_daily_by_category(category: str = None, project_root: Path = None) -> List[Dict]:
     """
-    按分类筛选 daily.csv 数据
+    按分类筛选 daily_snapshot 表数据
     
     Args:
         category: 分类筛选（fund/bank）
@@ -616,7 +526,7 @@ def read_daily_by_category(category: str = None, project_root: Path = None) -> L
 
 def read_balance_by_type(account_type: str = None, project_root: Path = None) -> List[Dict]:
     """
-    按账户类型筛选 daily_balance.csv 数据
+    按账户类型筛选账户余额数据（从 accounts 表读取）
     
     Args:
         account_type: 账户类型筛选（cash/fund_mapped/product_sub/summary）
@@ -625,17 +535,51 @@ def read_balance_by_type(account_type: str = None, project_root: Path = None) ->
     Returns:
         筛选后的记录列表
     """
-    records = read_latest_daily_balance(project_root)
+    from data.account_service import get_accounts
+    from data.config_loader import load_account_groups
+    from data.db_connector import execute_query
+    from data.product_service import get_product_by_id
     
-    if account_type:
-        records = [r for r in records if r.get('account_type') == account_type]
+    accounts_db = get_accounts(is_active=True)
+    account_groups = load_account_groups()
+    
+    records = []
+    for acc in accounts_db:
+        account_code = acc.get('account_code') or acc.get('account_id', '')
+        account_name = acc.get('account_name', '')
+        acc_type = acc.get('account_type', '')
+        balance = Decimal(str(acc.get('balance', 0) or 0))
+        
+        # 判断账户类型（兼容旧逻辑）
+        if acc_type == 'FUND_TOTAL':
+            account_type_display = 'fund_total'
+        elif acc_type == 'PRODUCT_SUB':
+            account_type_display = 'product_sub'
+        elif acc_type == 'FUND_MAPPED':
+            account_type_display = 'fund_mapped'
+        else:
+            account_type_display = 'cash'
+        
+        if account_type and account_type_display != account_type:
+            continue
+        
+        records.append({
+            'account_id': account_code,
+            'account_name': account_name,
+            'account_type': account_type_display,
+            'balance': str(balance),
+            'product_value': str(balance),
+            'diff': '',
+            'related_product': '',
+            'note': acc.get('note', '')
+        })
     
     return records
 
 
 def read_balance_by_group(group_keyword: str = None, project_root: Path = None) -> List[Dict]:
     """
-    按组关键词筛选 daily_balance.csv 数据
+    按组关键词筛选账户余额数据（从 accounts 表读取）
     
     Args:
         group_keyword: 组关键词（ylb/wenlibao/fund）
@@ -644,11 +588,40 @@ def read_balance_by_group(group_keyword: str = None, project_root: Path = None) 
     Returns:
         筛选后的记录列表
     """
-    records = read_latest_daily_balance(project_root)
+    from data.account_service import get_accounts
     
-    if group_keyword:
-        records = [r for r in records 
-                   if group_keyword in r.get('account_id', '').lower()]
+    accounts_db = get_accounts(is_active=True)
+    
+    records = []
+    for acc in accounts_db:
+        account_code = acc.get('account_code') or acc.get('account_id', '')
+        account_name = acc.get('account_name', '')
+        acc_type = acc.get('account_type', '')
+        balance = Decimal(str(acc.get('balance', 0) or 0))
+        
+        # 判断账户类型（兼容旧逻辑）
+        if acc_type == 'FUND_TOTAL':
+            account_type_display = 'fund_total'
+        elif acc_type == 'PRODUCT_SUB':
+            account_type_display = 'product_sub'
+        elif acc_type == 'FUND_MAPPED':
+            account_type_display = 'fund_mapped'
+        else:
+            account_type_display = 'cash'
+        
+        if group_keyword and group_keyword.lower() not in account_code.lower():
+            continue
+        
+        records.append({
+            'account_id': account_code,
+            'account_name': account_name,
+            'account_type': account_type_display,
+            'balance': str(balance),
+            'product_value': str(balance),
+            'diff': '',
+            'related_product': '',
+            'note': acc.get('note', '')
+        })
     
     return records
 

@@ -140,14 +140,60 @@ def calc_money_fund_daily_income(shares: Decimal, yield_per_10k: Decimal) -> Dec
 
 
 def load_accounts(project_root: Path) -> Dict:
-    """加载账户配置"""
-    import json
-    accounts_path = project_root / "config" / "accounts.json"
-    if not accounts_path.exists():
-        return {"accounts": [], "account_groups": {}}
+    """加载账户配置（从数据库读取，包含balance字段）"""
+    from data.account_service import get_accounts
+    from data.config_loader import load_account_groups
+    from data.db_connector import execute_query
+    from data.product_service import get_product_by_id
     
-    with open(accounts_path, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    # 从数据库读取账户（包含balance字段）
+    accounts_db = get_accounts(is_active=True)
+    
+    # 从数据库读取account_groups
+    account_groups = load_account_groups()
+    
+    # 转换为旧格式（兼容）
+    accounts = []
+    for acc in accounts_db:
+        account_code = acc.get('account_code') or acc.get('account_id', '')
+        product_id = acc.get('product_id')
+        
+        # 查找linked_product（通过product_id）
+        linked_product = ''
+        if product_id:
+            product = get_product_by_id(product_id)
+            if product:
+                linked_product = product.get('code', '')
+        
+        # 查找group（通过product_id查找account_groups）
+        group = ''
+        if product_id:
+            sql = """
+                SELECT group_code
+                FROM account_groups
+                WHERE linked_product_id = %s
+                LIMIT 1
+            """
+            group_rows = execute_query(sql, (product_id,))
+            if group_rows:
+                group = group_rows[0].get('group_code', '')
+        
+        accounts.append({
+            'id': account_code,
+            'account_code': account_code,
+            'name': acc.get('account_name', ''),
+            'account_name': acc.get('account_name', ''),
+            'account_type': acc.get('account_type', ''),
+            'group': group,
+            'linked_product': linked_product,
+            'initial_balance': '0',  # 初始余额，实际余额从balance字段读取
+            'balance': acc.get('balance', 0),  # 从数据库读取的余额
+            'note': acc.get('note', ''),
+            'product_id': product_id,
+            'parent_account_id': acc.get('parent_account_id')
+        })
+    
+    return {"accounts": accounts, "account_groups": account_groups}
 
 
 def load_ledger(project_root: Path) -> List[Dict]:
@@ -249,6 +295,145 @@ def calc_account_balance(account_id: str, ledger: List[Dict],
                 balance += amount
             if account_from == account_id:
                 balance -= amount
+    
+    return balance
+
+
+def calc_product_sub_account_balance(account_id: str, product_code: str, 
+                                     as_of_date: str = None,
+                                     ledger: List[Dict] = None) -> Decimal:
+    """
+    计算 product_sub 账户在产品中的实际持仓金额
+    
+    根据买入和赎回操作计算：
+    - 买入：从订单的 note 中解析 account_amounts，计算该账户的买入金额
+    - 赎回：从订单的 note 中解析 redeem_account，计算该账户的赎回金额
+    - 如果没有账户分配信息（旧数据），从 ledger 中查找该账户的买入扣款记录
+    
+    Args:
+        account_id: 账户ID
+        product_code: 产品代码
+        as_of_date: 截止日期（YYYY-MM-DD），None 表示今天
+        ledger: ledger 记录列表（可选，用于处理旧数据）
+    
+    Returns:
+        该账户在产品中的实际持仓金额
+    """
+    from data.data_store import load_transactions, load_orders
+    
+    if as_of_date is None:
+        as_of_date = date.today().strftime('%Y-%m-%d')
+    
+    # 加载交易记录和订单
+    transactions = load_transactions()
+    orders = load_orders()
+    
+    # 创建订单字典，方便查找
+    order_dict = {o.get('order_id', ''): o for o in orders}
+    
+    balance = Decimal('0')
+    
+    # 遍历交易记录
+    for tx in transactions:
+        tx_date = tx.get('date', '')
+        tx_product_code = tx.get('product_code', '')
+        tx_action = tx.get('action', '').lower()
+        tx_order_id = tx.get('order_id', '')
+        tx_note = tx.get('note', '')
+        
+        # 只处理该产品的交易
+        if tx_product_code != product_code:
+            continue
+        
+        # 日期过滤
+        if tx_date > as_of_date:
+            continue
+        
+        # 买入操作：buy_debit 或 buy_confirm
+        if tx_action in ['buy_debit', 'buy_confirm']:
+            if tx_order_id and tx_order_id in order_dict:
+                order = order_dict[tx_order_id]
+                order_note = order.get('note', '') or tx_note
+                
+                # 解析账户分配信息（格式：|account_amounts:账户1:金额1|账户2:金额2）
+                if '|account_amounts:' in order_note:
+                    try:
+                        # 提取 account_amounts 部分（可能后面还有其他 | 分隔的内容）
+                        parts = order_note.split('|account_amounts:')
+                        if len(parts) > 1:
+                            account_info_str = parts[1]
+                            # 如果后面还有 |，只取第一部分
+                            if '|' in account_info_str:
+                                account_info_str = account_info_str.split('|')[0]
+                            
+                            # 账户分配信息格式：账户1:金额1|账户2:金额2（注意这里用 | 分隔多个账户）
+                            account_pairs = account_info_str.split('|')
+                            for pair in account_pairs:
+                                if ':' in pair:
+                                    acc_id, acc_amount_str = pair.split(':', 1)
+                                    if acc_id == account_id:
+                                        acc_amount = safe_decimal(acc_amount_str)
+                                        balance += acc_amount
+                    except Exception as e:
+                        logger.warning(f"解析账户分配信息失败: {e}, order_id={tx_order_id}, note={order_note}")
+                elif ledger is not None:
+                    # 如果没有账户分配信息，从 ledger 中查找该账户的买入扣款
+                    for ledger_entry in ledger:
+                        ledger_note = ledger_entry.get('note', '')
+                        ledger_event_time = ledger_entry.get('event_time', '')
+                        ledger_account_from = ledger_entry.get('account_from', '')
+                        ledger_entry_type = ledger_entry.get('entry_type', '').lower()
+                        
+                        # 日期过滤
+                        if ledger_event_time[:10] > as_of_date:
+                            continue
+                        
+                        # 查找该账户的买入扣款记录（通过订单号匹配）
+                        if (ledger_entry_type == 'expense' and 
+                            ledger_account_from == account_id and
+                            tx_order_id in ledger_note):
+                            amount = safe_decimal(ledger_entry.get('amount', '0'))
+                            balance += amount
+        
+        # 赎回操作：sell_confirm
+        elif tx_action == 'sell_confirm':
+            if tx_order_id and tx_order_id in order_dict:
+                order = order_dict[tx_order_id]
+                order_note = order.get('note', '') or tx_note
+                
+                # 解析赎回账户（格式：|redeem_account:账户ID）
+                if '|redeem_account:' in order_note:
+                    try:
+                        redeem_account = order_note.split('|redeem_account:')[1].split('|')[0].strip()
+                        if redeem_account == account_id:
+                            # 该账户赎回，需要减少持仓金额
+                            # 赎回金额 = 份额 × 净值（总金额，包含手续费）
+                            shares = safe_decimal(tx.get('shares', '0'))
+                            nav = safe_decimal(tx.get('nav', '0'))
+                            if shares > 0 and nav > 0:
+                                gross = shares * nav
+                                balance -= gross
+                    except Exception as e:
+                        logger.warning(f"解析赎回账户信息失败: {e}, order_id={tx_order_id}, note={order_note}")
+                elif ledger is not None:
+                    # 如果没有赎回账户信息，从 ledger 中查找该账户的赎回记录
+                    for ledger_entry in ledger:
+                        ledger_note = ledger_entry.get('note', '')
+                        ledger_event_time = ledger_entry.get('event_time', '')
+                        ledger_account_from = ledger_entry.get('account_from', '')
+                        ledger_entry_type = ledger_entry.get('entry_type', '').lower()
+                        
+                        # 日期过滤
+                        if ledger_event_time[:10] > as_of_date:
+                            continue
+                        
+                        # 查找该账户的赎回持仓减少记录（通过订单号匹配）
+                        if (ledger_entry_type == 'expense' and 
+                            ledger_account_from == account_id and
+                            '赎回持仓减少' in ledger_note and
+                            tx_order_id in ledger_note):
+                            amount = safe_decimal(ledger_entry.get('amount', '0'))
+                            balance -= amount
     
     return balance
 
@@ -359,8 +544,13 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
         account_type = get_account_type(account)
         group = account.get('group', '')
         
-        # 计算账户余额（从 ledger 计算）
-        balance = calc_account_balance(account_id, ledger, initial_balance, fetch_date)
+        # 直接从accounts表读取余额（如果字段存在）
+        # 否则从 ledger 计算
+        account_balance_from_db = account.get('balance')
+        if account_balance_from_db is not None:
+            balance = safe_decimal(account_balance_from_db)
+        else:
+            balance = calc_account_balance(account_id, ledger, initial_balance, fetch_date)
         
         # 获取关联产品市值
         product_value = Decimal('0')
@@ -380,6 +570,10 @@ def generate_daily_balance(project_root: Path, fetch_date: str = None) -> List[D
         
         # 产品子账户（稳利宝等）：先记录 balance，product_value/diff 在第二阶段设置
         elif account_type == 'product_sub':
+            # 直接使用 ledger 计算余额（与记账页面逻辑一致）
+            # balance 已经从 ledger 计算得出，无需额外处理
+            pass
+            
             # 收集到 group_sub_info
             if group:
                 if group not in group_sub_info:

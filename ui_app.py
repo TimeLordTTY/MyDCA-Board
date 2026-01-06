@@ -44,10 +44,11 @@ from core.invest_service import (
 )
 from core.snapshot_service import (
     build_all_snapshots, collect_nav_and_build_snapshots,
-    read_latest_daily, read_latest_daily_balance,
+    read_latest_daily,
     get_portfolio_summary, read_balance_by_group
 )
-from core.daily_balance import create_daily_balance_snapshot
+# 已废弃：不再使用 daily_balance 快照
+# from core.daily_balance import create_daily_balance_snapshot
 from data.config_loader import get_sell_fee_rate, get_product
 from core.strategy_lab_service import (
     list_backtest_summaries, get_backtest_summary,
@@ -90,6 +91,52 @@ def format_product_display_name(product: Dict) -> str:
     channel_label = '场内' if channel == 'EXCHANGE' else '场外'
     
     return f"{code} - {name} ({channel_label})"
+
+
+def get_product_linked_accounts(product_code: str) -> list:
+    """
+    获取产品关联的账户列表
+    
+    Args:
+        product_code: 产品代码
+    
+    Returns:
+        账户列表，如果没有关联账户则返回空列表
+    """
+    try:
+        from data.product_service import get_product_by_code
+        from data.db_connector import execute_query
+        from data.config_loader import get_accounts_by_group
+        
+        # 获取产品信息
+        product = get_product_by_code(product_code)
+        if not product:
+            return []
+        
+        product_id = product.get('id')
+        if not product_id:
+            return []
+        
+        # 查找关联的账户组
+        sql = """
+            SELECT ag.group_code
+            FROM account_groups ag
+            WHERE ag.linked_product_id = %s
+            LIMIT 1
+        """
+        group_rows = execute_query(sql, (product_id,))
+        
+        if not group_rows:
+            return []
+        
+        group_code = group_rows[0]['group_code']
+        
+        # 获取该组下的所有账户
+        accounts = get_accounts_by_group(group_code)
+        return accounts
+    except Exception as e:
+        logger.warning(f"获取产品关联账户失败: {e}")
+        return []
 
 # 自定义样式
 st.markdown("""
@@ -215,7 +262,7 @@ PRODUCT_CONFIRM_ACCOUNT_MAP = {
 }
 DEFAULT_FUND_CONFIRM_ACCOUNT = 'fund_account'  # 基金确认后增加到基金账户
 
-# 账户ID到中文名称的映射
+# 账户ID到中文名称的基础映射（兜底，主要用于老数据）
 ACCOUNT_NAME_MAP = {
     'ylb_life': '余利宝生活费',
     'ylb_finance': '余利宝理财金',
@@ -230,6 +277,21 @@ ACCOUNT_NAME_MAP = {
     'fund_account': '基金账户',
     'other': '其他'
 }
+
+# 启动时从账户表补充映射：保证「生活记账」等页面统一展示账户表里的中文名称
+try:
+    from data.account_service import get_accounts  # 放在函数外，避免循环导入
+
+    _accounts_for_name = get_accounts(is_active=True)
+    for _acc in _accounts_for_name:
+        _code = _acc.get('account_code') or _acc.get('account_id')
+        _name = _acc.get('account_name')
+        if _code and _name:
+            # 不覆盖手工写死的别名，只在缺省时补充
+            ACCOUNT_NAME_MAP.setdefault(_code, _name)
+except Exception as _e:
+    # 这里失败不影响主流程，只是名字可能退回到英文ID
+    logger.warning("加载账户中文名称映射失败: %s", _e)
 
 # 理财操作类型映射（统一显示）
 ACTION_DISPLAY_MAP = {
@@ -1845,8 +1907,149 @@ def page_asset_details():
             key="balance_filter"
         )
     
-    # 读取数据
-    balance_data = read_latest_daily_balance()
+    # 直接从accounts表读取余额（实时数据）
+    from data.account_service import get_accounts
+    from data.config_loader import load_account_groups
+    from data.db_connector import execute_query
+    from data.product_service import get_product_by_id
+    from core.snapshot_service import read_latest_daily
+    
+    # 从数据库读取账户（包含balance字段）
+    accounts_db = get_accounts(is_active=True)
+    account_groups = load_account_groups()
+    daily_data = read_latest_daily()
+    
+    # 构建产品代码到daily数据的映射
+    daily_map = {r.get('product_code'): r for r in daily_data}
+    
+    # 构建账户余额数据（直接从accounts表读取balance）
+    balance_data = []
+    group_totals = {}  # {group_code: {'balance': Decimal, 'product_value': Decimal, 'accounts': []}}
+    
+    for acc in accounts_db:
+        account_code = acc.get('account_code') or acc.get('account_id', '')
+        account_name = acc.get('account_name', '')
+        account_type = acc.get('account_type', '')
+        product_id = acc.get('product_id')
+        balance = Decimal(str(acc.get('balance', 0) or 0))
+        
+        # 查找linked_product和group
+        linked_product = ''
+        group = ''
+        if product_id:
+            product = get_product_by_id(product_id)
+            if product:
+                linked_product = product.get('code', '')
+            
+            sql = """
+                SELECT group_code
+                FROM account_groups
+                WHERE linked_product_id = %s
+                LIMIT 1
+            """
+            group_rows = execute_query(sql, (product_id,))
+            if group_rows:
+                group = group_rows[0].get('group_code', '')
+        
+        # 判断账户类型（兼容旧逻辑）
+        if account_type == 'FUND_TOTAL':
+            account_type_display = 'fund_total'
+        elif account_type == 'PRODUCT_SUB':
+            account_type_display = 'product_sub'
+        elif account_type == 'FUND_MAPPED':
+            account_type_display = 'fund_mapped'
+        else:
+            account_type_display = 'cash'
+        
+        # 计算product_value（对于product_sub，需要从daily数据获取产品市值）
+        product_value = balance
+        if account_type_display == 'product_sub' and linked_product and linked_product in daily_map:
+            # 稳利宝子账户：需要按比例分配产品市值
+            product_info = daily_map[linked_product]
+            total_value = Decimal(str(product_info.get('total_value', 0) or 0))
+            
+            # 计算该组所有账户的余额总和
+            if group:
+                if group not in group_totals:
+                    group_totals[group] = {'balance': Decimal('0'), 'accounts': []}
+                group_totals[group]['balance'] += balance
+                group_totals[group]['accounts'].append(account_code)
+            
+            # 暂时使用balance，后续会通过汇总行计算收益
+            product_value = balance
+        elif account_type_display == 'fund_mapped' and linked_product and linked_product in daily_map:
+            # 小荷包：使用产品市值
+            product_info = daily_map[linked_product]
+            product_value = Decimal(str(product_info.get('total_value', 0) or 0))
+        
+        balance_data.append({
+            'account_id': account_code,
+            'account_name': account_name,
+            'account_type': account_type_display,
+            'balance': str(balance),
+            'product_value': str(product_value),
+            'diff': '',
+            'related_product': linked_product,
+            'note': acc.get('note', ''),
+            'group': group
+        })
+    
+    # 处理汇总行（稳利宝合计等）
+    summary_rows = []
+    for group_code, group_info in group_totals.items():
+        group_config = account_groups.get(group_code, {})
+        group_name = group_config.get('name', group_code)
+        linked_product_code = group_config.get('linked_product', '')
+        
+        # 计算该组的产品市值
+        group_product_value = Decimal('0')
+        if linked_product_code and linked_product_code in daily_map:
+            product_info = daily_map[linked_product_code]
+            group_product_value = Decimal(str(product_info.get('total_value', 0) or 0))
+        
+        group_balance = group_info['balance']
+        group_profit = group_product_value - group_balance
+        
+        # 更新profit_account的product_value和diff
+        profit_account_code = group_config.get('profit_account')
+        if profit_account_code:
+            for record in balance_data:
+                if record['account_id'] == profit_account_code and record.get('group') == group_code:
+                    record['product_value'] = str(Decimal(record['balance']) + group_profit)
+                    record['diff'] = str(group_profit)
+                    break
+        
+        # 添加汇总行
+        summary_rows.append({
+            'account_id': f'{group_code}_total',
+            'account_name': f'{group_name}(合计)',
+            'account_type': 'summary',
+            'balance': str(group_balance),
+            'product_value': str(group_product_value),
+            'diff': str(group_profit),
+            'related_product': linked_product_code,
+            'note': f'收益={group_profit:.2f}',
+            'group': group_code
+        })
+    
+    # 添加汇总行到balance_data
+    balance_data.extend(summary_rows)
+    
+    # 添加余利宝合计
+    ylb_accounts = [r for r in balance_data if r['account_id'] in ['ylb_life', 'ylb_finance']]
+    if ylb_accounts:
+        ylb_total = sum(Decimal(r['balance']) for r in ylb_accounts)
+        balance_data.append({
+            'account_id': 'ylb_total',
+            'account_name': '余利宝(合计)',
+            'account_type': 'summary',
+            'balance': str(ylb_total),
+            'product_value': str(ylb_total),
+            'diff': '',
+            'related_product': '',
+            'note': '余利宝生活费+理财金合计',
+            'group': 'ylb'
+        })
     
     if balance_data:
         # 筛选
@@ -1856,12 +2059,11 @@ def page_asset_details():
         
         # 处理基金账户：将 fund_total 改为场外基金账户，并增加场内基金账户和合计账户
         from data.product_service import get_products
-        from core.snapshot_service import read_latest_daily
         
         all_products = get_products(is_active=True)
         product_channel_map = {p.get('code', ''): p.get('channel', 'OTC') for p in all_products}
         
-        daily_data = read_latest_daily()
+        # daily_data已经在上面读取过了，这里不需要重复读取
         exchange_fund_value = Decimal('0')
         exchange_fund_pnl_day = Decimal('0')
         exchange_fund_unrealized_pnl = Decimal('0')
@@ -1960,6 +2162,36 @@ def page_asset_details():
                 'note': '场内+场外基金账户合计'
             })
             fund_total_account_added = True
+        
+        # 添加收益字段（从daily数据计算）
+        # 重新构建daily_map（因为daily_data可能已经更新）
+        daily_map = {r.get('product_code'): r for r in daily_data}
+        
+        for record in processed_balance_data:
+            account_id = record.get('account_id', '')
+            account_type = record.get('account_type', '')
+            related_product = record.get('related_product', '')
+            
+            yesterday_pnl = Decimal('0')
+            unrealized_pnl = Decimal('0')
+            total_pnl = Decimal('0')
+            
+            # 产品子账户（稳利宝）：从关联产品获取收益
+            if account_type == 'product_sub' and related_product and related_product in daily_map:
+                product_info = daily_map[related_product]
+                yesterday_pnl = Decimal(str(product_info.get('pnl_day', 0) or 0))
+                unrealized_pnl = Decimal(str(product_info.get('unrealized_pnl', 0) or 0))
+                total_pnl = Decimal(str(product_info.get('total_pnl', 0) or 0))
+            # 基金映射账户（小荷包）：从关联产品获取收益
+            elif account_type == 'fund_mapped' and related_product and related_product in daily_map:
+                product_info = daily_map[related_product]
+                yesterday_pnl = Decimal(str(product_info.get('pnl_day', 0) or 0))
+                unrealized_pnl = Decimal(str(product_info.get('unrealized_pnl', 0) or 0))
+                total_pnl = Decimal(str(product_info.get('total_pnl', 0) or 0))
+            
+            record['yesterday_pnl'] = f"{yesterday_pnl:.2f}" if yesterday_pnl != 0 else ''
+            record['unrealized_pnl'] = f"{unrealized_pnl:.2f}" if unrealized_pnl != 0 else ''
+            record['total_pnl'] = f"{total_pnl:.2f}" if total_pnl != 0 else ''
         
         # 转换为 DataFrame
         df_balance = pd.DataFrame(processed_balance_data)
@@ -2174,11 +2406,7 @@ def page_ledger():
                 if result.get('parent_balance_after'):
                     balance_msg += f" | 父账户余额: {result.get('parent_balance_after')}"
                 st.success(f"✅ 支出记录已保存！\n{balance_msg}")
-                # 刷新账户余额快照
-                try:
-                    create_daily_balance_snapshot()
-                except:
-                    pass
+                # 账户余额已实时更新，无需生成快照
             except Exception as e:
                 st.error(f"❌ 保存失败: {e}")
     
@@ -2249,10 +2477,7 @@ def page_ledger():
                 if result.get('parent_balance_after'):
                     balance_msg += f" | 父账户余额: {result.get('parent_balance_after')}"
                 st.success(f"✅ 收入记录已保存！\n{balance_msg}")
-                try:
-                    create_daily_balance_snapshot()
-                except:
-                    pass
+                # 账户余额已实时更新，无需生成快照
             except Exception as e:
                 st.error(f"❌ 保存失败: {e}")
     
@@ -2289,10 +2514,7 @@ def page_ledger():
                     if result.get('parent_balance_after'):
                         balance_msg += f" | 父账户余额: {result.get('parent_balance_after')}"
                     st.success(f"✅ 转账记录已保存！\n{balance_msg}")
-                    try:
-                        create_daily_balance_snapshot()
-                    except:
-                        pass
+                    # 账户余额已实时更新，无需生成快照
                 except Exception as e:
                     st.error(f"❌ 保存失败: {e}")
     
@@ -2360,10 +2582,7 @@ def page_ledger():
                         if result.get('parent_balance_after'):
                             balance_msg += f" | 父账户余额: {result.get('parent_balance_after')}"
                         st.success(f"✅ 退款记录已保存！\n{balance_msg}")
-                        try:
-                            create_daily_balance_snapshot()
-                        except:
-                            pass
+                        # 账户余额已实时更新，无需生成快照
                     except Exception as e:
                         st.error(f"❌ 保存失败: {e}")
     
@@ -2831,7 +3050,44 @@ def page_invest():
                 with col1:
                     # 场外产品列表（默认显示场外产品）
                     buy_product = st.selectbox("选择产品", otc_product_names if otc_product_names else all_product_names, key="buy_product_otc")
-                    buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount_otc")
+                    
+                    # 检查产品是否关联有账户
+                    linked_accounts = []
+                    if buy_product:
+                        product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                        if product:
+                            linked_accounts = get_product_linked_accounts(product['code'])
+                    
+                    buy_amount = 0.0
+                    account_amounts = {}  # {account_id: amount}
+                    
+                    if linked_accounts:
+                        # 如果产品关联有账户，分别填写每个账户的购买金额
+                        st.info("💡 该产品关联有账户，请分别填写每个账户的购买金额")
+                        total_amount = Decimal('0')
+                        
+                        for acc in linked_accounts:
+                            acc_id = acc['id']
+                            acc_name = acc['name']
+                            acc_amount_key = f"buy_account_amount_{acc_id}"
+                            acc_amount = st.number_input(
+                                f"{acc_name} ({acc_id}) 购买金额",
+                                min_value=0.0,
+                                step=100.0,
+                                key=acc_amount_key
+                            )
+                            if acc_amount > 0:
+                                account_amounts[acc_id] = Decimal(str(acc_amount))
+                                total_amount += account_amounts[acc_id]
+                        
+                        if total_amount > 0:
+                            buy_amount = float(total_amount)
+                            st.success(f"✓ 总购买金额: ¥{total_amount:.2f}")
+                            for acc_id, acc_amount in account_amounts.items():
+                                st.caption(f"  - {get_account_name(acc_id)}: ¥{acc_amount:.2f}")
+                    else:
+                        # 如果没有关联账户，使用原来的单金额输入
+                        buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount_otc")
                     
                     buy_fee_override = 0.0  # 默认值
                     if buy_product and buy_amount > 0:
@@ -2888,6 +3144,8 @@ def page_invest():
                 if st.button("提交买入扣款", type="primary", key="submit_buy_otc"):
                     if not buy_product or buy_amount <= 0:
                         st.error("❌ 请选择产品并输入金额！")
+                    elif linked_accounts and len(account_amounts) == 0:
+                        st.error("❌ 请至少填写一个账户的购买金额！")
                     else:
                         try:
                             # 使用合并的产品字典
@@ -2906,28 +3164,58 @@ def page_invest():
                                 except:
                                     requested_at = datetime.combine(buy_trade_date, datetime.now().time())
                                 
+                                # 如果有账户分配，在备注中记录
+                                note = buy_note or ""
+                                if account_amounts:
+                                    account_info = '|'.join([f"{acc_id}:{acc_amount}" for acc_id, acc_amount in account_amounts.items()])
+                                    if note:
+                                        note = f"{note}|account_amounts:{account_info}"
+                                    else:
+                                        note = f"|account_amounts:{account_info}"
+                                
                                 order_id = add_buy_debit(
                                     product_code=product['code'],
                                     amount=Decimal(str(buy_amount)),
                                     fee=Decimal(str(buy_fee_override)) if buy_fee_override > 0 else None,
                                     requested_at=requested_at,
                                     trade_date=buy_trade_date,
-                                    note=buy_note or None
+                                    note=note or None
                                 )
                                 
-                                # 同时在生活记账中添加一笔支出记录
-                                debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
+                                # 如果有账户分配，从对应账户分别扣款
                                 event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
-                                add_expense(
-                                    account_from=debit_account,
-                                    amount=Decimal(str(buy_amount)),
-                                    category_l1="理财投资",
-                                    category_l2=buy_category_l2,
-                                    event_time=event_time,
-                                    note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
-                                )
+                                if account_amounts:
+                                    for acc_id, acc_amount in account_amounts.items():
+                                        # 计算该账户对应的手续费（按比例）
+                                        from core.invest_service import calc_buy_fee
+                                        acc_fee = calc_buy_fee(product['code'], acc_amount)
+                                        acc_total = acc_amount  # 含手续费
+                                        
+                                        add_expense(
+                                            account_from=acc_id,
+                                            amount=acc_total,
+                                            category_l1="理财投资",
+                                            category_l2=buy_category_l2,
+                                            event_time=event_time,
+                                            note=f"{product.get('name') or product.get('product_name', '')} 买入 (订单号: {order_id})"
+                                        )
+                                else:
+                                    # 如果没有账户分配，使用原来的逻辑
+                                    debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
+                                    add_expense(
+                                        account_from=debit_account,
+                                        amount=Decimal(str(buy_amount)),
+                                        category_l1="理财投资",
+                                        category_l2=buy_category_l2,
+                                        event_time=event_time,
+                                        note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
+                                    )
                                 
                                 st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
+                                if account_amounts:
+                                    st.info(f"💰 已从以下账户扣款：")
+                                    for acc_id, acc_amount in account_amounts.items():
+                                        st.caption(f"  - {get_account_name(acc_id)}: ¥{acc_amount:.2f}")
                                 try:
                                     collect_nav_and_build_snapshots(silent=True)
                                 except:
@@ -2948,6 +3236,14 @@ def page_invest():
         with col1:
             # 默认显示场内产品（优先）
             redeem_product = st.selectbox("选择产品", all_product_names, key="redeem_product")
+            
+            # 检查产品是否关联有账户
+            redeem_linked_accounts = []
+            if redeem_product:
+                product = all_product_dict[redeem_product]
+                if product:
+                    redeem_linked_accounts = get_product_linked_accounts(product['code'])
+            
             redeem_shares = st.number_input("赎回份额", min_value=0.01, step=100.0, key="redeem_shares")
             redeem_holding_days = st.number_input("持有天数", min_value=1, step=1, value=30, key="redeem_holding_days")
             
@@ -2991,23 +3287,99 @@ def page_invest():
             )
             
             # 赎回账户选择
-            account_options = get_account_options()
-            account_dict = {acc['name']: acc['id'] for acc in account_options}
-            account_names = list(account_dict.keys())
+            # 如果产品关联了多个账户，需要区分两个账户：
+            # 1. 赎回来源账户（从哪个账户赎回份额，支持多账户组合）
+            # 2. 资金到账账户（赎回后资金到账的账户）
+            redeem_from_account = None  # 单个账户赎回（兼容）
+            redeem_from_accounts = {}  # 多账户组合赎回 {账户ID: 份额}
+            redeem_account = None  # 资金到账账户
             
-            # 默认选择余利宝理财金
-            default_redeem_account_name = '余利宝理财金'
-            default_redeem_account_idx = 0
-            if default_redeem_account_name in account_names:
-                default_redeem_account_idx = account_names.index(default_redeem_account_name)
-            
-            redeem_account_name = st.selectbox(
-                "赎回账户", 
-                account_names, 
-                index=default_redeem_account_idx,
-                key="redeem_account"
-            )
-            redeem_account = account_dict[redeem_account_name]
+            if redeem_linked_accounts:
+                # 如果产品关联有账户，支持多账户组合赎回
+                st.info("💡 该产品关联有账户，可以指定每个账户分别赎回多少份额")
+                
+                # 选择赎回模式：单个账户 or 多账户组合
+                redeem_mode = st.radio(
+                    "赎回模式",
+                    ["单个账户赎回", "多账户组合赎回"],
+                    key="redeem_mode",
+                    horizontal=True
+                )
+                
+                linked_account_dict = {acc['name']: acc['id'] for acc in redeem_linked_accounts}
+                linked_account_names = list(linked_account_dict.keys())
+                
+                if redeem_mode == "单个账户赎回":
+                    redeem_from_account_name = st.selectbox(
+                        "赎回来源账户 *（从哪个账户赎回份额）", 
+                        linked_account_names, 
+                        key="redeem_from_account"
+                    )
+                    redeem_from_account = linked_account_dict[redeem_from_account_name]
+                else:
+                    # 多账户组合赎回
+                    st.markdown("**为每个账户输入赎回份额：**")
+                    total_allocated_shares = Decimal('0')
+                    for acc in redeem_linked_accounts:
+                        acc_name = acc['name']
+                        acc_id = acc['id']
+                        shares_key = f"redeem_shares_account_{acc_id}"
+                        
+                        # 尝试从 session_state 获取上次输入的值，或者默认0
+                        default_shares = st.session_state.get(shares_key, 0.0)
+                        
+                        allocated_shares = st.number_input(
+                            f"{acc_name} 赎回份额",
+                            min_value=0.0,
+                            step=100.0,
+                            value=float(default_shares),
+                            key=shares_key
+                        )
+                        if allocated_shares > 0:
+                            redeem_from_accounts[acc_id] = Decimal(str(allocated_shares))
+                            total_allocated_shares += Decimal(str(allocated_shares))
+                        st.session_state[shares_key] = allocated_shares
+                    
+                    if total_allocated_shares != Decimal(str(redeem_shares)):
+                        st.warning(f"⚠️ 各账户分配总份额 {total_allocated_shares:.4f} 与总赎回份额 {redeem_shares:.4f} 不一致！")
+                        st.stop()
+                
+                # 资金到账账户（默认余利宝理财金）
+                account_options = get_account_options()
+                account_dict = {acc['name']: acc['id'] for acc in account_options}
+                account_names = list(account_dict.keys())
+                
+                default_redeem_account_name = '余利宝理财金'
+                default_redeem_account_idx = 0
+                if default_redeem_account_name in account_names:
+                    default_redeem_account_idx = account_names.index(default_redeem_account_name)
+                
+                redeem_account_name = st.selectbox(
+                    "资金到账账户（赎回后资金到账的账户）", 
+                    account_names, 
+                    index=default_redeem_account_idx,
+                    key="redeem_account"
+                )
+                redeem_account = account_dict[redeem_account_name]
+            else:
+                # 如果没有关联账户，只需要选择资金到账账户
+                account_options = get_account_options()
+                account_dict = {acc['name']: acc['id'] for acc in account_options}
+                account_names = list(account_dict.keys())
+                
+                # 默认选择余利宝理财金
+                default_redeem_account_name = '余利宝理财金'
+                default_redeem_account_idx = 0
+                if default_redeem_account_name in account_names:
+                    default_redeem_account_idx = account_names.index(default_redeem_account_name)
+                
+                redeem_account_name = st.selectbox(
+                    "资金到账账户", 
+                    account_names, 
+                    index=default_redeem_account_idx,
+                    key="redeem_account"
+                )
+                redeem_account = account_dict[redeem_account_name]
             
             # 手续费输入（可选，默认按费率计算）
             redeem_fee_override = st.number_input(
@@ -3048,6 +3420,8 @@ def page_invest():
                         requested_at=requested_at,
                         trade_date=redeem_trade_date,
                         redeem_account=redeem_account,
+                        redeem_from_account=redeem_from_account if redeem_from_account else None,
+                        redeem_from_accounts=redeem_from_accounts if redeem_from_accounts else None,
                         note=redeem_note or None,
                         fee_override=fee_override
                     )
@@ -5650,6 +6024,17 @@ def main():
                 st.rerun()
             except Exception as e:
                 st.sidebar.error(f"❌ 同步失败: {e}")
+    
+    # 重新计算账户余额按钮
+    if st.sidebar.button("💰 重新计算账户余额", key="sidebar_recalc_balances", use_container_width=True):
+        with st.spinner("正在重新计算所有账户余额..."):
+            try:
+                from data.account_service import recalculate_all_account_balances
+                balances = recalculate_all_account_balances()
+                st.sidebar.success(f"✅ 已重新计算 {len(balances)} 个账户余额！")
+                st.rerun()
+            except Exception as e:
+                st.sidebar.error(f"❌ 计算失败: {e}")
     
     st.sidebar.divider()
     

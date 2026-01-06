@@ -1,6 +1,7 @@
 """账户服务 - 从数据库读取账户配置"""
 import logging
 from typing import List, Dict, Optional
+from decimal import Decimal
 
 from data.db_connector import execute_query, execute_one, execute_update, execute_insert
 
@@ -22,7 +23,7 @@ def get_accounts(account_type: Optional[str] = None, is_active: bool = True) -> 
         SELECT 
             id, account_code, account_id, account_name, account_type,
             parent_account_id, product_id, currency, is_active, note,
-            created_at, updated_at
+            balance, created_at, updated_at
         FROM accounts
         WHERE 1=1
     """
@@ -46,7 +47,7 @@ def get_account_by_id(account_id: int) -> Optional[Dict]:
         SELECT 
             id, account_code, account_id, account_name, account_type,
             parent_account_id, product_id, currency, is_active, note,
-            created_at, updated_at
+            balance, created_at, updated_at
         FROM accounts
         WHERE id = %s
     """
@@ -59,7 +60,7 @@ def get_account_by_code(account_code: str) -> Optional[Dict]:
         SELECT 
             id, account_code, account_id, account_name, account_type,
             parent_account_id, product_id, currency, is_active, note,
-            created_at, updated_at
+            balance, created_at, updated_at
         FROM accounts
         WHERE account_code = %s
         LIMIT 1
@@ -73,7 +74,8 @@ def get_accounts_by_group(group_code: str) -> List[Dict]:
     sql = """
         SELECT 
             a.id, a.account_code, a.account_id, a.account_name, a.account_type,
-            a.parent_account_id, a.product_id, a.currency, a.is_active, a.note
+            a.parent_account_id, a.product_id, a.currency, a.is_active, a.note,
+            a.balance
         FROM accounts a
         INNER JOIN account_groups ag ON ag.linked_product_id = a.product_id
         WHERE ag.group_code = %s AND a.is_active = 1
@@ -224,4 +226,97 @@ def delete_account_pool_rule(rule_id: int) -> bool:
     sql = "UPDATE account_pool_rules SET is_active = 0 WHERE id = %s"
     execute_update(sql, (rule_id,))
     return True
+
+
+def update_account_balance(account_code: str, balance: Decimal) -> bool:
+    """更新账户余额"""
+    from decimal import Decimal
+    sql = "UPDATE accounts SET balance = %s WHERE account_code = %s"
+    # 使用Decimal的字符串表示，避免精度丢失
+    execute_update(sql, (str(balance), account_code))
+    return True
+
+
+def recalculate_all_account_balances() -> Dict[str, Decimal]:
+    """
+    重新计算所有账户余额（从初始余额+所有ledger记录）
+    
+    Returns:
+        账户余额字典 {account_code: balance}
+    """
+    from decimal import Decimal
+    from data.data_store import load_ledger
+    
+    # 从数据库获取所有账户（包含account_code）
+    accounts_db = get_accounts(is_active=True)
+    
+    # 初始化余额字典（所有账户初始余额为0，因为初始余额已作为income记录在ledger中）
+    balances = {}
+    # 建立 account_code 到 account_id 的映射，以及反向映射
+    code_to_id = {}  # {account_code: account_id}
+    id_to_code = {}  # {account_id: account_code}
+    for account in accounts_db:
+        account_code = account.get('account_code') or account.get('account_id', '')
+        account_id_value = account.get('account_id')  # 这是 account_id 字段的值（可能是字符串）
+        if account_code:
+            balances[account_code] = Decimal('0')
+            if account_id_value:
+                account_id_str = str(account_id_value)
+                code_to_id[account_code] = account_id_str
+                id_to_code[account_id_str] = account_code
+    
+    # 遍历所有ledger记录，计算余额
+    ledger = load_ledger()
+    for record in ledger:
+        entry_type = record.get('entry_type', '').lower()
+        try:
+            amount = Decimal(str(record.get('amount', '0')).replace(',', ''))
+        except:
+            amount = Decimal('0')
+        
+        account_from = str(record.get('account_from', '') or '')
+        account_to = str(record.get('account_to', '') or '')
+        
+        # 清理账户代码：移除可能的 |fee_override: 等后缀（兼容旧数据）
+        if '|fee_override' in account_from or 'fee_override' in account_from:
+            account_from = account_from.split('|fee_override')[0].split('fee_override')[0].rstrip('|:').strip()
+        if '|fee_override' in account_to or 'fee_override' in account_to:
+            account_to = account_to.split('|fee_override')[0].split('fee_override')[0].rstrip('|:').strip()
+        
+        # 匹配 account_from：可能是 account_code 或 account_id
+        matched_from_code = None
+        if account_from in balances:
+            matched_from_code = account_from
+        elif account_from in id_to_code:
+            matched_from_code = id_to_code[account_from]
+        
+        # 匹配 account_to：可能是 account_code 或 account_id
+        matched_to_code = None
+        if account_to in balances:
+            matched_to_code = account_to
+        elif account_to in id_to_code:
+            matched_to_code = id_to_code[account_to]
+        
+        # 入账：income 且 account_to
+        if entry_type == 'income' and matched_to_code:
+            balances[matched_to_code] += amount
+        
+        # 入账：transfer 且 account_to
+        elif entry_type == 'transfer' and matched_to_code:
+            balances[matched_to_code] += amount
+        
+        # 出账：expense 且 account_from
+        elif entry_type == 'expense' and matched_from_code:
+            balances[matched_from_code] -= amount
+        
+        # 出账：transfer 且 account_from
+        elif entry_type == 'transfer' and matched_from_code:
+            balances[matched_from_code] -= amount
+    
+    # 更新数据库中的余额
+    for account_code, balance in balances.items():
+        update_account_balance(account_code, balance)
+    
+    logger.info(f"重新计算了 {len(balances)} 个账户的余额")
+    return balances
 

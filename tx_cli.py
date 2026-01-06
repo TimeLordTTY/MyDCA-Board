@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 财富中枢 CLI 工具
 
@@ -238,6 +236,51 @@ def select_account(prompt: str = "选择账户") -> str:
                 return acc['id']
         
         print("✗ 无效选择")
+
+
+def get_product_linked_accounts(product_code: str) -> list:
+    """
+    获取产品关联的账户列表
+    
+    Args:
+        product_code: 产品代码
+    
+    Returns:
+        账户列表，如果没有关联账户则返回空列表
+    """
+    try:
+        from data.product_service import get_product_by_code
+        from data.db_connector import execute_query
+        
+        # 获取产品信息
+        product = get_product_by_code(product_code)
+        if not product:
+            return []
+        
+        product_id = product.get('id')
+        if not product_id:
+            return []
+        
+        # 查找关联的账户组
+        sql = """
+            SELECT ag.group_code
+            FROM account_groups ag
+            WHERE ag.linked_product_id = %s
+            LIMIT 1
+        """
+        group_rows = execute_query(sql, (product_id,))
+        
+        if not group_rows:
+            return []
+        
+        group_code = group_rows[0]['group_code']
+        
+        # 获取该组下的所有账户
+        accounts = get_accounts_by_group(group_code)
+        return accounts
+    except Exception as e:
+        print(f"⚠ 获取产品关联账户失败: {e}")
+        return []
 
 
 def select_category(entry_type: str) -> tuple:
@@ -539,8 +582,34 @@ def add_buy_debit():
     print(f"  申购费率: {buy_fee_rate * 100:.2f}%")
     print(f"  确认延迟: T+{buy_confirm_offset}")
     
-    # 输入扣款金额（含手续费）
-    amount = input_decimal("扣款金额（含手续费）", must_positive=True)
+    # 检查产品是否关联有账户
+    linked_accounts = get_product_linked_accounts(product_code)
+    account_amounts = {}  # {account_id: amount}
+    
+    if linked_accounts:
+        print(f"\n该产品关联有账户，需要分别填写每个账户购买金额：")
+        total_amount = Decimal('0')
+        
+        for acc in linked_accounts:
+            acc_id = acc['id']
+            acc_name = acc['name']
+            acc_amount = input_decimal(f"{acc_name} ({acc_id}) 购买金额", must_positive=True, required=False, default=Decimal('0'))
+            if acc_amount > 0:
+                account_amounts[acc_id] = acc_amount
+                total_amount += acc_amount
+        
+        if total_amount == 0:
+            print("✗ 至少需要有一个账户的购买金额大于0")
+            return
+        
+        print(f"\n✓ 总购买金额: {format_decimal(total_amount, 2)}")
+        for acc_id, acc_amount in account_amounts.items():
+            print(f"  - {get_account_name(acc_id)}: {format_decimal(acc_amount, 2)}")
+        
+        amount = total_amount
+    else:
+        # 输入扣款金额（含手续费）
+        amount = input_decimal("扣款金额（含手续费）", must_positive=True)
     
     # 计算手续费
     calculated_fee = (amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
@@ -569,7 +638,12 @@ def add_buy_debit():
     
     # 生成订单号
     order_id = generate_order_id(product_code)
-    note = product_name  # 直接使用产品名称
+    # 如果有账户分配，在备注中记录
+    if account_amounts:
+        account_info = '|'.join([f"{acc_id}:{acc_amount}" for acc_id, acc_amount in account_amounts.items()])
+        note = f"{product_name}|account_amounts:{account_info}"
+    else:
+        note = product_name
     
     # 确认
     confirm = input("\n确认写入? (Y/n): ").strip().lower()
@@ -591,6 +665,26 @@ def add_buy_debit():
         'note': note
     }
     append_transaction(tx_record)
+    
+    # 如果有账户分配，从对应账户扣款
+    if account_amounts:
+        from core.ledger_service import add_expense
+        event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
+        
+        for acc_id, acc_amount in account_amounts.items():
+            # 计算该账户对应的手续费（按比例）
+            acc_fee = (acc_amount * buy_fee_rate).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            acc_total = acc_amount  # 含手续费
+            
+            add_expense(
+                account_from=acc_id,
+                amount=acc_total,
+                category_l1="理财投资",
+                category_l2="买入扣款",
+                event_time=event_time,
+                note=f"{product_name} 买入 (订单号: {order_id})"
+            )
+            print(f"  ✓ 已从 {get_account_name(acc_id)} 扣款 {format_decimal(acc_total, 2)}")
     
     # 写入 orders.csv
     order_record = {
@@ -632,6 +726,38 @@ def add_redeem_request():
     print(f"✓ 产品: {product_code} - {product_name}")
     print(f"  确认延迟: T+{sell_confirm_offset}")
     
+    # 检查产品是否关联有账户
+    linked_accounts = get_product_linked_accounts(product_code)
+    redeem_account = None
+    
+    if linked_accounts:
+        print(f"\n该产品关联有账户，需要选择从哪个账户进行赎回：")
+        for i, acc in enumerate(linked_accounts, 1):
+            print(f"  [{i}] {acc['id']} - {acc['name']}")
+        
+        while True:
+            choice = input("\n请输入序号或账户ID: ").strip()
+            
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(linked_accounts):
+                    redeem_account = linked_accounts[idx]['id']
+                    break
+            except ValueError:
+                pass
+            
+            for acc in linked_accounts:
+                if acc['id'] == choice:
+                    redeem_account = acc['id']
+                    break
+            
+            if redeem_account:
+                break
+            
+            print("✗ 无效选择")
+        
+        print(f"✓ 赎回账户: {redeem_account} ({get_account_name(redeem_account)})")
+    
     # 显示赎回费率阶梯
     print(f"\n赎回费率阶梯：")
     print(format_sell_fee_tiers(product))
@@ -666,7 +792,11 @@ def add_redeem_request():
     
     # 生成订单号
     order_id = generate_order_id(product_code)
-    note = product_name  # 直接使用产品名称
+    # 如果有赎回账户，在备注中记录
+    if redeem_account:
+        note = f"{product_name}|redeem_account:{redeem_account}"
+    else:
+        note = product_name
     
     # 确认
     confirm = input("\n确认写入? (Y/n): ").strip().lower()
@@ -695,6 +825,8 @@ def add_redeem_request():
     
     print(f"\n✓ 已写入")
     print(f"  订单号: {order_id}")
+    if redeem_account:
+        print(f"  赎回账户: {redeem_account}")
     print(f"  等待 {confirm_date} 结算确认")
 
 
@@ -972,6 +1104,8 @@ def settle_orders():
             error_count += 1
             continue
         
+        product_name = product.get('product_name', product_code)
+        
         if order_type == 'buy_debit':
             # 买入确认
             amount = parse_decimal(order.get('amount', 0))
@@ -1020,6 +1154,15 @@ def settle_orders():
             print(f"  赎回费: {format_decimal(fee, 2)}")
             print(f"  到账净额: {format_decimal(amount, 2)}")
             
+            # 解析赎回账户（从订单的note中解析，格式：原备注|redeem_account:账户ID）
+            redeem_account = None
+            order_note = order.get('note', '')
+            if '|redeem_account:' in order_note:
+                try:
+                    redeem_account = order_note.split('|redeem_account:')[1].strip()
+                except:
+                    pass
+            
             # 写入 sell_confirm
             tx_record = {
                 'date': order.get('confirm_date', today),
@@ -1031,9 +1174,38 @@ def settle_orders():
                 'nav': str(nav),
                 'nav_date': nav_date,
                 'order_id': order_id,
-                'note': order.get('note', '')
+                'note': order_note.split('|redeem_account:')[0] if '|redeem_account:' in order_note else order_note
             }
             append_transaction(tx_record)
+            
+            # 如果有关联账户，需要减少该账户的金额（因为产品份额减少了）
+            # 同时，赎回的资金回到该账户（增加现金）
+            if redeem_account:
+                from core.ledger_service import add_expense, add_income
+                created_at = f"{order.get('confirm_date', today)} 12:00:00"
+                
+                # 减少账户金额（产品持仓减少）
+                # 使用产品市值作为减少金额（份额 × 净值）
+                add_expense(
+                    account_from=redeem_account,
+                    amount=gross,  # 使用总金额（包含手续费）
+                    category_l1="理财投资",
+                    category_l2="赎回确认（持仓减少）",
+                    event_time=created_at,
+                    note=f"{product_name} 赎回持仓减少 (订单号: {order_id})"
+                )
+                
+                # 增加账户金额（赎回资金到账）
+                add_income(
+                    account_to=redeem_account,
+                    amount=amount,  # 到账净额
+                    category_l1="理财投资",
+                    category_l2="赎回确认（资金到账）",
+                    event_time=created_at,
+                    note=f"{product_name} 赎回资金到账 (订单号: {order_id})"
+                )
+                
+                print(f"  已更新账户 {redeem_account}：持仓减少 {format_decimal(gross, 2)}，资金到账 {format_decimal(amount, 2)}")
         
         # 标记订单完成
         update_order_status(order_id, 'done')

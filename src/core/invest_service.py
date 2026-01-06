@@ -175,6 +175,8 @@ def add_redeem_request(
     requested_at: datetime = None,
     trade_date: date = None,
     redeem_account: str = None,
+    redeem_from_account: str = None,
+    redeem_from_accounts: Dict[str, Decimal] = None,
     note: str = None,
     fee_override: Decimal = None
 ) -> str:
@@ -187,7 +189,9 @@ def add_redeem_request(
         holding_days: 持有天数（用于确定赎回费率）
         requested_at: 请求时间（默认当前时间）
         trade_date: 交易日期（可选，默认根据requested_at计算）
-        redeem_account: 赎回账户（可选，默认余利宝理财金）
+        redeem_account: 资金到账账户（可选，默认余利宝理财金）
+        redeem_from_account: 赎回来源账户（可选，单个账户赎回，兼容旧接口）
+        redeem_from_accounts: 赎回来源账户字典（可选，多账户组合赎回，格式：{账户ID: 份额}）
         note: 备注（默认产品名称）
         fee_override: 手续费覆盖值（可选，如果提供则使用此值，否则按费率计算）
     
@@ -259,11 +263,20 @@ def add_redeem_request(
     if note is None:
         note = product_name
     
-    # 将赎回账户信息存储在note中（格式：原备注|redeem_account:账户ID）
+    # 将赎回账户信息存储在note中
+    # 格式：原备注|redeem_account:资金到账账户ID|redeem_from_accounts:账户1:份额1|账户2:份额2
+    note_with_account = note
     if redeem_account:
-        note_with_account = f"{note}|redeem_account:{redeem_account}"
-    else:
-        note_with_account = note
+        note_with_account = f"{note_with_account}|redeem_account:{redeem_account}"
+    
+    # 多账户组合赎回
+    if redeem_from_accounts:
+        account_shares_list = [f"{acc_id}:{shares}" for acc_id, shares in redeem_from_accounts.items()]
+        account_shares_str = '|'.join(account_shares_list)
+        note_with_account = f"{note_with_account}|redeem_from_accounts:{account_shares_str}"
+    elif redeem_from_account:
+        # 单个账户赎回（兼容旧接口）
+        note_with_account = f"{note_with_account}|redeem_from_account:{redeem_from_account}"
     
     # 如果提供了手续费覆盖值，将其存储在note中（格式：...|fee_override:手续费金额）
     if fee_override is not None and fee_override > 0:
@@ -594,23 +607,72 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 # 获取 product_id（使用之前已获取的 product）
                 product_id = product.get('id') if product else None
                 
-                # 获取赎回账户（从订单的note中解析，格式：原备注|redeem_account:账户ID）
-                redeem_account = None
+                # 获取赎回账户（从订单的note中解析）
+                # 格式：原备注|redeem_account:资金到账账户ID|redeem_from_accounts:账户1:份额1|账户2:份额2
+                # 或：原备注|redeem_account:资金到账账户ID|redeem_from_account:赎回来源账户ID（兼容旧格式）
+                redeem_account = None  # 资金到账账户
+                redeem_from_account = None  # 单个账户赎回（兼容旧格式）
+                redeem_from_accounts = {}  # 多账户组合赎回 {账户ID: 份额}
                 order_note = order.get('note', '')
+                
                 if '|redeem_account:' in order_note:
                     try:
-                        redeem_account = order_note.split('|redeem_account:')[1].strip()
+                        # 解析格式：...|redeem_account:账户代码|... 或 ...|redeem_account:账户代码
+                        # 需要确保只取账户代码，不包含后续的 |fee_override: 等
+                        parts = order_note.split('|redeem_account:')
+                        if len(parts) > 1:
+                            # 取 |redeem_account: 后面的部分
+                            redeem_account_part = parts[1]
+                            # 按 | 分割，取第一部分（账户代码）
+                            redeem_account = redeem_account_part.split('|')[0].strip()
+                            # 如果账户代码中包含 fee_override（说明解析错误），需要进一步处理
+                            if 'fee_override' in redeem_account or ':' in redeem_account:
+                                # 这种情况不应该发生，但为了兼容旧数据，尝试修复
+                                redeem_account = redeem_account.split(':')[0].strip()
+                    except Exception as e:
+                        logger.warning(f"解析redeem_account失败: {e}, order_id={order_id}, note={order_note}")
+                        redeem_account = None
+                
+                # 优先解析多账户组合赎回
+                if '|redeem_from_accounts:' in order_note:
+                    try:
+                        accounts_str = order_note.split('|redeem_from_accounts:')[1].split('|')[0].strip()
+                        # 格式：账户1:份额1|账户2:份额2
+                        account_pairs = accounts_str.split('|')
+                        for pair in account_pairs:
+                            if ':' in pair:
+                                acc_id, shares_str = pair.split(':', 1)
+                                redeem_from_accounts[acc_id.strip()] = safe_decimal(shares_str)
+                    except Exception as e:
+                        logger.warning(f"解析多账户组合赎回信息失败: {e}, order_id={order_id}, note={order_note}")
+                elif '|redeem_from_account:' in order_note:
+                    # 兼容旧格式：单个账户赎回
+                    try:
+                        redeem_from_account = order_note.split('|redeem_from_account:')[1].split('|')[0].strip()
                     except:
                         pass
                 
-                # 如果没有找到，使用默认账户（余利宝理财金）
+                # 如果没有找到资金到账账户，使用默认账户（余利宝理财金）
                 if not redeem_account:
                     redeem_account = 'ylb_finance'
+                
+                # 如果没有找到赎回来源账户，使用资金到账账户（兼容旧数据）
+                if not redeem_from_accounts and not redeem_from_account:
+                    redeem_from_account = redeem_account
                 
                 # 写入 sell_confirm
                 # 使用订单的确认日期，时间默认 12:00:00
                 confirm_date_str = order.get('confirm_date', target_date)
                 created_at = f"{confirm_date_str} 12:00:00"
+                
+                # 清理 note，移除账户信息
+                clean_note = order_note
+                if '|redeem_account:' in clean_note:
+                    clean_note = clean_note.split('|redeem_account:')[0]
+                if '|redeem_from_account:' in clean_note:
+                    clean_note = clean_note.split('|redeem_from_account:')[0]
+                if '|fee_override:' in clean_note:
+                    clean_note = clean_note.split('|fee_override:')[0]
                 
                 tx_record = {
                     'date': confirm_date_str,
@@ -623,13 +685,13 @@ def settle_orders(target_date: str = None) -> SettleResult:
                     'nav': str(nav),
                     'nav_date': nav_date,
                     'order_id': order_id,
-                    'note': order_note.split('|redeem_account:')[0] if '|redeem_account:' in order_note else order_note,
+                    'note': clean_note,
                     'created_at': created_at
                 }
                 append_transaction(tx_record)
                 
-                # 添加记账记录（赎回账户金额增加）
-                from core.ledger_service import add_income
+                # 添加记账记录（资金到账账户金额增加）
+                from core.ledger_service import add_income, add_expense
                 add_income(
                     account_to=redeem_account,
                     amount=amount,
@@ -638,6 +700,31 @@ def settle_orders(target_date: str = None) -> SettleResult:
                     event_time=created_at,
                     note=f"{product.get('product_name', product_code)} 赎回 (订单号: {order_id})"
                 )
+                
+                # 添加记账记录（赎回来源账户份额减少，金额减少）
+                if redeem_from_accounts:
+                    # 多账户组合赎回：为每个账户分别记录份额减少
+                    for acc_id, acc_shares in redeem_from_accounts.items():
+                        # 该账户的份额减少金额 = 该账户份额 × 净值
+                        acc_gross = acc_shares * nav
+                        add_expense(
+                            account_from=acc_id,
+                            amount=acc_gross,
+                            category_l1="理财投资",
+                            category_l2="赎回持仓减少",
+                            event_time=created_at,
+                            note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {acc_shares:.4f}, 净值: {nav})"
+                        )
+                else:
+                    # 单个账户赎回（兼容旧格式）
+                    add_expense(
+                        account_from=redeem_from_account,
+                        amount=gross,
+                        category_l1="理财投资",
+                        category_l2="赎回持仓减少",
+                        event_time=created_at,
+                        note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {shares:.4f}, 净值: {nav})"
+                    )
             
             # 标记订单完成
             update_order_status(order_id, 'done')
@@ -868,20 +955,71 @@ def settle_single_order(
             # 获取 product_id（使用之前已获取的 product）
             product_id = product.get('id') if product else None
             
-            # 获取赎回账户（从订单的note中解析，格式：原备注|redeem_account:账户ID）
-            redeem_account = None
+            # 获取赎回账户（从订单的note中解析）
+            # 格式：原备注|redeem_account:资金到账账户ID|redeem_from_accounts:账户1:份额1|账户2:份额2
+            # 或：原备注|redeem_account:资金到账账户ID|redeem_from_account:赎回来源账户ID（兼容旧格式）
+            redeem_account = None  # 资金到账账户
+            redeem_from_account = None  # 单个账户赎回（兼容旧格式）
+            redeem_from_accounts = {}  # 多账户组合赎回 {账户ID: 份额}
             order_note = order.get('note', '')
+            
             if '|redeem_account:' in order_note:
                 try:
-                    redeem_account = order_note.split('|redeem_account:')[1].strip()
+                    # 解析格式：...|redeem_account:账户代码|... 或 ...|redeem_account:账户代码
+                    # 需要确保只取账户代码，不包含后续的 |fee_override: 等
+                    parts = order_note.split('|redeem_account:')
+                    if len(parts) > 1:
+                        # 取 |redeem_account: 后面的部分
+                        redeem_account_part = parts[1]
+                        # 按 | 分割，取第一部分（账户代码）
+                        redeem_account = redeem_account_part.split('|')[0].strip()
+                        # 如果账户代码中包含 fee_override（说明解析错误），需要进一步处理
+                        if 'fee_override' in redeem_account or ':' in redeem_account:
+                            # 这种情况不应该发生，但为了兼容旧数据，尝试修复
+                            redeem_account = redeem_account.split(':')[0].strip()
+                except Exception as e:
+                    logger.warning(f"解析redeem_account失败: {e}, order_id={order_id}, note={order_note}")
+                    redeem_account = None
+            
+            # 优先解析多账户组合赎回
+            if '|redeem_from_accounts:' in order_note:
+                try:
+                    accounts_str = order_note.split('|redeem_from_accounts:')[1].split('|')[0].strip()
+                    # 格式：账户1:份额1|账户2:份额2
+                    account_pairs = accounts_str.split('|')
+                    for pair in account_pairs:
+                        if ':' in pair:
+                            acc_id, shares_str = pair.split(':', 1)
+                            redeem_from_accounts[acc_id.strip()] = parse_decimal(shares_str)
+                except Exception as e:
+                    logger.warning(f"解析多账户组合赎回信息失败: {e}, order_id={order_id}, note={order_note}")
+            elif '|redeem_from_account:' in order_note:
+                # 兼容旧格式：单个账户赎回
+                try:
+                    redeem_from_account = order_note.split('|redeem_from_account:')[1].split('|')[0].strip()
                 except:
                     pass
             
-            # 如果没有找到，使用默认账户（余利宝理财金）
+            # 如果没有找到资金到账账户，使用默认账户（余利宝理财金）
             if not redeem_account:
                 redeem_account = 'ylb_finance'
             
+            # 如果没有找到赎回来源账户，使用资金到账账户（兼容旧数据）
+            if not redeem_from_accounts and not redeem_from_account:
+                redeem_from_account = redeem_account
+            
             # 写入 sell_confirm
+            # 清理 note，移除账户信息
+            clean_note = order_note
+            if '|redeem_account:' in clean_note:
+                clean_note = clean_note.split('|redeem_account:')[0]
+            if '|redeem_from_accounts:' in clean_note:
+                clean_note = clean_note.split('|redeem_from_accounts:')[0]
+            if '|redeem_from_account:' in clean_note:
+                clean_note = clean_note.split('|redeem_from_account:')[0]
+            if '|fee_override:' in clean_note:
+                clean_note = clean_note.split('|fee_override:')[0]
+            
             tx_record = {
                 'date': confirm_date_str,
                 'product_id': product_id,
@@ -893,15 +1031,15 @@ def settle_single_order(
                 'nav': str(nav),
                 'nav_date': nav_date,
                 'order_id': order_id,
-                'note': order_note.split('|redeem_account:')[0] if '|redeem_account:' in order_note else order_note,
+                'note': clean_note,
                 'created_at': created_at
             }
             logger.info(f"settle_single_order: 准备写入赎回确认记录 order_id={order_id}, product_code={product_code}, product_id={product_id}, shares={shares}, amount={amount}")
             append_transaction(tx_record)
             logger.info(f"settle_single_order: 成功写入赎回确认记录 order_id={order_id}")
             
-            # 添加记账记录（赎回账户金额增加）
-            from core.ledger_service import add_income
+            # 添加记账记录（资金到账账户金额增加）
+            from core.ledger_service import add_income, add_expense
             add_income(
                 account_to=redeem_account,
                 amount=amount,
@@ -910,7 +1048,34 @@ def settle_single_order(
                 event_time=created_at,
                 note=f"{product.get('product_name', product_code)} 赎回 (订单号: {order_id})"
             )
-            logger.info(f"settle_single_order: 成功添加记账记录，账户={redeem_account}，金额={amount}")
+            logger.info(f"settle_single_order: 成功添加记账记录（金额增加），账户={redeem_account}，金额={amount}")
+            
+            # 添加记账记录（赎回来源账户份额减少，金额减少）
+            if redeem_from_accounts:
+                # 多账户组合赎回：为每个账户分别记录份额减少
+                for acc_id, acc_shares in redeem_from_accounts.items():
+                    # 该账户的份额减少金额 = 该账户份额 × 净值
+                    acc_gross = acc_shares * nav
+                    add_expense(
+                        account_from=acc_id,
+                        amount=acc_gross,
+                        category_l1="理财投资",
+                        category_l2="赎回持仓减少",
+                        event_time=created_at,
+                        note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {acc_shares:.4f}, 净值: {nav})"
+                    )
+                    logger.info(f"settle_single_order: 成功添加记账记录（份额减少），账户={acc_id}，份额={acc_shares:.4f}，金额={acc_gross}")
+            else:
+                # 单个账户赎回（兼容旧格式）
+                add_expense(
+                    account_from=redeem_from_account,
+                    amount=gross,
+                    category_l1="理财投资",
+                    category_l2="赎回持仓减少",
+                    event_time=created_at,
+                    note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {shares:.4f}, 净值: {nav})"
+                )
+                logger.info(f"settle_single_order: 成功添加记账记录（份额减少），账户={redeem_from_account}，金额={gross}")
             
             # 标记订单完成
             update_order_status(order_id, 'done')

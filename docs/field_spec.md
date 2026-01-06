@@ -454,89 +454,59 @@ id, fetch_date, product_id, product_code, product_name, category, nav_date, nav,
 
 ---
 
-## 5. daily_balance（账户余额快照表）
+## 5. accounts 表（账户配置表）- 账户余额
 
-**注意**：账户余额快照数据存储在 MySQL 数据库的 `daily_balance` 表中。
+**重要变更**：账户余额现在直接从 `accounts` 表的 `balance` 字段读取（实时数据），不再使用 `daily_balance` 快照表。
 
-### 5.1 数据库表字段（固定）
+### 5.1 账户余额字段
 
-```
-id, fetch_date, account_id, account_name, account_type, balance, related_product, product_value, diff, note, created_at
-```
+`accounts` 表包含 `balance` 字段（`DECIMAL(18, 2)`），存储账户当前余额。
 
-**注意**：`yesterday_pnl`、`unrealized_pnl`、`total_pnl` 字段在代码中计算并在 UI 中显示，但**不存储**在数据库中。这些字段仅在查询时动态计算。
+**余额更新规则**：
+- 每次记账操作（支出/收入/转账/退款）后，自动更新对应账户的 `balance` 字段
+- 每次理财操作（买入/赎回确认）后，自动更新对应账户的 `balance` 字段
+- 余额计算基于 ledger 表的所有记录，确保与记账页面一致
 
-### 5.2 中文表头映射
+### 5.2 account_type 枚举
 
-| 字段 | 中文表头 |
-|------|----------|
-| fetch_date | 采集日期 |
-| account_id | 账户ID |
-| account_name | 账户名称 |
-| account_type | 账户类型 |
-| balance | 账户余额 |
-| related_product | 关联产品 |
-| product_value | 产品市值 |
-| diff | 差异 |
-| yesterday_pnl | 昨日收益 |
-| unrealized_pnl | 持有收益 |
-| total_pnl | 累计收益 |
-| note | 备注 |
-
-### 5.3 account_type 枚举
-
-**注意**：`daily_balance` 表中的 `account_type` 字段类型为 `varchar(30)`，存储小写值。`accounts` 表中的 `account_type` 字段类型为 `enum('CASH','BUCKET','FUND_MAPPED','PRODUCT_SUB','FUND_TOTAL','SUMMARY')`，存储大写值。
+`accounts` 表中的 `account_type` 字段类型为 `enum('CASH','BUCKET','FUND_MAPPED','PRODUCT_SUB','FUND_TOTAL','SUMMARY')`，存储大写值。
 
 | account_type | 含义 | 余额计算规则 |
 |--------------|------|--------------|
-| cash | 现金账户（余利宝、银行卡等） | `Σ ledger 入账 - Σ ledger 出账` |
-| bucket | 现金桶账户（未来扩展） | `Σ ledger 入账 - Σ ledger 出账` |
-| fund_mapped | 货币基金映射账户（小荷包） | `关联产品市值 + 当日收益`（收益自动入账） |
-| product_sub | 产品子账户（稳利宝各子账户） | `Σ ledger 入账 - Σ ledger 出账` |
-| fund_total | 基金账户汇总（场外） | `Σ daily_snapshot 表场外基金市值`（channel=OTC，排除 fund_mapped 关联产品） |
-| summary | 汇总行 | 各组账户合计 |
+| CASH | 现金账户（余利宝、银行卡等） | `Σ ledger 入账 - Σ ledger 出账` |
+| BUCKET | 现金桶账户（未来扩展） | `Σ ledger 入账 - Σ ledger 出账` |
+| FUND_MAPPED | 货币基金映射账户（小荷包） | `关联产品市值 + 当日收益`（收益自动入账） |
+| PRODUCT_SUB | 产品子账户（稳利宝各子账户） | `Σ ledger 入账 - Σ ledger 出账` |
+| FUND_TOTAL | 基金账户汇总（场外） | `Σ daily_snapshot 表场外基金市值`（channel=OTC，排除 fund_mapped 关联产品） |
+| SUMMARY | 汇总行 | 各组账户合计 |
 
-### 5.4 字段定义与公式
+### 5.3 收益字段（动态计算）
 
-| 字段 | 定义 | 公式 | 变化触发 |
-|------|------|------|----------|
-| fetch_date | 快照生成日期 | YYYY-MM-DD | 每次同步 |
-| account_id | 账户唯一标识 | 来自 accounts 表 | 固定 |
-| account_name | 账户显示名称 | 来自 accounts 表 | 固定 |
-| account_type | 账户类型 | 见上表枚举 | 固定 |
-| balance | 账户余额（本金分桶） | 见上表计算规则 | ledger 变动 |
-| related_product | 关联产品代码 | 来自 accounts 表的 product_id 关联 | 固定 |
-| product_value | 展示市值 | 见 5.5 说明 | 净值变动 |
-| diff | 收益/差异 | 见 5.5 说明 | 净值变动 |
-| note | 备注 | 来自 accounts 表或动态生成 | 净值变动 |
+**收益字段**（针对基金、余利宝生活费、稳利宝）在 UI 中动态计算显示，从 `daily_snapshot` 表读取产品持仓数据：
+- `yesterday_pnl`：昨日收益（前一天的 pnl_day）
+- `unrealized_pnl`：持有收益（浮动盈亏）
+- `total_pnl`：累计收益（生命周期总盈亏）
 
-**动态计算字段**（不存储在数据库，仅在查询时计算）：
-- `yesterday_pnl`：昨日收益（前一天的 pnl_day，仅基金、余利宝生活费、稳利宝）
-- `unrealized_pnl`：持有收益（浮动盈亏，仅基金、余利宝生活费、稳利宝）
-- `total_pnl`：累计收益（生命周期总盈亏，仅基金、余利宝生活费、稳利宝）
-
-**注意**：这些动态计算字段在 `snapshot_service.py` 的 `read_latest_daily_balance()` 函数中计算，用于 UI 显示，但不写入数据库。
-
-### 5.5 product_value 与 diff 字段说明
+### 5.4 product_value 与 diff 字段说明（UI 展示）
 
 **核心原则**：
-- `balance` **永远**来自 ledger 计算（本金分桶余额），不含收益
+- `balance` **永远**来自 accounts 表的 balance 字段（实时数据），不含收益
 - `product_value` 是**展示口径**，可包含收益
 - `diff` 显示收益/亏损差异
 
 | account_type | balance | product_value | diff |
 |--------------|---------|---------------|------|
-| cash | ledger 余额 | 空 | 空 |
-| fund_mapped | 市值+日收益 | 同 balance | `balance - ledger_balance` |
-| **product_sub（普通）** | ledger 余额 | **= balance** | 空 |
-| **product_sub（profit_account）** | ledger 余额 | **= balance + group_profit** | **group_profit** |
-| summary | 子账户合计 | 父产品市值 | group_profit |
+| CASH | accounts.balance | 空 | 空 |
+| FUND_MAPPED | accounts.balance（市值+日收益） | 同 balance | `balance - ledger_balance` |
+| **PRODUCT_SUB（普通）** | accounts.balance | **= balance** | 空 |
+| **PRODUCT_SUB（profit_account）** | accounts.balance | **= balance + group_profit** | **group_profit** |
+| SUMMARY | 子账户合计 | 父产品市值 | group_profit |
 
 #### product_sub 收益分配展示规则
 
 对于有 `linked_product` 的账户组（如稳利宝），系统会将父产品收益**展示分配**到指定的 `profit_account`：
 
-1. **group_profit 计算**：`父产品 total_value - 子账户 balance 合计`
+1. **group_profit 计算**：`父产品 total_value - 子账户 balance 合计`（从 daily_snapshot 表读取）
 2. **profit_account 查找规则**（优先级）：
    - `account_groups[group_id].profit_account`（如 `wenlibao_project`）
    - 子账户中 `receives_profit=true` 的账户
@@ -549,8 +519,8 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 
 **示例**：
 ```
-假设：父产品 FBAE41126E 的 total_value = 24322.06
-      子账户 balance 合计 = 24320.87
+假设：父产品 FBAE41126E 的 total_value = 24322.06（从 daily_snapshot 表读取）
+      子账户 balance 合计 = 24320.87（从 accounts 表读取）
       group_profit = 1.19
 
 结果：
@@ -559,13 +529,13 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 - wenlibao_total:   balance=24320.87, product_value=24322.06, diff=1.19
 ```
 
-### 5.6 fund_mapped 账户收益计算（货币基金）
+### 5.5 fund_mapped 账户收益计算（货币基金）
 
 对于关联货币基金的账户（如小荷包 -> 000686），余额包含当日收益：
 
 **收益公式**：`日收益 = 持有份额 / 10000 × 万份收益`
 
-**余额公式**：`balance = 关联产品市值 + 当日收益`
+**余额公式**：`balance = 关联产品市值 + 当日收益`（存储在 accounts.balance 字段）
 
 **示例**：
 - 持有份额：348.25
@@ -573,12 +543,12 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 - 日收益：348.25 / 10000 × 0.3249 = 0.01
 - 余额：348.25 + 0.01 = 348.26
 
-### 5.7 汇总行规则
+### 5.6 汇总行规则
 
 | 汇总行 | account_id | 计算规则 |
 |--------|------------|----------|
-| 稳利宝合计 | wenlibao_total | balance = Σ 子账户余额，product_value = 父产品市值，diff = group_profit |
-| 余利宝合计 | ylb_total | balance = ylb_life + ylb_finance |
+| 稳利宝合计 | wenlibao_total | balance = Σ 子账户余额（从 accounts 表），product_value = 父产品市值（从 daily_snapshot 表），diff = group_profit |
+| 余利宝合计 | ylb_total | balance = ylb_life + ylb_finance（从 accounts 表） |
 | 场外基金账户 | fund_account（原 fund_total） | balance = Σ daily_snapshot 表场外基金市值（channel=OTC，排除 fund_mapped 关联产品） |
 | 场内基金账户 | exchange_fund_account | balance = Σ daily_snapshot 表场内基金市值（channel=EXCHANGE） |
 | 基金(合计)账户 | fund_total_account | balance = 场外基金账户 + 场内基金账户 |
@@ -587,8 +557,8 @@ id, fetch_date, account_id, account_name, account_type, balance, related_product
 - 原 `fund_total` 账户在 UI 中显示为"场外基金账户"，仅统计场外基金（channel=OTC）
 - 新增"场内基金账户"（account_id=exchange_fund_account），统计场内基金（channel=EXCHANGE）
 - 新增"基金(合计)账户"（account_id=fund_total_account），为场内+场外基金合计
-- 这些账户在 UI 的"资产详情"页面中动态计算并显示，不存储在 `daily_balance` 表中
-- 汇总行 diff 与 profit_account diff 一致**：表示该产品组在该快照日的收益/亏损
+- 这些账户在 UI 的"资产详情"页面中动态计算并显示
+- 汇总行 diff 与 profit_account diff 一致：表示该产品组在该快照日的收益/亏损
 
 ---
 
@@ -841,19 +811,18 @@ real_return=1.36% (=6.79/500)
 | real_return | 真实收益率 |
 | fetched_at | 采集时间 |
 
-### daily_balance
+### accounts 表（账户余额）
 
 | 英文 | 中文 |
 |------|------|
-| fetch_date | 采集日期 |
-| account_id | 账户ID |
+| account_code | 账户代码 |
 | account_name | 账户名称 |
 | account_type | 账户类型 |
-| balance | 账户余额 |
-| related_product | 关联产品 |
-| product_value | 产品市值 |
-| diff | 差异 |
+| balance | 账户余额（实时数据） |
+| product_id | 关联产品ID |
 | note | 备注 |
+
+**注意**：账户余额现在直接从 `accounts` 表的 `balance` 字段读取，不再使用 `daily_balance` 快照表。
 
 ---
 

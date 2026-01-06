@@ -18,8 +18,6 @@ process_single_product()        # 处理每个产品
 ↓
 create_daily_snapshot()         # 生成产品快照（daily_snapshot表）
 ↓
-create_daily_balance_snapshot() # 生成账户余额快照（daily_balance表）
-↓
 输出汇总日志                    # 显示执行结果
 ```
 
@@ -99,7 +97,6 @@ MyDCA-Board/
 │   ├── core/                        # 核心业务模块
 │   │   ├── nav_collector.py         # 主控协调器
 │   │   ├── snapshot.py              # 产品快照生成（daily_snapshot表）
-│   │   ├── daily_balance.py         # 账户余额快照（daily_balance表）
 │   │   ├── holdings_calculator.py   # 持仓与成本计算器（场外）
 │   │   ├── exchange_holdings_calculator.py  # 场内持仓计算器
 │   │   ├── ledger_service.py        # 账本业务服务（UI/CLI共用）
@@ -533,13 +530,14 @@ id, event_time, entry_type, amount, category_l1, category_l2, account_from, acco
 
 系统共包含 **29 张数据库表**，分为以下几类：
 
-### 核心业务表（6张）
+### 核心业务表（5张）
 1. **transactions** - 交易流水表（所有投资交易记录）
 2. **orders** - 理财任务队列表（待结算订单）
 3. **ledger** - 生活账本表（日常收支记录）
 4. **daily_snapshot** - 产品日快照表（每日资产快照）
-5. **daily_balance** - 账户余额快照表（每日账户余额）
-6. **nav** - 净值历史表（所有产品历史净值）
+5. **nav** - 净值历史表（所有产品历史净值）
+
+**注意**：账户余额现在直接从 `accounts` 表的 `balance` 字段读取（实时数据），不再使用 `daily_balance` 快照表。
 
 ### 配置表（6张）
 7. **products** - 产品配置表（产品基本信息、费率等）
@@ -686,24 +684,24 @@ python scripts/run_backtest.py --product 163406 --strategy pure_sip
 - 所有策略参数存储在 `strategy_config` 表
 - 回测独立，不侵入生产执行模块，不触发下单
 
-### 账户余额快照
+### 账户余额
 
-系统会在启动时和每次操作后自动生成账户余额快照（存储在数据库中），展示各账户余额和收益信息：
+账户余额现在直接从 `accounts` 表的 `balance` 字段读取（实时数据），每次记账操作后自动更新。
 
+**账户类型**：
 | 账户类型 | 说明 |
 |---------|------|
-| `cash` | 现金账户（余利宝、银行卡等） |
-| `fund_mapped` | 货币基金映射账户（小荷包 -> 000686），余额=市值+当日收益 |
-| `product_sub` | 产品子账户（稳利宝各子账户） |
-| `fund_total` | 基金账户汇总（不含货币基金） |
-| `summary` | 汇总行（稳利宝合计、余利宝合计、基金合计） |
+| `CASH` | 现金账户（余利宝、银行卡等） |
+| `FUND_MAPPED` | 货币基金映射账户（小荷包 -> 000686），余额=市值+当日收益 |
+| `PRODUCT_SUB` | 产品子账户（稳利宝各子账户） |
+| `FUND_TOTAL` | 基金账户汇总（不含货币基金） |
 
 **收益字段**（针对基金、余利宝生活费、稳利宝）：
 - `yesterday_pnl`：昨日收益（前一天的 pnl_day）
 - `unrealized_pnl`：持有收益（浮动盈亏）
 - `total_pnl`：累计收益（生命周期总盈亏）
 
-**注意**：这些收益字段在 UI 中动态计算显示，但**不存储**在 `daily_balance` 数据库表中。
+**注意**：这些收益字段在 UI 中动态计算显示，从 `daily_snapshot` 表读取产品持仓数据。
 
 ---
 
@@ -1014,15 +1012,16 @@ pip install -r requirements.txt
 
 ## 📊 数据库表总览
 
-系统共包含 **29 张数据库表**，分为以下几类：
+系统共包含 **28 张数据库表**，分为以下几类：
 
-### 核心业务表（6张）
+### 核心业务表（5张）
 1. **transactions** - 交易流水表
 2. **orders** - 理财任务队列表
 3. **ledger** - 生活账本表
 4. **daily_snapshot** - 产品日快照表
-5. **daily_balance** - 账户余额快照表
-6. **nav** - 净值历史表
+5. **nav** - 净值历史表
+
+**注意**：账户余额现在直接从 `accounts` 表的 `balance` 字段读取（实时数据），不再使用 `daily_balance` 快照表。
 
 ### 配置表（6张）
 7. **products** - 产品配置表
@@ -1064,13 +1063,14 @@ pip install -r requirements.txt
 
 系统共包含 **27 张数据库表**，详细字段定义请参阅 [docs/field_spec.md](docs/field_spec.md)：
 
-### 核心业务表（6张）
+### 核心业务表（5张）
 1. `transactions` - 交易流水表（所有投资交易记录）
 2. `orders` - 理财任务队列表（待结算订单）
 3. `ledger` - 生活账本表（日常收支记录）
 4. `daily_snapshot` - 产品日快照表（每日资产快照）
-5. `daily_balance` - 账户余额快照表（每日账户余额）
-6. `nav` - 净值历史表（所有产品历史净值）
+5. `nav` - 净值历史表（所有产品历史净值）
+
+**注意**：账户余额现在直接从 `accounts` 表的 `balance` 字段读取（实时数据），不再使用 `daily_balance` 快照表。
 
 ### 配置表（6张）
 7. `products` - 产品配置表（产品基本信息、费率等）
