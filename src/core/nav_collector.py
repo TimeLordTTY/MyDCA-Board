@@ -141,7 +141,17 @@ def process_single_product(product, products_map, nav_records):
     # 只处理第一条记录
     nav_record = nav_list[0]
     result['date'] = nav_record['nav_date']
-    result['nav'] = nav_record['nav']
+    
+    # 货币基金特殊处理：东方财富API返回的 dwjz 字段对于货币基金是万份收益，不是净值
+    # 货币基金的净值应该始终是 1.0
+    from decimal import Decimal
+    nav_value = Decimal(str(nav_record['nav']))
+    if '货币' in product_name or '货币市场' in product_name:
+        # 货币基金：强制将净值设为 1.0
+        nav_value = Decimal('1.0')
+        logger.info(f"货币基金 {product_code} ({product_name})：将净值从 {nav_record['nav']} 修正为 1.0")
+    
+    result['nav'] = str(nav_value)
     
     # 检查是否已存在该日期的净值
     check_sql = "SELECT COUNT(*) as cnt FROM nav WHERE product_code = %s AND nav_date = %s"
@@ -149,11 +159,10 @@ def process_single_product(product, products_map, nav_records):
     already_exists = check_result and int(check_result.get('cnt', 0)) > 0
     
     # 存储到数据库
-    from decimal import Decimal
     save_nav(
         product_code=product_code,
         nav_date=nav_record['nav_date'],
-        nav=Decimal(str(nav_record['nav'])),
+        nav=nav_value,
         acc_nav=Decimal(str(nav_record.get('total_nav', '0'))) if nav_record.get('total_nav') else None,
         daily_return=Decimal(str(nav_record.get('income', '0'))) if nav_record.get('income') else None
     )
@@ -169,6 +178,8 @@ def process_single_product(product, products_map, nav_records):
     
     # 无论净值是否是新的，都要记录用于生成快照
     # 因为份额可能变化（交易流水），即使净值不变，value 也会变
+    # 更新 nav_record 中的 nav 值（货币基金已修正为 1.0）
+    nav_record['nav'] = str(nav_value)
     nav_records[product_code] = nav_record
     result['snapshot'] = 'Y'
     
