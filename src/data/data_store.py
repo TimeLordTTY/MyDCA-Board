@@ -35,7 +35,7 @@ TRANSACTIONS_FIELDNAMES = [
     'fee', 'nav', 'nav_date', 'order_id', 'note'
 ]
 
-VALID_ACTIONS = ['buy_debit', 'buy_confirm', 'buy', 'sell', 'sell_confirm', 'dividend', 'redeem_request']
+VALID_ACTIONS = ['buy_debit', 'buy_confirm', 'buy', 'sell', 'sell_confirm', 'dividend', 'redeem_request', 'transfer_out', 'transfer_in']
 
 
 def load_transactions() -> List[Dict]:
@@ -64,7 +64,7 @@ def load_recent_transactions(n: int = 30) -> List[Dict]:
         交易记录列表（按时间倒序）
     """
     sql = """
-        SELECT id,
+        SELECT id, product_id,
                DATE_FORMAT(`date`, '%%Y-%%m-%%d') as `date`,
                product_code, action, amount, shares, fee, nav,
                DATE_FORMAT(nav_date, '%%Y-%%m-%%d') as nav_date,
@@ -73,7 +73,7 @@ def load_recent_transactions(n: int = 30) -> List[Dict]:
         FROM transactions
         ORDER BY created_at DESC, id DESC
         LIMIT %s
-    """
+"""
     return execute_query(sql, (n,))
 
 

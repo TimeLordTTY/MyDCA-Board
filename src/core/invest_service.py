@@ -784,7 +784,7 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 
                 # 添加记账记录（资金到账账户金额增加）
                 from core.ledger_service import add_income, add_expense
-                from data.account_service import get_account_shares, update_account_shares
+                from data.account_service import get_account_shares, update_account_shares, get_account_by_code
                 
                 add_income(
                     account_to=redeem_account,
@@ -828,21 +828,24 @@ def settle_orders(target_date: str = None) -> SettleResult:
                         actual_main_shares = main_shares_needed
                     
                     # 记账：主账户
-                    if fixed_amount:
-                        # 固定金额，按固定金额记账
-                        main_amount = fixed_amount
-                    else:
-                        # 非固定金额，按实际份额×净值记账
-                        main_amount = actual_main_shares * nav
-                    
-                    add_expense(
-                        account_from=main_account,
-                        amount=main_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-                        category_l1="理财投资",
-                        category_l2="赎回持仓减少",
-                        event_time=created_at,
-                        note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {actual_main_shares:.6f}, 净值: {nav})"
-                    )
+                    # 只有当主账户与 redeem_account 不同时，才创建 expense 记录
+                    # 因为如果账户相同，资金已经通过 income 记录增加了，不需要再扣减
+                    if main_account != redeem_account:
+                        if fixed_amount:
+                            # 固定金额，按固定金额记账
+                            main_amount = fixed_amount
+                        else:
+                            # 非固定金额，按实际份额×净值记账
+                            main_amount = actual_main_shares * nav
+                        
+                        add_expense(
+                            account_from=main_account,
+                            amount=main_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
+                            category_l1="理财投资",
+                            category_l2="赎回持仓减少",
+                            event_time=created_at,
+                            note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {actual_main_shares:.6f}, 净值: {nav})"
+                        )
                     
                     # 更新主账户份额
                     update_account_shares(main_account, actual_main_shares, 'decrease')
@@ -851,15 +854,18 @@ def settle_orders(target_date: str = None) -> SettleResult:
                     for supp in supplement_accounts_list:
                         supp_acc_id = supp['account_id']
                         supp_shares = supp['shares']
-                        supp_amount = (supp_shares * nav).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-                        add_expense(
-                            account_from=supp_acc_id,
-                            amount=supp_amount,
-                            category_l1="理财投资",
-                            category_l2="赎回持仓减少",
-                            event_time=created_at,
-                            note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {supp_shares:.6f}, 净值: {nav})"
-                        )
+                        
+                        # 只有当补充账户与 redeem_account 不同时，才创建 expense 记录
+                        if supp_acc_id != redeem_account:
+                            supp_amount = (supp_shares * nav).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                            add_expense(
+                                account_from=supp_acc_id,
+                                amount=supp_amount,
+                                category_l1="理财投资",
+                                category_l2="赎回持仓减少",
+                                event_time=created_at,
+                                note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {supp_shares:.6f}, 净值: {nav})"
+                            )
                         
                         # 更新补充账户份额
                         update_account_shares(supp_acc_id, supp_shares, 'decrease')
@@ -868,16 +874,18 @@ def settle_orders(target_date: str = None) -> SettleResult:
                 elif redeem_from_accounts:
                     # 多账户组合赎回：为每个账户分别记录份额减少
                     for acc_id, acc_shares in redeem_from_accounts.items():
-                        # 该账户的份额减少金额 = 该账户份额 × 净值
-                        acc_gross = acc_shares * nav
-                        add_expense(
-                            account_from=acc_id,
-                            amount=acc_gross.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-                            category_l1="理财投资",
-                            category_l2="赎回持仓减少",
-                            event_time=created_at,
-                            note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {acc_shares:.4f}, 净值: {nav})"
-                        )
+                        # 只有当账户与 redeem_account 不同时，才创建 expense 记录
+                        if acc_id != redeem_account:
+                            # 该账户的份额减少金额 = 该账户份额 × 净值
+                            acc_gross = acc_shares * nav
+                            add_expense(
+                                account_from=acc_id,
+                                amount=acc_gross.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
+                                category_l1="理财投资",
+                                category_l2="赎回持仓减少",
+                                event_time=created_at,
+                                note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {acc_shares:.4f}, 净值: {nav})"
+                            )
                         
                         # 更新账户份额
                         update_account_shares(acc_id, acc_shares, 'decrease')
@@ -886,14 +894,16 @@ def settle_orders(target_date: str = None) -> SettleResult:
                     if not redeem_from_account:
                         redeem_from_account = redeem_account
                     
-                    add_expense(
-                        account_from=redeem_from_account,
-                        amount=gross.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
-                        category_l1="理财投资",
-                        category_l2="赎回持仓减少",
-                        event_time=created_at,
-                        note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {shares:.4f}, 净值: {nav})"
-                    )
+                    # 只有当账户与 redeem_account 不同时，才创建 expense 记录
+                    if redeem_from_account != redeem_account:
+                        add_expense(
+                            account_from=redeem_from_account,
+                            amount=gross.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP),
+                            category_l1="理财投资",
+                            category_l2="赎回持仓减少",
+                            event_time=created_at,
+                            note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {shares:.4f}, 净值: {nav})"
+                        )
                     
                     # 更新账户份额
                     update_account_shares(redeem_from_account, shares, 'decrease')
@@ -1223,9 +1233,21 @@ def settle_single_order(
             logger.info(f"settle_single_order: 成功添加记账记录（金额增加），账户={redeem_account}，金额={amount}")
             
             # 添加记账记录（赎回来源账户份额减少，金额减少）
+            # 注意：只有当赎回来源账户与到账账户相同时，才不创建 expense 记录
+            # 因为如果账户相同，资金已经通过 income 记录增加了，不需要再扣减
+            # 对于 PRODUCT_SUB 类型账户（如稳利宝），虽然余额主要通过 shares × nav 计算，
+            # 但在某些历史计算场景中，也会从 ledger 记录中查找"赎回持仓减少"记录，所以需要创建 expense 记录
+            from data.account_service import get_account_by_code
+            
             if redeem_from_accounts:
                 # 多账户组合赎回：为每个账户分别记录份额减少
                 for acc_id, acc_shares in redeem_from_accounts.items():
+                    # 如果账户与 redeem_account 相同，不创建 expense 记录
+                    # 因为资金已经通过 income 记录增加了，不需要再扣减
+                    if acc_id == redeem_account:
+                        logger.info(f"settle_single_order: 跳过创建 expense 记录（账户={acc_id} 与到账账户相同）")
+                        continue
+                    
                     # 该账户的份额减少金额 = 该账户份额 × 净值
                     acc_gross = acc_shares * nav
                     add_expense(
@@ -1239,15 +1261,20 @@ def settle_single_order(
                     logger.info(f"settle_single_order: 成功添加记账记录（份额减少），账户={acc_id}，份额={acc_shares:.4f}，金额={acc_gross}")
             else:
                 # 单个账户赎回（兼容旧格式）
-                add_expense(
-                    account_from=redeem_from_account,
-                    amount=gross,
-                    category_l1="理财投资",
-                    category_l2="赎回持仓减少",
-                    event_time=created_at,
-                    note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {shares:.4f}, 净值: {nav})"
-                )
-                logger.info(f"settle_single_order: 成功添加记账记录（份额减少），账户={redeem_from_account}，金额={gross}")
+                if redeem_from_account:
+                    # 如果账户与 redeem_account 相同，不创建 expense 记录
+                    if redeem_from_account == redeem_account:
+                        logger.info(f"settle_single_order: 跳过创建 expense 记录（账户={redeem_from_account} 与到账账户相同）")
+                    else:
+                        add_expense(
+                            account_from=redeem_from_account,
+                            amount=gross,
+                            category_l1="理财投资",
+                            category_l2="赎回持仓减少",
+                            event_time=created_at,
+                            note=f"{product.get('product_name', product_code)} 赎回持仓减少 (订单号: {order_id}, 份额: {shares:.4f}, 净值: {nav})"
+                        )
+                        logger.info(f"settle_single_order: 成功添加记账记录（份额减少），账户={redeem_from_account}，金额={gross}")
             
             # 标记订单完成
             update_order_status(order_id, 'done')

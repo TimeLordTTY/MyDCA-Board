@@ -378,7 +378,9 @@ ACTION_DISPLAY_MAP = {
     'sell': '卖出',
     'sell_confirm': '卖出确认',
     'redeem_request': '卖出待确认',
-    'dividend': '分红'
+    'dividend': '分红',
+    'transfer_out': '转托管转出',
+    'transfer_in': '转托管转入'
 }
 
 # 待确认类型（白色显示，不带+/-号）
@@ -2418,17 +2420,29 @@ def page_asset_details():
                         shares = Decimal(str(holdings.get('current_qty', 0))) if holdings else Decimal('0')
                         value = shares * price
                         r_copy = dict(r)
+                        r_copy['product_id'] = exchange_product_id  # 添加 product_id，用于区分场内场外
                         r_copy['shares'] = str(shares)
                         r_copy['value'] = str(value)
                         r_copy['nav'] = str(price)
                         r_copy['total_pnl'] = str(holdings.get('total_pnl', 0)) if holdings else '0'
+                        # 场内产品使用 total_cost 作为成本（用于计算收益率）
+                        r_copy['total_cost'] = str(holdings.get('total_cost', 0)) if holdings else '0'
+                        r_copy['avg_cost'] = str(holdings.get('avg_cost', 0)) if holdings else '0'
+                        # 清空可能来自场外的数据
+                        r_copy['principal_total'] = '0'  # 场内产品不使用 principal_total
+                        r_copy['cost'] = str(holdings.get('total_cost', 0)) if holdings else '0'  # 使用 total_cost 作为 cost
                         filtered_data.append(r_copy)
                     except Exception as e:
                         logger.warning(f"计算场内持仓失败: {code}, error={e}")
                         # 计算失败时仍显示，但份额为0
                         r_copy = dict(r)
+                        r_copy['product_id'] = exchange_product_id
                         r_copy['shares'] = '0'
                         r_copy['value'] = '0'
+                        r_copy['total_pnl'] = '0'
+                        r_copy['total_cost'] = '0'
+                        r_copy['principal_total'] = '0'
+                        r_copy['cost'] = '0'
                         filtered_data.append(r_copy)
             daily_data = filtered_data
         else:
@@ -2535,13 +2549,50 @@ def page_asset_details():
                 except:
                     value = Decimal("0.00")
             
-            # P0-6: 统一精度展示
-            # 份额保留6位，金额保留2位，净值保留4位
+            # 格式化展示
+            # 份额保留2位小数，净值保留6位小数，市值保留2位小数，盈亏保留2位小数，收益率转为百分比
             from src.utils.decimal_utils import format_shares, format_money, format_nav
             
-            shares_display = format_shares(row.get("shares"), places=6)
-            nav_display = format_nav(row.get("nav"), places=4)
+            shares_display = format_shares(row.get("shares"), places=2)
+            nav_display = format_nav(row.get("nav"), places=6)
             total_pnl = format_money(row.get("total_pnl"), places=2)
+            
+            # 收益率转为百分比
+            # 注意：场内产品和场外产品的收益率计算方式不同
+            # 场内产品：使用 total_pnl / total_cost（基于 trade_fills）
+            # 场外产品：使用 total_pnl / principal_total（基于 transactions）
+            shares = Decimal(str(row.get("shares", 0) or 0))
+            total_pnl = Decimal(str(row.get("total_pnl", 0) or 0))
+            
+            # 如果份额为0，收益率直接为0
+            if shares == 0:
+                row["real_return"] = "0.00%"
+            else:
+                # 判断是场内还是场外产品（通过 product_id 或 total_cost 字段）
+                total_cost = Decimal(str(row.get("total_cost", 0) or 0))
+                principal_total = Decimal(str(row.get("principal_total", 0) or 0))
+                cost = Decimal(str(row.get("cost", 0) or 0))
+                
+                # 优先使用 total_cost（场内产品）
+                if total_cost > 0:
+                    # 场内产品：使用 total_pnl / total_cost
+                    return_val = float((total_pnl / total_cost * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    row["real_return"] = f"{return_val:.2f}%"
+                elif principal_total > 0:
+                    # 场外产品：使用 total_pnl / principal_total
+                    return_val = float((total_pnl / principal_total * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    row["real_return"] = f"{return_val:.2f}%"
+                elif cost > 0:
+                    # 备选：使用 cost（持仓成本）计算浮动盈亏收益率
+                    unrealized_pnl = Decimal(str(row.get("unrealized_pnl", 0) or 0))
+                    if unrealized_pnl != 0:
+                        return_val = float((unrealized_pnl / cost * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                        row["real_return"] = f"{return_val:.2f}%"
+                    else:
+                        row["real_return"] = "0.00%"
+                else:
+                    # 无法计算收益率
+                    row["real_return"] = "0.00%"
             
             row["shares"] = shares_display
             row["nav"] = nav_display
@@ -2550,6 +2601,14 @@ def page_asset_details():
             return row
         
         df_daily = df_daily.apply(_recalc_row, axis=1)
+        
+        # 在产品名称中添加产品代码（小字显示）
+        # 由于 st.dataframe 不支持 HTML，我们直接在名称后面添加代码
+        if 'product_code' in df_daily.columns and 'product_name' in df_daily.columns:
+            df_daily['product_name'] = df_daily.apply(
+                lambda row: f"{row.get('product_name', '')} ({row.get('product_code', '')})",
+                axis=1
+            )
         
         # 选择显示的列（增加净值日期）
         display_cols = ['product_name', 'nav_date', 'nav', 'shares', 'value', 'total_pnl', 'real_return']
@@ -2568,6 +2627,9 @@ def page_asset_details():
         df_display = df_daily[display_cols].copy()
         df_display = df_display.rename(columns=col_names)
         
+        # 使用 st.dataframe 显示，但产品名称列需要特殊处理（HTML格式）
+        # 由于 st.dataframe 不支持 HTML，我们需要使用 st.markdown 或者修改显示方式
+        # 这里先使用 st.dataframe，产品代码会在名称后面显示
         st.dataframe(df_display, width='stretch', hide_index=True)
     else:
         st.info("暂无产品持仓数据")
@@ -3040,6 +3102,7 @@ def page_invest():
     tab1, tab2, tab3, tab4 = st.tabs(["💳 买入/成交", "📤 赎回发起", "📝 补录历史", "🔁 转托管（场外→场内）"])
     
     # 获取产品选项（需要包含 channel 字段）
+    from data.product_service import get_products
     all_products = get_products(is_active=True)
     
     # 分离场内和场外产品
@@ -3503,7 +3566,7 @@ def page_invest():
     # ------------------------------------------------------------
     with tab4:
         st.subheader("🔁 场外基金转托管到场内（LOF）")
-        st.info("💡 目前仅记录转托管事件，不会立即影响持仓计算。后续可用于精细拆分场内/场外持仓。")
+        st.info("💡 转托管将自动更新场外和场内持仓，并生成关联的理财记录。")
 
         # 只列出同时存在 OTC 和 EXCHANGE 两个版本的基金代码
         code_to_channels: Dict[str, set] = {}
@@ -3544,6 +3607,9 @@ def page_invest():
 
                 from datetime import date as _date
                 transfer_date = st.date_input("转托管日期", value=_date.today(), key="custody_transfer_date")
+                
+                transfer_time = st.text_input("转托管时间（HH:MM:SS）", value="10:00:00", key="custody_transfer_time",
+                                             help="默认 10:00:00")
 
                 transfer_shares = st.number_input(
                     "转托管份额 *（从场外转到场内）",
@@ -3552,7 +3618,34 @@ def page_invest():
                     format="%.4f",
                     key="custody_transfer_shares",
                 )
+                
+                # 成交价格（场内价格）
+                transfer_price = st.number_input(
+                    "成交价格 *（场内价格）",
+                    min_value=0.0001,
+                    step=0.01,
+                    format="%.4f",
+                    key="custody_transfer_price",
+                    help="场内成交价格，用于计算金额"
+                )
+                
+                # 自动计算金额
+                if transfer_shares > 0 and transfer_price > 0:
+                    calculated_amount = Decimal(str(transfer_shares)) * Decimal(str(transfer_price))
+                    st.info(f"💰 计算金额：¥{format_decimal(calculated_amount)}（价格 × 份额）")
+                
             with col2:
+                # 费用
+                transfer_fee = st.number_input(
+                    "费用",
+                    min_value=0.0,
+                    step=0.01,
+                    value=0.0,
+                    format="%.2f",
+                    key="custody_transfer_fee",
+                    help="转托管费用，默认 0"
+                )
+                
                 custody_note = st.text_input("备注（可选）", key="custody_transfer_note")
 
                 # 展示该产品当前总份额，方便你参考
@@ -3567,7 +3660,7 @@ def page_invest():
                             total_value = Decimal(str(info.get("value") or "0"))
                             st.caption(
                                 f"当前总份额：{total_shares:.4f} | 当前市值约：¥{format_decimal(total_value)} "
-                                "(包含场内+场外，后续会按转托管进行拆分)"
+                                "(包含场内+场外)"
                             )
                         except Exception:
                             pass
@@ -3576,26 +3669,34 @@ def page_invest():
 
             st.divider()
             if st.button("保存转托管记录", type="primary", key="custody_transfer_submit"):
-                if not product_code or transfer_shares <= 0:
-                    st.error("❌ 请先选择基金并输入大于0的转托管份额。")
+                if not product_code:
+                    st.error("❌ 请先选择基金。")
+                elif transfer_shares <= 0:
+                    st.error("❌ 转托管份额必须大于0。")
+                elif transfer_price <= 0:
+                    st.error("❌ 成交价格必须大于0。")
                 else:
                     try:
                         from core.custody_transfer_service import add_fund_custody_transfer
 
-                        new_id = add_fund_custody_transfer(
+                        result = add_fund_custody_transfer(
                             product_code=product_code,
                             transfer_shares=Decimal(str(transfer_shares)),
+                            price=Decimal(str(transfer_price)),
                             transfer_date=transfer_date,
-                            from_channel="OTC",
-                            to_channel="EXCHANGE",
+                            fee=Decimal(str(transfer_fee)),
+                            transfer_time=transfer_time,
                             note=custody_note,
                         )
-                        if new_id:
-                            st.success(f"✅ 已保存转托管记录（ID={new_id}）：{product_code} {transfer_shares:.4f} 份 场外→场内")
+                        if result.get('success'):
+                            st.success(f"✅ {result.get('message', '转托管成功')}：{product_code} {transfer_shares:.4f} 份 @ {transfer_price} 场外→场内")
+                            st.rerun()
                         else:
-                            st.error("❌ 保存失败，返回ID为空。")
+                            st.error(f"❌ {result.get('message', '转托管失败')}")
                     except Exception as e:
                         st.error(f"❌ 保存失败: {e}")
+                        import traceback
+                        st.exception(e)
     with tab2:
         st.subheader("赎回发起")
         
@@ -4092,36 +4193,76 @@ def page_invest():
     
     if recent_tx:
         # 计算每个产品的当前份额，用于倒推
+        # 注意：转托管转出和转入使用相同的 product_code，但 product_id 不同（场外和场内）
+        # 因此需要按 product_id 来区分计算份额
         from core.holdings_calculator import get_all_product_positions
+        from core.exchange_holdings_calculator import get_exchange_holdings_summary
+        from data.product_service import get_products
         from datetime import date as date_cls
+        
+        # 获取所有产品信息，建立 product_id -> product_code 的映射
+        all_products = get_products(is_active=True)
+        product_id_to_code = {p.get('id'): p.get('code') for p in all_products}
+        
+        # 获取场外产品持仓（按 product_code）
         current_positions = get_all_product_positions(date_cls.today().strftime('%Y-%m-%d'))
-        # {product_code: (shares, cost)}
-        product_shares = {code: pos[0] for code, pos in current_positions.items()}
+        product_shares_by_code = {code: pos[0] for code, pos in current_positions.items()}
+        
+        # 获取场内产品持仓（按 product_id）
+        exchange_product_ids = [p.get('id') for p in all_products if p.get('channel') == 'EXCHANGE']
+        exchange_holdings = get_exchange_holdings_summary(exchange_product_ids)
+        product_shares_by_id = {pid: Decimal(str(h.get('current_qty', 0))) if h else Decimal('0') 
+                                for pid, h in exchange_holdings.items()}
         
         # recent_tx 已经是按时间倒序的，从最新开始倒推份额
         for r in recent_tx:
             action = r.get('action', '')
             product_code = r.get('product_code', '')
+            product_id = r.get('product_id')
             shares = r.get('shares', '')
             
-            # 当前记录后的产品份额
-            r['_product_shares_after'] = product_shares.get(product_code, Decimal('0'))
+            # 确定当前记录后的产品份额
+            # 转托管转出是场外产品，转托管转入是场内产品
+            if action == 'transfer_out':
+                # 转托管转出：使用场外产品份额
+                r['_product_shares_after'] = product_shares_by_code.get(product_code, Decimal('0'))
+            elif action == 'transfer_in':
+                # 转托管转入：使用场内产品份额
+                if product_id:
+                    r['_product_shares_after'] = product_shares_by_id.get(product_id, Decimal('0'))
+                else:
+                    r['_product_shares_after'] = Decimal('0')
+            else:
+                # 其他操作：使用 product_code（场外产品）
+                r['_product_shares_after'] = product_shares_by_code.get(product_code, Decimal('0'))
             
             # 倒推：计算这笔交易前的份额
             if action in ['buy', 'buy_confirm'] and shares:
                 try:
-                    product_shares[product_code] = product_shares.get(product_code, Decimal('0')) - Decimal(str(shares))
+                    product_shares_by_code[product_code] = product_shares_by_code.get(product_code, Decimal('0')) - Decimal(str(shares))
                 except:
                     pass
             elif action in ['sell', 'sell_confirm', 'redeem_request'] and shares:
                 try:
-                    product_shares[product_code] = product_shares.get(product_code, Decimal('0')) + Decimal(str(shares))
+                    product_shares_by_code[product_code] = product_shares_by_code.get(product_code, Decimal('0')) + Decimal(str(shares))
+                except:
+                    pass
+            elif action == 'transfer_out' and shares:
+                # 转托管转出：场外产品份额减少
+                try:
+                    product_shares_by_code[product_code] = product_shares_by_code.get(product_code, Decimal('0')) + Decimal(str(shares))
+                except:
+                    pass
+            elif action == 'transfer_in' and shares and product_id:
+                # 转托管转入：场内产品份额减少（倒推）
+                try:
+                    product_shares_by_id[product_id] = product_shares_by_id.get(product_id, Decimal('0')) - Decimal(str(shares))
                 except:
                     pass
         
         # 处理数据（按原来的倒序显示）
-        # 理财视角（按份额变化）：买入/分红 = 份额增加（红色+），卖出 = 份额减少（绿色-）
-        shares_increase_actions = ['buy', 'buy_confirm', 'dividend']  # 份额增加类（红色）
+        # 理财视角（按份额变化）：买入/分红/转托管转入 = 份额增加（红色+），卖出/转托管转出 = 份额减少（绿色-）
+        shares_increase_actions = ['buy', 'buy_confirm', 'dividend', 'transfer_in']  # 份额增加类（红色）
         
         rows = []
         raw_records = []
@@ -4136,6 +4277,14 @@ def page_invest():
             
             # buy 和 buy_confirm 需要计算金额：shares × nav
             if action in ['buy', 'buy_confirm'] and shares and nav:
+                try:
+                    calc_amount = float(shares) * float(nav)
+                    amount = f"{calc_amount:.2f}"
+                except:
+                    pass
+            
+            # transfer_in 需要计算金额：shares × nav（价格）
+            if action == 'transfer_in' and shares and nav:
                 try:
                     calc_amount = float(shares) * float(nav)
                     amount = f"{calc_amount:.2f}"
@@ -4176,8 +4325,12 @@ def page_invest():
             
             # 格式化金额显示
             # 赎回时（sell_confirm, redeem_request）：金额用黑色（不显示+/-号）
+            # 转托管转出：不显示金额（空字符串）
             # 购买时：保持原有逻辑（份额增加用红色+，份额减少用绿色-）
-            if action in ['sell_confirm', 'redeem_request']:
+            if action == 'transfer_out':
+                # 转托管转出：不显示金额
+                amount_display = ''
+            elif action in ['sell_confirm', 'redeem_request']:
                 # 赎回时，金额用黑色显示，不添加+/-号
                 try:
                     amount_val = float(amount) if amount else 0
@@ -4288,16 +4441,19 @@ def page_invest():
                 
                 with col2:
                     edit_shares = st.number_input("份额", value=float(selected_record.get('shares', 0) or 0), step=0.01, format="%.4f", key="tx_edit_shares")
-                    edit_nav = st.number_input("净值", value=float(selected_record.get('nav', 0) or 0), step=0.0001, format="%.4f", key="tx_edit_nav")
-                    # 如果是赎回类型（sell_confirm），显示手续费编辑
+                    # 转托管记录：nav 字段显示为"价格"；其他记录：显示为"净值"
+                    nav_label = "价格" if selected_record.get('action') in ['transfer_in', 'transfer_out'] else "净值"
+                    edit_nav = st.number_input(nav_label, value=float(selected_record.get('nav', 0) or 0), step=0.0001, format="%.4f", key="tx_edit_nav",
+                                             help="转托管时表示成交价格，其他情况表示净值")
+                    # 如果是赎回类型（sell_confirm）或转托管类型，显示手续费编辑
                     edit_fee = None
-                    if selected_record.get('action') in ['sell_confirm', 'sell']:
+                    if selected_record.get('action') in ['sell_confirm', 'sell', 'transfer_out', 'transfer_in']:
                         edit_fee = st.number_input(
                             "手续费", 
                             value=float(selected_record.get('fee', 0) or 0), 
                             step=0.01, 
                             key="tx_edit_fee",
-                            help="赎回手续费"
+                            help="赎回或转托管手续费"
                         )
                     edit_note = st.text_input("备注", value=selected_record.get('note', '') or '', key="tx_edit_note")
                 
@@ -4646,12 +4802,34 @@ def page_orders():
         order_options = [(o.get('order_id', ''), f"{o.get('order_id', '')} - {o.get('product_code', '')} - {'买入' if o.get('order_type') == 'buy_debit' else '赎回'}") for o in all_orders]
         
         if order_options:
+            # 使用 session_state 来跟踪当前选择的订单，确保选择变化时表单内容更新
+            if 'edit_order_selected_id' not in st.session_state:
+                st.session_state['edit_order_selected_id'] = order_options[0][0] if order_options else None
+            
+            # 计算默认索引
+            default_index = 0
+            saved_id = st.session_state.get('edit_order_selected_id')
+            if saved_id:
+                for i, o in enumerate(order_options):
+                    if o[0] == saved_id:
+                        default_index = i
+                        break
+            
             selected_order_id = st.selectbox(
                 "选择要编辑的订单",
                 options=[o[0] for o in order_options],
                 format_func=lambda x: next((o[1] for o in order_options if o[0] == x), x),
-                key="edit_order_select"
+                key="edit_order_select",
+                index=default_index
             )
+            
+            # 更新 session_state
+            if selected_order_id != st.session_state.get('edit_order_selected_id'):
+                st.session_state['edit_order_selected_id'] = selected_order_id
+                # 清空相关的输入框状态，强制重新渲染
+                for key in list(st.session_state.keys()):
+                    if key.startswith('order_edit_'):
+                        del st.session_state[key]
             
             if selected_order_id:
                 # 找到选中的订单
@@ -4665,26 +4843,50 @@ def page_orders():
                     order_type = selected_order.get('order_type', '')
                     status = selected_order.get('status', '')
                     
+                    # 使用订单ID作为key的一部分，确保每个订单的输入框是独立的
+                    key_suffix = f"_{selected_order_id}"
+                    
                     col1, col2 = st.columns(2)
                     
                     with col1:
                         # 只读信息
-                        st.text_input("订单号", value=selected_order_id, disabled=True, key="order_edit_id")
-                        st.text_input("产品代码", value=selected_order.get('product_code', ''), disabled=True, key="order_edit_product")
-                        st.text_input("订单类型", value='买入扣款' if order_type == 'buy_debit' else '赎回发起', disabled=True, key="order_edit_type")
-                        st.text_input("状态", value={'pending': '待处理', 'done': '已完成', 'cancelled': '已取消'}.get(status, status), disabled=True, key="order_edit_status")
+                        st.text_input("订单号", value=selected_order_id, disabled=True, key=f"order_edit_id{key_suffix}")
+                        st.text_input("产品代码", value=selected_order.get('product_code', ''), disabled=True, key=f"order_edit_product{key_suffix}")
+                        st.text_input("订单类型", value='买入扣款' if order_type == 'buy_debit' else '赎回发起', disabled=True, key=f"order_edit_type{key_suffix}")
+                        st.text_input("状态", value={'pending': '待处理', 'done': '已完成', 'cancelled': '已取消'}.get(status, status), disabled=True, key=f"order_edit_status{key_suffix}")
                     
                     with col2:
-                        # 可编辑字段
+                        # 可编辑字段 - 使用订单ID作为key的一部分
+                        # 净值日期
+                        nav_date_str = selected_order.get('nav_date', '')
+                        if nav_date_str:
+                            try:
+                                nav_date_value = datetime.strptime(nav_date_str, '%Y-%m-%d').date()
+                            except:
+                                nav_date_value = datetime.now().date()
+                        else:
+                            nav_date_value = datetime.now().date()
+                        
                         edit_nav_date = st.date_input(
                             "净值日期",
-                            value=datetime.strptime(selected_order.get('nav_date', ''), '%Y-%m-%d').date() if selected_order.get('nav_date') else datetime.now().date(),
-                            key="order_edit_nav_date"
+                            value=nav_date_value,
+                            key=f"order_edit_nav_date{key_suffix}"
                         )
+                        
+                        # 确认日期
+                        confirm_date_str = selected_order.get('confirm_date', '')
+                        if confirm_date_str:
+                            try:
+                                confirm_date_value = datetime.strptime(confirm_date_str, '%Y-%m-%d').date()
+                            except:
+                                confirm_date_value = datetime.now().date()
+                        else:
+                            confirm_date_value = datetime.now().date()
+                        
                         edit_confirm_date = st.date_input(
                             "确认日期",
-                            value=datetime.strptime(selected_order.get('confirm_date', ''), '%Y-%m-%d').date() if selected_order.get('confirm_date') else datetime.now().date(),
-                            key="order_edit_confirm_date"
+                            value=confirm_date_value,
+                            key=f"order_edit_confirm_date{key_suffix}"
                         )
                         
                         if order_type == 'buy_debit':
@@ -4692,7 +4894,7 @@ def page_orders():
                                 "金额",
                                 value=float(selected_order.get('amount', 0) or 0),
                                 step=0.01,
-                                key="order_edit_amount"
+                                key=f"order_edit_amount{key_suffix}"
                             )
                             edit_shares = None
                         else:
@@ -4700,11 +4902,12 @@ def page_orders():
                                 "份额",
                                 value=float(selected_order.get('shares', 0) or 0),
                                 step=0.01,
-                                key="order_edit_shares"
+                                format="%.4f",
+                                key=f"order_edit_shares{key_suffix}"
                             )
                             edit_amount = None
                         
-                        edit_note = st.text_input("备注", value=selected_order.get('note', '') or '', key="order_edit_note")
+                        edit_note = st.text_input("备注", value=selected_order.get('note', '') or '', key=f"order_edit_note{key_suffix}")
                     
                     # 保存按钮
                     if st.button("💾 保存订单修改", type="primary", key="save_order_edit"):

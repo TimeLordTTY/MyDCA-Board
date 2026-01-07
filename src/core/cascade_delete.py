@@ -698,6 +698,7 @@ def cascade_delete_transaction(tx_id: int, tx: dict) -> dict:
     
     注意：场外订单对应两笔理财录入（buy_debit 和 buy_confirm）
     赎回订单对应（redeem_request 和 sell_confirm）
+    转托管对应（transfer_out 和 transfer_in）
     
     Args:
         tx_id: 理财记录ID
@@ -707,6 +708,12 @@ def cascade_delete_transaction(tx_id: int, tx: dict) -> dict:
         删除结果字典
     """
     from data.data_store import delete_transaction, delete_order, delete_ledger
+    
+    # 检查是否是转托管记录
+    action = tx.get('action', '')
+    if action in ('transfer_out', 'transfer_in'):
+        # 调用转托管专用删除函数
+        return cascade_delete_custody_transfer(tx_id, tx)
     
     result = {
         'transaction_deleted': False,
@@ -1080,6 +1087,37 @@ def cascade_delete_ledger(ledger_id: int, ledger: dict) -> dict:
                         result['errors'].append(f"删除转账配对记录失败: ledger_id={pair_id}")
                 except Exception as e:
                     result['errors'].append(f"删除转账配对记录异常: ledger_id={pair_id}, error={e}")
+        
+        # 6. 重新计算受影响的账户余额
+        affected_accounts = set()
+        # 收集当前记账记录影响的账户
+        account_from = ledger.get('account_from', '')
+        account_to = ledger.get('account_to', '')
+        if account_from:
+            affected_accounts.add(account_from)
+        if account_to:
+            affected_accounts.add(account_to)
+        # 如果删除了转账配对记录，也要收集配对记录影响的账户
+        if transfer_pair:
+            pair_account_from = transfer_pair.get('account_from', '')
+            pair_account_to = transfer_pair.get('account_to', '')
+            if pair_account_from:
+                affected_accounts.add(pair_account_from)
+            if pair_account_to:
+                affected_accounts.add(pair_account_to)
+        
+        # 重新计算所有受影响的账户余额
+        if affected_accounts:
+            from core.ledger_service import calc_account_balance
+            from data.account_service import update_account_balance
+            for account_code in affected_accounts:
+                try:
+                    new_balance = calc_account_balance(account_code)
+                    update_account_balance(account_code, new_balance)
+                    logger.info(f"已重新计算账户余额: {account_code} = {new_balance}")
+                except Exception as e:
+                    result['errors'].append(f"重新计算账户余额失败: account={account_code}, error={e}")
+                    logger.warning(f"重新计算账户余额失败: account={account_code}, error={e}")
     
     except Exception as e:
         result['errors'].append(f"级联删除记账记录异常: {e}")
@@ -1140,6 +1178,7 @@ def cascade_update_transaction(tx_id: int, tx: dict, updated_record: dict) -> di
     更新逻辑：
     - 理财记录更新：同步更新关联的记账记录（金额、日期、备注）
     - 记账记录通过备注中的订单号关联
+    - 如果是转托管记录，调用专门的转托管更新函数
     
     Args:
         tx_id: 理财记录ID
@@ -1150,6 +1189,12 @@ def cascade_update_transaction(tx_id: int, tx: dict, updated_record: dict) -> di
         更新结果字典
     """
     from data.data_store import update_transaction, update_ledger, load_ledger
+    
+    # 检查是否是转托管记录
+    action = tx.get('action', '')
+    if action in ('transfer_out', 'transfer_in'):
+        # 调用转托管专用更新函数
+        return cascade_update_custody_transfer(tx_id, tx, updated_record)
     
     result = {
         'transaction_updated': False,
@@ -1393,3 +1438,316 @@ def cascade_update_order(order_id: str, order: dict, updated_fields: dict) -> di
     
     return result
 
+
+# ============================================================
+# 转托管联动删除/更新函数
+# ============================================================
+
+def cascade_delete_custody_transfer(tx_id: int, tx: dict) -> dict:
+    """
+    级联删除转托管记录及其关联记录
+    
+    转托管会产生两笔记录：
+    - transfer_out: 场外转出
+    - transfer_in: 场内转入
+    
+    删除逻辑：
+    1. 通过 order_id 找到配对记录
+    2. 恢复账户份额
+    3. 删除 trade_fills 记录
+    4. 删除关联的记账记录
+    5. 删除两条 transactions 记录
+    
+    Args:
+        tx_id: 理财记录ID
+        tx: 理财记录数据
+    
+    Returns:
+        删除结果字典
+    """
+    from data.data_store import delete_transaction, delete_ledger, load_ledger
+    from core.custody_transfer_service import find_custody_transfer_pair
+    
+    result = {
+        'transaction_deleted': False,
+        'pair_transaction_deleted': False,
+        'trade_fills_deleted': 0,
+        'ledgers_deleted': 0,
+        'shares_restored': [],
+        'errors': []
+    }
+    
+    try:
+        action = tx.get('action', '')
+        order_id = tx.get('order_id', '')
+        
+        if action not in ('transfer_out', 'transfer_in'):
+            result['errors'].append(f"不是转托管记录: action={action}")
+            return result
+        
+        if not order_id:
+            result['errors'].append(f"转托管记录缺少 order_id")
+            return result
+        
+        # 1. 查找配对记录
+        transfer_out, transfer_in = find_custody_transfer_pair(order_id)
+        
+        if not transfer_out or not transfer_in:
+            result['errors'].append(f"找不到转托管配对记录: order_id={order_id}")
+            return result
+        
+        # 确定当前记录和配对记录
+        current_record = transfer_out if action == 'transfer_out' else transfer_in
+        pair_record = transfer_in if action == 'transfer_out' else transfer_out
+        
+        # 2. 恢复账户份额
+        transfer_shares = _parse_decimal(current_record.get('shares', 0))
+        
+        # 恢复场外账户份额（增加）
+        if action == 'transfer_out':
+            # 删除转出，恢复场外份额
+            otc_product_code = transfer_out.get('product_code', '')
+            if otc_product_code:
+                from data.product_service import get_product_by_code
+                from data.account_service import get_accounts, update_account_shares
+                
+                otc_product = get_product_by_code(otc_product_code, channel='OTC')
+                if otc_product:
+                    otc_accounts = get_accounts(is_active=True)
+                    for acc in otc_accounts:
+                        if acc.get('product_id') == otc_product.get('id') and acc.get('account_type') == 'PRODUCT_SUB':
+                            update_account_shares(acc.get('account_code'), transfer_shares, 'increase')
+                            result['shares_restored'].append({
+                                'account_code': acc.get('account_code'),
+                                'shares': transfer_shares,
+                                'operation': 'increase'
+                            })
+        
+        # 恢复场内账户份额（减少）
+        if action == 'transfer_in':
+            # 删除转入，恢复场内份额
+            exchange_product_code = transfer_in.get('product_code', '')
+            if exchange_product_code:
+                from data.product_service import get_product_by_code
+                from data.account_service import get_accounts, update_account_shares
+                
+                exchange_product = get_product_by_code(exchange_product_code, channel='EXCHANGE')
+                if exchange_product:
+                    exchange_accounts = get_accounts(is_active=True)
+                    for acc in exchange_accounts:
+                        if acc.get('product_id') == exchange_product.get('id') and acc.get('account_type') == 'PRODUCT_SUB':
+                            update_account_shares(acc.get('account_code'), transfer_shares, 'decrease')
+                            result['shares_restored'].append({
+                                'account_code': acc.get('account_code'),
+                                'shares': transfer_shares,
+                                'operation': 'decrease'
+                            })
+        
+        # 3. 删除 trade_fills 记录（如果是场内记录）
+        if action == 'transfer_in':
+            exchange_product_code = transfer_in.get('product_code', '')
+            if exchange_product_code:
+                from data.product_service import get_product_by_code
+                from data.db_connector import execute_update
+                
+                exchange_product = get_product_by_code(exchange_product_code, channel='EXCHANGE')
+                if exchange_product:
+                    exchange_product_id = exchange_product.get('id')
+                    delete_sql = """
+                        DELETE FROM trade_fills
+                        WHERE product_id = %s
+                          AND side = 'BUY'
+                          AND trade_date = %s
+                          AND ABS(qty - %s) < 0.0001
+                          AND source = 'MANUAL'
+                        LIMIT 1
+                    """
+                    affected = execute_update(delete_sql, (
+                        exchange_product_id,
+                        transfer_in.get('date', ''),
+                        float(transfer_shares)
+                    ))
+                    result['trade_fills_deleted'] = affected
+        
+        # 4. 删除关联的记账记录
+        all_ledgers = load_ledger()
+        for ledger in all_ledgers:
+            note = ledger.get('note', '') or ''
+            if (f'(订单号: {order_id})' in note or f'(订单号:{order_id})' in note) and '转托管' in note:
+                ledger_id = ledger.get('id')
+                if ledger_id:
+                    try:
+                        if delete_ledger(ledger_id):
+                            result['ledgers_deleted'] += 1
+                    except Exception as e:
+                        result['errors'].append(f"删除记账记录失败: ledger_id={ledger_id}, error={e}")
+        
+        # 5. 删除配对记录
+        pair_id = pair_record.get('id')
+        if pair_id:
+            try:
+                if delete_transaction(pair_id):
+                    result['pair_transaction_deleted'] = True
+            except Exception as e:
+                result['errors'].append(f"删除配对记录失败: tx_id={pair_id}, error={e}")
+        
+        # 6. 删除当前记录
+        if delete_transaction(tx_id):
+            result['transaction_deleted'] = True
+        else:
+            result['errors'].append(f"删除理财记录失败: tx_id={tx_id}")
+    
+    except Exception as e:
+        result['errors'].append(f"级联删除转托管记录异常: {e}")
+        logger.error(f"级联删除转托管记录异常: tx_id={tx_id}", exc_info=True)
+    
+    return result
+
+
+def cascade_update_custody_transfer(tx_id: int, tx: dict, updated_record: dict) -> dict:
+    """
+    联动更新转托管记录及其关联记录
+    
+    更新逻辑：
+    1. 通过 order_id 找到配对记录
+    2. 联动更新两条 transactions 记录（金额、价格、份额、费用、日期、备注）
+    3. 更新 trade_fills 记录（如果份额或价格变化）
+    4. 更新关联的记账记录
+    5. 重新计算账户份额（如果份额变化）
+    
+    Args:
+        tx_id: 理财记录ID
+        tx: 原理财记录数据
+        updated_record: 更新后的记录数据
+    
+    Returns:
+        更新结果字典
+    """
+    from data.data_store import update_transaction, update_ledger, load_ledger, parse_decimal
+    from core.custody_transfer_service import find_custody_transfer_pair, update_custody_transfer
+    from decimal import Decimal, ROUND_HALF_UP
+    
+    result = {
+        'transaction_updated': False,
+        'pair_transaction_updated': False,
+        'trade_fills_updated': False,
+        'ledgers_updated': 0,
+        'errors': []
+    }
+    
+    try:
+        action = tx.get('action', '')
+        order_id = tx.get('order_id', '')
+        
+        if action not in ('transfer_out', 'transfer_in'):
+            result['errors'].append(f"不是转托管记录: action={action}")
+            return result
+        
+        if not order_id:
+            result['errors'].append(f"转托管记录缺少 order_id")
+            return result
+        
+        # 1. 查找配对记录
+        transfer_out, transfer_in = find_custody_transfer_pair(order_id)
+        
+        if not transfer_out or not transfer_in:
+            result['errors'].append(f"找不到转托管配对记录: order_id={order_id}")
+            return result
+        
+        # 2. 提取更新字段
+        new_shares = updated_record.get('shares')
+        new_price = updated_record.get('nav')  # 价格存储在 nav 字段
+        new_fee = updated_record.get('fee')
+        new_date = updated_record.get('date')
+        new_note = updated_record.get('note')
+        
+        # 转换类型
+        if new_shares:
+            new_shares = parse_decimal(new_shares) if isinstance(new_shares, str) else Decimal(str(new_shares))
+        if new_price:
+            new_price = parse_decimal(new_price) if isinstance(new_price, str) else Decimal(str(new_price))
+        if new_fee:
+            new_fee = parse_decimal(new_fee) if isinstance(new_fee, str) else Decimal(str(new_fee))
+        if new_date and isinstance(new_date, str):
+            from datetime import datetime
+            new_date = datetime.strptime(new_date, '%Y-%m-%d').date()
+        
+        # 3. 使用 custody_transfer_service 的更新函数
+        update_result = update_custody_transfer(
+            order_id=order_id,
+            transfer_shares=new_shares,
+            price=new_price,
+            fee=new_fee,
+            transfer_date=new_date,
+            note=new_note
+        )
+        
+        if update_result.get('success'):
+            result['transaction_updated'] = True
+            result['pair_transaction_updated'] = True
+            result['trade_fills_updated'] = True
+        else:
+            result['errors'].append(update_result.get('message', '更新失败'))
+        
+        # 4. 更新关联的记账记录
+        all_ledgers = load_ledger()
+        for ledger in all_ledgers:
+            note = ledger.get('note', '') or ''
+            if (f'(订单号: {order_id})' in note or f'(订单号:{order_id})' in note) and '转托管' in note:
+                ledger_id = ledger.get('id')
+                if not ledger_id:
+                    continue
+                
+                # 构建记账记录更新数据
+                ledger_update = {}
+                
+                # 更新日期
+                if new_date:
+                    old_event_time = ledger.get('event_time', '')
+                    if old_event_time and len(old_event_time) > 10:
+                        time_part = old_event_time[10:]
+                        ledger_update['event_time'] = f"{new_date.strftime('%Y-%m-%d')}{time_part}"
+                    else:
+                        ledger_update['event_time'] = f"{new_date.strftime('%Y-%m-%d')} 10:00:00"
+                
+                # 更新金额（如果份额或价格变化）
+                if new_shares and new_price:
+                    new_amount = (new_price * new_shares).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    ledger_update['amount'] = str(new_amount)
+                
+                # 更新备注
+                if new_note is not None:
+                    # 从原备注中提取订单号部分
+                    if '(订单号:' in note:
+                        order_part = note[note.find('(订单号:'):]
+                        # 重新构建备注
+                        if new_note:
+                            ledger_update['note'] = f"{new_note} {order_part}"
+                        else:
+                            ledger_update['note'] = order_part
+                
+                # 执行更新
+                if ledger_update:
+                    full_update = {
+                        'event_time': ledger_update.get('event_time', ledger.get('event_time')),
+                        'entry_type': ledger.get('entry_type'),
+                        'amount': ledger_update.get('amount', str(ledger.get('amount', '0'))),
+                        'category_l1': ledger.get('category_l1'),
+                        'category_l2': ledger.get('category_l2'),
+                        'account_from': ledger.get('account_from'),
+                        'account_to': ledger.get('account_to'),
+                        'note': ledger_update.get('note', ledger.get('note'))
+                    }
+                    
+                    try:
+                        if update_ledger(ledger_id, full_update):
+                            result['ledgers_updated'] += 1
+                            logger.info(f"已更新关联记账记录: ledger_id={ledger_id}")
+                    except Exception as e:
+                        result['errors'].append(f"更新记账记录失败: ledger_id={ledger_id}, error={e}")
+    
+    except Exception as e:
+        result['errors'].append(f"联动更新转托管记录异常: {e}")
+        logger.error(f"联动更新转托管记录异常: tx_id={tx_id}", exc_info=True)
+    
+    return result

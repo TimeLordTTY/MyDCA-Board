@@ -336,6 +336,14 @@ class HoldingsCalculator:
                     cost -= cost_reduction
                     shares -= sell_shares
             
+            elif action == 'transfer_out':
+                # 转托管转出：份额减少，成本按比例减少（类似卖出）
+                transfer_shares = safe_decimal(t.get('shares', 0))
+                if transfer_shares > 0 and shares > 0:
+                    cost_reduction = cost * transfer_shares / shares
+                    cost -= cost_reduction
+                    shares -= transfer_shares
+            
             elif action == 'dividend':
                 # 分红：份额增加，成本不变
                 div_shares = safe_decimal(t.get('shares', 0))
