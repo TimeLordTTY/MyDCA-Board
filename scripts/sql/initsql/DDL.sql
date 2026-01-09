@@ -1,17 +1,17 @@
 /*
  Navicat Premium Dump SQL
 
- Source Server         : 124.220.229.91-dca
+ Source Server         : localhost-dca
  Source Server Type    : MySQL
- Source Server Version : 50744 (5.7.44-log)
- Source Host           : 124.220.229.91:9009
+ Source Server Version : 80036 (8.0.36)
+ Source Host           : 127.0.0.1:9009
  Source Schema         : dca
 
  Target Server Type    : MySQL
- Target Server Version : 50744 (5.7.44-log)
+ Target Server Version : 80036 (8.0.36)
  File Encoding         : 65001
 
- Date: 28/12/2025 16:36:37
+ Date: 10/01/2026 00:23:28
 */
 
 SET NAMES utf8mb4;
@@ -22,17 +22,17 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- ----------------------------
 DROP TABLE IF EXISTS `account_groups`;
 CREATE TABLE `account_groups`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `group_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '组代码（如 wenlibao/ylb）',
   `group_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '组名称',
-  `linked_product_id` bigint(20) NULL DEFAULT NULL COMMENT '关联产品ID（如稳利宝）',
-  `profit_account_id` bigint(20) NULL DEFAULT NULL COMMENT '收益归属账户ID',
+  `linked_product_id` bigint NULL DEFAULT NULL COMMENT '关联产品ID（如稳利宝）',
+  `profit_account_id` bigint NULL DEFAULT NULL COMMENT '收益归属账户ID',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `group_code`(`group_code`) USING BTREE,
-  INDEX `idx_linked_product`(`linked_product_id`) USING BTREE,
-  INDEX `idx_profit_account`(`profit_account_id`) USING BTREE
+  UNIQUE INDEX `group_code`(`group_code` ASC) USING BTREE,
+  INDEX `idx_linked_product`(`linked_product_id` ASC) USING BTREE,
+  INDEX `idx_profit_account`(`profit_account_id` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '账户组配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -40,9 +40,9 @@ CREATE TABLE `account_groups`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `account_pool_rules`;
 CREATE TABLE `account_pool_rules`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `from_account_id` bigint(20) NOT NULL COMMENT '来源账户ID（如余利宝理财金）',
-  `to_product_id` bigint(20) NOT NULL COMMENT '目标产品ID（基金/ETF/LOF）',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `from_account_id` bigint NOT NULL COMMENT '来源账户ID（如余利宝理财金）',
+  `to_product_id` bigint NOT NULL COMMENT '目标产品ID（基金/ETF/LOF）',
   `ratio` decimal(10, 6) NOT NULL COMMENT '分配比例（如 0.35 表示 35%）',
   `min_amount` decimal(18, 2) NULL DEFAULT 0.00 COMMENT '最小分配金额',
   `round_step` decimal(18, 2) NULL DEFAULT 1.00 COMMENT '取整粒度（如 1/10/100）',
@@ -50,9 +50,9 @@ CREATE TABLE `account_pool_rules`  (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_pool_account_product`(`from_account_id`, `to_product_id`) USING BTREE,
-  INDEX `idx_from_account`(`from_account_id`) USING BTREE,
-  INDEX `idx_to_product`(`to_product_id`) USING BTREE
+  UNIQUE INDEX `uk_pool_account_product`(`from_account_id` ASC, `to_product_id` ASC) USING BTREE,
+  INDEX `idx_from_account`(`from_account_id` ASC) USING BTREE,
+  INDEX `idx_to_product`(`to_product_id` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 14 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '资金池分配规则表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -60,33 +60,37 @@ CREATE TABLE `account_pool_rules`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `accounts`;
 CREATE TABLE `accounts`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `account_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '账户代码（唯一标识）',
   `account_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '账户ID（兼容字段，等于account_code）',
   `account_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '账户名称',
   `account_type` enum('CASH','BUCKET','FUND_MAPPED','PRODUCT_SUB','FUND_TOTAL','SUMMARY') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '账户类型',
-  `parent_account_id` bigint(20) NULL DEFAULT NULL COMMENT '父账户ID（桶挂在大账户下）',
-  `product_id` bigint(20) NULL DEFAULT NULL COMMENT '账户背后绑定的产品ID',
+  `parent_account_id` bigint NULL DEFAULT NULL COMMENT '父账户ID（桶挂在大账户下）',
+  `product_id` bigint NULL DEFAULT NULL COMMENT '账户背后绑定的产品ID',
   `currency` enum('CNY','USD','HKD') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT 'CNY' COMMENT '货币类型',
   `note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
+  `balance` decimal(18, 2) NULL DEFAULT 0.00 COMMENT '账户当前余额（从初始余额+所有ledger记录计算）',
+  `shares` decimal(20, 6) NULL DEFAULT 0.000000 COMMENT '账户在产品中的份额（仅用于PRODUCT_SUB类型账户）',
   `is_active` tinyint(1) NULL DEFAULT 1 COMMENT '是否启用',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `account_code`(`account_code`) USING BTREE,
-  INDEX `idx_account_type`(`account_type`) USING BTREE,
-  INDEX `idx_parent_account`(`parent_account_id`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_is_active`(`is_active`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 16 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '账户配置表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `account_code`(`account_code` ASC) USING BTREE,
+  INDEX `idx_account_type`(`account_type` ASC) USING BTREE,
+  INDEX `idx_parent_account`(`parent_account_id` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
+  INDEX `idx_is_active`(`is_active` ASC) USING BTREE,
+  INDEX `idx_balance`(`balance` ASC) USING BTREE,
+  INDEX `idx_shares`(`shares` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 18 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '账户配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for advisor_suggestion
 -- ----------------------------
 DROP TABLE IF EXISTS `advisor_suggestion`;
 CREATE TABLE `advisor_suggestion`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `as_of_time` datetime NOT NULL COMMENT '建议生成时间',
   `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码',
   `action` enum('BUY','HOLD','WAIT','SKIP') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '建议动作',
@@ -110,17 +114,17 @@ CREATE TABLE `advisor_suggestion`  (
   `reason_blocks_json` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '结构化原因列表（JSON）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE KEY `uk_product` (`product_id`) USING BTREE COMMENT '每个产品只保留一条建议记录',
-  INDEX `idx_product_id` (`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 970 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表（每个产品只保留一条最新建议）' ROW_FORMAT = DYNAMIC;
+  UNIQUE INDEX `uk_product`(`product_id` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 16350 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '建议输出表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for backtest_daily
 -- ----------------------------
 DROP TABLE IF EXISTS `backtest_daily`;
 CREATE TABLE `backtest_daily`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `summary_id` bigint(20) NOT NULL COMMENT '关联backtest_summary.id',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `summary_id` bigint NOT NULL COMMENT '关联backtest_summary.id',
   `trade_date` date NOT NULL COMMENT '交易日期',
   `nav` decimal(18, 6) NOT NULL COMMENT '净值/收盘价',
   `cash_pool` decimal(20, 2) NOT NULL COMMENT '可用现金池',
@@ -131,9 +135,9 @@ CREATE TABLE `backtest_daily`  (
   `fee_cum` decimal(20, 2) NOT NULL COMMENT '累计手续费',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_summary_date`(`summary_id`, `trade_date`) USING BTREE,
-  INDEX `idx_summary`(`summary_id`) USING BTREE,
-  INDEX `idx_trade_date`(`trade_date`) USING BTREE
+  UNIQUE INDEX `uk_summary_date`(`summary_id` ASC, `trade_date` ASC) USING BTREE,
+  INDEX `idx_summary`(`summary_id` ASC) USING BTREE,
+  INDEX `idx_trade_date`(`trade_date` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 163364 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '回测每日数据表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -141,8 +145,8 @@ CREATE TABLE `backtest_daily`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `backtest_summary`;
 CREATE TABLE `backtest_summary`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `strategy_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略标识',
   `strategy_version` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT 'default' COMMENT '策略版本',
   `param_set_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '参数组合ID',
@@ -153,16 +157,16 @@ CREATE TABLE `backtest_summary`  (
   `total_return` decimal(10, 6) NOT NULL COMMENT '总收益率',
   `annual_return` decimal(10, 6) NOT NULL COMMENT '年化收益率',
   `max_drawdown` decimal(10, 6) NOT NULL COMMENT '最大回撤',
-  `trade_count` int(11) NOT NULL COMMENT '成交次数',
+  `trade_count` int NOT NULL COMMENT '成交次数',
   `total_fees` decimal(20, 2) NOT NULL COMMENT '手续费总额',
   `fee_ratio` decimal(10, 6) NOT NULL COMMENT '手续费占收益比例',
   `wait_pool_ratio` decimal(10, 6) NOT NULL COMMENT 'wait_pool滞留比例',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_product`(`product_id`) USING BTREE,
-  INDEX `idx_strategy`(`strategy_key`, `strategy_version`) USING BTREE,
-  INDEX `idx_param_set`(`param_set_id`) USING BTREE,
-  INDEX `idx_start_date`(`start_date`) USING BTREE
+  INDEX `idx_product`(`product_id` ASC) USING BTREE,
+  INDEX `idx_strategy`(`strategy_key` ASC, `strategy_version` ASC) USING BTREE,
+  INDEX `idx_param_set`(`param_set_id` ASC) USING BTREE,
+  INDEX `idx_start_date`(`start_date` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 86 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '回测汇总表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -170,8 +174,8 @@ CREATE TABLE `backtest_summary`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `backtest_trades`;
 CREATE TABLE `backtest_trades`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `summary_id` bigint(20) NOT NULL COMMENT '关联backtest_summary.id',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `summary_id` bigint NOT NULL COMMENT '关联backtest_summary.id',
   `trade_date` date NOT NULL COMMENT '成交日期',
   `side` enum('BUY','SELL') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '买卖方向',
   `amount` decimal(20, 2) NOT NULL COMMENT '成交金额',
@@ -181,9 +185,9 @@ CREATE TABLE `backtest_trades`  (
   `reasons` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL COMMENT '成交原因（JSON数组）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_summary`(`summary_id`) USING BTREE,
-  INDEX `idx_trade_date`(`trade_date`) USING BTREE,
-  INDEX `idx_side`(`side`) USING BTREE
+  INDEX `idx_summary`(`summary_id` ASC) USING BTREE,
+  INDEX `idx_trade_date`(`trade_date` ASC) USING BTREE,
+  INDEX `idx_side`(`side` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 5391 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '回测成交表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -191,8 +195,8 @@ CREATE TABLE `backtest_trades`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `budget_trace`;
 CREATE TABLE `budget_trace`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `as_of_time` datetime NOT NULL COMMENT '建议生成时间',
   `new_budget` decimal(18, 2) NOT NULL COMMENT '本轮新增预算',
   `wait_pool_before` decimal(18, 2) NOT NULL COMMENT '等待池余额（before）',
@@ -204,36 +208,36 @@ CREATE TABLE `budget_trace`  (
   `reason_text` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '原因说明（结构化文本）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_trace`(`product_id`, `as_of_time`) USING BTREE,
-  INDEX `idx_time`(`as_of_time`) USING BTREE,
-  INDEX `idx_product`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 39 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '预算追踪审计日志表' ROW_FORMAT = DYNAMIC;
+  UNIQUE INDEX `uk_trace`(`product_id` ASC, `as_of_time` ASC) USING BTREE,
+  INDEX `idx_time`(`as_of_time` ASC) USING BTREE,
+  INDEX `idx_product`(`product_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 16697 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '预算追踪审计日志表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for categories
 -- ----------------------------
 DROP TABLE IF EXISTS `categories`;
 CREATE TABLE `categories`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `entry_type` enum('expense','income') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '记账类型',
   `category_l1` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '一级分类',
   `category_l2` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '二级分类（可为空）',
-  `display_order` int(11) NULL DEFAULT 0 COMMENT '显示顺序',
+  `display_order` int NULL DEFAULT 0 COMMENT '显示顺序',
   `is_active` tinyint(1) NULL DEFAULT 1 COMMENT '是否启用',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_category`(`entry_type`, `category_l1`, `category_l2`) USING BTREE,
-  INDEX `idx_entry_type`(`entry_type`) USING BTREE,
-  INDEX `idx_category_l1`(`category_l1`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 70 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '分类配置表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_category`(`entry_type` ASC, `category_l1` ASC, `category_l2` ASC) USING BTREE,
+  INDEX `idx_entry_type`(`entry_type` ASC) USING BTREE,
+  INDEX `idx_category_l1`(`category_l1` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 75 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '分类配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for daily_balance
 -- ----------------------------
 DROP TABLE IF EXISTS `daily_balance`;
 CREATE TABLE `daily_balance`  (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id` int NOT NULL AUTO_INCREMENT,
   `fetch_date` date NOT NULL,
   `account_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `account_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
@@ -245,16 +249,16 @@ CREATE TABLE `daily_balance`  (
   `note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_date_account`(`fetch_date`, `account_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1700 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_date_account`(`fetch_date` ASC, `account_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 2050 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for daily_snapshot
 -- ----------------------------
 DROP TABLE IF EXISTS `daily_snapshot`;
 CREATE TABLE `daily_snapshot`  (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NULL DEFAULT NULL COMMENT '产品ID（外键）',
+  `id` int NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NULL DEFAULT NULL COMMENT '产品ID（外键）',
   `fetch_date` date NOT NULL,
   `product_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `product_name` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
@@ -277,19 +281,37 @@ CREATE TABLE `daily_snapshot`  (
   `fetched_at` varchar(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_date_product`(`fetch_date`, `product_code`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 3218 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_date_product`(`fetch_date` ASC, `product_code` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 6078 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+
+-- ----------------------------
+-- Table structure for fund_custody_transfer
+-- ----------------------------
+DROP TABLE IF EXISTS `fund_custody_transfer`;
+CREATE TABLE `fund_custody_transfer`  (
+  `id` bigint UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `product_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '基金代码，例如 163406',
+  `from_channel` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'OTC' COMMENT '转出渠道，通常为 OTC',
+  `to_channel` varchar(16) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'EXCHANGE' COMMENT '转入渠道，通常为 EXCHANGE',
+  `transfer_date` date NOT NULL COMMENT '转托管生效日期（按交易日）',
+  `transfer_shares` decimal(24, 6) NOT NULL COMMENT '转托管份额',
+  `note` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  INDEX `idx_fct_product_date`(`product_code` ASC, `transfer_date` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 5 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场外基金转托管到场内记录表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for indicator_daily
 -- ----------------------------
 DROP TABLE IF EXISTS `indicator_daily`;
 CREATE TABLE `indicator_daily`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `trade_date` date NOT NULL COMMENT '指标日期（对应 market_bar_d.trade_date）',
-  `window_days` int(11) NOT NULL COMMENT '窗口N（来自策略参数）',
+  `window_days` int NOT NULL COMMENT '窗口N（来自策略参数）',
   `pct_rank` decimal(9, 6) NULL DEFAULT NULL COMMENT '分位0~1（基于昨日close在窗口内的rank）',
   `q_buy_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '买入分位对应的价格阈值（例如20%分位的close值）',
   `q_mid_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '可选：50%分位价格',
@@ -300,17 +322,17 @@ CREATE TABLE `indicator_daily`  (
   `ma60` decimal(18, 6) NULL DEFAULT NULL COMMENT '60日均线',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_ind`(`product_id`, `trade_date`, `window_days`) USING BTREE,
-  INDEX `idx_date`(`trade_date`) USING BTREE,
-  INDEX `idx_prod_date`(`product_id`, `trade_date`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 136 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '日更慢指标表' ROW_FORMAT = DYNAMIC;
+  UNIQUE INDEX `uk_ind`(`product_id` ASC, `trade_date` ASC, `window_days` ASC) USING BTREE,
+  INDEX `idx_date`(`trade_date` ASC) USING BTREE,
+  INDEX `idx_prod_date`(`product_id` ASC, `trade_date` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1353 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '日更慢指标表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for job_config
 -- ----------------------------
 DROP TABLE IF EXISTS `job_config`;
 CREATE TABLE `job_config`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `job_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '任务代码',
   `cron_expr` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Cron表达式',
   `enabled` tinyint(1) NULL DEFAULT 1 COMMENT '是否启用',
@@ -320,16 +342,16 @@ CREATE TABLE `job_config`  (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `job_code`(`job_code`) USING BTREE,
-  INDEX `idx_enabled`(`enabled`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 11 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '任务调度配置表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `job_code`(`job_code` ASC) USING BTREE,
+  INDEX `idx_enabled`(`enabled` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 12 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '任务调度配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for ledger
 -- ----------------------------
 DROP TABLE IF EXISTS `ledger`;
 CREATE TABLE `ledger`  (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `id` int NOT NULL AUTO_INCREMENT,
   `event_time` datetime NOT NULL,
   `entry_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `amount` decimal(20, 2) NOT NULL COMMENT '金额',
@@ -342,16 +364,16 @@ CREATE TABLE `ledger`  (
   `note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_event_time`(`event_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 88 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+  INDEX `idx_event_time`(`event_time` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 224 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for market_bar_d
 -- ----------------------------
 DROP TABLE IF EXISTS `market_bar_d`;
 CREATE TABLE `market_bar_d`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `trade_date` date NOT NULL COMMENT '交易日期',
   `open_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '开盘价',
   `high_price` decimal(18, 6) NULL DEFAULT NULL COMMENT '最高价',
@@ -363,18 +385,18 @@ CREATE TABLE `market_bar_d`  (
   `source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'AKSHARE' COMMENT '数据源',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_bar_product_date_source`(`product_id`, `trade_date`, `source`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_trade_date`(`trade_date`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 18685 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内日K线表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_bar_product_date_source`(`product_id` ASC, `trade_date` ASC, `source` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
+  INDEX `idx_trade_date`(`trade_date` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 41313 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内日K线表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for market_quote_rt
 -- ----------------------------
 DROP TABLE IF EXISTS `market_quote_rt`;
 CREATE TABLE `market_quote_rt`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `quote_time` datetime NOT NULL COMMENT '行情时间（精确到秒）',
   `price` decimal(18, 6) NOT NULL COMMENT '当前价格',
   `prev_close` decimal(18, 6) NULL DEFAULT NULL COMMENT '昨收价',
@@ -391,19 +413,19 @@ CREATE TABLE `market_quote_rt`  (
   `source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'AKSHARE' COMMENT '数据源',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_rt_product_time_source`(`product_id`, `quote_time`, `source`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_quote_time`(`quote_time`) USING BTREE,
-  INDEX `idx_premium_rate`(`premium_rate`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 10778 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内实时行情表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_rt_product_time_source`(`product_id` ASC, `quote_time` ASC, `source` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
+  INDEX `idx_quote_time`(`quote_time` ASC) USING BTREE,
+  INDEX `idx_premium_rate`(`premium_rate` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 21874 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内实时行情表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for nav
 -- ----------------------------
 DROP TABLE IF EXISTS `nav`;
 CREATE TABLE `nav`  (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NULL DEFAULT NULL COMMENT '产品ID（外键）',
+  `id` int NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NULL DEFAULT NULL COMMENT '产品ID（外键）',
   `product_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `nav_date` date NOT NULL,
   `nav` decimal(20, 6) NOT NULL COMMENT '单位净值',
@@ -412,17 +434,17 @@ CREATE TABLE `nav`  (
   `dividend` decimal(20, 2) NULL DEFAULT NULL COMMENT '分红',
   `fetched_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_product_date`(`product_code`, `nav_date`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 21883 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_product_date`(`product_code` ASC, `nav_date` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 23659 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for orders
 -- ----------------------------
 DROP TABLE IF EXISTS `orders`;
 CREATE TABLE `orders`  (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NULL DEFAULT NULL COMMENT '产品ID（外键）',
+  `id` int NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NULL DEFAULT NULL COMMENT '产品ID（外键）',
   `order_id` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `product_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `order_type` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
@@ -433,68 +455,68 @@ CREATE TABLE `orders`  (
   `trade_date` date NULL DEFAULT NULL,
   `nav_date` date NULL DEFAULT NULL,
   `confirm_date` date NULL DEFAULT NULL,
-  `holding_days` int(11) NULL DEFAULT NULL,
+  `holding_days` int NULL DEFAULT NULL,
   `sell_fee_rate` decimal(10, 6) NULL DEFAULT NULL,
   `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',
   `note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `order_id`(`order_id`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 32 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `order_id`(`order_id` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 52 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for pending_buy_pool
 -- ----------------------------
 DROP TABLE IF EXISTS `pending_buy_pool`;
 CREATE TABLE `pending_buy_pool`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
-  `from_account_id` bigint(20) NOT NULL COMMENT '来源账户ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
+  `from_account_id` bigint NOT NULL COMMENT '来源账户ID',
   `pending_amount` decimal(18, 2) NOT NULL DEFAULT 0.00 COMMENT '待买入金额（累加）',
   `reason` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '扣留原因（溢价刹车等）',
   `last_change_reason` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '最后变更原因（如NON_TRADE_DAY, PREMIUM_BRAKE, MIN_TRADE_LIMIT）',
   `last_change_time` datetime NULL DEFAULT NULL COMMENT '最后变更时间',
-  `version` bigint(20) NOT NULL DEFAULT 0 COMMENT '版本号（乐观锁，避免并发冲突）',
+  `version` bigint NOT NULL DEFAULT 0 COMMENT '版本号（乐观锁，避免并发冲突）',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_pool_product_account`(`product_id`, `from_account_id`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_from_account`(`from_account_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '待买入池表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_pool_product_account`(`product_id` ASC, `from_account_id` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
+  INDEX `idx_from_account`(`from_account_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 3 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '待买入池表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for product_nav_range
 -- ----------------------------
 DROP TABLE IF EXISTS `product_nav_range`;
 CREATE TABLE `product_nav_range`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `product_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '产品代码',
   `product_name` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '产品名称',
   `earliest_nav_date` date NULL DEFAULT NULL COMMENT '最早净值日期',
   `latest_nav_date` date NULL DEFAULT NULL COMMENT '最新净值日期',
-  `record_count` int(11) NULL DEFAULT 0 COMMENT '记录数',
+  `record_count` int NULL DEFAULT 0 COMMENT '记录数',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_product_code`(`product_code`) USING BTREE,
-  INDEX `idx_earliest_date`(`earliest_nav_date`) USING BTREE,
-  INDEX `idx_latest_date`(`latest_nav_date`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 23 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品净值范围表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_product_code`(`product_code` ASC) USING BTREE,
+  INDEX `idx_earliest_date`(`earliest_nav_date` ASC) USING BTREE,
+  INDEX `idx_latest_date`(`latest_nav_date` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 146 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品净值范围表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for product_strategy_bind
 -- ----------------------------
 DROP TABLE IF EXISTS `product_strategy_bind`;
 CREATE TABLE `product_strategy_bind`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码: percentile/profit_recycle/drawdown/simple',
   `param_set_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '参数集ID(版本)，从 strategy_config 读取',
   `enabled` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
   `strategy_type` enum('VETO','TRIGGER','SCORE') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'TRIGGER' COMMENT '策略类型：VETO=否决层，TRIGGER=触发层，SCORE=强度层',
-  `priority` int(11) NOT NULL DEFAULT 0 COMMENT '优先级（数字越小越优先，同层内按此排序）',
+  `priority` int NOT NULL DEFAULT 0 COMMENT '优先级（数字越小越优先，同层内按此排序）',
   `min_trade_amount` decimal(18, 2) NOT NULL DEFAULT 1000.00 COMMENT '最小有效成交金额',
   `ideal_trade_amount` decimal(18, 2) NOT NULL DEFAULT 2000.00 COMMENT '理想成交金额',
   `fee_rate` decimal(18, 6) NOT NULL DEFAULT 0.000845 COMMENT '手续费率（万0.845）',
@@ -502,17 +524,17 @@ CREATE TABLE `product_strategy_bind`  (
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_product_strategy`(`product_id`, `strategy_code`) USING BTREE,
-  INDEX `idx_strategy`(`strategy_code`) USING BTREE,
-  INDEX `idx_product_type`(`product_id`, `strategy_type`, `priority`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 10 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品策略绑定表' ROW_FORMAT = DYNAMIC;
+  UNIQUE INDEX `uk_product_strategy`(`product_id` ASC, `strategy_code` ASC) USING BTREE,
+  INDEX `idx_strategy`(`strategy_code` ASC) USING BTREE,
+  INDEX `idx_product_type`(`product_id` ASC, `strategy_type` ASC, `priority` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 10 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品策略绑定表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for products
 -- ----------------------------
 DROP TABLE IF EXISTS `products`;
 CREATE TABLE `products`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '交易代码/基金代码',
   `channel` enum('EXCHANGE','OTC') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'OTC' COMMENT '场内/场外',
   `market` enum('SH','SZ','NA') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'NA' COMMENT '市场类型: SH/SZ/NA',
@@ -525,8 +547,8 @@ CREATE TABLE `products`  (
   `source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '数据源 (fund/cmbc/akshare)',
   `buy_fee_rate` decimal(10, 6) NULL DEFAULT 0.000000 COMMENT '申购费率',
   `sell_fee_rate` decimal(10, 6) NULL DEFAULT 0.000000 COMMENT '赎回费率',
-  `buy_confirm_offset` int(11) NULL DEFAULT 1 COMMENT '买入确认延迟交易日数',
-  `sell_confirm_offset` int(11) NULL DEFAULT 1 COMMENT '赎回确认延迟交易日数',
+  `buy_confirm_offset` int NULL DEFAULT 1 COMMENT '买入确认延迟交易日数',
+  `sell_confirm_offset` int NULL DEFAULT 1 COMMENT '赎回确认延迟交易日数',
   `cutoff_time` varchar(10) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT '15:00' COMMENT '交易截止时间',
   `product_code` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '产品代码（兼容字段，等于code）',
   `note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL COMMENT '备注',
@@ -534,37 +556,37 @@ CREATE TABLE `products`  (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_prod_code_channel_market`(`code`, `channel`, `market`) USING BTREE,
-  INDEX `idx_code`(`code`) USING BTREE,
-  INDEX `idx_channel`(`channel`) USING BTREE,
-  INDEX `idx_asset_type`(`asset_type`) USING BTREE,
-  INDEX `idx_is_active`(`is_active`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 24 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品配置表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_prod_code_channel_market`(`code` ASC, `channel` ASC, `market` ASC) USING BTREE,
+  INDEX `idx_code`(`code` ASC) USING BTREE,
+  INDEX `idx_channel`(`channel` ASC) USING BTREE,
+  INDEX `idx_asset_type`(`asset_type` ASC) USING BTREE,
+  INDEX `idx_is_active`(`is_active` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 34 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '产品配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for qdii_premium_rt
 -- ----------------------------
 DROP TABLE IF EXISTS `qdii_premium_rt`;
 CREATE TABLE `qdii_premium_rt`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `quote_time` datetime NOT NULL COMMENT '行情时间',
   `iopv` decimal(18, 6) NULL DEFAULT NULL COMMENT 'IOPV（基金份额参考净值）',
   `premium_rate` decimal(10, 6) NOT NULL COMMENT '溢价率（如 0.0123 表示 1.23%）',
   `source` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'AKSHARE' COMMENT '数据源',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_prem_product_time_source`(`product_id`, `quote_time`, `source`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_quote_time`(`quote_time`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 6412 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = 'QDII溢价率表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_prem_product_time_source`(`product_id` ASC, `quote_time` ASC, `source` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
+  INDEX `idx_quote_time`(`quote_time` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 11334 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = 'QDII溢价率表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for strategy_config
 -- ----------------------------
 DROP TABLE IF EXISTS `strategy_config`;
 CREATE TABLE `strategy_config`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `strategy_key` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略标识',
   `strategy_version` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT 'default' COMMENT '策略版本',
   `param_set_id` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '参数组合ID',
@@ -573,9 +595,9 @@ CREATE TABLE `strategy_config`  (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_strategy_param`(`strategy_key`, `strategy_version`, `param_set_id`) USING BTREE,
-  INDEX `idx_strategy_key`(`strategy_key`) USING BTREE,
-  INDEX `idx_is_active`(`is_active`) USING BTREE
+  UNIQUE INDEX `uk_strategy_param`(`strategy_key` ASC, `strategy_version` ASC, `param_set_id` ASC) USING BTREE,
+  INDEX `idx_strategy_key`(`strategy_key` ASC) USING BTREE,
+  INDEX `idx_is_active`(`is_active` ASC) USING BTREE
 ) ENGINE = InnoDB AUTO_INCREMENT = 92 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略配置表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
@@ -583,26 +605,26 @@ CREATE TABLE `strategy_config`  (
 -- ----------------------------
 DROP TABLE IF EXISTS `strategy_state`;
 CREATE TABLE `strategy_state`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NOT NULL COMMENT '产品ID',
   `strategy_code` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '策略代码',
   `state_json` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '状态JSON（利润池/峰值/上次动作日等）',
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_state`(`product_id`, `strategy_code`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略状态表' ROW_FORMAT = DYNAMIC;
+  UNIQUE INDEX `uk_state`(`product_id` ASC, `strategy_code` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '策略状态表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for trade_fills
 -- ----------------------------
 DROP TABLE IF EXISTS `trade_fills`;
 CREATE TABLE `trade_fills`  (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
+  `id` bigint NOT NULL AUTO_INCREMENT,
   `trade_date` date NOT NULL COMMENT '成交日期',
   `trade_time` datetime NOT NULL COMMENT '成交时间（精确到秒）',
-  `product_id` bigint(20) NOT NULL COMMENT '产品ID',
-  `account_id` bigint(20) NULL DEFAULT NULL COMMENT '资金来源账户ID（外键关联accounts.id）',
+  `product_id` bigint NOT NULL COMMENT '产品ID',
+  `account_id` bigint NULL DEFAULT NULL COMMENT '资金来源账户ID（外键关联accounts.id）',
   `side` enum('BUY','SELL') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '买卖方向',
   `qty` decimal(18, 6) NOT NULL COMMENT '成交数量（份额/股数）',
   `price` decimal(18, 6) NOT NULL COMMENT '成交价',
@@ -615,21 +637,21 @@ CREATE TABLE `trade_fills`  (
   `source` enum('IMPORT','MANUAL') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'MANUAL' COMMENT '数据来源',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE INDEX `uk_fill_source_order`(`source`, `broker_order_id`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE,
-  INDEX `idx_trade_date`(`trade_date`) USING BTREE,
-  INDEX `idx_side`(`side`) USING BTREE,
-  INDEX `idx_broker_order_id`(`broker_order_id`) USING BTREE,
-  INDEX `idx_account_id`(`account_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 1 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内成交流水表' ROW_FORMAT = Dynamic;
+  UNIQUE INDEX `uk_fill_source_order`(`source` ASC, `broker_order_id` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE,
+  INDEX `idx_trade_date`(`trade_date` ASC) USING BTREE,
+  INDEX `idx_side`(`side` ASC) USING BTREE,
+  INDEX `idx_broker_order_id`(`broker_order_id` ASC) USING BTREE,
+  INDEX `idx_account_id`(`account_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 14 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '场内成交流水表' ROW_FORMAT = Dynamic;
 
 -- ----------------------------
 -- Table structure for transactions
 -- ----------------------------
 DROP TABLE IF EXISTS `transactions`;
 CREATE TABLE `transactions`  (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `product_id` bigint(20) NULL DEFAULT NULL COMMENT '产品ID（外键）',
+  `id` int NOT NULL AUTO_INCREMENT,
+  `product_id` bigint NULL DEFAULT NULL COMMENT '产品ID（外键）',
   `date` date NOT NULL,
   `product_code` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `action` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
@@ -642,9 +664,9 @@ CREATE TABLE `transactions`  (
   `note` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE,
-  INDEX `idx_date`(`date`) USING BTREE,
-  INDEX `idx_product`(`product_code`) USING BTREE,
-  INDEX `idx_product_id`(`product_id`) USING BTREE
-) ENGINE = InnoDB AUTO_INCREMENT = 309 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
+  INDEX `idx_date`(`date` ASC) USING BTREE,
+  INDEX `idx_product`(`product_code` ASC) USING BTREE,
+  INDEX `idx_product_id`(`product_id` ASC) USING BTREE
+) ENGINE = InnoDB AUTO_INCREMENT = 373 CHARACTER SET = utf8mb4 COLLATE = utf8mb4_general_ci ROW_FORMAT = Dynamic;
 
 SET FOREIGN_KEY_CHECKS = 1;
