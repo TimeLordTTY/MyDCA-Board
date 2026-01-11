@@ -37,4 +37,11 @@ export const productApi = {
     const response = await apiClient.put<ProductMaster>(`/products/${id}`, data)
     return response.data
   },
+
+  /**
+   * 批量更新产品排序
+   */
+  updateProductSortOrder: async (updates: Array<{ id: number; sortOrder: number }>): Promise<void> => {
+    await apiClient.post<void>('/products/sort-order', updates)
+  },
 }

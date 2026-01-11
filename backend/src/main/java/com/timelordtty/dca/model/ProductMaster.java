@@ -98,6 +98,12 @@ public class ProductMaster {
     /** 是否启用，true=启用，false=禁用，默认true */
     private Boolean isActive;
     
+    /** 排序顺序（数字越小越靠前，NULL表示未设置） */
+    private Integer sortOrder;
+    
+    /** 备注 */
+    private String note;
+    
     /** 创建时间 */
     private LocalDateTime createdAt;
     

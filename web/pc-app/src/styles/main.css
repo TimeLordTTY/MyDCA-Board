@@ -61,7 +61,15 @@ a {
 .wrap {
   max-width: var(--max);
   margin: 0 auto;
-  padding: 0 18px 30px;
+  padding: 12px 18px 30px;
+}
+
+/* 产品页面专用样式 - 固定高度，无滚动 */
+.products-page-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  overflow: hidden;
 }
 
 /* ============ Sticky Topbar ============ */
@@ -211,6 +219,30 @@ a {
   background: transparent;
   box-shadow: none;
   border: 1px solid rgba(230, 238, 247, 0.9);
+}
+
+/* 小按钮样式 - 用于表格操作列 */
+.btn-small {
+  border: 1px solid rgba(78, 164, 255, 0.2);
+  background: rgba(78, 164, 255, 0.08);
+  color: #4ea4ff;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.btn-small:hover {
+  background: rgba(78, 164, 255, 0.15);
+  border-color: rgba(78, 164, 255, 0.35);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(78, 164, 255, 0.15);
 }
 
 .avatar {
@@ -620,4 +652,28 @@ tbody tr:hover td {
 
 .spacer {
   height: 6px;
+}
+
+/* 隐藏滚动条但保持滚动功能 */
+.hide-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* 拖拽排序样式 */
+.drag-over {
+  background-color: rgba(78, 164, 255, 0.1) !important;
+  border-top: 2px solid #4ea4ff;
+}
+
+tbody tr[draggable="true"]:hover {
+  background-color: rgba(78, 164, 255, 0.05);
+}
+
+tbody tr[draggable="true"]:active {
+  opacity: 0.6;
 }

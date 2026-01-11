@@ -100,9 +100,11 @@
 
 #### 3.5 产品管理页面 ✅
 - ✅ **产品列表**（表格）：
-  - 列：名称、代码、类型（显示中文）、渠道（显示中文）、市场（显示中文）、币种（显示中文）、状态
+  - 列：名称（含代码，代码显示在名称下方小字灰色斜体）、类型（显示中文）、渠道（显示中文）、市场（显示中文）、币种（显示中文）、状态、操作
   - 支持筛选（keyword、assetType、channel）
   - 调用`/api/v2/products`
+  - **响应式数据绑定**：使用本地ref存储产品列表，在`loadProducts`函数中从store获取数据并更新本地ref，确保Vue响应式正常工作
+  - **操作按钮布局**：使用`white-space: nowrap`防止按钮自动换行，按钮之间使用`margin-right`保持间距
 - ✅ **新增/编辑产品**（模态框）：
   - 表单字段：**完全按照product_master表的所有字段**
     - productCode, productName
@@ -567,3 +569,8 @@ mvn clean compile
 3. **设计风格必须一致**，完全按照demo的淡蓝色主题和卡片式布局
 4. **API对接必须准确**，严格按照Phase 1的后端API接口定义
 5. **组合支付必须支持**，订单和流水都支持多账户共同支付
+6. **响应式数据绑定**：在Vue组件中使用Pinia store时，如果直接在模板中访问`store.products`可能出现响应式失效问题。推荐做法：
+   - 使用本地`ref`存储列表数据
+   - 在数据加载函数中，从store获取数据后更新本地ref：`products.value = productStore.products`
+   - 这样确保Vue的响应式系统能正确追踪数据变化
+7. **按钮布局**：操作列的按钮应使用`white-space: nowrap`防止自动换行，按钮之间使用适当的`margin-right`保持间距

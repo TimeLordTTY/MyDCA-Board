@@ -39,5 +39,17 @@ public class ProductService {
         productMasterMapper.update(product);
         return product;
     }
+    
+    /**
+     * 批量更新产品排序
+     * @param updates 排序更新列表，每个元素包含产品ID和新的排序值
+     * @return 更新的记录数
+     */
+    public int batchUpdateSortOrder(List<ProductMasterMapper.ProductSortOrderUpdate> updates) {
+        if (updates == null || updates.isEmpty()) {
+            return 0;
+        }
+        return productMasterMapper.batchUpdateSortOrder(updates);
+    }
 }
 

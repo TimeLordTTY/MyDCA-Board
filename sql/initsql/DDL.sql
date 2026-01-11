@@ -94,13 +94,16 @@ CREATE TABLE `product_master` (
   `cutoff_time` VARCHAR(10) NOT NULL DEFAULT '15:00' COMMENT '交易截止时间',
   `data_source` VARCHAR(32) NULL COMMENT '数据源（akshare/fund/cmbc）',
   `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  `sort_order` INT NULL COMMENT '排序顺序（数字越小越靠前，NULL表示未设置）',
+  `note` VARCHAR(500) NULL COMMENT '备注',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_product_code_channel_market` (`product_code`, `channel`, `market`),
   KEY `idx_product_code` (`product_code`),
   KEY `idx_asset_type` (`asset_type`),
-  KEY `idx_is_active` (`is_active`)
+  KEY `idx_is_active` (`is_active`),
+  KEY `idx_channel_sort_order` (`channel`, `sort_order`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='产品主数据表';
 
 -- 2.2 user_product - 用户产品配置表

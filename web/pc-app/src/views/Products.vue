@@ -1,6 +1,6 @@
 <template>
-  <div>
-    <div class="card">
+  <div class="products-page-container">
+    <div class="card" style="flex-shrink: 0;">
       <div class="row-between">
         <div>
           <h3>
@@ -16,89 +16,210 @@
         </div>
       </div>
       <div class="divider"></div>
-
-      <!-- 筛选 -->
-      <div class="row-gap" style="margin-bottom: 16px">
-        <el-input
-          v-model="filters.keyword"
-          placeholder="搜索产品名称或代码"
-          style="width: 200px"
-          clearable
-          @clear="loadProducts"
-          @keyup.enter="loadProducts"
-        />
-        <el-select v-model="filters.assetType" placeholder="资产类型" style="width: 150px" clearable @change="loadProducts">
-          <el-option
-            v-for="(label, value) in assetTypeMap"
-            :key="value"
-            :label="label"
-            :value="value"
-          />
-        </el-select>
-        <el-select v-model="filters.channel" placeholder="渠道" style="width: 120px" clearable @change="loadProducts">
-          <el-option
-            v-for="(label, value) in channelMap"
-            :key="value"
-            :label="label"
-            :value="value"
-          />
-        </el-select>
-        <el-button @click="loadProducts">搜索</el-button>
-      </div>
-
-      <!-- 产品列表 -->
-      <div style="overflow: auto">
-        <table>
-          <thead>
-            <tr>
-              <th>名称</th>
-              <th>代码</th>
-              <th>类型</th>
-              <th>渠道</th>
-              <th>市场</th>
-              <th>币种</th>
-              <th>状态</th>
-              <th class="right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-if="productStore.loading">
-              <tr>
-                <td colspan="8" class="td-muted" style="text-align: center">加载中...</td>
-              </tr>
-            </template>
-            <template v-else-if="!productStore.products || productStore.products.length === 0">
-              <tr>
-                <td colspan="8" class="td-muted" style="text-align: center">暂无产品</td>
-              </tr>
-            </template>
-            <template v-else>
-              <tr v-for="product in productStore.products" :key="product.id">
-                <td><b>{{ product.productName }}</b></td>
-                <td class="mono">{{ product.productCode }}</td>
-                <td>
-                  <span class="tag blue">{{ getAssetTypeLabel(product.assetType) }}</span>
-                </td>
-                <td>{{ getChannelLabel(product.channel) }}</td>
-                <td>{{ getMarketLabel(product.market) }}</td>
-                <td>{{ getCurrencyLabel(product.currency) }}</td>
-                <td>
-                  <span class="tag" :class="product.isActive ? 'green' : 'red'">
-                    {{ product.isActive ? '启用' : '停用' }}
-                  </span>
-                </td>
-                <td class="right">
-                  <button class="btn" @click="handleEdit(product)">编辑</button>
-                  <button class="btn" @click="handleToggle(product)">
-                    {{ product.isActive ? '停用' : '启用' }}
-                  </button>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
     </div>
+
+    <!-- 产品列表 - 左右分栏 -->
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; flex: 1; min-height: 0; margin-top: 16px;">
+        <!-- 左侧：场内产品 -->
+        <div class="card" style="padding: 16px; display: flex; flex-direction: column; min-height: 0;">
+          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 15px;">场内产品</h3>
+          </div>
+          <!-- 左侧筛选条件 -->
+          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
+            <el-input
+              v-model="exchangeFilters.keyword"
+              placeholder="搜索产品名称或代码"
+              style="width: 180px"
+              clearable
+              @clear="loadExchangeProducts"
+              @keyup.enter="loadExchangeProducts"
+            />
+            <el-select
+              v-model="exchangeFilters.assetType"
+              placeholder="资产类型"
+              style="width: 130px"
+              clearable
+              @change="loadExchangeProducts"
+            >
+              <el-option
+                v-for="(label, value) in assetTypeMap"
+                :key="value"
+                :label="label"
+                :value="value"
+              />
+            </el-select>
+            <el-select
+              v-model="exchangeFilters.isActive"
+              placeholder="是否启用"
+              style="width: 100px"
+              @change="loadExchangeProducts"
+            >
+              <el-option label="启用" :value="true" />
+              <el-option label="停用" :value="false" />
+              <el-option label="全部" :value="undefined" />
+            </el-select>
+          </div>
+          <div style="flex: 1; overflow: auto; min-height: 0;" class="hide-scrollbar">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>类型</th>
+                  <th>市场</th>
+                  <th class="right" style="min-width: 80px; white-space: nowrap;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-if="loading">
+                  <tr>
+                    <td colspan="4" class="td-muted" style="text-align: center">加载中...</td>
+                  </tr>
+                </template>
+                <template v-else-if="exchangeProducts.length === 0">
+                  <tr>
+                    <td colspan="4" class="td-muted" style="text-align: center">暂无场内产品</td>
+                  </tr>
+                </template>
+                <template v-else>
+                  <tr
+                    v-for="(product, index) in exchangeProducts"
+                    :key="product.id"
+                    draggable="true"
+                    :data-index="index"
+                    @dragstart="handleDragStart($event, index, 'exchange')"
+                    @dragover.prevent="handleDragOver($event, index, 'exchange')"
+                    @drop="handleDrop($event, index, 'exchange')"
+                    @dragend="handleDragEnd"
+                    style="cursor: move;"
+                    :class="{ 'drag-over': dragOverIndex === index && dragOverType === 'exchange' }"
+                  >
+                    <td>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #999; font-size: 12px; user-select: none;">⋮⋮</span>
+                        <div>
+                          <b style="cursor: pointer; color: #4ea4ff;" @click="handleViewHolding(product)">
+                            {{ product.productName }}
+                          </b>
+                          <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
+                            {{ product.productCode }}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="tag blue">{{ getAssetTypeLabel(product.assetType) }}</span>
+                    </td>
+                    <td>{{ getMarketLabel(product.market) }}</td>
+                    <td class="right" style="white-space: nowrap; padding: 8px;">
+                      <button class="btn-small" @click="handleEdit(product)" title="编辑产品">✏️ 编辑</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 右侧：场外产品 -->
+        <div class="card" style="padding: 16px; display: flex; flex-direction: column; min-height: 0;">
+          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 15px;">场外产品</h3>
+          </div>
+          <!-- 右侧筛选条件 -->
+          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
+            <el-input
+              v-model="otcFilters.keyword"
+              placeholder="搜索产品名称或代码"
+              style="width: 180px"
+              clearable
+              @clear="loadOtcProducts"
+              @keyup.enter="loadOtcProducts"
+            />
+            <el-select
+              v-model="otcFilters.assetType"
+              placeholder="资产类型"
+              style="width: 130px"
+              clearable
+              @change="loadOtcProducts"
+            >
+              <el-option
+                v-for="(label, value) in assetTypeMap"
+                :key="value"
+                :label="label"
+                :value="value"
+              />
+            </el-select>
+            <el-select
+              v-model="otcFilters.isActive"
+              placeholder="是否启用"
+              style="width: 100px"
+              @change="loadOtcProducts"
+            >
+              <el-option label="启用" :value="true" />
+              <el-option label="停用" :value="false" />
+              <el-option label="全部" :value="undefined" />
+            </el-select>
+          </div>
+          <div style="flex: 1; overflow: auto; min-height: 0;" class="hide-scrollbar">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>类型</th>
+                  <th class="right" style="min-width: 80px; white-space: nowrap;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-if="loading">
+                  <tr>
+                    <td colspan="3" class="td-muted" style="text-align: center">加载中...</td>
+                  </tr>
+                </template>
+                <template v-else-if="otcProducts.length === 0">
+                  <tr>
+                    <td colspan="3" class="td-muted" style="text-align: center">暂无场外产品</td>
+                  </tr>
+                </template>
+                <template v-else>
+                  <tr
+                    v-for="(product, index) in otcProducts"
+                    :key="product.id"
+                    draggable="true"
+                    :data-index="index"
+                    @dragstart="handleDragStart($event, index, 'otc')"
+                    @dragover.prevent="handleDragOver($event, index, 'otc')"
+                    @drop="handleDrop($event, index, 'otc')"
+                    @dragend="handleDragEnd"
+                    style="cursor: move;"
+                    :class="{ 'drag-over': dragOverIndex === index && dragOverType === 'otc' }"
+                  >
+                    <td>
+                      <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="color: #999; font-size: 12px; user-select: none;">⋮⋮</span>
+                        <div>
+                          <b style="cursor: pointer; color: #4ea4ff;" @click="handleViewHolding(product)">
+                            {{ product.productName }}
+                          </b>
+                          <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
+                            {{ product.productCode }}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span class="tag blue">{{ getAssetTypeLabel(product.assetType) }}</span>
+                    </td>
+                    <td class="right" style="white-space: nowrap; padding: 8px;">
+                      <button class="btn-small" @click="handleEdit(product)" title="编辑产品">✏️ 编辑</button>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
 
     <!-- 新增/编辑产品对话框 -->
     <el-dialog
@@ -251,7 +372,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
   useProductStore,
   assetTypeMap,
@@ -259,24 +381,44 @@ import {
   marketMap,
   currencyMap,
   getAssetTypeLabel,
-  getChannelLabel,
   getMarketLabel,
-  getCurrencyLabel,
+  productApi,
 } from '@wealth-hub/shared'
 import type { ProductMaster } from '@wealth-hub/shared'
 
 const productStore = useProductStore()
+const router = useRouter()
 
-const filters = reactive({
+// 使用本地ref来存储产品列表，确保响应式
+const allProducts = ref<ProductMaster[]>([])
+const exchangeProducts = ref<ProductMaster[]>([])
+const otcProducts = ref<ProductMaster[]>([])
+const loading = ref(false)
+
+// 左侧场内产品筛选条件
+const exchangeFilters = reactive({
   keyword: '',
   assetType: '',
-  channel: '',
+  isActive: true as boolean | undefined,
+})
+
+// 右侧场外产品筛选条件
+const otcFilters = reactive({
+  keyword: '',
+  assetType: '',
+  isActive: true as boolean | undefined,
 })
 
 const dialogVisible = ref(false)
 const editingProduct = ref<ProductMaster | null>(null)
 const saving = ref(false)
 const formRef = ref<FormInstance>()
+
+// 拖拽排序相关
+const draggedIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
+const dragOverType = ref<'exchange' | 'otc' | null>(null)
+const draggedType = ref<'exchange' | 'otc' | null>(null)
 
 const form = reactive<Partial<ProductMaster>>({
   productCode: '',
@@ -311,16 +453,179 @@ const rules: FormRules = {
   cutoffTime: [{ required: true, message: '请输入交易截单时间', trigger: 'blur' }],
 }
 
-async function loadProducts() {
+// 加载所有产品（调用同一个接口）
+async function loadAllProducts() {
+  loading.value = true
   try {
-    await productStore.fetchProducts({
-      keyword: filters.keyword || undefined,
-      assetType: filters.assetType || undefined,
-      channel: filters.channel || undefined,
-    })
+    await productStore.fetchProducts()
+    // 从store中获取所有产品
+    allProducts.value = productStore.products || []
+    // 分别加载场内和场外产品
+    loadExchangeProducts()
+    loadOtcProducts()
   } catch (error: any) {
     ElMessage.error(error.message || '加载失败')
+    allProducts.value = []
+    exchangeProducts.value = []
+    otcProducts.value = []
+  } finally {
+    loading.value = false
   }
+}
+
+// 加载场内产品（基于左侧筛选条件）
+function loadExchangeProducts() {
+  let filtered = allProducts.value.filter((p) => p.channel === 'EXCHANGE')
+
+  // 应用筛选条件
+  if (exchangeFilters.keyword) {
+    const keyword = exchangeFilters.keyword.toLowerCase()
+    filtered = filtered.filter(
+      (p) =>
+        p.productName.toLowerCase().includes(keyword) ||
+        p.productCode.toLowerCase().includes(keyword)
+    )
+  }
+
+  if (exchangeFilters.assetType) {
+    filtered = filtered.filter((p) => p.assetType === exchangeFilters.assetType)
+  }
+
+  if (exchangeFilters.isActive !== undefined) {
+    filtered = filtered.filter((p) => p.isActive === exchangeFilters.isActive)
+  }
+
+  // 应用保存的排序
+  exchangeProducts.value = loadSavedOrder(filtered, 'EXCHANGE')
+}
+
+// 加载场外产品（基于右侧筛选条件）
+function loadOtcProducts() {
+  let filtered = allProducts.value.filter((p) => p.channel === 'OTC')
+
+  // 应用筛选条件
+  if (otcFilters.keyword) {
+    const keyword = otcFilters.keyword.toLowerCase()
+    filtered = filtered.filter(
+      (p) =>
+        p.productName.toLowerCase().includes(keyword) ||
+        p.productCode.toLowerCase().includes(keyword)
+    )
+  }
+
+  if (otcFilters.assetType) {
+    filtered = filtered.filter((p) => p.assetType === otcFilters.assetType)
+  }
+
+  if (otcFilters.isActive !== undefined) {
+    filtered = filtered.filter((p) => p.isActive === otcFilters.isActive)
+  }
+
+  // 应用保存的排序
+  otcProducts.value = loadSavedOrder(filtered, 'OTC')
+}
+
+function handleViewHolding(product: ProductMaster) {
+  router.push({ name: 'Holdings', query: { productId: product.id } })
+}
+
+// 拖拽排序处理
+function handleDragStart(event: DragEvent, index: number, type: 'exchange' | 'otc') {
+  draggedIndex.value = index
+  draggedType.value = type
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', '')
+  }
+}
+
+function handleDragOver(_event: DragEvent, index: number, type: 'exchange' | 'otc') {
+  if (draggedIndex.value === null || draggedType.value !== type) return
+  if (index !== draggedIndex.value) {
+    dragOverIndex.value = index
+    dragOverType.value = type
+  }
+}
+
+function handleDrop(event: DragEvent, dropIndex: number, type: 'exchange' | 'otc') {
+  event.preventDefault()
+  if (draggedIndex.value === null || draggedType.value !== type) return
+  
+  const sourceIndex = draggedIndex.value
+  if (sourceIndex === dropIndex) return
+
+  // 重新排序
+  if (type === 'exchange') {
+    const newList = [...exchangeProducts.value]
+    const [removed] = newList.splice(sourceIndex, 1)
+    newList.splice(dropIndex, 0, removed)
+    exchangeProducts.value = newList
+    // 保存排序
+    saveProductOrder(newList, 'EXCHANGE')
+  } else {
+    const newList = [...otcProducts.value]
+    const [removed] = newList.splice(sourceIndex, 1)
+    newList.splice(dropIndex, 0, removed)
+    otcProducts.value = newList
+    // 保存排序
+    saveProductOrder(newList, 'OTC')
+  }
+
+  handleDragEnd()
+}
+
+function handleDragEnd() {
+  draggedIndex.value = null
+  dragOverIndex.value = null
+  dragOverType.value = null
+  draggedType.value = null
+}
+
+// 保存产品排序（调用后端接口）
+async function saveProductOrder(orderedProducts: ProductMaster[], _channel: 'EXCHANGE' | 'OTC') {
+  try {
+    // 构建更新请求
+    const updates = orderedProducts.map((product, index) => ({
+      id: product.id,
+      sortOrder: index + 1, // 从1开始
+    }))
+    
+    // 调用后端接口保存排序
+    await (productApi as any).updateProductSortOrder(updates)
+    
+    // 更新本地数据中的sortOrder
+    orderedProducts.forEach((product, index) => {
+      ;(product as any).sortOrder = index + 1
+      const allProduct = allProducts.value.find((p) => p.id === product.id)
+      if (allProduct) {
+        ;(allProduct as any).sortOrder = index + 1
+      }
+    })
+    
+    ElMessage.success('产品排序已保存')
+  } catch (error: any) {
+    console.error('Failed to save product order:', error)
+    ElMessage.error(error.message || '保存排序失败')
+  }
+}
+
+// 加载保存的排序顺序（从后端返回的sortOrder字段排序）
+function loadSavedOrder(products: ProductMaster[], _channel: 'EXCHANGE' | 'OTC'): ProductMaster[] {
+  // 按照sortOrder排序，如果sortOrder为null或undefined，则按id排序
+  return [...products].sort((a, b) => {
+    const aSort = (a as any).sortOrder
+    const bSort = (b as any).sortOrder
+    if (aSort != null && bSort != null) {
+      return aSort - bSort
+    }
+    if (aSort != null) {
+      return -1
+    }
+    if (bSort != null) {
+      return 1
+    }
+    return a.id - b.id
+  })
 }
 
 function handleAddProduct() {
@@ -335,25 +640,6 @@ function handleEdit(product: ProductMaster) {
   dialogVisible.value = true
 }
 
-function handleToggle(product: ProductMaster) {
-  ElMessageBox.confirm(
-    `确定要${product.isActive ? '停用' : '启用'}产品"${product.productName}"吗？`,
-    '提示',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(async () => {
-    try {
-      await productStore.updateProduct(product.id, { isActive: !product.isActive })
-      ElMessage.success('操作成功')
-      await loadProducts()
-    } catch (error: any) {
-      ElMessage.error(error.message || '操作失败')
-    }
-  })
-}
 
 function resetForm() {
   Object.assign(form, {
@@ -398,7 +684,7 @@ async function handleSave() {
         ElMessage.success('创建成功')
       }
       dialogVisible.value = false
-      await loadProducts()
+      await loadAllProducts()
     } catch (error: any) {
       ElMessage.error(error.message || '保存失败')
     } finally {
@@ -408,6 +694,6 @@ async function handleSave() {
 }
 
 onMounted(async () => {
-  await loadProducts()
+  await loadAllProducts()
 })
 </script>
