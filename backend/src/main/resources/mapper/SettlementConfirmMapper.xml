@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.SettlementConfirmMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.SettlementConfirm">
+        <id column="id" property="id"/>
+        <result column="order_id" property="orderId"/>
+        <result column="confirm_date" property="confirmDate"/>
+        <result column="confirm_datetime" property="confirmDatetime"/>
+        <result column="nav_date" property="navDate"/>
+        <result column="confirm_nav" property="confirmNav"/>
+        <result column="confirm_shares" property="confirmShares"/>
+        <result column="confirm_amount" property="confirmAmount"/>
+        <result column="confirm_fee" property="confirmFee"/>
+        <result column="is_manual_override" property="isManualOverride"/>
+        <result column="confirmed_by_user_id" property="confirmedByUserId"/>
+        <result column="confirmed_at" property="confirmedAt"/>
+        <result column="note" property="note"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectByOrderId" resultMap="BaseResultMap">
+        SELECT * FROM settlement_confirm WHERE order_id = #{orderId}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO settlement_confirm (
+            order_id, confirm_date, confirm_datetime, nav_date, confirm_nav,
+            confirm_shares, confirm_amount, confirm_fee, is_manual_override,
+            confirmed_by_user_id, confirmed_at, note, created_at, updated_at
+        ) VALUES (
+            #{orderId}, #{confirmDate}, #{confirmDatetime}, #{navDate}, #{confirmNav},
+            #{confirmShares}, #{confirmAmount}, #{confirmFee}, #{isManualOverride},
+            #{confirmedByUserId}, #{confirmedAt}, #{note}, NOW(), NOW()
+        )
+    </insert>
+
+</mapper>
+

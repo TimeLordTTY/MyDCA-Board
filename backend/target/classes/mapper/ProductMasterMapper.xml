@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.ProductMasterMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.ProductMaster">
+        <id column="id" property="id"/>
+        <result column="product_code" property="productCode"/>
+        <result column="channel" property="channel"/>
+        <result column="market" property="market"/>
+        <result column="asset_type" property="assetType"/>
+        <result column="currency" property="currency"/>
+        <result column="product_name" property="productName"/>
+        <result column="is_qdii" property="isQdii"/>
+        <result column="track_index" property="trackIndex"/>
+        <result column="buy_fee_rate" property="buyFeeRate"/>
+        <result column="sell_fee_rate" property="sellFeeRate"/>
+        <result column="buy_confirm_offset" property="buyConfirmOffset"/>
+        <result column="sell_confirm_offset" property="sellConfirmOffset"/>
+        <result column="cutoff_time" property="cutoffTime"/>
+        <result column="data_source" property="dataSource"/>
+        <result column="is_active" property="isActive"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM product_master WHERE id = #{id}
+    </select>
+
+    <select id="selectByCode" resultMap="BaseResultMap">
+        SELECT * FROM product_master 
+        WHERE product_code = #{productCode} 
+        AND channel = #{channel} 
+        AND market = #{market}
+    </select>
+
+    <select id="selectByCondition" resultMap="BaseResultMap">
+        SELECT * FROM product_master
+        WHERE is_active = 1
+        <if test="keyword != null and keyword != ''">
+            AND (product_name LIKE CONCAT('%', #{keyword}, '%') 
+            OR product_code LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="assetType != null and assetType != ''">
+            AND asset_type = #{assetType}
+        </if>
+        <if test="channel != null and channel != ''">
+            AND channel = #{channel}
+        </if>
+        ORDER BY product_name
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO product_master (
+            product_code, channel, market, asset_type, currency, product_name,
+            is_qdii, track_index, buy_fee_rate, sell_fee_rate,
+            buy_confirm_offset, sell_confirm_offset, cutoff_time, data_source,
+            is_active, created_at, updated_at
+        ) VALUES (
+            #{productCode}, #{channel}, #{market}, #{assetType}, #{currency}, #{productName},
+            #{isQdii}, #{trackIndex}, #{buyFeeRate}, #{sellFeeRate},
+            #{buyConfirmOffset}, #{sellConfirmOffset}, #{cutoffTime}, #{dataSource},
+            #{isActive}, NOW(), NOW()
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE product_master
+        SET product_name = #{productName},
+            is_qdii = #{isQdii},
+            track_index = #{trackIndex},
+            buy_fee_rate = #{buyFeeRate},
+            sell_fee_rate = #{sellFeeRate},
+            buy_confirm_offset = #{buyConfirmOffset},
+            sell_confirm_offset = #{sellConfirmOffset},
+            cutoff_time = #{cutoffTime},
+            data_source = #{dataSource},
+            is_active = #{isActive},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>
+

@@ -1,0 +1,27 @@
+/**
+ * API Client统一导出
+ */
+
+export * from './client'
+export * from './auth'
+export * from './user'
+export * from './family'
+export * from './product'
+export * from './account'
+export * from './ledger'
+export * from './order'
+export * from './settlement'
+export * from './holding'
+export * from './dashboard'
+
+// 导出所有API对象
+export { authApi } from './auth'
+export { userApi } from './user'
+export { familyApi } from './family'
+export { productApi } from './product'
+export { accountApi } from './account'
+export { ledgerApi } from './ledger'
+export { orderApi } from './order'
+export { settlementApi } from './settlement'
+export { holdingApi } from './holding'
+export { dashboardApi } from './dashboard'

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.LedgerPostingMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.LedgerPosting">
+        <id column="id" property="id"/>
+        <result column="txn_id" property="txnId"/>
+        <result column="posting_type" property="postingType"/>
+        <result column="account_id" property="accountId"/>
+        <result column="account_type" property="accountType"/>
+        <result column="amount" property="amount"/>
+        <result column="shares" property="shares"/>
+        <result column="currency" property="currency"/>
+        <result column="note" property="note"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <select id="selectByTxnId" resultMap="BaseResultMap">
+        SELECT * FROM ledger_posting WHERE txn_id = #{txnId}
+    </select>
+
+    <select id="selectByAccountId" resultMap="BaseResultMap">
+        SELECT * FROM ledger_posting WHERE account_id = #{accountId} ORDER BY created_at DESC
+    </select>
+
+    <select id="sumDebitByAccount" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(amount), 0) FROM ledger_posting
+        WHERE account_id = #{accountId} AND posting_type = 'DEBIT'
+    </select>
+
+    <select id="sumCreditByAccount" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(amount), 0) FROM ledger_posting
+        WHERE account_id = #{accountId} AND posting_type = 'CREDIT'
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ledger_posting (
+            txn_id, posting_type, account_id, account_type, amount, shares, currency, note, created_at
+        ) VALUES (
+            #{txnId}, #{postingType}, #{accountId}, #{accountType}, #{amount}, #{shares}, #{currency}, #{note}, NOW()
+        )
+    </insert>
+
+    <insert id="batchInsert">
+        INSERT INTO ledger_posting (
+            txn_id, posting_type, account_id, account_type, amount, shares, currency, note, created_at
+        ) VALUES
+        <foreach collection="postings" item="posting" separator=",">
+            (#{posting.txnId}, #{posting.postingType}, #{posting.accountId}, #{posting.accountType},
+             #{posting.amount}, #{posting.shares}, #{posting.currency}, #{posting.note}, NOW())
+        </foreach>
+    </insert>
+
+</mapper>
+

@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: wealth-hub
+  profiles:
+    active: dev
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:9009/dca_v2?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: dca
+    password: FW5GxWai5Shyrekb
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+# MyBatis配置
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.timelordtty.dca.model
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+# 服务器配置
+server:
+  port: 8765
+
+# JWT配置
+jwt:
+  secret: wealth-hub-secret-key-change-in-production-environment-minimum-256-bits
+  expiration: 86400000
+
+# Actuator配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.timelordtty.dca: DEBUG
+    org.springframework.web: INFO
+    org.mybatis: DEBUG

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.OrderMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.Order">
+        <id column="id" property="id"/>
+        <result column="order_id" property="orderId"/>
+        <result column="user_id" property="userId"/>
+        <result column="product_id" property="productId"/>
+        <result column="order_type" property="orderType"/>
+        <result column="amount" property="amount"/>
+        <result column="shares" property="shares"/>
+        <result column="requested_at" property="requestedAt"/>
+        <result column="trade_date" property="tradeDate"/>
+        <result column="expected_nav_date" property="expectedNavDate"/>
+        <result column="expected_confirm_date" property="expectedConfirmDate"/>
+        <result column="status" property="status"/>
+        <result column="fee_estimate" property="feeEstimate"/>
+        <result column="note" property="note"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM orders WHERE id = #{id}
+    </select>
+
+    <select id="selectByOrderId" resultMap="BaseResultMap">
+        SELECT * FROM orders WHERE order_id = #{orderId}
+    </select>
+
+    <select id="selectByStatus" resultMap="BaseResultMap">
+        SELECT * FROM orders WHERE status = #{status} ORDER BY expected_confirm_date ASC
+    </select>
+
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT * FROM orders WHERE user_id = #{userId} ORDER BY created_at DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO orders (
+            order_id, user_id, product_id, order_type, amount, shares,
+            requested_at, trade_date, expected_nav_date, expected_confirm_date,
+            status, fee_estimate, note, created_at, updated_at
+        ) VALUES (
+            #{orderId}, #{userId}, #{productId}, #{orderType}, #{amount}, #{shares},
+            #{requestedAt}, #{tradeDate}, #{expectedNavDate}, #{expectedConfirmDate},
+            #{status}, #{feeEstimate}, #{note}, NOW(), NOW()
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE orders
+        SET status = #{status},
+            fee_estimate = #{feeEstimate},
+            note = #{note},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>
+

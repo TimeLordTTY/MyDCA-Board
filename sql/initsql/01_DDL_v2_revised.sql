@@ -1,7 +1,21 @@
 -- ============================================
--- 财富中枢系统 - 完整数据库DDL（修订版 v2.0）
--- 基于《财富中枢系统完整设计方案.md》修订版
--- MySQL 8.0+
+-- SQL脚本目的：创建财富中枢系统完整数据库结构
+-- 文件编号：01
+-- 执行顺序：第一个执行（基础DDL）
+-- ============================================
+-- 
+-- 功能说明：
+-- 1. 创建所有核心数据表（用户、家庭、账户、产品、订单、交易等）
+-- 2. 创建表索引和约束
+-- 3. 设置字符集为utf8mb4，支持完整的Unicode字符
+-- 
+-- 基于：《财富中枢系统完整设计方案.md》修订版
+-- 数据库版本：MySQL 8.0+
+-- 
+-- 注意事项：
+-- - 执行前请确保数据库已创建
+-- - 执行后会关闭外键检查，执行完成后会自动恢复
+-- - 建议在空数据库中执行，避免表名冲突
 -- ============================================
 
 SET NAMES utf8mb4;
@@ -68,7 +82,7 @@ CREATE TABLE `product_master` (
   `product_code` VARCHAR(32) NOT NULL COMMENT '产品代码',
   `channel` ENUM('EXCHANGE', 'OTC') NOT NULL DEFAULT 'OTC' COMMENT '场内/场外',
   `market` ENUM('SH', 'SZ', 'NA') NOT NULL DEFAULT 'NA' COMMENT '市场：SH/SZ/NA',
-  `asset_type` ENUM('ETF', 'LOF', 'FUND', 'MMF', 'BANK_WM_NAV', 'BANK_WM_BOX', 'STOCK', 'FUTURES', 'OPTIONS') NOT NULL DEFAULT 'FUND' COMMENT '资产类型',
+  `asset_type` ENUM('ETF', 'LOF', 'FUND', 'MMF', 'BANK_WM_NAV', 'BANK_WM_BOX', 'STOCK', 'FUTURES', 'OPTIONS', 'BOND_REPO') NOT NULL DEFAULT 'FUND' COMMENT '资产类型（BOND_REPO=国债逆回购，场内交易标的，作为现金管理工具，默认1天期）',
   `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
   `product_name` VARCHAR(128) NOT NULL COMMENT '产品名称',
   `is_qdii` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否QDII',
@@ -122,6 +136,8 @@ CREATE TABLE `accounts` (
   `owner_user_id` BIGINT NULL COMMENT '归属用户ID（个人账户）',
   `owner_family_id` BIGINT NULL COMMENT '归属家庭ID（家庭账户）',
   `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
+  `parent_account_id` BIGINT NULL COMMENT '父账户ID（用于现实账户的资金分区/子账户，父账户为平台容器/分组节点，子账户为真实信封余额）',
+  `fund_usage` ENUM('SPENDABLE','RESERVED','INVESTABLE') NOT NULL DEFAULT 'SPENDABLE' COMMENT '资金用途（SPENDABLE=可支出，允许日常支出/生活消费；RESERVED=专款，房租/项目/安全金等，禁止日常支出和默认禁止投资；INVESTABLE=可投资，可用于投资如ETF/逆回购等，默认不用于日常支出。仅对account_kind=REAL且account_type=CASH且为叶子账户的场景做约束校验）',
   `balance` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '账面余额（由流水推导，REAL账户可手工调整）',
   `reserved_amount` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '占用/冻结金额（下单占用，结算确认后释放）',
   `initial_balance` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '初始余额',
@@ -136,11 +152,19 @@ CREATE TABLE `accounts` (
   KEY `idx_account_kind` (`account_kind`),
   KEY `idx_account_type` (`account_type`),
   KEY `idx_is_active` (`is_active`),
+  KEY `idx_parent_account_id` (`parent_account_id`),
   CONSTRAINT `chk_virtual_subtype` CHECK (
     (`account_kind` = 'VIRTUAL' AND `virtual_subtype` IS NOT NULL) OR 
     (`account_kind` = 'REAL' AND `virtual_subtype` IS NULL)
-  )
+  ),
+  FOREIGN KEY (`parent_account_id`) REFERENCES `accounts`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='账户表';
+
+-- 父子账户约束说明（应用层必须校验，MySQL不支持在CHECK约束中引用外键列）：
+-- 1. VIRTUAL账户不允许设置parent_account_id（应用层校验）
+-- 2. 子账户必须是REAL（应用层校验）
+-- 3. 只有CASH类型的REAL账户允许形成父子层级（应用层校验）
+-- 4. ledger_posting.account_id 只允许引用叶子账户（应用层校验）
 
 -- 2.4 debt_contract - 分期合同/借款合同表
 CREATE TABLE `debt_contract` (
@@ -199,8 +223,10 @@ CREATE TABLE `ledger_txn` (
   `user_id` BIGINT NOT NULL COMMENT '用户ID',
   `family_id` BIGINT NULL COMMENT '家庭ID（用于家庭汇总）',
   `txn_type` ENUM(
-    'BUY', 'SELL',                    -- 投资交易
-    'SUBSCRIPTION', 'REDEMPTION',     -- 申购/赎回
+    'BUY', 'SELL',                    -- 投资交易（场内买入/卖出）
+    'SUBSCRIPTION', 'REDEMPTION',     -- 申购/赎回（场外基金买入/卖出）
+    'CUSTODY_TRANSFER',                -- 转托管（持仓从A账户迁到B账户，无现金流）
+    'BOND_REPO',                       -- 国债逆回购（现金增强，不生成持仓）
     'DIVIDEND_CASH', 'DIVIDEND_REINVEST', 'DIVIDEND_EX_DATE', 'DIVIDEND_PAY_DATE', 'INTEREST',  -- 收益类
     'FEE', 'TAX',                     -- 费用类
     'TRANSFER_OUT', 'TRANSFER_IN',    -- 转账（成对出现）
@@ -212,6 +238,9 @@ CREATE TABLE `ledger_txn` (
   `biz_group_key` VARCHAR(64) NULL COMMENT '业务分组键（用于UI合并展示，如order_id）',
   `product_id` BIGINT NULL COMMENT '关联产品ID（投资类交易）',
   `order_id` VARCHAR(64) NULL COMMENT '关联订单ID（如有）',
+  `related_txn_id` VARCHAR(64) NULL COMMENT '关联的原交易txn_id（退款/报销等，指向原交易）',
+  `related_order_id` VARCHAR(64) NULL COMMENT '关联的原订单号（可选，用于订单级退款/撤单）',
+  `relation_type` ENUM('NONE','TRANSFER_PAIR','REFUND','REFUND_OF','REIMBURSE','REIMBURSEMENT_OF','REVERSAL','CUSTODY_TRANSFER_OF') NOT NULL DEFAULT 'NONE' COMMENT '关联类型（NONE=无关联，TRANSFER_PAIR=转账成对，REFUND=退款，REFUND_OF=退款属于原交易，REIMBURSE=报销，REIMBURSEMENT_OF=报销属于原支出，REVERSAL=撤销，CUSTODY_TRANSFER_OF=转托管属于原事件）',
   `requested_at` DATETIME NOT NULL COMMENT '发起时间',
   `trade_date` DATE NULL COMMENT '交易归属日（由requested_at+cutoff+交易日历推导）',
   `nav_date` DATE NULL COMMENT '使用的净值日期（计算份额/到账金额时采用的净值日期）',
@@ -231,6 +260,9 @@ CREATE TABLE `ledger_txn` (
   KEY `idx_biz_group_key` (`biz_group_key`),
   KEY `idx_product_id` (`product_id`),
   KEY `idx_order_id` (`order_id`),
+  KEY `idx_related_txn_id` (`related_txn_id`),
+  KEY `idx_related_order_id` (`related_order_id`),
+  KEY `idx_relation_type` (`relation_type`),
   KEY `idx_trade_date` (`trade_date`),
   KEY `idx_confirm_date` (`confirm_date`),
   KEY `idx_fetch_date` (`fetch_date`),
@@ -312,6 +344,24 @@ CREATE TABLE `settlement_confirm` (
   KEY `idx_confirm_date` (`confirm_date`),
   KEY `idx_nav_date` (`nav_date`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='结算确认表';
+
+-- 4.3 order_funding_line - 订单资金来源拆分表
+CREATE TABLE `order_funding_line` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '资金来源行ID',
+  `order_id` VARCHAR(64) NOT NULL COMMENT '订单ID（外键orders.order_id）',
+  `line_no` INT NOT NULL COMMENT '行号（同一订单内从1开始递增）',
+  `account_id` BIGINT NOT NULL COMMENT '资金来源账户ID（外键accounts.id，必须是叶子账户）',
+  `amount` DECIMAL(18, 2) NOT NULL COMMENT '出资金额',
+  `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_order_line` (`order_id`, `line_no`),
+  KEY `idx_order_id` (`order_id`),
+  KEY `idx_account_id` (`account_id`),
+  CONSTRAINT `fk_funding_line_order` FOREIGN KEY (`order_id`) REFERENCES `orders`(`order_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_funding_line_account` FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='订单资金来源拆分表';
 
 -- ============================================
 -- 5. 持仓与快照表（修订：增加dirty标记和收益拆分）
@@ -722,6 +772,22 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- 5. 快照脏数据标记：
 --    - 历史修正后：标记is_dirty=1，设置dirty_from_date
 --    - 后台任务：从dirty_from_date起逐日链式重建
+--
+-- 6. 父子账户/资金分区（信封系统）：
+--    - 父账户（ROOT）= 平台容器/分组节点（余利宝、稳利宝、华宝证券等），用于UI聚合与筛选
+--    - 子账户（BUCKET/叶子账户）= 资金信封（生活费/房租/项目/理财金/安全金/待分配等），真实金额只存在子账户
+--    - 父账户不参与任何记账分录，禁止余额编辑，balance字段不作为真实余额来源（保持0或不可编辑）
+--    - 父账户展示余额 = Σ(子账户叶子余额)（仅展示层聚合）
+--    - ledger_posting.account_id 只允许引用【叶子账户】（即不存在任何child的账户）。父账户禁止出现在任何记账分录中
+--    - fund_usage约束范围：只对account_kind=REAL且account_type=CASH且为叶子账户的场景做约束校验
+--    - 每个平台父账户必须至少有一个默认子账户：xxx_unallocated（待分配/自由资金）
+--
+-- 7. 国债逆回购（BOND_REPO）：
+--    - 华宝证券账户内所有资金都允许做1天期国债逆回购（包括RESERVED专款）
+--    - 记账方式：占用/释放 + 利息入账，不生成持仓POSITION
+--    - 下单日：创建REPO订单（PENDING），仅增加source_account.reserved_amount（锁定本金）
+--    - 到期日：确认订单（CONFIRMED），必须按顺序：1) 校验订单到期；2) 释放占用；3) 生成利息ledger_txn
+--    - 看板计算：repo_locked_amount必须用订单汇总计算（Σ(所有REPO订单的principal)），不能用reserved_amount的一部分
 
 -- ============================================
 -- 辅助视图（可选，用于快速查询）
@@ -832,22 +898,16 @@ ORDER BY
   END,
   s.generated_at DESC;
 
--- ============================================
--- 初始化数据（示例）
--- ============================================
-
--- 创建虚拟账户（用于分录归集）
-INSERT INTO accounts (account_code, account_name, account_kind, account_type, virtual_subtype, currency, balance, reserved_amount, initial_balance, owner_type, owner_user_id)
-VALUES 
-  ('VIRTUAL-POSITION', '持仓账户', 'VIRTUAL', 'OTHER', 'POSITION', 'CNY', 0, 0, 0, 'PERSONAL', NULL),
-  ('VIRTUAL-FEE', '费用账户', 'VIRTUAL', 'OTHER', 'FEE', 'CNY', 0, 0, 0, 'PERSONAL', NULL),
-  ('VIRTUAL-INCOME', '收入账户', 'VIRTUAL', 'OTHER', 'INCOME', 'CNY', 0, 0, 0, 'PERSONAL', NULL),
-  ('VIRTUAL-EXPENSE', '支出账户', 'VIRTUAL', 'OTHER', 'EXPENSE', 'CNY', 0, 0, 0, 'PERSONAL', NULL),
-  ('VIRTUAL-RECEIVABLE', '应收账户', 'VIRTUAL', 'OTHER', 'RECEIVABLE', 'CNY', 0, 0, 0, 'PERSONAL', NULL),
-  ('VIRTUAL-LIABILITY', '负债账户', 'VIRTUAL', 'OTHER', 'LIABILITY', 'CNY', 0, 0, 0, 'PERSONAL', NULL)
-ON DUPLICATE KEY UPDATE account_name = VALUES(account_name);
-
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ============================================
+-- DDL脚本完成
+-- ============================================
+-- 
+-- 后续步骤：
+-- 1. 执行 DML.sql 初始化虚拟账户和管理员用户
+-- 2. 如需更新现有数据库，请查看 updatesql 目录下的补丁脚本
+-- ============================================
 
 -- ============================================
 -- DDL脚本完成

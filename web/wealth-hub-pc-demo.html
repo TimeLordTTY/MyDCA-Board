@@ -1,0 +1,2864 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>财富中枢 · PC Demo（可交互）</title>
+  <style>
+    :root{
+      --bg: #f4faff;
+      --bg2:#eef7ff;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --line:#e6eef7;
+
+      /* 淡蓝主题 */
+      --primary:#4ea4ff;
+      --primary2:#7cc7ff;
+      --primarySoft: rgba(78,164,255,.12);
+
+      --good:#16a34a;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+
+      --shadow: 0 14px 35px rgba(15, 23, 42, .08);
+      --shadow2: 0 10px 22px rgba(15, 23, 42, .06);
+
+      --r16:16px;
+      --r20:20px;
+
+      --fs12:12px;
+      --fs13:13px;
+      --fs14:14px;
+      --fs16:16px;
+      --fs18:18px;
+      --fs20:20px;
+      --fs24:24px;
+
+      --gap:14px;
+      --max: 1180px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC","Microsoft YaHei","Noto Sans CJK SC", sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 500px at 30% -10%, rgba(124,199,255,.35), transparent 60%),
+        radial-gradient(900px 520px at 88% 6%, rgba(78,164,255,.18), transparent 55%),
+        linear-gradient(180deg, var(--bg2), var(--bg));
+      min-height:100vh;
+    }
+
+    a{color:inherit}
+    .wrap{max-width:var(--max); margin:0 auto; padding: 0 18px 30px;}
+
+    /* ============ Sticky Topbar (红框区域) ============ */
+    .topbar{
+      position: sticky; top: 0; z-index: 999;
+      padding: 14px 18px;
+      margin: 0 -18px;
+      background: rgba(244, 250, 255, .78);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid rgba(230,238,247,.9);
+    }
+    .topbar-inner{
+      max-width:var(--max);
+      margin:0 auto;
+      display:flex;
+      align-items:center;
+      justify-content:space-between; /* 左右两块同一行 */
+      gap: 16px;
+    }
+
+    .brand{
+      display:flex; align-items:center; gap: 10px;
+      min-width: 240px;
+    }
+    .logo{
+      width:34px; height:34px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), var(--primary2));
+      box-shadow: 0 10px 22px rgba(78,164,255,.28);
+      display:grid; place-items:center;
+      color:white; font-weight:800;
+      letter-spacing: .5px;
+    }
+    .brand-title{
+      display:flex; flex-direction:column; line-height:1.1;
+    }
+    .brand-title b{font-size:16px}
+    .brand-title span{font-size:12px; color:var(--muted); margin-top:2px}
+
+    .nav{
+      display:flex; align-items:center;
+      gap: 8px;
+      flex: 1;
+      justify-content:flex-start;
+      flex-wrap: wrap;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.8);
+      border: 1px solid rgba(230,238,247,.9);
+      box-shadow: var(--shadow2);
+    }
+    .pill{
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      color: #0f172a;
+      display:flex; align-items:center; gap:8px;
+      transition: .18s ease;
+      white-space:nowrap;
+    }
+    .pill:hover{background: rgba(78,164,255,.10)}
+    .pill.active{
+      background: linear-gradient(135deg, rgba(78,164,255,.20), rgba(124,199,255,.22));
+      border: 1px solid rgba(78,164,255,.25);
+      box-shadow: 0 10px 22px rgba(78,164,255,.16);
+    }
+    .pill .dot{
+      width:8px; height:8px; border-radius: 50%;
+      background: rgba(100,116,139,.35);
+    }
+    .pill.active .dot{
+      background: linear-gradient(135deg, var(--primary), var(--primary2));
+    }
+
+    .actions{
+      display:flex; align-items:center; gap: 10px;
+      justify-content:flex-end;
+      min-width: 320px;
+    }
+
+    .btn{
+      border: 1px solid rgba(230,238,247,.9);
+      background: rgba(255,255,255,.92);
+      color: #0f172a;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      cursor:pointer;
+      box-shadow: var(--shadow2);
+      transition: .18s ease;
+      display:flex; align-items:center; gap: 8px;
+      white-space:nowrap;
+    }
+    .btn:hover{transform: translateY(-1px); box-shadow: var(--shadow);}
+    .btn.primary{
+      background: linear-gradient(135deg, var(--primary), var(--primary2));
+      color: white;
+      border: 0;
+      box-shadow: 0 14px 28px rgba(78,164,255,.28);
+    }
+    .btn.ghost{
+      background: transparent;
+      box-shadow:none;
+      border: 1px solid rgba(230,238,247,.9);
+    }
+
+    .avatar{
+      width: 36px; height:36px; border-radius: 14px;
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(230,238,247,.9);
+      box-shadow: var(--shadow2);
+      display:grid; place-items:center;
+      cursor:pointer;
+      user-select:none;
+    }
+
+    /* ============ Page Header (移到 topbar 下) ============ */
+    .pagehead{
+      padding: 14px 0 8px;
+    }
+    .pagehead h1{
+      margin: 10px 0 4px;
+      font-size: 22px;
+      letter-spacing: .3px;
+    }
+    .pagehead p{
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    /* ============ Layout ============ */
+    .grid{
+      display:grid;
+      grid-template-columns: 1.2fr .9fr;
+      gap: var(--gap);
+      margin-top: 10px;
+    }
+    @media (max-width: 1080px){
+      .grid{grid-template-columns: 1fr;}
+      .actions{min-width:auto}
+      .brand{min-width:auto}
+    }
+
+    .card{
+      background: rgba(255,255,255,.94);
+      border: 1px solid rgba(230,238,247,.95);
+      border-radius: var(--r20);
+      box-shadow: var(--shadow2);
+      padding: 16px;
+    }
+    .card h3{
+      margin:0;
+      font-size: 15px;
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+      gap:10px;
+    }
+    .sub{
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .kpis{
+      display:grid;
+      grid-template-columns: 1.1fr 1fr 1fr;
+      gap: var(--gap);
+      margin-top: 12px;
+    }
+    @media (max-width: 1080px){
+      .kpis{grid-template-columns: 1fr;}
+    }
+
+    .kpi{
+      padding: 16px;
+      border-radius: var(--r20);
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(230,238,247,.95);
+      box-shadow: var(--shadow2);
+    }
+    .kpi.primary{
+      background: linear-gradient(135deg, rgba(78,164,255,.92), rgba(124,199,255,.92));
+      color: white;
+      border: 0;
+      box-shadow: 0 18px 36px rgba(78,164,255,.25);
+    }
+    .kpi .label{font-size: 12px; opacity: .9; display:flex; align-items:center; gap:8px;}
+    .kpi .value{font-size: 26px; font-weight: 900; margin-top: 8px; letter-spacing: .3px;}
+    .kpi .mini{font-size: 12px; margin-top: 6px; opacity: .9;}
+    .kpi .row{
+      display:flex; gap: 8px; flex-wrap:wrap;
+      margin-top: 10px;
+    }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(15,23,42,.06);
+      border: 1px solid rgba(15,23,42,.08);
+      color: #0f172a;
+      white-space:nowrap;
+    }
+    .kpi.primary .chip{
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(255,255,255,.24);
+      color:white;
+    }
+    .chip.good{color: var(--good); background: rgba(22,163,74,.10); border-color: rgba(22,163,74,.18);}
+    .chip.bad{color: var(--bad); background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.18);}
+    .chip.warn{color: var(--warn); background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.18);}
+
+    .two{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--gap);
+      margin-top: var(--gap);
+    }
+    @media (max-width: 1080px){
+      .two{grid-template-columns: 1fr;}
+    }
+
+    /* ============ Tables ============ */
+    table{
+      width:100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow:hidden;
+    }
+    thead th{
+      text-align:left;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(230,238,247,.95);
+    }
+    tbody td{
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(230,238,247,.75);
+      font-size: 13px;
+      vertical-align: top;
+    }
+    tbody tr:hover td{
+      background: rgba(78,164,255,.06);
+    }
+    .td-muted{color: var(--muted); font-size:12px;}
+    .right{text-align:right}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;}
+    .tag{
+      display:inline-flex; align-items:center; gap:6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      border: 1px solid rgba(230,238,247,.95);
+      background: rgba(255,255,255,.92);
+    }
+    .tag.blue{background: rgba(78,164,255,.10); border-color: rgba(78,164,255,.18); color:#1d4ed8;}
+    .tag.gray{background: rgba(100,116,139,.10); border-color: rgba(100,116,139,.18); color:#334155;}
+    .tag.green{background: rgba(22,163,74,.10); border-color: rgba(22,163,74,.18); color: var(--good);}
+    .tag.orange{background: rgba(245,158,11,.10); border-color: rgba(245,158,11,.18); color: var(--warn);}
+    .tag.red{background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.18); color: var(--bad);}
+
+    .row-between{display:flex; justify-content:space-between; align-items:center; gap:12px;}
+    .row-gap{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+
+    .divider{height:1px; background: rgba(230,238,247,.95); margin: 12px 0;}
+
+    /* ============ Simple charts ============ */
+    .alloc{
+      display:flex; gap: 14px; align-items:center; justify-content: space-between;
+      margin-top: 12px;
+    }
+    .donut{
+      width: 140px; height: 140px; border-radius: 50%;
+      background: conic-gradient(var(--primary) 0deg 0deg, rgba(100,116,139,.20) 0deg 360deg);
+      position: relative;
+      box-shadow: inset 0 0 0 16px rgba(255,255,255,.92);
+      border: 1px solid rgba(230,238,247,.95);
+    }
+    .donut::after{
+      content:"";
+      position:absolute; inset: 22px;
+      background: rgba(255,255,255,.92);
+      border-radius: 50%;
+      border: 1px solid rgba(230,238,247,.95);
+    }
+    .donutCenter{
+      position:absolute;
+      inset: 0;
+      display:grid;
+      place-items:center;
+      text-align:center;
+      z-index: 2;
+      pointer-events:none;
+    }
+    .donutCenter b{font-size:18px}
+    .donutCenter span{font-size:12px; color: var(--muted)}
+    .legend{
+      display:flex; flex-direction:column; gap: 10px;
+      flex: 1;
+      padding-left: 6px;
+    }
+    .legItem{display:flex; align-items:center; gap:10px; justify-content: space-between;}
+    .legLeft{display:flex; align-items:center; gap:10px;}
+    .swatch{width:10px; height:10px; border-radius: 999px; background: var(--primary);}
+    .swatch.gray{background: rgba(100,116,139,.30);}
+    .legItem b{font-size:13px}
+    .legItem span{font-size:12px; color: var(--muted)}
+
+    .lineBox{
+      width:100%;
+      height: 180px;
+      border-radius: var(--r20);
+      background: rgba(78,164,255,.06);
+      border: 1px dashed rgba(78,164,255,.22);
+      padding: 10px;
+    }
+    canvas{width:100%; height:100%;}
+
+    /* ============ Pages ============ */
+    .page{display:none;}
+    .page.active{display:block;}
+
+    /* ============ Forms/Modal ============ */
+    .modalMask{
+      position: fixed; inset: 0;
+      background: rgba(15,23,42,.32);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      z-index: 2000;
+    }
+    .modalMask.show{display:flex;}
+    .modal{
+      width: min(760px, 100%);
+      background: rgba(255,255,255,.96);
+      border: 1px solid rgba(230,238,247,.95);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+    .modal h2{
+      margin:0;
+      font-size: 16px;
+      display:flex;
+      align-items:center;
+      justify-content: space-between;
+    }
+    .closeX{
+      width:34px; height:34px;
+      border-radius: 12px;
+      border: 1px solid rgba(230,238,247,.95);
+      background: rgba(255,255,255,.92);
+      cursor:pointer;
+    }
+    .form{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .form.one{grid-template-columns: 1fr;}
+    .field label{
+      font-size: 12px;
+      color: var(--muted);
+      display:block;
+      margin-bottom: 6px;
+    }
+    .field input, .field select, .field textarea{
+      width:100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(230,238,247,.95);
+      background: rgba(255,255,255,.95);
+      outline:none;
+      font-size: 13px;
+    }
+    .field textarea{min-height: 86px; resize: vertical;}
+    .modalFoot{
+      display:flex; justify-content: flex-end; gap: 10px;
+      margin-top: 14px;
+    }
+
+    /* ============ Toast ============ */
+    .toast{
+      position: fixed;
+      right: 18px; bottom: 18px;
+      background: rgba(255,255,255,.96);
+      border: 1px solid rgba(230,238,247,.95);
+      box-shadow: var(--shadow);
+      border-radius: 16px;
+      padding: 12px 14px;
+      min-width: 240px;
+      display:none;
+      z-index: 3000;
+    }
+    .toast.show{display:block;}
+    .toast b{display:block; font-size: 13px;}
+    .toast span{display:block; font-size: 12px; color: var(--muted); margin-top: 4px;}
+
+    /* Small helpers */
+    .muted{color: var(--muted)}
+    .tiny{font-size: 12px}
+    .spacer{height: 6px;}
+  </style>
+</head>
+
+<body>
+  <!-- Sticky topbar（红框区域） -->
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="logo">W</div>
+        <div class="brand-title">
+          <b>WealthHub</b>
+          <span>淡蓝主题 · PC 交互 Demo（本地假数据）</span>
+        </div>
+      </div>
+
+      <div class="nav" id="nav">
+        <button class="pill active" data-page="dashboard"><span class="dot"></span>总览</button>
+        <button class="pill" data-page="ledger"><span class="dot"></span>流水</button>
+        <button class="pill" data-page="orders"><span class="dot"></span>订单&结算</button>
+        <button class="pill" data-page="products"><span class="dot"></span>产品</button>
+        <button class="pill" data-page="accounts"><span class="dot"></span>账户</button>
+        <button class="pill" data-page="settings"><span class="dot"></span>设置</button>
+        <button class="pill" data-page="backtest"><span class="dot"></span>回测实验室</button>
+      </div>
+
+      <div class="actions">
+        <button class="btn ghost" id="btnRefresh">⟳ 刷新数据</button>
+        <button class="btn primary" id="btnUnifiedEntry">📝 记一笔</button>
+        <button class="btn" id="btnNewOrder">▦ 新建订单</button>
+        <div class="avatar" id="btnProfile">👤</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- 标题/说明放到 topbar 下方 -->
+    <div class="pagehead" id="pagehead">
+      <h1 id="pageTitle">财富中枢 · 看板（PC Demo）</h1>
+      <p id="pageDesc">目标：在不接数据库的情况下，把\"产品/账户/下单/结算/看板联动\"跑通。数据存于 localStorage，可重开页面继续演示。</p>
+    </div>
+
+    <!-- DASHBOARD -->
+    <section class="page active" id="page-dashboard">
+      <div class="kpis">
+        <div class="kpi primary">
+          <div class="label">✨ 净资产（Net Worth）</div>
+          <div class="value" id="kpiNetWorth">¥ --</div>
+          <div class="mini">= 现金 + 持仓市值 - 负债（演示口径）</div>
+          <div class="row">
+            <span class="chip" id="chipToday">今日 +0.00</span>
+            <span class="chip" id="chipMonth">本月净流入 +0.00</span>
+          </div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">💧 可用资金</div>
+          <div class="value" id="kpiAvailable">¥ --</div>
+          <div class="mini">= Σ(现金叶子余额) - Σ(占用 reserved)</div>
+          <div class="row">
+            <span class="chip warn" id="chipReserved">占用 ¥ 0.00</span>
+            <span class="chip" id="chipSpendable">生活费可支出 ¥ 0.00</span>
+          </div>
+        </div>
+
+        <div class="kpi">
+          <div class="label">📈 持仓市值</div>
+          <div class="value" id="kpiHoldings">¥ --</div>
+          <div class="mini">= Σ(持仓 shares × 价格)</div>
+          <div class="row">
+            <span class="chip good" id="chipPnl">浮动盈亏 +0.00</span>
+            <span class="chip" id="chipAllocHint">资产配置会随你操作联动</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>资产配比（Allocation）
+            <span class="row-gap">
+              <span class="tag gray tiny">演示</span>
+            </span>
+          </h3>
+          <div class="alloc">
+            <div class="legend">
+              <div class="legItem">
+                <div class="legLeft"><span class="swatch"></span><b>持仓</b></div>
+                <span id="legHoldPct">--%</span>
+              </div>
+              <div class="legItem">
+                <div class="legLeft"><span class="swatch gray"></span><b>现金</b></div>
+                <span id="legCashPct">--%</span>
+              </div>
+              <div class="spacer"></div>
+              <div class="tiny muted">提示：你去“账户/持仓/订单结算”做操作，这里会实时变动。</div>
+            </div>
+
+            <div class="donut" id="donut">
+              <div class="donutCenter">
+                <div><b id="donutPct">--%</b></div>
+                <span>持仓占比</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <h3>净资产走势（近30天） <span class="tag blue tiny">轻量本地绘图</span></h3>
+          <div class="sub">为了演示视觉效果，本曲线由“当前净资产 + 轻微扰动”模拟生成（后端接上后再替换为真实快照）。</div>
+          <div class="lineBox">
+            <canvas id="lineChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>今天建议（你打开系统最想看到的） <span class="tag orange tiny" id="todoCount">待办 0</span></h3>
+          <div class="sub">建议来自：待结算订单 / 待分配资金 / 本月应还 / 逆回购到期（演示）。</div>
+
+          <div class="divider"></div>
+
+          <div id="todoList" class="row-gap" style="flex-direction:column; align-items:stretch;"></div>
+
+          <div class="divider"></div>
+
+          <h3>核心持仓（Top 5） 
+            <span class="row-gap">
+              <span class="tag blue tiny">联动</span>
+              <button class="btn" id="btnViewHoldings" style="padding:6px 10px; font-size:12px;">查看全部 →</button>
+            </span>
+          </h3>
+          <div class="sub">来自持仓数据的实时计算。</div>
+          <div style="margin-top:10px; overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>标的</th>
+                  <th class="right">份额</th>
+                  <th class="right">成本</th>
+                  <th class="right">现价</th>
+                  <th class="right">市值</th>
+                  <th class="right">盈亏</th>
+                </tr>
+              </thead>
+              <tbody id="topHoldings"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section class="page" id="page-products">
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <h3>产品管理 <span class="tag blue tiny">可新增/编辑/停用</span></h3>
+            <div class="sub">产品是全局字典：ETF / 基金 / 货基 / 逆回购（演示）。后续接行情服务时，code 用于查询。</div>
+          </div>
+          <div class="row-gap">
+            <button class="btn" id="btnAddProduct">＋ 新增产品</button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>名称</th>
+                <th>代码</th>
+                <th>类型</th>
+                <th>币种</th>
+                <th>状态</th>
+                <th class="right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="productTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACCOUNTS -->
+    <section class="page" id="page-accounts">
+      <div class="two">
+        <div class="card">
+          <div class="row-between">
+            <div>
+              <h3>账户管理 <span class="tag blue tiny">可编辑</span></h3>
+              <div class="sub">父账户仅用于分组展示；真实余额只在叶子账户。每个平台默认有"待分配"。</div>
+            </div>
+            <div class="row-gap">
+              <button class="btn" id="btnAddPlatform">＋ 新增平台</button>
+              <button class="btn" id="btnAddBucket">＋ 新增信封</button>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div id="accountTree"></div>
+          <div class="divider"></div>
+          <h3>现金叶子账户（摘要）</h3>
+          <div style="margin-top:10px; overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>平台</th>
+                  <th>信封</th>
+                  <th>用途</th>
+                  <th class="right">余额</th>
+                  <th class="right">占用</th>
+                </tr>
+              </thead>
+              <tbody id="cashLeafTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>账户说明</h3>
+          <div class="sub">
+            <b>账户结构：</b><br/>
+            • 平台（ROOT）：用于分组，如"华宝证券"、"支付宝"<br/>
+            • 信封（LEAF）：实际存储余额的账户，如"生活费"、"理财金"<br/>
+            <div class="spacer"></div>
+            <b>资金用途（fund_usage）：</b><br/>
+            • SPENDABLE：可支出，用于日常消费<br/>
+            • RESERVED：专款，用于特定用途（如逆回购占用）<br/>
+            • INVESTABLE：可投资，用于购买理财产品<br/>
+            <div class="spacer"></div>
+            <b>操作提示：</b><br/>
+            • 点击账户可以编辑余额、用途、状态<br/>
+            • 点击平台可以重命名<br/>
+            • 所有变更会实时反映在看板上
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOLDINGS (隐藏页面，从看板跳转) -->
+    <section class="page" id="page-holdings">
+      <div class="two">
+        <div class="card">
+          <div class="row-between">
+            <div>
+              <h3>持仓管理 <span class="tag blue tiny">演示</span></h3>
+              <div class="sub">买入/卖出来自"订单&结算"。你也可以在这里模拟改价格（刷新按钮）。</div>
+            </div>
+            <div class="row-gap">
+              <button class="btn" id="btnReprice">🎲 随机刷新价格</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>标的</th>
+                  <th>代码</th>
+                  <th class="right">份额</th>
+                  <th class="right">均价</th>
+                  <th class="right">现价</th>
+                  <th class="right">市值</th>
+                  <th class="right">浮盈亏</th>
+                </tr>
+              </thead>
+              <tbody id="holdingTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>快速说明</h3>
+          <div class="sub">
+            这个 Demo 不做真实税务/批次成本，只做"看得见的联动"。<br/>
+            你的正式系统里是复式记账 + postings，这里用简化引擎模拟出"你点一下，数字就动"。<br/>
+            目的：把 UI/交互体验先做顺，再接后端。
+          </div>
+
+          <div class="divider"></div>
+
+          <h3>你可以试试：</h3>
+          <div class="tiny muted">
+            1）去【设置-账户】入金 → 分配到【理财金】<br/>
+            2）去【订单&结算】下一个 BUY → 确认成交<br/>
+            3）回到【总览】看净资产/配比/建议变化<br/>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ORDERS -->
+    <section class="page" id="page-orders">
+      <div class="two">
+        <div class="card">
+          <div class="row-between">
+            <div>
+              <h3>订单列表 <span class="tag orange tiny">待结算会进“今日建议”</span></h3>
+              <div class="sub">下单会先占用 reserved；确认结算后才真正影响余额/持仓（演示版）。</div>
+            </div>
+            <button class="btn primary" id="btnNewOrder2">▦ 新建订单</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>类型</th>
+                  <th>标的</th>
+                  <th>资金来源</th>
+                  <th class="right">金额</th>
+                  <th class="right">费用</th>
+                  <th>状态</th>
+                  <th class="right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="orderTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>结算说明（演示规则）</h3>
+          <div class="sub">
+            - BUY：PENDING 时只占用资金；CONFIRM 时扣余额 + 增加持仓<br/>
+            - SELL：CONFIRM 时减少持仓 + 增加余额（演示版不做复杂成本）<br/>
+            - 逆回购（BOND_REPO）：PENDING 占用本金；CONFIRM 时释放占用 + 记入利息收益（不生成持仓）<br/>
+          </div>
+          <div class="divider"></div>
+          <h3>防呆（演示版）</h3>
+          <div class="tiny muted">
+            - 支出只能从 SPENDABLE 的信封扣款<br/>
+            - ETF/基金 BUY 默认只能从 INVESTABLE 扣款<br/>
+            - 逆回购允许华宝平台任意信封来源（你设定的规则）<br/>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- LEDGER -->
+    <section class="page" id="page-ledger">
+      <div class="card">
+        <div class="row-between">
+          <div>
+            <h3>交易流水 <span class="tag gray tiny">记账流水</span></h3>
+            <div class="sub">展示所有记账操作流水。流水记录的是记账操作（入金、支出、转账、订单结算等），不包括行情波动。</div>
+          </div>
+          <div class="row-gap">
+            <button class="btn" id="btnExport">⬇ 导出 JSON</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>类型</th>
+                <th>摘要</th>
+                <th class="right">金额</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- BACKTEST -->
+    <section class="page" id="page-backtest">
+      <div class="two">
+        <div class="card">
+          <div class="row-between">
+            <div>
+              <h3>回测实验室（UI 演示） <span class="tag blue tiny">可跑“假回测”</span></h3>
+              <div class="sub">用于演示你未来 Python 回测任务：选产品 + 策略 + 参数 → 生成结果 → 一键应用。</div>
+            </div>
+            <button class="btn" id="btnRunBacktest">▶ 运行回测</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="form">
+            <div class="field">
+              <label>标的（Product）</label>
+              <select id="btProduct"></select>
+            </div>
+            <div class="field">
+              <label>策略（Strategy）</label>
+              <select id="btStrategy">
+                <option value="profit_recycle">profit_recycle（利润回收）</option>
+                <option value="fixed_dca">fixed_dca（固定定投）</option>
+                <option value="value_zone">value_zone（估值分区）</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>每次投入（元）</label>
+              <input id="btAmount" type="number" value="500" />
+            </div>
+            <div class="field">
+              <label>回测区间（天）</label>
+              <input id="btDays" type="number" value="180" />
+            </div>
+            <div class="field" style="grid-column: 1 / -1;">
+              <label>备注</label>
+              <textarea id="btNote">这里是演示：真实版本将由 Python 任务生成 run_id，并落库摘要+文件明细。</textarea>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <h3>最近回测（演示结果）</h3>
+          <div style="overflow:auto; margin-top:10px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>run_id</th>
+                  <th>标的</th>
+                  <th>策略</th>
+                  <th class="right">年化</th>
+                  <th class="right">最大回撤</th>
+                  <th class="right">建议参数</th>
+                  <th class="right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="btTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>你会怎么接真实回测？</h3>
+          <div class="sub">
+            演示版：点击“运行回测” → 随机生成一个结果。<br/>
+            真实版：Java 发起任务 → Python 运行 → 写入 backtest_run/py_job → 前端轮询/刷新结果 → “应用参数”二次确认写回策略配置。<br/>
+            <div class="spacer"></div>
+            先把 UI/交互做得舒服，后端接入会非常顺。
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="page" id="page-settings">
+      <div class="two">
+        <!-- 用户管理（仅管理员） -->
+        <div class="card">
+          <div class="row-between">
+            <div>
+              <h3>用户管理 <span class="tag orange tiny" id="userMgtTag">仅管理员</span></h3>
+              <div class="sub">管理家庭成员和权限。只有管理员可以添加/编辑用户。</div>
+            </div>
+            <div class="row-gap">
+              <button class="btn" id="btnAddUser" style="display:none;">＋ 新增用户</button>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div id="userList" style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>用户名</th>
+                  <th>角色</th>
+                  <th>状态</th>
+                  <th class="right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="userTable"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Demo 设置 -->
+        <div class="card">
+          <h3>Demo 设置 <span class="tag gray tiny">本地数据</span></h3>
+          <div class="sub">数据存 localStorage。你可以清空重置、也可以导出。</div>
+          <div class="divider"></div>
+          <div class="row-gap">
+            <button class="btn" id="btnReset">🧹 重置演示数据</button>
+            <button class="btn" id="btnDump">📦 导出全量 State</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal -->
+  <div class="modalMask" id="modalMask">
+    <div class="modal" id="modal">
+      <h2 id="modalTitle">Modal <button class="closeX" id="modalClose">✕</button></h2>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <b id="toastTitle">提示</b>
+    <span id="toastMsg">…</span>
+  </div>
+
+  <script>
+    /***********************
+     * Utils
+     ***********************/
+    const $ = (sel, el=document) => el.querySelector(sel);
+    const $$ = (sel, el=document) => Array.from(el.querySelectorAll(sel));
+    const fmt = (n) => {
+      const x = Number(n || 0);
+      return "¥ " + x.toLocaleString("zh-CN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    };
+    const uid = (p="id") => p + "_" + Math.random().toString(16).slice(2, 10) + Date.now().toString(16).slice(-4);
+    const todayISO = () => new Date().toISOString().slice(0,10);
+    const nowStr = () => {
+      const d=new Date();
+      const p=(v)=>String(v).padStart(2,"0");
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    };
+    const clamp = (v, a, b)=>Math.max(a, Math.min(b, v));
+    const toast = (title, msg) => {
+      $("#toastTitle").textContent = title;
+      $("#toastMsg").textContent = msg;
+      const t = $("#toast");
+      t.classList.add("show");
+      clearTimeout(toast._tm);
+      toast._tm = setTimeout(()=>t.classList.remove("show"), 2600);
+    };
+
+    /***********************
+     * Demo State (localStorage)
+     ***********************/
+    const STORAGE_KEY = "wealthhub_pc_demo_state_v2";
+
+    const seedState = () => {
+      // 平台父账户（容器） + 子账户信封（叶子）
+      const platforms = [
+        { id: uid("plat"), name: "余利宝", kind:"ROOT", currency:"CNY" },
+        { id: uid("plat"), name: "稳利宝", kind:"ROOT", currency:"CNY" },
+        { id: uid("plat"), name: "华宝证券", kind:"ROOT", currency:"CNY" },
+      ];
+
+      const mkBucket = (platformName, bucketName, usage, balance, reserved=0) => {
+        const plat = platforms.find(p=>p.name===platformName);
+        return {
+          id: uid("acc"),
+          kind:"LEAF",
+          parent_id: plat.id,
+          platform: plat.name,
+          name: bucketName,
+          fund_usage: usage, // SPENDABLE / RESERVED / INVESTABLE
+          currency:"CNY",
+          balance: Number(balance),
+          reserved_amount: Number(reserved),
+          active: true
+        };
+      };
+
+      const accounts = [
+        mkBucket("余利宝", "待分配", "SPENDABLE", 8000, 0),
+        mkBucket("余利宝", "生活费", "SPENDABLE", 2500, 0),
+        mkBucket("余利宝", "房租预备金", "RESERVED", 4500, 0),
+        mkBucket("余利宝", "项目资金", "RESERVED", 3000, 0),
+        mkBucket("余利宝", "理财金", "INVESTABLE", 6000, 0),
+
+        mkBucket("稳利宝", "待分配", "SPENDABLE", 0, 0),
+        mkBucket("稳利宝", "安全金", "RESERVED", 8000, 0),
+        mkBucket("稳利宝", "房租预备金", "RESERVED", 2000, 0),
+
+        mkBucket("华宝证券", "待分配", "SPENDABLE", 0, 0),
+        mkBucket("华宝证券", "房租预备金", "RESERVED", 0, 0),
+        mkBucket("华宝证券", "项目资金", "RESERVED", 0, 0),
+        mkBucket("华宝证券", "理财金", "INVESTABLE", 15000, 1800), // 演示：有占用
+      ];
+
+      const products = [
+        { id: uid("prd"), name:"纳指100 ETF", code:"513100", asset_type:"ETF", currency:"CNY", active:true },
+        { id: uid("prd"), name:"沪深300 ETF", code:"510300", asset_type:"ETF", currency:"CNY", active:true },
+        { id: uid("prd"), name:"货币基金A", code:"000001", asset_type:"FUND", currency:"CNY", active:true },
+        { id: uid("prd"), name:"国债逆回购(1D)", code:"204001", asset_type:"BOND_REPO", currency:"CNY", active:true },
+      ];
+
+      // holdings only for ETF/FUND etc (BOND_REPO 不生成持仓：你的规则)
+      const holdings = [
+        { id: uid("pos"), product_id: products[0].id, shares: 2000, avg_cost: 1.15, price: 1.25 },
+        { id: uid("pos"), product_id: products[2].id, shares: 10000, avg_cost: 1.00, price: 1.00 },
+      ];
+
+      const orders = [
+        // 演示：一个待结算的申购
+        { id: uid("ord"), type:"BUY", product_id: products[1].id, source_account_id: accounts.find(a=>a.platform==="余利宝" && a.name==="理财金").id, amount: 10000, fee: 0, status:"PENDING", note:"演示订单", created_at: nowStr() },
+      ];
+
+      // 先把 pending 订单占用做出来
+      const pending = orders.filter(o=>o.status==="PENDING");
+      pending.forEach(o=>{
+        const acc = accounts.find(a=>a.id===o.source_account_id);
+        if(acc) acc.reserved_amount += Number(o.amount) + Number(o.fee||0);
+      });
+
+      const ledger = [
+        { id: uid("led"), ts: nowStr(), kind:"INFO", summary:"初始化演示数据", amount: 0, note:"localStorage seed" }
+      ];
+
+      const backtests = [];
+
+      // 用户数据（演示）
+      const users = [
+        { id: uid("usr"), username: "admin", role: "ADMIN", active: true, created_at: nowStr() },
+        { id: uid("usr"), username: "user1", role: "MEMBER", active: true, created_at: nowStr() },
+      ];
+
+      return { version:3, platforms, accounts, products, holdings, orders, ledger, backtests, users, currentUser: users[0] };
+    };
+
+    const loadState = () => {
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if(!raw) return seedState();
+        const s = JSON.parse(raw);
+        if(!s || !s.platforms || !s.accounts) return seedState();
+        return s;
+      }catch(e){
+        return seedState();
+      }
+    };
+
+    const saveState = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+    let state = loadState();
+
+    /***********************
+     * Derived helpers
+     ***********************/
+    const getPlatformById = (id) => state.platforms.find(p=>p.id===id);
+    const getAccount = (id) => state.accounts.find(a=>a.id===id);
+    const getProduct = (id) => state.products.find(p=>p.id===id);
+
+    const isLeaf = (acc) => acc && acc.kind==="LEAF";
+    const platformNameOf = (acc) => {
+      const p = getPlatformById(acc.parent_id);
+      return p ? p.name : (acc.platform || "未知平台");
+    };
+
+    const cashLeafAccounts = () => state.accounts.filter(a=>a.kind==="LEAF" && a.active);
+
+    const sumCash = () => cashLeafAccounts().reduce((s,a)=>s+Number(a.balance||0),0);
+    const sumReserved = () => cashLeafAccounts().reduce((s,a)=>s+Number(a.reserved_amount||0),0);
+
+    const holdingsValue = () => state.holdings.reduce((s,h)=>s + Number(h.shares||0)*Number(h.price||0), 0);
+    const holdingsCost = () => state.holdings.reduce((s,h)=>s + Number(h.shares||0)*Number(h.avg_cost||0), 0);
+    const holdingsPnl = () => holdingsValue() - holdingsCost();
+
+    const netWorth = () => sumCash() + holdingsValue(); // 演示版：暂不做负债
+    const available = () => sumCash() - sumReserved();
+
+    const sumUsage = (usage) => cashLeafAccounts().filter(a=>a.fund_usage===usage).reduce((s,a)=>s+Number(a.balance||0),0);
+
+    const topHoldings = () => {
+      const arr = state.holdings.map(h=>{
+        const p = getProduct(h.product_id) || {name:"未知", code:"--"};
+        const mv = Number(h.shares||0)*Number(h.price||0);
+        const cost = Number(h.shares||0)*Number(h.avg_cost||0);
+        return { ...h, product:p, mv, pnl: mv-cost };
+      }).sort((a,b)=>b.mv-a.mv).slice(0,5);
+      return arr;
+    };
+
+    /***********************
+     * Navigation
+     ***********************/
+    const setPage = (page) => {
+      $$(".page").forEach(p=>p.classList.remove("active"));
+      $("#page-"+page).classList.add("active");
+
+      $$("#nav .pill").forEach(b=>b.classList.toggle("active", b.dataset.page===page));
+
+      const titleMap = {
+        dashboard: ["财富中枢 · 看板", "资产概览、今日建议、核心持仓。所有数据实时联动。"],
+        ledger: ["交易流水", "展示所有记账流水。流水记录的是记账操作，不包括行情波动。"],
+        orders: ["订单与结算", "PENDING 占用资金，CONFIRM 才落账。逆回购按\"占用/释放 + 利息入账\"处理。"],
+        products: ["产品管理", "产品是全局字典：ETF / 基金 / 货基 / 逆回购。后续接行情服务时，code 用于查询。"],
+        accounts: ["账户管理", "管理平台和信封账户。父账户用于分组，叶子账户存储实际余额。"],
+        settings: ["设置", "用户管理（仅管理员）、Demo设置。"],
+        backtest: ["回测实验室", "UI 演示：选产品+策略+参数 → 生成结果 → 应用配置（需二次确认）。"],
+        holdings: ["持仓管理", "买卖来自订单结算；刷新按钮模拟行情波动。"]
+      };
+      $("#pageTitle").textContent = titleMap[page][0];
+      $("#pageDesc").textContent = titleMap[page][1];
+
+      renderAll();
+    };
+
+    $("#nav").addEventListener("click", (e)=>{
+      const btn = e.target.closest(".pill");
+      if(!btn) return;
+      setPage(btn.dataset.page);
+    });
+
+    /***********************
+     * Modal builder
+     ***********************/
+    const modal = {
+      open(title, html, onMount){
+        $("#modalTitle").childNodes[0].textContent = title + " ";
+        $("#modalBody").innerHTML = html;
+        $("#modalMask").classList.add("show");
+        if(onMount) onMount($("#modalBody"));
+      },
+      close(){
+        $("#modalMask").classList.remove("show");
+        $("#modalBody").innerHTML = "";
+      }
+    };
+    const modalClose = $("#modalClose");
+    if(modalClose) modalClose.onclick = ()=>modal.close();
+    const modalMask = $("#modalMask");
+    if(modalMask) {
+      modalMask.addEventListener("click", (e)=>{
+        if(e.target.id==="modalMask") modal.close();
+      });
+    }
+
+    /***********************
+     * Core operations (demo logic)
+     ***********************/
+    const requireLeafCash = (accountId) => {
+      const a = getAccount(accountId);
+      if(!a || !isLeaf(a)) throw new Error("请选择一个叶子现金账户");
+      return a;
+    };
+
+    const canExpenseFrom = (acc) => acc.fund_usage==="SPENDABLE";
+    const canInvestFrom = (acc) => acc.fund_usage==="INVESTABLE";
+
+    const assertAvailable = (acc, need) => {
+      const avail = Number(acc.balance||0) - Number(acc.reserved_amount||0);
+      if(avail + 1e-9 < Number(need)) throw new Error(`余额不足：可用 ${fmt(avail)}，需要 ${fmt(need)}`);
+    };
+
+    const logLedger = (kind, summary, amount, note="") => {
+      state.ledger.unshift({
+        id: uid("led"),
+        ts: nowStr(),
+        kind,
+        summary,
+        amount: Number(amount||0),
+        note: note || ""
+      });
+    };
+
+    const opDeposit = (accountId, amount, note="") => {
+      const acc = requireLeafCash(accountId);
+      acc.balance += Number(amount);
+      logLedger("DEPOSIT", `入金 → ${platformNameOf(acc)} / ${acc.name}`, amount, note);
+      saveState();
+      renderAll();
+    };
+
+    const opExpense = (accountId, amount, note="") => {
+      const acc = requireLeafCash(accountId);
+      if(!canExpenseFrom(acc)) throw new Error("这不是可支出信封（SPENDABLE），不允许日常消费。");
+      assertAvailable(acc, amount);
+      acc.balance -= Number(amount);
+      logLedger("EXPENSE", `支出 ← ${platformNameOf(acc)} / ${acc.name}`, amount, note);
+      saveState();
+      renderAll();
+    };
+
+    const opTransfer = (fromId, toId, amount, note="") => {
+      const from = requireLeafCash(fromId);
+      const to = requireLeafCash(toId);
+      if(from.id===to.id) throw new Error("转出/转入不能是同一个账户");
+      assertAvailable(from, amount);
+      from.balance -= Number(amount);
+      to.balance += Number(amount);
+      logLedger("TRANSFER", `转账/分配 ${platformNameOf(from)}:${from.name} → ${platformNameOf(to)}:${to.name}`, amount, note);
+      saveState();
+      renderAll();
+    };
+
+    // Order: create pending (reserve)
+    const opCreateOrder = (type, productId, sourceAccId, amount, fee=0, note="") => {
+      const p = getProduct(productId);
+      if(!p || !p.active) throw new Error("请选择一个有效产品");
+      const source = requireLeafCash(sourceAccId);
+
+      const totalNeed = Number(amount) + Number(fee||0);
+
+      // ETF/FUND BUY 约束：默认 INVESTABLE
+      if(type==="BUY" && p.asset_type!=="BOND_REPO"){
+        if(!canInvestFrom(source)) throw new Error("投资类 BUY 默认只能从 INVESTABLE 信封扣款。");
+      }
+
+      // 逆回购：允许RESERVED账户（现金增强工具，不生成持仓）
+      if(type==="REPO" || p.asset_type==="BOND_REPO"){
+        // 允许SPENDABLE、RESERVED、INVESTABLE（演示规则：逆回购作为现金增强工具，允许从RESERVED账户操作）
+        const plat = platformNameOf(source);
+        if(!plat.includes("华宝")) throw new Error("逆回购演示规则：只允许华宝证券平台下单。");
+        // 不再限制fund_usage，允许RESERVED账户
+      }
+
+      assertAvailable(source, totalNeed);
+      source.reserved_amount += totalNeed;
+
+      const ord = { id: uid("ord"), type, product_id: productId, source_account_id: sourceAccId, amount:Number(amount), fee:Number(fee||0), status:"PENDING", note, created_at: nowStr() };
+      state.orders.unshift(ord);
+      logLedger("ORDER", `下单（PENDING）${type}：${p.name}`, totalNeed, `占用 reserved；来源=${platformNameOf(source)}/${source.name}`);
+      saveState();
+      renderAll();
+      return ord;
+    };
+
+    const ensureHolding = (productId) => {
+      let h = state.holdings.find(x=>x.product_id===productId);
+      if(!h){
+        const p = getProduct(productId);
+        h = { id: uid("pos"), product_id: productId, shares: 0, avg_cost: 0, price: (p && p.asset_type==="FUND") ? 1.0 : 1.0 };
+        state.holdings.push(h);
+      }
+      return h;
+    };
+
+    // Confirm order
+    const opConfirmOrder = (orderId) => {
+      const o = state.orders.find(x=>x.id===orderId);
+      if(!o) throw new Error("订单不存在");
+      if(o.status!=="PENDING") throw new Error("订单已处理");
+      const p = getProduct(o.product_id);
+      const source = requireLeafCash(o.source_account_id);
+      const total = Number(o.amount) + Number(o.fee||0);
+
+      // Release reserve first
+      source.reserved_amount = Math.max(0, Number(source.reserved_amount||0) - total);
+
+      if(o.type==="BUY"){
+        // 扣现金
+        source.balance -= total;
+
+        // 增加持仓（演示：用金额/价格估算份额）
+        const h = ensureHolding(o.product_id);
+        const price = Number(h.price||1);
+        const addShares = price>0 ? Number(o.amount)/price : 0;
+        // 新均价
+        const oldCost = Number(h.shares||0)*Number(h.avg_cost||0);
+        const newCost = oldCost + Number(o.amount);
+        const newShares = Number(h.shares||0) + addShares;
+        h.shares = newShares;
+        h.avg_cost = newShares>0 ? newCost/newShares : 0;
+
+        logLedger("SETTLE", `结算确认 BUY：${p.name}`, total, `扣款+入持仓（演示份额=${addShares.toFixed(4)}）`);
+      }
+
+      if(o.type==="SELL"){
+        // 卖出（演示：按金额减少份额，并按现价增加现金）
+        const h = ensureHolding(o.product_id);
+        const price = Number(h.price||1);
+        const sellShares = price>0 ? Number(o.amount)/price : 0;
+        if(Number(h.shares||0) + 1e-9 < sellShares) throw new Error("持仓不足（演示版按金额换算份额）");
+
+        h.shares -= sellShares;
+
+        // 现金入账（演示：到账=amount-fee）
+        const cashIn = Math.max(0, Number(o.amount) - Number(o.fee||0));
+        source.balance += cashIn;
+
+        logLedger("SETTLE", `结算确认 SELL：${p.name}`, cashIn, `减少持仓（演示份额=${sellShares.toFixed(4)}）`);
+      }
+
+      // 逆回购（不生成持仓）：到期确认时只记利息收益
+      if(o.type==="REPO" || (p && p.asset_type==="BOND_REPO")){
+        // 演示：利息 = amount * 0.00008（约等于一天 3% 年化的粗略值）
+        const interest = Number(o.amount) * 0.00008;
+        // 不动本金余额（我们只用 reserved 表示“今日占用”），这里用“利息入账”体现收益
+        source.balance += interest;
+        logLedger("REPO", `逆回购到期确认：${p.name}`, interest, "释放占用 + 利息入账（演示）");
+      }
+
+      o.status="CONFIRMED";
+      o.confirmed_at = nowStr();
+
+      saveState();
+      renderAll();
+    };
+
+    const opCancelOrder = (orderId) => {
+      const o = state.orders.find(x=>x.id===orderId);
+      if(!o) throw new Error("订单不存在");
+      if(o.status!=="PENDING") throw new Error("只能取消待结算订单");
+      const source = requireLeafCash(o.source_account_id);
+      const total = Number(o.amount) + Number(o.fee||0);
+      source.reserved_amount = Math.max(0, Number(source.reserved_amount||0) - total);
+      o.status = "CANCELLED";
+      o.cancelled_at = nowStr();
+      logLedger("CANCEL", `取消订单：${(getProduct(o.product_id)||{}).name||"未知"}`, total, "释放占用");
+      saveState();
+      renderAll();
+    };
+
+    const opReprice = () => {
+      state.holdings.forEach(h=>{
+        // 演示：轻微波动
+        const drift = (Math.random()-0.5) * 0.08; // +-4%
+        h.price = clamp(Number(h.price||1) * (1+drift), 0.5, 10);
+      });
+      // 注意：行情波动不记录到流水（流水只记录记账操作）
+      saveState();
+      renderAll();
+    };
+
+    /***********************
+     * Renderers
+     ***********************/
+    const renderDashboard = () => {
+      $("#kpiNetWorth").textContent = fmt(netWorth());
+      $("#kpiAvailable").textContent = fmt(available());
+      $("#kpiHoldings").textContent = fmt(holdingsValue());
+
+      $("#chipReserved").textContent = "占用 " + fmt(sumReserved());
+      $("#chipSpendable").textContent = "生活费可支出 " + fmt(sumUsage("SPENDABLE"));
+      $("#chipPnl").textContent = (holdingsPnl()>=0 ? "浮动盈亏 +" : "浮动盈亏 ") + (holdingsPnl()).toLocaleString("zh-CN",{minimumFractionDigits:2, maximumFractionDigits:2});
+
+      // Allocation donut
+      const cash = sumCash();
+      const hold = holdingsValue();
+      const total = cash + hold;
+      const holdPct = total>0 ? (hold/total) : 0;
+      const deg = holdPct * 360;
+
+      $("#donut").style.background = `conic-gradient(var(--primary) 0deg ${deg}deg, rgba(100,116,139,.20) ${deg}deg 360deg)`;
+      $("#donutPct").textContent = Math.round(holdPct*100) + "%";
+      $("#legHoldPct").textContent = Math.round(holdPct*100) + "%";
+      $("#legCashPct").textContent = Math.round((1-holdPct)*100) + "%";
+
+      // Todo suggestions
+      const todos = [];
+      const pendingOrders = state.orders.filter(o=>o.status==="PENDING");
+      if(pendingOrders.length){
+        todos.push({
+          title: `处理结算：${pendingOrders.length} 笔待确认`,
+          desc: "去\"订单&结算\"确认到帐/份额（演示）。",
+          tag: "待结算",
+          action: ()=>setPage("orders")
+        });
+      }
+      // 待分配资金：各平台的"待分配"信封余额>0
+      const unalloc = cashLeafAccounts().filter(a=>a.name.includes("待分配") && Number(a.balance||0)>0);
+      if(unalloc.length){
+        const amt = unalloc.reduce((s,a)=>s+Number(a.balance||0),0);
+        todos.push({
+          title: `待分配资金：${fmt(amt)}`,
+          desc: "把钱从\"待分配\"分到生活费/房租/理财金，避免误花。",
+          tag: "现金管理",
+          action: ()=>setPage("settings")
+        });
+      }
+      // 逆回购占用：华宝平台 reserved>0
+      const hb = cashLeafAccounts().filter(a=>platformNameOf(a).includes("华宝") && Number(a.reserved_amount||0)>0);
+      if(hb.length){
+        const amt = hb.reduce((s,a)=>s+Number(a.reserved_amount||0),0);
+        todos.push({
+          title: `华宝逆回购占用：${fmt(amt)}`,
+          desc: "演示：占用资金在\"可用资金\"中扣除，到期确认后记入利息。",
+          tag: "逆回购",
+          action: ()=>setPage("orders")
+        });
+      }
+      // 默认至少一个暖心提示
+      if(!todos.length){
+        todos.push({
+          title: "今天状态很干净 ✨",
+          desc: "没有待结算，也没有待分配。你可以去下个订单，让看板动起来～",
+          tag: "轻松",
+          action: ()=>setPage("orders")
+        });
+      }
+
+      $("#todoCount").textContent = `待办 ${todos.length}`;
+      const list = $("#todoList");
+      list.innerHTML = "";
+      todos.forEach((t, idx)=>{
+        const div = document.createElement("div");
+        div.className = "card";
+        div.style.padding = "12px";
+        div.style.borderRadius = "16px";
+        div.innerHTML = `
+          <div class="row-between">
+            <div>
+              <div style="font-weight:800; font-size:13px;">${t.title}</div>
+              <div class="tiny muted" style="margin-top:4px;">${t.desc}</div>
+            </div>
+            <div class="row-gap">
+              <span class="tag orange tiny">${t.tag}</span>
+              <button class="btn" data-idx="${idx}">查看</button>
+            </div>
+          </div>
+        `;
+        div.querySelector("button").onclick = ()=>t.action();
+        list.appendChild(div);
+      });
+
+      // Top holdings
+      const tb = $("#topHoldings");
+      tb.innerHTML = "";
+      const arr = topHoldings();
+      if(!arr.length){
+        tb.innerHTML = `<tr><td colspan="6" class="td-muted">暂无持仓，去\"订单&结算\"买一笔试试。</td></tr>`;
+      }else{
+        arr.forEach(x=>{
+          const pnlClass = x.pnl>=0 ? "good":"bad";
+          tb.innerHTML += `
+            <tr>
+              <td><b>${x.product.name}</b><div class="td-muted mono">${x.product.code}</div></td>
+              <td class="right mono">${Number(x.shares).toFixed(2)}</td>
+              <td class="right mono">${Number(x.avg_cost).toFixed(4)}</td>
+              <td class="right mono">${Number(x.price).toFixed(4)}</td>
+              <td class="right mono">${fmt(x.mv)}</td>
+              <td class="right"><span class="chip ${pnlClass}">${x.pnl>=0?"+":""}${x.pnl.toFixed(2)}</span></td>
+            </tr>
+          `;
+        });
+      }
+
+      // today/month chips (演示：用流水中统计)
+      const monthPrefix = todayISO().slice(0,7);
+      const monthIn = state.ledger.filter(x=>x.ts.startsWith(monthPrefix) && x.kind==="DEPOSIT").reduce((s,x)=>s+Number(x.amount||0),0);
+      $("#chipMonth").textContent = `本月净流入 +${monthIn.toFixed(2)}`;
+      $("#chipToday").textContent = `今日 +${(Math.random()*1200).toFixed(2)}`;
+    };
+
+    const renderProducts = () => {
+      const tb = $("#productTable");
+      tb.innerHTML = "";
+      state.products.forEach(p=>{
+        const st = p.active ? `<span class="tag green">启用</span>` : `<span class="tag red">停用</span>`;
+        const at = p.asset_type==="BOND_REPO" ? `<span class="tag orange">BOND_REPO</span>` :
+                   p.asset_type==="ETF" ? `<span class="tag blue">ETF</span>` :
+                   `<span class="tag gray">${p.asset_type}</span>`;
+        tb.innerHTML += `
+          <tr>
+            <td><b>${p.name}</b></td>
+            <td class="mono">${p.code}</td>
+            <td>${at}</td>
+            <td>${p.currency}</td>
+            <td>${st}</td>
+            <td class="right">
+              <button class="btn" data-act="edit" data-id="${p.id}">编辑</button>
+              <button class="btn" data-act="toggle" data-id="${p.id}">${p.active?"停用":"启用"}</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      tb.querySelectorAll("button").forEach(btn=>{
+        btn.onclick = ()=>{
+          const id = btn.dataset.id;
+          const act = btn.dataset.act;
+          const p = getProduct(id);
+          if(!p) return;
+          if(act==="toggle"){
+            p.active = !p.active;
+            logLedger("PRODUCT", `产品状态变更：${p.name}`, 0, p.active?"启用":"停用");
+            saveState(); renderAll();
+            return;
+          }
+          if(act==="edit"){
+            openProductModal(p);
+          }
+        };
+      });
+    };
+
+    const renderAccountTree = () => {
+      const box = $("#accountTree");
+      box.innerHTML = "";
+
+      state.platforms.forEach(plat=>{
+        const children = state.accounts.filter(a=>a.parent_id===plat.id && a.active);
+        const sumBal = children.reduce((s,a)=>s+Number(a.balance||0),0);
+        const sumRes = children.reduce((s,a)=>s+Number(a.reserved_amount||0),0);
+
+        const wrap = document.createElement("div");
+        wrap.className = "card";
+        wrap.style.padding="12px";
+        wrap.style.borderRadius="16px";
+        wrap.style.marginBottom="12px";
+        wrap.innerHTML = `
+          <div class="row-between">
+            <div>
+              <div style="font-weight:900;">${plat.name}</div>
+              <div class="tiny muted">父账户（容器）余额 = Σ子账户余额：<span class="mono">${fmt(sumBal)}</span>；占用：<span class="mono">${fmt(sumRes)}</span></div>
+            </div>
+            <div class="row-gap">
+              <button class="btn" data-act="rename" data-id="${plat.id}">改名</button>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div id="children-${plat.id}"></div>
+        `;
+        const childBox = wrap.querySelector(`#children-${plat.id}`);
+
+        children.sort((a,b)=>a.name.localeCompare(b.name,"zh")).forEach(acc=>{
+          const usageTag = acc.fund_usage==="SPENDABLE" ? `<span class="tag green">SPENDABLE</span>` :
+                           acc.fund_usage==="RESERVED" ? `<span class="tag orange">RESERVED</span>` :
+                           `<span class="tag blue">INVESTABLE</span>`;
+          const item = document.createElement("div");
+          item.className="row-between";
+          item.style.padding="10px 8px";
+          item.style.borderRadius="14px";
+          item.style.border = "1px solid rgba(230,238,247,.9)";
+          item.style.background="rgba(255,255,255,.92)";
+          item.style.marginBottom="10px";
+          item.innerHTML = `
+            <div>
+              <div style="font-weight:800;">${acc.name} ${usageTag}</div>
+              <div class="tiny muted">余额：<span class="mono">${fmt(acc.balance)}</span>；占用：<span class="mono">${fmt(acc.reserved_amount)}</span></div>
+            </div>
+            <div class="row-gap">
+              <button class="btn" data-act="edit" data-id="${acc.id}">编辑</button>
+            </div>
+          `;
+          childBox.appendChild(item);
+
+          item.querySelector("button").onclick = ()=> openAccountModal(acc);
+        });
+
+        wrap.querySelector("button").onclick = ()=>{
+          const act = wrap.querySelector("button").dataset.act;
+          if(act==="rename"){
+            openPlatformRename(plat);
+          }
+        };
+
+        box.appendChild(wrap);
+      });
+    };
+
+    const renderCashLeafTable = () => {
+      const tb = $("#cashLeafTable");
+      tb.innerHTML = "";
+      cashLeafAccounts().forEach(a=>{
+        const usage = a.fund_usage==="SPENDABLE" ? `<span class="tag green">SPENDABLE</span>` :
+                      a.fund_usage==="RESERVED" ? `<span class="tag orange">RESERVED</span>` :
+                      `<span class="tag blue">INVESTABLE</span>`;
+        tb.innerHTML += `
+          <tr>
+            <td><b>${platformNameOf(a)}</b></td>
+            <td>${a.name}</td>
+            <td>${usage}</td>
+            <td class="right mono">${fmt(a.balance)}</td>
+            <td class="right mono">${fmt(a.reserved_amount)}</td>
+          </tr>
+        `;
+      });
+    };
+
+    const renderHoldings = () => {
+      const tb = $("#holdingTable");
+      tb.innerHTML = "";
+      const arr = state.holdings.map(h=>{
+        const p = getProduct(h.product_id) || {name:"未知", code:"--"};
+        const mv = Number(h.shares||0)*Number(h.price||0);
+        const cost = Number(h.shares||0)*Number(h.avg_cost||0);
+        return { ...h, product:p, mv, pnl: mv-cost };
+      });
+
+      if(!arr.length){
+        tb.innerHTML = `<tr><td colspan="7" class="td-muted">暂无持仓，去\"订单&结算\"买一笔试试。</td></tr>`;
+        return;
+      }
+
+      arr.sort((a,b)=>b.mv-a.mv).forEach(x=>{
+        const pnlTag = x.pnl>=0 ? "good":"bad";
+        tb.innerHTML += `
+          <tr>
+            <td><b>${x.product.name}</b></td>
+            <td class="mono">${x.product.code}</td>
+            <td class="right mono">${Number(x.shares).toFixed(2)}</td>
+            <td class="right mono">${Number(x.avg_cost).toFixed(4)}</td>
+            <td class="right mono">${Number(x.price).toFixed(4)}</td>
+            <td class="right mono">${fmt(x.mv)}</td>
+            <td class="right"><span class="chip ${pnlTag}">${x.pnl>=0?"+":""}${x.pnl.toFixed(2)}</span></td>
+          </tr>
+        `;
+      });
+    };
+
+    const renderOrders = () => {
+      const tb = $("#orderTable");
+      tb.innerHTML = "";
+      state.orders.forEach(o=>{
+        const p = getProduct(o.product_id) || {name:"未知", code:"--", asset_type:"--"};
+        const a = getAccount(o.source_account_id);
+        const accName = a ? `${platformNameOf(a)}/${a.name}` : "未知账户";
+        const st = o.status==="PENDING" ? `<span class="tag orange">PENDING</span>` :
+                   o.status==="CONFIRMED" ? `<span class="tag green">CONFIRMED</span>` :
+                   `<span class="tag red">${o.status}</span>`;
+        const typeTag = o.type==="BUY" ? `<span class="tag blue">BUY</span>` :
+                        o.type==="SELL" ? `<span class="tag gray">SELL</span>` :
+                        `<span class="tag orange">REPO</span>`;
+
+        tb.innerHTML += `
+          <tr>
+            <td class="mono">${o.id.slice(-8)}</td>
+            <td>${typeTag}</td>
+            <td><b>${p.name}</b><div class="td-muted mono">${p.code}</div></td>
+            <td>${accName}</td>
+            <td class="right mono">${fmt(o.amount)}</td>
+            <td class="right mono">${fmt(o.fee||0)}</td>
+            <td>${st}</td>
+            <td class="right">
+              ${
+                o.status==="PENDING"
+                ? `<button class="btn" data-act="confirm" data-id="${o.id}">确认</button>
+                   <button class="btn" data-act="cancel" data-id="${o.id}">取消</button>`
+                : `<span class="td-muted">—</span>`
+              }
+            </td>
+          </tr>
+        `;
+      });
+
+      tb.querySelectorAll("button").forEach(btn=>{
+        btn.onclick = ()=>{
+          const id = btn.dataset.id;
+          const act = btn.dataset.act;
+          try{
+            if(act==="confirm") opConfirmOrder(id);
+            if(act==="cancel") opCancelOrder(id);
+          }catch(err){
+            toast("操作失败", err.message || String(err));
+          }
+        };
+      });
+    };
+
+    const renderLedger = () => {
+      const tb = $("#ledgerTable");
+      tb.innerHTML = "";
+      // 过滤掉行情相关的流水（QUOTE类型）
+      const filteredLedger = state.ledger.filter(x => x.kind !== "QUOTE");
+      if(!filteredLedger.length){
+        tb.innerHTML = `<tr><td colspan="5" class="td-muted">暂无流水记录</td></tr>`;
+        return;
+      }
+      filteredLedger.forEach(x=>{
+        const kindTag = x.kind==="DEPOSIT" ? `<span class="tag green">入金</span>` :
+                       x.kind==="EXPENSE" ? `<span class="tag red">支出</span>` :
+                       x.kind==="INCOME" ? `<span class="tag green">收入</span>` :
+                       x.kind==="TRANSFER" ? `<span class="tag blue">转账</span>` :
+                       x.kind==="ORDER" ? `<span class="tag orange">订单</span>` :
+                       x.kind==="SETTLE" ? `<span class="tag blue">结算</span>` :
+                       x.kind==="REFUND" ? `<span class="tag green">退款</span>` :
+                       x.kind==="REIMBURSE" ? `<span class="tag green">报销</span>` :
+                       x.kind==="REVERSE" ? `<span class="tag red">冲正</span>` :
+                       x.kind==="ADJUST" ? `<span class="tag gray">调整</span>` :
+                       x.kind==="REPO" ? `<span class="tag orange">逆回购</span>` :
+                       x.kind==="CANCEL" ? `<span class="tag gray">取消</span>` :
+                       `<span class="tag gray">${x.kind}</span>`;
+        tb.innerHTML += `
+          <tr>
+            <td class="mono">${x.ts}</td>
+            <td>${kindTag}</td>
+            <td><b>${x.summary}</b></td>
+            <td class="right mono">${x.amount ? fmt(x.amount) : "—"}</td>
+            <td class="td-muted">${x.note || ""}</td>
+          </tr>
+        `;
+      });
+    };
+
+    const renderBacktest = () => {
+      const sel = $("#btProduct");
+      sel.innerHTML = "";
+      state.products.filter(p=>p.active && p.asset_type!=="BOND_REPO").forEach(p=>{
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = `${p.name} (${p.code})`;
+        sel.appendChild(opt);
+      });
+
+      const tb = $("#btTable");
+      tb.innerHTML = "";
+      state.backtests.forEach(r=>{
+        const p = getProduct(r.product_id) || {name:"未知", code:"--"};
+        tb.innerHTML += `
+          <tr>
+            <td class="mono">${r.run_id.slice(-10)}</td>
+            <td><b>${p.name}</b><div class="td-muted mono">${p.code}</div></td>
+            <td class="mono">${r.strategy}</td>
+            <td class="right mono">${(r.ann*100).toFixed(2)}%</td>
+            <td class="right mono">${(r.mdd*100).toFixed(2)}%</td>
+            <td class="right mono">${r.suggest}</td>
+            <td class="right"><button class="btn" data-id="${r.run_id}">应用参数</button></td>
+          </tr>
+        `;
+      });
+
+      tb.querySelectorAll("button").forEach(btn=>{
+        btn.onclick = ()=>{
+          const r = state.backtests.find(x=>x.run_id===btn.dataset.id);
+          if(!r) return;
+          modal.open("应用参数（二次确认）", `
+            <div class="sub">你将把回测建议参数写入策略配置（演示）。真实系统里这一步一定要二次确认。</div>
+            <div class="divider"></div>
+            <div class="card" style="padding:12px; border-radius:16px;">
+              <div><b>标的：</b>${(getProduct(r.product_id)||{}).name}</div>
+              <div><b>策略：</b><span class="mono">${r.strategy}</span></div>
+              <div><b>建议：</b><span class="mono">${r.suggest}</span></div>
+            </div>
+            <div class="modalFoot">
+              <button class="btn" id="btCancel">取消</button>
+              <button class="btn primary" id="btOk">确认应用</button>
+            </div>
+          `, (root)=>{
+            $("#btCancel", root).onclick = ()=>modal.close();
+            $("#btOk", root).onclick = ()=>{
+              logLedger("BACKTEST", "应用回测参数（演示）", 0, r.suggest);
+              saveState(); renderAll();
+              modal.close();
+              toast("已应用", "演示：参数已记录到流水（真实版写策略表）");
+            };
+          });
+        };
+      });
+    };
+
+    const renderLineChart = () => {
+      const canvas = $("#lineChart");
+      const ctx = canvas.getContext("2d");
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth * dpr;
+      const h = canvas.clientHeight * dpr;
+      canvas.width = w; canvas.height = h;
+
+      // simulate 30 points around current netWorth
+      const base = netWorth();
+      const pts = [];
+      let v = base * 0.98;
+      for(let i=0;i<30;i++){
+        v = v * (1 + (Math.random()-0.48)*0.01);
+        pts.push(v);
+      }
+      const min = Math.min(...pts);
+      const max = Math.max(...pts);
+      const pad = 16*dpr;
+
+      ctx.clearRect(0,0,w,h);
+
+      // grid
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "rgba(100,116,139,.18)";
+      ctx.lineWidth = 1*dpr;
+      for(let i=0;i<5;i++){
+        const y = pad + i*(h-2*pad)/4;
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(w-pad, y);
+        ctx.stroke();
+      }
+
+      // line
+      ctx.lineWidth = 2.2*dpr;
+      ctx.strokeStyle = "rgba(78,164,255,.95)";
+      ctx.beginPath();
+      pts.forEach((p,i)=>{
+        const x = pad + i*(w-2*pad)/29;
+        const y = pad + (1 - (p-min)/(max-min+1e-9))*(h-2*pad);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+
+      // fill
+      ctx.globalAlpha = 0.14;
+      ctx.fillStyle = "rgba(78,164,255,.8)";
+      ctx.lineTo(w-pad, h-pad);
+      ctx.lineTo(pad, h-pad);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    };
+
+    const renderUsers = () => {
+      const tb = $("#userTable");
+      tb.innerHTML = "";
+      const isAdmin = state.currentUser && state.currentUser.role === "ADMIN";
+      
+      if(!isAdmin){
+        tb.innerHTML = `<tr><td colspan="4" class="td-muted">只有管理员可以管理用户</td></tr>`;
+        $("#btnAddUser").style.display = "none";
+        return;
+      }
+
+      $("#btnAddUser").style.display = "inline-flex";
+      state.users.forEach(u=>{
+        const roleTag = u.role==="ADMIN" ? `<span class="tag orange">管理员</span>` : `<span class="tag gray">成员</span>`;
+        const statusTag = u.active ? `<span class="tag green">启用</span>` : `<span class="tag red">停用</span>`;
+        tb.innerHTML += `
+          <tr>
+            <td><b>${u.username}</b></td>
+            <td>${roleTag}</td>
+            <td>${statusTag}</td>
+            <td class="right">
+              <button class="btn" data-act="edit" data-id="${u.id}">编辑</button>
+              <button class="btn" data-act="toggle" data-id="${u.id}">${u.active?"停用":"启用"}</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      tb.querySelectorAll("button").forEach(btn=>{
+        btn.onclick = ()=>{
+          const id = btn.dataset.id;
+          const act = btn.dataset.act;
+          const u = state.users.find(x=>x.id===id);
+          if(!u) return;
+          if(act==="toggle"){
+            u.active = !u.active;
+            logLedger("USER", `用户状态变更：${u.username}`, 0, u.active?"启用":"停用");
+            saveState(); renderAll();
+            return;
+          }
+          if(act==="edit"){
+            openUserModal(u);
+          }
+        };
+      });
+    };
+
+    const renderAll = () => {
+      // dashboard
+      if($("#page-dashboard").classList.contains("active")){
+        renderDashboard();
+        renderLineChart();
+      }
+      // ledger
+      if($("#page-ledger").classList.contains("active")) renderLedger();
+      // orders
+      if($("#page-orders").classList.contains("active")) renderOrders();
+      // products
+      if($("#page-products").classList.contains("active")) renderProducts();
+      // accounts
+      if($("#page-accounts").classList.contains("active")){
+        renderAccountTree();
+        renderCashLeafTable();
+      }
+      // settings (仅用户管理和Demo设置)
+      if($("#page-settings").classList.contains("active")){
+        renderUsers();
+      }
+      // backtest
+      if($("#page-backtest").classList.contains("active")) renderBacktest();
+      // holdings (隐藏页面，但可以从看板跳转)
+      if($("#page-holdings").classList.contains("active")) renderHoldings();
+    };
+
+    /***********************
+     * Modals: Product
+     ***********************/
+    const openProductModal = (p=null) => {
+      const isEdit = !!p;
+      const data = p ? {...p} : { id:null, name:"", code:"", asset_type:"ETF", currency:"CNY", active:true };
+      modal.open(isEdit?"编辑产品":"新增产品", `
+        <div class="form">
+          <div class="field">
+            <label>名称</label>
+            <input id="pName" value="${data.name||""}" placeholder="比如：纳指100 ETF" />
+          </div>
+          <div class="field">
+            <label>代码</label>
+            <input id="pCode" value="${data.code||""}" placeholder="比如：513100" />
+          </div>
+          <div class="field">
+            <label>类型</label>
+            <select id="pType">
+              <option value="ETF">ETF</option>
+              <option value="FUND">FUND</option>
+              <option value="BOND_REPO">BOND_REPO</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>币种</label>
+            <select id="pCur">
+              <option value="CNY">CNY</option>
+              <option value="USD">USD</option>
+              <option value="HKD">HKD</option>
+            </select>
+          </div>
+          <div class="field" style="grid-column: 1 / -1;">
+            <label>状态</label>
+            <select id="pActive">
+              <option value="true">启用</option>
+              <option value="false">停用</option>
+            </select>
+          </div>
+        </div>
+        <div class="modalFoot">
+          <button class="btn" id="pCancel">取消</button>
+          <button class="btn primary" id="pSave">${isEdit?"保存":"创建"}</button>
+        </div>
+      `, (root)=>{
+        $("#pType", root).value = data.asset_type;
+        $("#pCur", root).value = data.currency;
+        $("#pActive", root).value = String(!!data.active);
+
+        $("#pCancel", root).onclick = ()=>modal.close();
+        $("#pSave", root).onclick = ()=>{
+          try{
+            const name = $("#pName", root).value.trim();
+            const code = $("#pCode", root).value.trim();
+            const type = $("#pType", root).value;
+            const cur = $("#pCur", root).value;
+            const active = $("#pActive", root).value === "true";
+            if(!name) throw new Error("产品名称不能为空");
+            if(!code) throw new Error("产品代码不能为空");
+
+            if(isEdit){
+              p.name=name; p.code=code; p.asset_type=type; p.currency=cur; p.active=active;
+              logLedger("PRODUCT", `编辑产品：${name}`, 0, `${code}/${type}/${cur}/${active?"启用":"停用"}`);
+            }else{
+              state.products.unshift({ id: uid("prd"), name, code, asset_type:type, currency:cur, active });
+              logLedger("PRODUCT", `新增产品：${name}`, 0, `${code}/${type}/${cur}`);
+            }
+            saveState(); renderAll();
+            modal.close();
+            toast("完成", isEdit?"已保存产品":"已创建产品");
+          }catch(err){
+            toast("保存失败", err.message || String(err));
+          }
+        };
+      });
+    };
+
+    /***********************
+     * Modals: Accounts
+     ***********************/
+    const openPlatformRename = (plat) => {
+      modal.open("平台改名", `
+        <div class="sub">只影响展示，不影响余额逻辑（父=容器）。</div>
+        <div class="divider"></div>
+        <div class="form one">
+          <div class="field">
+            <label>平台名称</label>
+            <input id="platName" value="${plat.name}" />
+          </div>
+        </div>
+        <div class="modalFoot">
+          <button class="btn" id="cCancel">取消</button>
+          <button class="btn primary" id="cOk">保存</button>
+        </div>
+      `, (root)=>{
+        $("#cCancel", root).onclick = ()=>modal.close();
+        $("#cOk", root).onclick = ()=>{
+          const v = $("#platName", root).value.trim();
+          if(!v) return toast("失败","平台名不能为空");
+          plat.name = v;
+          logLedger("ACCOUNT", "平台改名", 0, v);
+          saveState(); renderAll();
+          modal.close();
+        };
+      });
+    };
+
+    const openAccountModal = (acc) => {
+      modal.open("编辑信封账户", `
+        <div class="sub">注意：这里是叶子账户（真实余额）。用途决定“可支出/专款/可投资”规则。</div>
+        <div class="divider"></div>
+        <div class="form">
+          <div class="field">
+            <label>信封名称</label>
+            <input id="aName" value="${acc.name}" />
+          </div>
+          <div class="field">
+            <label>用途（fund_usage）</label>
+            <select id="aUsage">
+              <option value="SPENDABLE">SPENDABLE（可支出）</option>
+              <option value="RESERVED">RESERVED（专款）</option>
+              <option value="INVESTABLE">INVESTABLE（可投资）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>余额（演示可编辑）</label>
+            <input id="aBal" type="number" value="${Number(acc.balance||0)}" />
+          </div>
+          <div class="field">
+            <label>占用 reserved（演示可编辑）</label>
+            <input id="aRes" type="number" value="${Number(acc.reserved_amount||0)}" />
+          </div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>状态</label>
+            <select id="aActive">
+              <option value="true">启用</option>
+              <option value="false">停用</option>
+            </select>
+          </div>
+        </div>
+        <div class="modalFoot">
+          <button class="btn" id="aCancel">取消</button>
+          <button class="btn primary" id="aOk">保存</button>
+        </div>
+      `, (root)=>{
+        $("#aUsage", root).value = acc.fund_usage;
+        $("#aActive", root).value = String(!!acc.active);
+
+        $("#aCancel", root).onclick = ()=>modal.close();
+        $("#aOk", root).onclick = ()=>{
+          try{
+            const name = $("#aName", root).value.trim();
+            const usage = $("#aUsage", root).value;
+            const bal = Number($("#aBal", root).value||0);
+            const res = Number($("#aRes", root).value||0);
+            const active = $("#aActive", root).value==="true";
+            if(!name) throw new Error("名称不能为空");
+            if(bal<0) throw new Error("余额不能为负");
+            if(res<0) throw new Error("占用不能为负");
+            if(res>bal) throw new Error("占用不能超过余额（演示防呆）");
+
+            acc.name = name;
+            acc.fund_usage = usage;
+            acc.balance = bal;
+            acc.reserved_amount = res;
+            acc.active = active;
+
+            logLedger("ACCOUNT", `编辑账户：${platformNameOf(acc)}/${acc.name}`, 0, `usage=${usage}, bal=${bal}, res=${res}`);
+            saveState(); renderAll();
+            modal.close();
+          }catch(err){
+            toast("保存失败", err.message || String(err));
+          }
+        };
+      });
+    };
+
+    const openAddPlatform = () => {
+      modal.open("新增平台（父容器）", `
+        <div class="sub">父账户仅用于分组展示，不参与记账分录。创建后会自动生成一个“待分配”子账户。</div>
+        <div class="divider"></div>
+        <div class="form one">
+          <div class="field">
+            <label>平台名称</label>
+            <input id="npName" placeholder="比如：支付宝 / 华宝证券 / 余利宝" />
+          </div>
+        </div>
+        <div class="modalFoot">
+          <button class="btn" id="npCancel">取消</button>
+          <button class="btn primary" id="npOk">创建</button>
+        </div>
+      `, (root)=>{
+        $("#npCancel", root).onclick = ()=>modal.close();
+        $("#npOk", root).onclick = ()=>{
+          const name = $("#npName", root).value.trim();
+          if(!name) return toast("失败","平台名不能为空");
+          const plat = { id: uid("plat"), name, kind:"ROOT", currency:"CNY" };
+          state.platforms.push(plat);
+          // 默认待分配
+          state.accounts.push({
+            id: uid("acc"), kind:"LEAF", parent_id: plat.id, platform: name, name:"待分配",
+            fund_usage:"SPENDABLE", currency:"CNY", balance:0, reserved_amount:0, active:true
+          });
+          logLedger("ACCOUNT", "新增平台", 0, name);
+          saveState(); renderAll();
+          modal.close();
+        };
+      });
+    };
+
+    const openAddBucket = () => {
+      const platOptions = state.platforms.map(p=>`<option value="${p.id}">${p.name}</option>`).join("");
+      modal.open("新增信封（子账户/叶子）", `
+        <div class="sub">信封是你真正存钱/分配/投资的最小单位。</div>
+        <div class="divider"></div>
+        <div class="form">
+          <div class="field">
+            <label>所属平台</label>
+            <select id="nbPlat">${platOptions}</select>
+          </div>
+          <div class="field">
+            <label>用途</label>
+            <select id="nbUsage">
+              <option value="SPENDABLE">SPENDABLE（可支出）</option>
+              <option value="RESERVED">RESERVED（专款）</option>
+              <option value="INVESTABLE">INVESTABLE（可投资）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>信封名称</label>
+            <input id="nbName" placeholder="比如：生活费 / 房租预备金 / 理财金" />
+          </div>
+          <div class="field">
+            <label>初始余额</label>
+            <input id="nbBal" type="number" value="0" />
+          </div>
+        </div>
+        <div class="modalFoot">
+          <button class="btn" id="nbCancel">取消</button>
+          <button class="btn primary" id="nbOk">创建</button>
+        </div>
+      `, (root)=>{
+        $("#nbCancel", root).onclick = ()=>modal.close();
+        $("#nbOk", root).onclick = ()=>{
+          try{
+            const platId = $("#nbPlat", root).value;
+            const plat = getPlatformById(platId);
+            const usage = $("#nbUsage", root).value;
+            const name = $("#nbName", root).value.trim();
+            const bal = Number($("#nbBal", root).value||0);
+            if(!plat) throw new Error("平台无效");
+            if(!name) throw new Error("信封名称不能为空");
+            if(bal<0) throw new Error("余额不能为负");
+
+            state.accounts.push({
+              id: uid("acc"), kind:"LEAF", parent_id: plat.id, platform: plat.name,
+              name, fund_usage: usage, currency:"CNY", balance: bal, reserved_amount:0, active:true
+            });
+            logLedger("ACCOUNT", `新增信封：${plat.name}/${name}`, bal, `usage=${usage}`);
+            saveState(); renderAll();
+            modal.close();
+          }catch(err){
+            toast("创建失败", err.message || String(err));
+          }
+        };
+      });
+    };
+
+    /***********************
+     * Unified Transaction Entry (统一记账中心)
+     * 11种业务类型：DEPOSIT, EXPENSE, INCOME, TRANSFER, BUY, SELL, REPO, REFUND, REIMBURSE, REVERSE, ADJUST
+     ***********************/
+    const openUnifiedEntry = () => {
+      let step = 1; // 1=选择类型, 2=填写详情
+      let selectedType = "";
+
+      const renderStep1 = () => {
+        return `
+          <div class="sub">第一步：选择业务类型（11种类型）</div>
+          <div class="divider"></div>
+          <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px;">
+            <button class="btn" data-type="DEPOSIT" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">💰</div>
+              <div style="font-weight:600;">入金</div>
+              <div class="tiny muted" style="margin-top:4px;">DEPOSIT</div>
+            </button>
+            <button class="btn" data-type="EXPENSE" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">💸</div>
+              <div style="font-weight:600;">支出</div>
+              <div class="tiny muted" style="margin-top:4px;">EXPENSE</div>
+            </button>
+            <button class="btn" data-type="INCOME" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">💵</div>
+              <div style="font-weight:600;">收入</div>
+              <div class="tiny muted" style="margin-top:4px;">INCOME</div>
+            </button>
+            <button class="btn" data-type="TRANSFER" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">⇄</div>
+              <div style="font-weight:600;">转账/分配</div>
+              <div class="tiny muted" style="margin-top:4px;">TRANSFER</div>
+            </button>
+            <button class="btn" data-type="BUY" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">📈</div>
+              <div style="font-weight:600;">买入/申购</div>
+              <div class="tiny muted" style="margin-top:4px;">BUY</div>
+            </button>
+            <button class="btn" data-type="SELL" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">📉</div>
+              <div style="font-weight:600;">卖出/赎回</div>
+              <div class="tiny muted" style="margin-top:4px;">SELL</div>
+            </button>
+            <button class="btn" data-type="REPO" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">🔄</div>
+              <div style="font-weight:600;">逆回购</div>
+              <div class="tiny muted" style="margin-top:4px;">REPO (允许RESERVED)</div>
+            </button>
+            <button class="btn" data-type="REFUND" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">↩️</div>
+              <div style="font-weight:600;">退款</div>
+              <div class="tiny muted" style="margin-top:4px;">REFUND</div>
+            </button>
+            <button class="btn" data-type="REIMBURSE" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">📋</div>
+              <div style="font-weight:600;">报销</div>
+              <div class="tiny muted" style="margin-top:4px;">REIMBURSE</div>
+            </button>
+            <button class="btn" data-type="REVERSE" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">↺</div>
+              <div style="font-weight:600;">冲正</div>
+              <div class="tiny muted" style="margin-top:4px;">REVERSE</div>
+            </button>
+            <button class="btn" data-type="ADJUST" style="flex-direction:column; padding:16px; text-align:center;">
+              <div style="font-size:20px; margin-bottom:4px;">⚙️</div>
+              <div style="font-weight:600;">调整</div>
+              <div class="tiny muted" style="margin-top:4px;">ADJUST</div>
+            </button>
+          </div>
+          <div class="modalFoot">
+            <button class="btn" id="uCancel1">取消</button>
+          </div>
+        `;
+      };
+
+      const renderStep2 = (type) => {
+        const accOpts = cashLeafAccounts().map(a=>`<option value="${a.id}">${platformNameOf(a)} / ${a.name} (${a.fund_usage})</option>`).join("");
+        const prodOpts = state.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${p.name} (${p.code}) · ${p.asset_type}</option>`).join("");
+        
+        // 获取最近的交易用于退款/报销关联
+        const recentTxns = state.ledger.filter(x=>x.kind==="EXPENSE" || x.kind==="BUY" || x.kind==="ORDER").slice(0, 10);
+        const txnOpts = recentTxns.map((t,i)=>`<option value="${t.id}">${t.ts} - ${t.summary} (${fmt(t.amount)})</option>`).join("") || "<option value=''>暂无可用交易</option>";
+
+        let fields = "";
+
+        // 根据类型生成不同字段
+        if(type==="DEPOSIT" || type==="EXPENSE" || type==="INCOME"){
+          fields = `
+            <div class="field">
+              <label>账户</label>
+              <select id="uAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>金额（元）</label>
+              <input id="uAmt" type="number" value="100" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>备注</label>
+              <input id="uNote" placeholder="比如：工资 / 咖啡 / 午餐" />
+            </div>
+          `;
+        }else if(type==="TRANSFER"){
+          fields = `
+            <div class="field">
+              <label>转出账户</label>
+              <select id="uFromAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>转入账户</label>
+              <select id="uToAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>金额（元）</label>
+              <input id="uAmt" type="number" value="100" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>备注</label>
+              <input id="uNote" placeholder="比如：分配到房租预备金" />
+            </div>
+          `;
+        }else if(type==="BUY" || type==="SELL"){
+          fields = `
+            <div class="field">
+              <label>产品</label>
+              <select id="uProd">${prodOpts}</select>
+            </div>
+            <div class="field">
+              <label>资金来源账户</label>
+              <select id="uAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>金额（元）</label>
+              <input id="uAmt" type="number" value="500" />
+            </div>
+            <div class="field">
+              <label>费用（元）</label>
+              <input id="uFee" type="number" value="0" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>备注</label>
+              <input id="uNote" placeholder="比如：周定投 / 赎回" />
+            </div>
+          `;
+        }else if(type==="REPO"){
+          fields = `
+            <div class="field">
+              <label>产品（逆回购）</label>
+              <select id="uProd">${prodOpts}</select>
+            </div>
+            <div class="field">
+              <label>资金来源账户 <span class="tag orange tiny">允许RESERVED</span></label>
+              <select id="uAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>金额（元）</label>
+              <input id="uAmt" type="number" value="10000" />
+            </div>
+            <div class="field">
+              <label>费用（元）</label>
+              <input id="uFee" type="number" value="0" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>备注</label>
+              <input id="uNote" placeholder="比如：华宝1天期逆回购" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <div class="sub" style="background:rgba(245,158,11,.1); padding:10px; border-radius:8px; border:1px solid rgba(245,158,11,.2);">
+                <b>逆回购说明：</b>逆回购作为现金增强工具，不生成持仓。允许从RESERVED账户操作，到期确认后释放占用并记入利息收益。
+              </div>
+            </div>
+          `;
+        }else if(type==="REFUND" || type==="REIMBURSE"){
+          fields = `
+            <div class="field" style="grid-column:1/-1;">
+              <label>关联原交易</label>
+              <select id="uRelatedTxn">${txnOpts}</select>
+              <div class="tiny muted" style="margin-top:4px;">选择要退款/报销的原交易</div>
+            </div>
+            <div class="field">
+              <label>退款/报销账户</label>
+              <select id="uAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>金额（元）</label>
+              <input id="uAmt" type="number" value="100" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>备注</label>
+              <input id="uNote" placeholder="比如：商品退款 / 差旅费报销" />
+            </div>
+          `;
+        }else if(type==="REVERSE"){
+          fields = `
+            <div class="field" style="grid-column:1/-1;">
+              <label>关联原交易</label>
+              <select id="uRelatedTxn">${txnOpts}</select>
+              <div class="tiny muted" style="margin-top:4px;">选择要冲正的原交易</div>
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>冲正原因</label>
+              <textarea id="uNote" placeholder="请说明冲正原因"></textarea>
+            </div>
+          `;
+        }else if(type==="ADJUST"){
+          fields = `
+            <div class="field">
+              <label>账户</label>
+              <select id="uAcc">${accOpts}</select>
+            </div>
+            <div class="field">
+              <label>调整后余额（元）</label>
+              <input id="uAmt" type="number" />
+            </div>
+            <div class="field" style="grid-column:1/-1;">
+              <label>调整原因</label>
+              <textarea id="uNote" placeholder="请说明调整原因（如：对账差异修正）"></textarea>
+            </div>
+          `;
+        }
+
+        const typeNames = {
+          DEPOSIT: "入金", EXPENSE: "支出", INCOME: "收入", TRANSFER: "转账/分配",
+          BUY: "买入/申购", SELL: "卖出/赎回", REPO: "逆回购",
+          REFUND: "退款", REIMBURSE: "报销", REVERSE: "冲正", ADJUST: "调整"
+        };
+
+        return `
+          <div class="sub">第二步：填写${typeNames[type]}详情</div>
+          <div class="divider"></div>
+          <div class="form">
+            ${fields}
+          </div>
+          <div class="modalFoot">
+            <button class="btn" id="uBack">← 返回</button>
+            <button class="btn" id="uCancel2">取消</button>
+            <button class="btn primary" id="uSubmit">提交</button>
+          </div>
+        `;
+      };
+
+      const updateModal = () => {
+        const root = $("#modalBody");
+        if(step===1){
+          root.innerHTML = renderStep1();
+          root.querySelectorAll("button[data-type]").forEach(btn=>{
+            btn.onclick = ()=>{
+              selectedType = btn.dataset.type;
+              step = 2;
+              updateModal();
+            };
+          });
+          const cancelBtn = root.querySelector("#uCancel1");
+          if(cancelBtn) cancelBtn.onclick = ()=>modal.close();
+        }else{
+          root.innerHTML = renderStep2(selectedType);
+          const backBtn = root.querySelector("#uBack");
+          const cancelBtn = root.querySelector("#uCancel2");
+          const submitBtn = root.querySelector("#uSubmit");
+          if(backBtn) backBtn.onclick = ()=>{
+            step = 1;
+            selectedType = "";
+            updateModal();
+          };
+          if(cancelBtn) cancelBtn.onclick = ()=>modal.close();
+          if(submitBtn) submitBtn.onclick = ()=>{
+            try{
+              handleUnifiedSubmit(selectedType, root);
+            }catch(err){
+              toast("提交失败", err.message || String(err));
+            }
+          };
+        }
+      };
+
+      modal.open("统一记账中心", renderStep1(), (root)=>{
+        step = 1;
+        selectedType = "";
+        updateModal();
+      });
+    };
+
+    const handleUnifiedSubmit = (type, root) => {
+      const accOpts = cashLeafAccounts();
+      const getAcc = (sel) => {
+        const id = $(sel, root).value;
+        return accOpts.find(a=>a.id===id);
+      };
+
+      if(type==="DEPOSIT"){
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!acc || amt<=0) throw new Error("请填写完整信息");
+        opDeposit(acc.id, amt, note);
+      }else if(type==="EXPENSE"){
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!acc || amt<=0) throw new Error("请填写完整信息");
+        opExpense(acc.id, amt, note);
+      }else if(type==="INCOME"){
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!acc || amt<=0) throw new Error("请填写完整信息");
+        // 收入操作（类似入金）
+        acc.balance += amt;
+        logLedger("INCOME", `收入 → ${platformNameOf(acc)} / ${acc.name}`, amt, note);
+        saveState();
+        renderAll();
+      }else if(type==="TRANSFER"){
+        const from = getAcc("#uFromAcc");
+        const to = getAcc("#uToAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!from || !to || amt<=0) throw new Error("请填写完整信息");
+        opTransfer(from.id, to.id, amt, note);
+      }else if(type==="BUY" || type==="SELL"){
+        const pid = $("#uProd", root).value;
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const fee = Number($("#uFee", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!pid || !acc || amt<=0) throw new Error("请填写完整信息");
+        opCreateOrder(type, pid, acc.id, amt, fee, note);
+      }else if(type==="REPO"){
+        const pid = $("#uProd", root).value;
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const fee = Number($("#uFee", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!pid || !acc || amt<=0) throw new Error("请填写完整信息");
+        // 逆回购：允许RESERVED账户
+        const p = getProduct(pid);
+        if(!p || p.asset_type!=="BOND_REPO") throw new Error("请选择逆回购产品");
+        opCreateOrder("REPO", pid, acc.id, amt, fee, note);
+      }else if(type==="REFUND"){
+        const txnId = $("#uRelatedTxn", root).value;
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!txnId || !acc || amt<=0) throw new Error("请填写完整信息");
+        // 退款：增加余额，记录关联
+        acc.balance += amt;
+        logLedger("REFUND", `退款 ← ${platformNameOf(acc)} / ${acc.name}`, amt, `关联交易:${txnId.slice(-8)} | ${note}`);
+        saveState();
+        renderAll();
+      }else if(type==="REIMBURSE"){
+        const txnId = $("#uRelatedTxn", root).value;
+        const acc = getAcc("#uAcc");
+        const amt = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!txnId || !acc || amt<=0) throw new Error("请填写完整信息");
+        // 报销：增加余额，记录关联
+        acc.balance += amt;
+        logLedger("REIMBURSE", `报销 ← ${platformNameOf(acc)} / ${acc.name}`, amt, `关联交易:${txnId.slice(-8)} | ${note}`);
+        saveState();
+        renderAll();
+      }else if(type==="REVERSE"){
+        const txnId = $("#uRelatedTxn", root).value;
+        const note = $("#uNote", root).value.trim();
+        if(!txnId || !note) throw new Error("请填写完整信息");
+        logLedger("REVERSE", `冲正交易:${txnId.slice(-8)}`, 0, note);
+        saveState();
+        renderAll();
+      }else if(type==="ADJUST"){
+        const acc = getAcc("#uAcc");
+        const newBal = Number($("#uAmt", root).value||0);
+        const note = $("#uNote", root).value.trim();
+        if(!acc || newBal<0 || !note) throw new Error("请填写完整信息");
+        const oldBal = acc.balance;
+        acc.balance = newBal;
+        logLedger("ADJUST", `余额调整: ${platformNameOf(acc)} / ${acc.name}`, newBal - oldBal, `${note} (${fmt(oldBal)} → ${fmt(newBal)})`);
+        saveState();
+        renderAll();
+      }
+
+      modal.close();
+      toast("完成", "已记录并联动到看板");
+    };
+
+    /***********************
+     * New order modal
+     ***********************/
+    const openNewOrder = () => {
+      const prodOpts = state.products.filter(p=>p.active).map(p=>`<option value="${p.id}">${p.name} (${p.code}) · ${p.asset_type}</option>`).join("");
+      const accOpts = cashLeafAccounts().map(a=>`<option value="${a.id}">${platformNameOf(a)} / ${a.name} (${a.fund_usage})</option>`).join("");
+
+      modal.open("新建订单（演示）", `
+        <div class="sub">PENDING：占用资金（reserved）；CONFIRM：落账影响余额/持仓/利息收益。</div>
+        <div class="divider"></div>
+
+        <div class="form">
+          <div class="field">
+            <label>订单类型</label>
+            <select id="oType">
+              <option value="BUY">BUY（买入/申购）</option>
+              <option value="SELL">SELL（卖出/赎回）</option>
+              <option value="REPO">REPO（逆回购）</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>产品</label>
+            <select id="oProd">${prodOpts}</select>
+          </div>
+          <div class="field">
+            <label>资金来源（现金叶子账户）</label>
+            <select id="oAcc">${accOpts}</select>
+          </div>
+          <div class="field">
+            <label>金额（元）</label>
+            <input id="oAmt" type="number" value="500" />
+          </div>
+          <div class="field">
+            <label>费用（元）</label>
+            <input id="oFee" type="number" value="0" />
+          </div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>备注</label>
+            <input id="oNote" placeholder="比如：周定投 / 赎回到余利宝 / 华宝1天期逆回购" />
+          </div>
+        </div>
+
+        <div class="modalFoot">
+          <button class="btn" id="oCancel">取消</button>
+          <button class="btn primary" id="oOk">创建（PENDING）</button>
+        </div>
+      `, (root)=>{
+        const syncTypeWithProduct = () => {
+          const pid = $("#oProd", root).value;
+          const p = getProduct(pid);
+          if(p && p.asset_type==="BOND_REPO"){
+            $("#oType", root).value = "REPO";
+          }
+        };
+        $("#oProd", root).onchange = syncTypeWithProduct;
+        syncTypeWithProduct();
+
+        $("#oCancel", root).onclick = ()=>modal.close();
+        $("#oOk", root).onclick = ()=>{
+          try{
+            const type = $("#oType", root).value;
+            const pid = $("#oProd", root).value;
+            const acc = $("#oAcc", root).value;
+            const amt = Number($("#oAmt", root).value||0);
+            const fee = Number($("#oFee", root).value||0);
+            const note = $("#oNote", root).value.trim();
+            if(amt<=0) throw new Error("金额必须>0");
+            if(fee<0) throw new Error("费用不能为负");
+
+            opCreateOrder(type, pid, acc, amt, fee, note);
+            modal.close();
+            toast("已创建订单", "状态=PENDING（已占用资金）");
+          }catch(err){
+            toast("创建失败", err.message || String(err));
+          }
+        };
+      });
+    };
+
+    /***********************
+     * Buttons bindings (with null checks)
+     ***********************/
+    const btnUnifiedEntry = $("#btnUnifiedEntry");
+    if(btnUnifiedEntry) btnUnifiedEntry.onclick = openUnifiedEntry;
+    
+    const btnNewOrder = $("#btnNewOrder");
+    if(btnNewOrder) btnNewOrder.onclick = openNewOrder;
+    
+    const btnNewOrder2 = $("#btnNewOrder2");
+    if(btnNewOrder2) btnNewOrder2.onclick = openNewOrder;
+
+    const btnRefresh = $("#btnRefresh");
+    if(btnRefresh) {
+      btnRefresh.onclick = ()=>{
+        // 演示：刷新行情 + 重绘看板（行情波动不记录到流水）
+        opReprice();
+      };
+    }
+
+    const btnAddProduct = $("#btnAddProduct");
+    if(btnAddProduct) btnAddProduct.onclick = ()=>openProductModal(null);
+    
+    const btnAddPlatform = $("#btnAddPlatform");
+    if(btnAddPlatform) btnAddPlatform.onclick = openAddPlatform;
+    
+    const btnAddBucket = $("#btnAddBucket");
+    if(btnAddBucket) btnAddBucket.onclick = openAddBucket;
+    
+    const btnAddUser = $("#btnAddUser");
+    if(btnAddUser) btnAddUser.onclick = ()=>openUserModal(null);
+
+    // 这些按钮在隐藏的page-accounts页面中，添加存在性检查
+    const btnDeposit = $("#btnDeposit");
+    const btnExpense = $("#btnExpense");
+    const btnTransfer = $("#btnTransfer");
+    if(btnDeposit) btnDeposit.onclick = ()=>openUnifiedEntry();
+    if(btnExpense) btnExpense.onclick = ()=>openUnifiedEntry();
+    if(btnTransfer) btnTransfer.onclick = ()=>openUnifiedEntry();
+
+    const btnReprice = $("#btnReprice");
+    if(btnReprice) {
+      btnReprice.onclick = ()=>{
+        opReprice();
+        toast("已刷新", "持仓价格已变动（行情波动不记录到流水）");
+      };
+    }
+
+    const btnExport = $("#btnExport");
+    if(btnExport) {
+      btnExport.onclick = ()=>{
+        const blob = new Blob([JSON.stringify(state.ledger, null, 2)], {type:"application/json"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "ledger-demo.json";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+    }
+
+    const btnRunBacktest = $("#btnRunBacktest");
+    if(btnRunBacktest) {
+      btnRunBacktest.onclick = ()=>{
+        try{
+          const pid = $("#btProduct").value;
+          const p = getProduct(pid);
+          if(!p) throw new Error("请先选择标的");
+          const strategy = $("#btStrategy").value;
+          const amount = Number($("#btAmount").value||0);
+          const days = Number($("#btDays").value||0);
+
+          const ann = clamp(0.08 + Math.random()*0.16, 0.05, 0.25);
+          const mdd = clamp(0.06 + Math.random()*0.18, 0.04, 0.28);
+          const suggest = `amount=${amount}; days=${days}; take_profit=${(1.8+Math.random()*1.2).toFixed(2)}%`;
+
+          const run = { run_id: uid("bt"), product_id: pid, strategy, ann, mdd, suggest, created_at: nowStr() };
+          state.backtests.unshift(run);
+          logLedger("BACKTEST", `运行回测（演示）：${p.name}`, 0, suggest);
+          saveState(); renderAll();
+          toast("回测完成", `年化 ${(ann*100).toFixed(1)}%，回撤 ${(mdd*100).toFixed(1)}%`);
+        }catch(err){
+          toast("失败", err.message || String(err));
+        }
+      };
+    }
+
+    const btnReset = $("#btnReset");
+    if(btnReset) {
+      btnReset.onclick = ()=>{
+        modal.open("重置演示数据", `
+          <div class="sub">将清空 localStorage 并恢复初始演示数据。</div>
+          <div class="divider"></div>
+          <div class="modalFoot">
+            <button class="btn" id="rCancel">取消</button>
+            <button class="btn primary" id="rOk">确认重置</button>
+          </div>
+        `, (root)=>{
+          const rCancel = $("#rCancel", root);
+          const rOk = $("#rOk", root);
+          if(rCancel) rCancel.onclick = ()=>modal.close();
+          if(rOk) {
+            rOk.onclick = ()=>{
+              localStorage.removeItem(STORAGE_KEY);
+              state = loadState();
+              modal.close();
+              setPage("dashboard");
+              toast("已重置", "演示数据已恢复");
+            };
+          }
+        });
+      };
+    }
+
+    const btnDump = $("#btnDump");
+    if(btnDump) {
+      btnDump.onclick = ()=>{
+        const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "wealthhub-demo-state.json";
+        a.click();
+        URL.revokeObjectURL(a.href);
+      };
+    }
+
+    const btnProfile = $("#btnProfile");
+    if(btnProfile) {
+      btnProfile.onclick = ()=>{
+        toast("你好主人", "这个按钮后面可以接\"用户/家庭成员/偏好设置\"。");
+      };
+    }
+
+    const btnViewHoldings = $("#btnViewHoldings");
+    if(btnViewHoldings) {
+      btnViewHoldings.onclick = ()=>{
+        setPage("holdings");
+      };
+    }
+
+    /***********************
+     * User Management Modals
+     ***********************/
+    const openUserModal = (u=null) => {
+      const isEdit = !!u;
+      const data = u ? {...u} : { id:null, username:"", role:"MEMBER", active:true };
+      modal.open(isEdit?"编辑用户":"新增用户", `
+        <div class="form">
+          <div class="field">
+            <label>用户名</label>
+            <input id="uName" value="${data.username||""}" placeholder="用户名" ${isEdit?"readonly":""} />
+          </div>
+          <div class="field">
+            <label>角色</label>
+            <select id="uRole">
+              <option value="MEMBER">成员</option>
+              <option value="ADMIN">管理员</option>
+            </select>
+          </div>
+          <div class="field" style="grid-column:1/-1;">
+            <label>状态</label>
+            <select id="uActive">
+              <option value="true">启用</option>
+              <option value="false">停用</option>
+            </select>
+          </div>
+        </div>
+        <div class="modalFoot">
+          <button class="btn" id="uCancel">取消</button>
+          <button class="btn primary" id="uSave">${isEdit?"保存":"创建"}</button>
+        </div>
+      `, (root)=>{
+        $("#uRole", root).value = data.role;
+        $("#uActive", root).value = String(!!data.active);
+
+        $("#uCancel", root).onclick = ()=>modal.close();
+        $("#uSave", root).onclick = ()=>{
+          try{
+            const username = $("#uName", root).value.trim();
+            const role = $("#uRole", root).value;
+            const active = $("#uActive", root).value === "true";
+            if(!username) throw new Error("用户名不能为空");
+
+            if(isEdit){
+              u.role = role;
+              u.active = active;
+              logLedger("USER", `编辑用户：${username}`, 0, `role=${role}, active=${active}`);
+            }else{
+              state.users.push({ id: uid("usr"), username, role, active, created_at: nowStr() });
+              logLedger("USER", `新增用户：${username}`, 0, `role=${role}`);
+            }
+            saveState(); renderAll();
+            modal.close();
+            toast("完成", isEdit?"已保存用户":"已创建用户");
+          }catch(err){
+            toast("保存失败", err.message || String(err));
+          }
+        };
+      });
+    };
+
+    /***********************
+     * Initial render
+     ***********************/
+    renderAll();
+
+    // Keep chart responsive
+    window.addEventListener("resize", ()=>{
+      if($("#page-dashboard").classList.contains("active")) renderLineChart();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+# 开发环境配置
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.timelordtty.dca: DEBUG
+    org.springframework.web: DEBUG
+    org.mybatis: DEBUG
+    org.apache.ibatis: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# MyBatis SQL日志
+mybatis:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.UserMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.User">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password_hash" property="passwordHash"/>
+        <result column="nickname" property="nickname"/>
+        <result column="email" property="email"/>
+        <result column="phone" property="phone"/>
+        <result column="family_id" property="familyId"/>
+        <result column="is_active" property="isActive"/>
+        <result column="last_login_at" property="lastLoginAt"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM users WHERE id = #{id}
+    </select>
+
+    <select id="selectByUsername" resultMap="BaseResultMap">
+        SELECT * FROM users WHERE username = #{username}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO users (username, password_hash, nickname, email, phone, family_id, is_active, created_at, updated_at)
+        VALUES (#{username}, #{passwordHash}, #{nickname}, #{email}, #{phone}, #{familyId}, #{isActive}, NOW(), NOW())
+    </insert>
+
+    <update id="update">
+        UPDATE users
+        SET nickname = #{nickname},
+            email = #{email},
+            phone = #{phone},
+            family_id = #{familyId},
+            is_active = #{isActive},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLastLoginAt">
+        UPDATE users
+        SET last_login_at = #{lastLoginAt}, updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>
+
