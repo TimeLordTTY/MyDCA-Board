@@ -74,6 +74,33 @@ public class AccountService {
         }
 
         accountMapper.insert(account);
+        
+        // 如果创建的是父账户（平台账户），自动创建"待分配"子账户
+        if (account.getParentAccountId() == null && 
+            "REAL".equals(account.getAccountKind()) && 
+            "CASH".equals(account.getAccountType())) {
+            // 创建默认的"待分配"子账户
+            Account defaultEnvelope = new Account();
+            defaultEnvelope.setAccountCode(account.getAccountCode() + "-待分配");
+            defaultEnvelope.setAccountName("待分配");
+            defaultEnvelope.setAccountKind("REAL");
+            defaultEnvelope.setAccountType("CASH");
+            defaultEnvelope.setParentAccountId(account.getId());
+            defaultEnvelope.setFundUsage("SPENDABLE");
+            defaultEnvelope.setCurrency(account.getCurrency());
+            defaultEnvelope.setBalance(BigDecimal.ZERO);
+            defaultEnvelope.setReservedAmount(BigDecimal.ZERO);
+            defaultEnvelope.setInitialBalance(BigDecimal.ZERO);
+            defaultEnvelope.setIsActive(true);
+            defaultEnvelope.setOwnerType(account.getOwnerType());
+            defaultEnvelope.setOwnerUserId(account.getOwnerUserId());
+            defaultEnvelope.setOwnerFamilyId(account.getOwnerFamilyId());
+            defaultEnvelope.setNote("系统自动创建的待分配账户");
+            
+            // 直接调用insert，跳过校验（因为已经通过父账户校验）
+            accountMapper.insert(defaultEnvelope);
+        }
+        
         return account;
     }
 
@@ -117,15 +144,20 @@ public class AccountService {
      */
     public List<Account> getAccountTree(Long ownerUserId, Long ownerFamilyId) {
         List<Account> accounts = accountMapper.selectByOwner(ownerUserId, ownerFamilyId);
-        // 构建树形结构
+        // 构建树形结构：为每个父账户计算聚合余额并设置children属性
         for (Account account : accounts) {
             if (account.getParentAccountId() == null) {
-                // 父账户，计算子账户余额
+                // 父账户，查询子账户
                 List<Account> children = accountMapper.selectChildren(account.getId());
+                
+                // 计算子账户余额总和
                 BigDecimal totalBalance = children.stream()
                         .map(Account::getBalance)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
                 account.setBalance(totalBalance);
+                
+                // 设置children属性（用于前端树形展示）
+                account.setChildren(children);
             }
         }
         return accounts;

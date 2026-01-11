@@ -38,5 +38,20 @@ public class DashboardController {
                 currentUser.getId(), currentUser.getFamilyId(), viewType);
         return ResponseEntity.ok(overview);
     }
+
+    /**
+     * 获取今日建议清单
+     * 
+     * 注意：Phase 1阶段，建议功能在Phase 3实现，这里返回空列表
+     * 
+     * @return 今日建议列表（Phase 1返回空列表）
+     */
+    @GetMapping("/today-actions")
+    public ResponseEntity<List<DashboardService.TodayAction>> getTodayActions() {
+        // Phase 1阶段，建议功能未实现，返回空列表
+        // Phase 3会实现策略引擎和建议生成
+        List<DashboardService.TodayAction> emptyList = new java.util.ArrayList<>();
+        return ResponseEntity.ok(emptyList);
+    }
 }
 

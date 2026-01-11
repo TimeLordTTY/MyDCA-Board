@@ -62,33 +62,39 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-if="productStore.loading">
-              <td colspan="8" class="td-muted" style="text-align: center">加载中...</td>
-            </tr>
-            <tr v-else-if="productStore.products.length === 0">
-              <td colspan="8" class="td-muted" style="text-align: center">暂无产品</td>
-            </tr>
-            <tr v-for="product in productStore.products" :key="product.id">
-              <td><b>{{ product.productName }}</b></td>
-              <td class="mono">{{ product.productCode }}</td>
-              <td>
-                <span class="tag blue">{{ getAssetTypeLabel(product.assetType) }}</span>
-              </td>
-              <td>{{ getChannelLabel(product.channel) }}</td>
-              <td>{{ getMarketLabel(product.market) }}</td>
-              <td>{{ getCurrencyLabel(product.currency) }}</td>
-              <td>
-                <span class="tag" :class="product.isActive ? 'green' : 'red'">
-                  {{ product.isActive ? '启用' : '停用' }}
-                </span>
-              </td>
-              <td class="right">
-                <button class="btn" @click="handleEdit(product)">编辑</button>
-                <button class="btn" @click="handleToggle(product)">
-                  {{ product.isActive ? '停用' : '启用' }}
-                </button>
-              </td>
-            </tr>
+            <template v-if="productStore.loading">
+              <tr>
+                <td colspan="8" class="td-muted" style="text-align: center">加载中...</td>
+              </tr>
+            </template>
+            <template v-else-if="!productStore.products || productStore.products.length === 0">
+              <tr>
+                <td colspan="8" class="td-muted" style="text-align: center">暂无产品</td>
+              </tr>
+            </template>
+            <template v-else>
+              <tr v-for="product in productStore.products" :key="product.id">
+                <td><b>{{ product.productName }}</b></td>
+                <td class="mono">{{ product.productCode }}</td>
+                <td>
+                  <span class="tag blue">{{ getAssetTypeLabel(product.assetType) }}</span>
+                </td>
+                <td>{{ getChannelLabel(product.channel) }}</td>
+                <td>{{ getMarketLabel(product.market) }}</td>
+                <td>{{ getCurrencyLabel(product.currency) }}</td>
+                <td>
+                  <span class="tag" :class="product.isActive ? 'green' : 'red'">
+                    {{ product.isActive ? '启用' : '停用' }}
+                  </span>
+                </td>
+                <td class="right">
+                  <button class="btn" @click="handleEdit(product)">编辑</button>
+                  <button class="btn" @click="handleToggle(product)">
+                    {{ product.isActive ? '停用' : '启用' }}
+                  </button>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -306,11 +312,15 @@ const rules: FormRules = {
 }
 
 async function loadProducts() {
-  await productStore.fetchProducts({
-    keyword: filters.keyword || undefined,
-    assetType: filters.assetType || undefined,
-    channel: filters.channel || undefined,
-  })
+  try {
+    await productStore.fetchProducts({
+      keyword: filters.keyword || undefined,
+      assetType: filters.assetType || undefined,
+      channel: filters.channel || undefined,
+    })
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载失败')
+  }
 }
 
 function handleAddProduct() {
@@ -397,7 +407,7 @@ async function handleSave() {
   })
 }
 
-onMounted(() => {
-  loadProducts()
+onMounted(async () => {
+  await loadProducts()
 })
 </script>

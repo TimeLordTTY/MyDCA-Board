@@ -51,9 +51,24 @@ public class OrderController {
             new BigDecimal(request.get("amount").toString()) : null;
         BigDecimal shares = request.containsKey("shares") ? 
             new BigDecimal(request.get("shares").toString()) : null;
-        Long accountId = Long.valueOf(request.get("accountId").toString());
+        Long accountId = request.containsKey("accountId") ? 
+            Long.valueOf(request.get("accountId").toString()) : null;
 
-        Order order = orderService.createOrder(currentUser.getId(), productId, orderType, amount, shares, accountId);
+        // 支持组合支付（fundingLines）
+        List<com.timelordtty.dca.model.OrderFundingLine> fundingLines = null;
+        if (request.containsKey("fundingLines")) {
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> fundingLinesData = (List<Map<String, Object>>) request.get("fundingLines");
+            fundingLines = new java.util.ArrayList<>();
+            for (Map<String, Object> fl : fundingLinesData) {
+                com.timelordtty.dca.model.OrderFundingLine fundingLine = new com.timelordtty.dca.model.OrderFundingLine();
+                fundingLine.setAccountId(Long.valueOf(fl.get("accountId").toString()));
+                fundingLine.setAmount(new BigDecimal(fl.get("amount").toString()));
+                fundingLines.add(fundingLine);
+            }
+        }
+
+        Order order = orderService.createOrder(currentUser.getId(), productId, orderType, amount, shares, accountId, fundingLines);
         return ResponseEntity.ok(order);
     }
 

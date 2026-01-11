@@ -74,6 +74,20 @@ export const useAccountStore = defineStore('account', () => {
     return updatedAccount
   }
 
+  /**
+   * 根据账户ID获取账户
+   */
+  function getAccountById(id: number): Account | undefined {
+    return accounts.value.find((a) => a.id === id)
+  }
+
+  /**
+   * 获取所有叶子账户（用于记账校验）
+   */
+  function getAllLeafAccounts(): Account[] {
+    return getLeafAccounts(accountTree.value)
+  }
+
   return {
     accounts,
     accountTree,
@@ -84,5 +98,7 @@ export const useAccountStore = defineStore('account', () => {
     createAccount,
     updateAccount,
     adjustBalance,
+    getAccountById,
+    getAllLeafAccounts,
   }
 })

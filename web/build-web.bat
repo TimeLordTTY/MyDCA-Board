@@ -72,17 +72,4 @@ REM 启动PC端开发服务器（新窗口）
 echo 正在启动PC端开发服务器（端口 3000）...
 start "PC端 - 财富中枢系统" cmd /k "cd /d %WEB_DIR%pc-app && npm run dev"
 
-REM 等待1秒，确保第一个窗口启动
-timeout /t 1 /nobreak >nul
-
-REM 启动Mobile端开发服务器（新窗口）
-echo 正在启动Mobile端开发服务器（端口 3001）...
-start "Mobile端 - 财富中枢系统" cmd /k "cd /d %WEB_DIR%mobile-app && npm run dev"
-
-echo.
-echo ✓ 前端开发服务器已启动！
-echo   - PC端: http://localhost:3000
-echo   - Mobile端: http://localhost:3001
-echo.
-
 cd ..

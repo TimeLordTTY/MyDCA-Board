@@ -1,5 +1,41 @@
 <template>
   <div>
+    <!-- 新建订单模态框 -->
+    <NewOrderModal v-model="newOrderVisible" @success="loadOrders" />
+
+    <!-- 订单详情模态框 -->
+    <el-dialog v-model="detailVisible" title="订单详情" width="800px">
+      <div v-if="selectedOrder">
+        <div style="margin-bottom: 16px">
+          <div><strong>订单ID：</strong>{{ selectedOrder.orderId }}</div>
+          <div><strong>类型：</strong>{{ getOrderTypeLabel(selectedOrder.orderType) }}</div>
+          <div><strong>产品ID：</strong>{{ selectedOrder.productId }}</div>
+          <div><strong>金额：</strong>{{ formatCurrency(selectedOrder.amount) }}</div>
+          <div><strong>份额：</strong>{{ selectedOrder.shares || '—' }}</div>
+          <div><strong>状态：</strong>{{ getOrderStatusLabel(selectedOrder.status) }}</div>
+          <div><strong>创建时间：</strong>{{ formatDateTime(selectedOrder.createdAt) }}</div>
+        </div>
+        <div class="divider"></div>
+        <div style="margin-top: 16px">
+          <h4>资金来源</h4>
+          <table style="margin-top: 12px">
+            <thead>
+              <tr>
+                <th>账户</th>
+                <th class="right">金额</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in fundingLines" :key="line.id">
+                <td>{{ getAccountName(line.accountId) }}</td>
+                <td class="right mono">{{ formatCurrency(line.amount) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </el-dialog>
+
     <div class="card">
       <div class="row-between">
         <div>
@@ -50,10 +86,10 @@
                 </span>
               </td>
               <td class="right">
+                <button class="btn" @click="handleViewDetail(order)" style="margin-right: 8px">详情</button>
                 <template v-if="order.status === 'PENDING'">
                   <button class="btn" @click="handleCancelOrder(order)">取消</button>
                 </template>
-                <span v-else class="td-muted">—</span>
               </td>
             </tr>
           </tbody>
@@ -66,11 +102,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { orderApi, formatCurrency, getOrderTypeLabel, getOrderStatusLabel } from '@wealth-hub/shared'
-import type { Order } from '@wealth-hub/shared'
+import { orderApi, formatCurrency, formatDateTime, getOrderTypeLabel, getOrderStatusLabel, useAccountStore } from '@wealth-hub/shared'
+import type { Order, OrderDetail, OrderFundingLine } from '@wealth-hub/shared'
+import NewOrderModal from '../components/NewOrderModal.vue'
+
+const accountStore = useAccountStore()
 
 const loading = ref(false)
 const orders = ref<Order[]>([])
+const newOrderVisible = ref(false)
+const detailVisible = ref(false)
+const selectedOrder = ref<OrderDetail | null>(null)
+const fundingLines = ref<OrderFundingLine[]>([])
 
 function getOrderStatusTagClass(status: string): string {
   if (status === 'CONFIRMED') return 'green'
@@ -91,7 +134,27 @@ async function loadOrders() {
 }
 
 function handleNewOrder() {
-  ElMessage.info('新建订单功能开发中')
+  newOrderVisible.value = true
+}
+
+async function handleViewDetail(order: Order) {
+  try {
+    const detail = await orderApi.getOrder(order.orderId)
+    selectedOrder.value = detail
+    fundingLines.value = detail.fundingLines || []
+    detailVisible.value = true
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载详情失败')
+  }
+}
+
+function getAccountName(accountId: number): string {
+  const account = accountStore.accountTree.find((a) => a.id === accountId)
+  if (!account) return `账户ID: ${accountId}`
+  const parent = account.parentAccountId
+    ? accountStore.accountTree.find((a) => a.id === account.parentAccountId)
+    : null
+  return parent ? `${parent.accountName} / ${account.accountName}` : account.accountName
 }
 
 async function handleCancelOrder(order: Order) {
@@ -111,6 +174,7 @@ async function handleCancelOrder(order: Order) {
 }
 
 onMounted(() => {
+  accountStore.fetchAccounts()
   loadOrders()
 })
 </script>

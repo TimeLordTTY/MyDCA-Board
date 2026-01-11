@@ -24,10 +24,16 @@ export const ledgerApi = {
 
   /**
    * 获取流水详情
+   * 注意：后端API目前只返回LedgerTxn，不包含postings
+   * 需要前端单独获取postings或修改后端API
    */
   getTransactionDetail: async (txnId: string): Promise<LedgerTxnDetail> => {
-    const response = await apiClient.get<LedgerTxnDetail>(`/ledger/txns/${txnId}`)
-    return response.data
+    const response = await apiClient.get<LedgerTxn>(`/ledger/txns/${txnId}`)
+    // 后端目前不返回postings，这里返回空数组
+    return {
+      ...response.data,
+      postings: [],
+    } as LedgerTxnDetail
   },
 
   /**

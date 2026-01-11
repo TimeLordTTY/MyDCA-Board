@@ -11,7 +11,8 @@ export interface ProductMaster {
   assetType: 'ETF' | 'LOF' | 'FUND' | 'MMF' | 'BANK_WM_NAV' | 'BANK_WM_BOX' | 'STOCK' | 'FUTURES' | 'OPTIONS' | 'BOND_REPO'
   currency: 'CNY' | 'USD' | 'HKD'
   productName: string
-  isQdii: boolean
+  isQdii?: boolean
+  isqdii?: boolean // 兼容后端可能返回的小写字段
   trackIndex?: string
   buyFeeRate: number
   sellFeeRate: number
@@ -20,6 +21,7 @@ export interface ProductMaster {
   cutoffTime: string
   dataSource?: string
   isActive: boolean
+  note?: string // 添加note字段
   createdAt: string
   updatedAt: string
 }

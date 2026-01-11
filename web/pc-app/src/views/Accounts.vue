@@ -231,6 +231,16 @@ const balanceRules: FormRules = {
 }
 
 function getPlatformName(account: Account): string {
+  // 如果账户有parentAccountId，说明它是子账户，需要查找父账户
+  if (account.parentAccountId) {
+    // 从所有账户中查找父账户（因为accountTree可能还没有构建好children）
+    const parent = accountStore.accounts.find((a) => a.id === account.parentAccountId)
+    if (parent) {
+      return parent.accountName
+    }
+  }
+  
+  // 如果没有parentAccountId，尝试从accountTree中查找（可能是通过children关系）
   const platform = accountStore.accountTree.find((p) =>
     p.children?.some((c) => c.id === account.id)
   )

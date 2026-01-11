@@ -113,6 +113,7 @@ public class DashboardService {
         overview.setTotalLiabilities(totalLiabilities);
         overview.setNetWorth(totalAssets.subtract(totalLiabilities));
         overview.setCashBalance(cashBalance);
+        overview.setPositionValue(positionValue); // 设置持仓市值
 
         return overview;
     }
@@ -122,6 +123,7 @@ public class DashboardService {
         private BigDecimal totalLiabilities;
         private BigDecimal netWorth;
         private BigDecimal cashBalance;
+        private BigDecimal positionValue; // 持仓市值
 
         // Getters and setters
         public BigDecimal getTotalAssets() { return totalAssets; }
@@ -132,6 +134,34 @@ public class DashboardService {
         public void setNetWorth(BigDecimal netWorth) { this.netWorth = netWorth; }
         public BigDecimal getCashBalance() { return cashBalance; }
         public void setCashBalance(BigDecimal cashBalance) { this.cashBalance = cashBalance; }
+        public BigDecimal getPositionValue() { return positionValue; }
+        public void setPositionValue(BigDecimal positionValue) { this.positionValue = positionValue; }
+    }
+
+    /**
+     * 今日建议（TodayAction）
+     * 
+     * Phase 1阶段：建议功能未实现，返回空列表
+     * Phase 3阶段：会实现策略引擎和建议生成
+     */
+    public static class TodayAction {
+        private Long id;
+        private String title;
+        private String description;
+        private String actionType; // BUY/SELL/HOLD等
+        private String priority; // HIGH/MEDIUM/LOW
+
+        // Getters and setters
+        public Long getId() { return id; }
+        public void setId(Long id) { this.id = id; }
+        public String getTitle() { return title; }
+        public void setTitle(String title) { this.title = title; }
+        public String getDescription() { return description; }
+        public void setDescription(String description) { this.description = description; }
+        public String getActionType() { return actionType; }
+        public void setActionType(String actionType) { this.actionType = actionType; }
+        public String getPriority() { return priority; }
+        public void setPriority(String priority) { this.priority = priority; }
     }
 }
 

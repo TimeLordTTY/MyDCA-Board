@@ -1,5 +1,12 @@
 <template>
   <div>
+    <!-- 结算确认模态框 -->
+    <SettlementConfirmModal
+      v-model="confirmVisible"
+      :order="selectedOrder"
+      @success="loadSettlements"
+    />
+
     <div class="card">
       <div class="row-between">
         <div>
@@ -55,6 +62,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { settlementApi, getOrderTypeLabel, formatCurrency, formatDate } from '@wealth-hub/shared'
 import type { Order } from '@wealth-hub/shared'
+import SettlementConfirmModal from '../components/SettlementConfirmModal.vue'
 
 const loading = ref(false)
 const pendingSettlements = ref<Order[]>([])
@@ -70,8 +78,12 @@ async function loadSettlements() {
   }
 }
 
+const confirmVisible = ref(false)
+const selectedOrder = ref<Order | null>(null)
+
 function handleConfirmSettlement(settlement: Order) {
-  ElMessage.info('结算确认功能开发中')
+  selectedOrder.value = settlement
+  confirmVisible.value = true
 }
 
 onMounted(() => {

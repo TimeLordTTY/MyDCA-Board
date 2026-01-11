@@ -17,9 +17,27 @@ export const useProductStore = defineStore('product', () => {
   async function fetchProducts(params?: ProductQueryParams) {
     loading.value = true
     try {
-      products.value = await productApi.getProducts(params)
+      const data = await productApi.getProducts(params)
+      console.log('API returned data:', data)
+      console.log('Data type:', Array.isArray(data), 'Length:', data?.length)
+      
+      // 处理字段名不一致的问题（后端可能返回isqdii，前端期望isQdii）
+      // 同时确保所有必需字段都有值
+      const processedData = (data || []).map((product: any) => ({
+        ...product,
+        isQdii: product.isQdii ?? product.isqdii ?? false,
+        isActive: product.isActive ?? true,
+      }))
+      
+      products.value = processedData
+      console.log('Products stored:', products.value.length)
+      console.log('First product:', products.value[0])
+    } catch (error) {
+      console.error('Failed to load products:', error)
+      products.value = []
     } finally {
       loading.value = false
+      console.log('Loading finished, products count:', products.value.length)
     }
   }
 

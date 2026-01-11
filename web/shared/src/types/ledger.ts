@@ -62,14 +62,17 @@ export interface PaymentLine {
 
 export interface CreateTransactionRequest {
   txnType: string
-  paymentLines?: PaymentLine[]
+  postings: Array<{
+    postingType: 'DEBIT' | 'CREDIT'
+    accountId: number
+    accountType: 'CASH' | 'POSITION' | 'FEE' | 'INCOME' | 'EXPENSE' | 'LIABILITY' | 'RECEIVABLE'
+    amount: number
+    shares?: number
+    currency?: 'CNY' | 'USD' | 'HKD'
+  }>
+  bizGroupKey?: string
   relatedTxnId?: string
   productId?: number
-  amount?: number
-  shares?: number
-  tradeDate?: string
-  navDate?: string
-  confirmDate?: string
   note?: string
 }
 

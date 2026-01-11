@@ -204,10 +204,16 @@ const spendableAmount = computed(() => {
 })
 
 const unrealizedPnl = computed(() => {
+  if (!holdings.value || !Array.isArray(holdings.value)) {
+    return 0
+  }
   return holdings.value.reduce((sum, h) => sum + (h.unrealizedPnl || 0), 0)
 })
 
 const topHoldings = computed(() => {
+  if (!holdings.value || !Array.isArray(holdings.value)) {
+    return []
+  }
   return holdings.value
     .sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0))
     .slice(0, 5)
@@ -237,7 +243,22 @@ async function loadData() {
     }))
 
     // 加载持仓
-    holdings.value = await holdingApi.getHoldings()
+    try {
+      const holdingsData = await holdingApi.getHoldings()
+      // holdingsData 可能是 Map 或对象，需要转换为数组
+      if (holdingsData instanceof Map) {
+        holdings.value = Array.from(holdingsData.values())
+      } else if (Array.isArray(holdingsData)) {
+        holdings.value = holdingsData
+      } else if (typeof holdingsData === 'object' && holdingsData !== null) {
+        holdings.value = Object.values(holdingsData)
+      } else {
+        holdings.value = []
+      }
+    } catch (error: any) {
+      console.error('Failed to load holdings:', error)
+      holdings.value = []
+    }
 
     // 加载账户数据
     await accountStore.fetchAccounts()
