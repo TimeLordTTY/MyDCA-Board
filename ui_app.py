@@ -3237,7 +3237,6 @@ def page_invest():
                     default_fee = 0.0
                     if buy_product and buy_amount > 0:
                         from core.exchange_trade_service import calc_default_fee
-                        from decimal import Decimal
                         default_fee = float(calc_default_fee(Decimal(str(buy_amount))))
                         st.info(f"💡 默认手续费: ¥{default_fee:.2f}（万0.845，最低0.20）")
                     
@@ -3275,7 +3274,6 @@ def page_invest():
                             
                             # 调用服务保存成交
                             from core.exchange_trade_service import save_exchange_trade
-                            from decimal import Decimal
                             
                             price = Decimal(str(buy_price)) if buy_price > 0 else None
                             fee = Decimal(str(buy_fee)) if buy_fee > 0 else None
@@ -3382,7 +3380,38 @@ def page_invest():
                     # 场外产品列表（默认显示场外产品）
                     buy_product = st.selectbox("选择产品", otc_product_names if otc_product_names else all_product_names, key="buy_product_otc")
                     
-                    # 检查产品是否关联有账户
+                    # 扣款账户选择（资金来源账户）
+                    account_options = get_account_options()
+                    account_dict = {acc['name']: acc['id'] for acc in account_options}
+                    account_names = list(account_dict.keys())
+                    
+                    # 默认扣款账户：根据产品自动获取，如果没有则使用默认账户
+                    default_debit_account = None
+                    if buy_product:
+                        product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
+                        if product:
+                            default_debit_account = get_tx_account(product['code'], 'buy_debit')
+                    
+                    # 找到默认账户在列表中的索引
+                    default_debit_account_idx = 0
+                    if default_debit_account:
+                        for idx, acc in enumerate(account_options):
+                            if acc['id'] == default_debit_account:
+                                default_debit_account_idx = idx
+                                break
+                    
+                    buy_debit_account_name = st.selectbox(
+                        "扣款账户（资金来源）*",
+                        account_names,
+                        index=default_debit_account_idx,
+                        key="buy_debit_account_otc",
+                        help="从哪个账户扣款"
+                    )
+                    buy_debit_account_id = account_dict[buy_debit_account_name]
+                    buy_debit_account_balance = get_account_balance(buy_debit_account_id)
+                    st.caption(f"当前余额：¥{format_decimal(buy_debit_account_balance)}")
+                    
+                    # 检查产品是否关联有子账户（这些是买入后持仓会增加的账户）
                     linked_accounts = []
                     if buy_product:
                         product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
@@ -3390,11 +3419,11 @@ def page_invest():
                             linked_accounts = get_product_linked_accounts(product['code'])
                     
                     buy_amount = 0.0
-                    account_amounts = {}  # {account_id: amount}
+                    account_amounts = {}  # {account_id: amount} 子账户分配金额
                     
                     if linked_accounts:
-                        # 如果产品关联有账户，分别填写每个账户的购买金额
-                        st.info("💡 该产品关联有账户，请分别填写每个账户的购买金额")
+                        # 如果产品关联有子账户，分别填写每个子账户的分配金额
+                        st.info("💡 该产品关联有子账户，请分别填写每个子账户的分配金额（买入后持仓会增加）")
                         total_amount = Decimal('0')
                         
                         for acc in linked_accounts:
@@ -3404,10 +3433,11 @@ def page_invest():
                             acc_balance = get_account_balance(acc_id)
                             st.caption(f"{acc_name} 当前余额：¥{format_decimal(acc_balance)}")
                             acc_amount = st.number_input(
-                                f"{acc_name} ({acc_id}) 购买金额",
+                                f"{acc_name} ({acc_id}) 分配金额",
                                 min_value=0.0,
                                 step=100.0,
-                                key=acc_amount_key
+                                key=acc_amount_key,
+                                help="该子账户分配的购买金额"
                             )
                             if acc_amount > 0:
                                 account_amounts[acc_id] = Decimal(str(acc_amount))
@@ -3419,7 +3449,7 @@ def page_invest():
                             for acc_id, acc_amount in account_amounts.items():
                                 st.caption(f"  - {get_account_name(acc_id)}: ¥{acc_amount:.2f}")
                     else:
-                        # 如果没有关联账户，使用原来的单金额输入
+                        # 如果没有关联子账户，使用原来的单金额输入
                         buy_amount = st.number_input("扣款金额（含手续费）", min_value=0.01, step=100.0, key="buy_amount_otc")
                     
                     buy_fee_override = 0.0  # 默认值
@@ -3428,7 +3458,6 @@ def page_invest():
                         product = otc_product_dict.get(buy_product) or all_product_dict.get(buy_product)
                         if product:
                             from core.invest_service import calc_buy_fee
-                            from decimal import Decimal
                             fee = calc_buy_fee(product['code'], Decimal(str(buy_amount)))
                             buy_fee_rate = float(product.get('buy_fee_rate') or 0)
                             st.info(f"💡 预计手续费: ¥{fee:.2f}（费率 {buy_fee_rate*100:.2f}%）")
@@ -3478,7 +3507,7 @@ def page_invest():
                     if not buy_product or buy_amount <= 0:
                         st.error("❌ 请选择产品并输入金额！")
                     elif linked_accounts and len(account_amounts) == 0:
-                        st.error("❌ 请至少填写一个账户的购买金额！")
+                        st.error("❌ 请至少填写一个子账户的分配金额！")
                     else:
                         try:
                             # 使用合并的产品字典
@@ -3515,38 +3544,22 @@ def page_invest():
                                     note=note or None
                                 )
                                 
-                                # 如果有账户分配，从对应账户分别扣款
+                                # 从扣款账户扣款
                                 event_time = requested_at.strftime('%Y-%m-%d %H:%M:%S')
-                                if account_amounts:
-                                    for acc_id, acc_amount in account_amounts.items():
-                                        # 计算该账户对应的手续费（按比例）
-                                        from core.invest_service import calc_buy_fee
-                                        acc_fee = calc_buy_fee(product['code'], acc_amount)
-                                        acc_total = acc_amount  # 含手续费
-                                        
-                                        add_expense(
-                                            account_from=acc_id,
-                                            amount=acc_total,
-                                            category_l1="理财投资",
-                                            category_l2=buy_category_l2,
-                                            event_time=event_time,
-                                            note=f"{product.get('name') or product.get('product_name', '')} 买入 (订单号: {order_id})"
-                                        )
-                                else:
-                                    # 如果没有账户分配，使用原来的逻辑
-                                    debit_account = get_tx_account(product['code'], 'buy_debit')  # 扣款账户
-                                    add_expense(
-                                        account_from=debit_account,
-                                        amount=Decimal(str(buy_amount)),
-                                        category_l1="理财投资",
-                                        category_l2=buy_category_l2,
-                                        event_time=event_time,
-                                        note=f"{product.get('name') or product.get('product_name', '')} (订单号: {order_id})"
-                                    )
+                                # 统一从选择的扣款账户扣款
+                                add_expense(
+                                    account_from=buy_debit_account_id,
+                                    amount=Decimal(str(buy_amount)),
+                                    category_l1="理财投资",
+                                    category_l2=buy_category_l2,
+                                    event_time=event_time,
+                                    note=f"{product.get('name') or product.get('product_name', '')} 买入 (订单号: {order_id})"
+                                )
                                 
                                 st.success(f"✅ 买入扣款已提交！订单号: {order_id}")
+                                st.info(f"💰 已从 {buy_debit_account_name} 扣款: ¥{buy_amount:.2f}")
                                 if account_amounts:
-                                    st.info(f"💰 已从以下账户扣款：")
+                                    st.info(f"📊 子账户分配：")
                                     for acc_id, acc_amount in account_amounts.items():
                                         st.caption(f"  - {get_account_name(acc_id)}: ¥{acc_amount:.2f}")
                                 try:
