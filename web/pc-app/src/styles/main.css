@@ -42,15 +42,22 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
     'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   color: var(--text);
   background: radial-gradient(1200px 500px at 30% -10%, rgba(124, 199, 255, 0.35), transparent 60%),
     radial-gradient(900px 520px at 88% 6%, rgba(78, 164, 255, 0.18), transparent 55%),
     linear-gradient(180deg, var(--bg2), var(--bg));
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 a {
@@ -68,8 +75,12 @@ a {
 .products-page-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 80px);
+  height: calc(100vh - 62px - 24px); /* 100vh - topbar高度(约62px) - wrap上下padding(12px*2) */
+  max-height: calc(100vh - 62px - 24px);
   overflow: hidden;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 /* ============ Sticky Topbar ============ */

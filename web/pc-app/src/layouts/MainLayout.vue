@@ -1,7 +1,7 @@
 <template>
-  <div>
+  <div style="display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
     <!-- Sticky Topbar -->
-    <div class="topbar">
+    <div class="topbar" style="flex-shrink: 0;">
       <div class="topbar-inner">
         <div class="brand">
           <div class="logo">W</div>
@@ -33,9 +33,9 @@
       </div>
     </div>
 
-    <div class="wrap">
+    <div class="wrap" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;">
       <!-- Page Content -->
-      <router-view />
+      <router-view style="flex: 1; min-height: 0; overflow: hidden;" />
     </div>
   </div>
 </template>

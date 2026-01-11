@@ -1,32 +1,31 @@
 <template>
   <div class="products-page-container">
-    <div class="card" style="flex-shrink: 0;">
+    <div class="card" style="flex-shrink: 0; margin-bottom: 12px; padding: 12px 16px;">
       <div class="row-between">
         <div>
-          <h3>
+          <h3 style="margin: 0 0 4px 0; font-size: 16px;">
             产品管理
             <span class="tag blue tiny">可新增/编辑/停用</span>
           </h3>
-          <div class="sub">
+          <div class="sub" style="margin: 0; font-size: 12px;">
             产品是全局字典：ETF / 基金 / 货基 / 逆回购。后续接行情服务时，code 用于查询。
           </div>
         </div>
         <div class="row-gap">
-          <el-button type="primary" @click="handleAddProduct">＋ 新增产品</el-button>
+          <el-button type="primary" size="small" @click="handleAddProduct">＋ 新增产品</el-button>
         </div>
       </div>
-      <div class="divider"></div>
     </div>
 
     <!-- 产品列表 - 左右分栏 -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; flex: 1; min-height: 0; margin-top: 16px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; min-height: 0; overflow: hidden;">
         <!-- 左侧：场内产品 -->
-        <div class="card" style="padding: 16px; display: flex; flex-direction: column; min-height: 0;">
-          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
-            <h3 style="margin: 0; font-size: 15px;">场内产品</h3>
+        <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
+          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">场内产品</h3>
           </div>
           <!-- 左侧筛选条件 -->
-          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
+          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
             <el-input
               v-model="exchangeFilters.keyword"
               placeholder="搜索产品名称或代码"
@@ -122,12 +121,12 @@
         </div>
 
         <!-- 右侧：场外产品 -->
-        <div class="card" style="padding: 16px; display: flex; flex-direction: column; min-height: 0;">
-          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
-            <h3 style="margin: 0; font-size: 15px;">场外产品</h3>
+        <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
+          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">场外产品</h3>
           </div>
           <!-- 右侧筛选条件 -->
-          <div class="row-gap" style="margin-bottom: 12px; flex-shrink: 0;">
+          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
             <el-input
               v-model="otcFilters.keyword"
               placeholder="搜索产品名称或代码"
@@ -161,7 +160,7 @@
               <el-option label="全部" :value="undefined" />
             </el-select>
           </div>
-          <div style="flex: 1; overflow: auto; min-height: 0;" class="hide-scrollbar">
+          <div ref="otcTableContainer" style="flex: 1; overflow: auto; min-height: 0;" class="hide-scrollbar">
             <table>
               <thead>
                 <tr>
@@ -191,6 +190,7 @@
                     @dragover.prevent="handleDragOver($event, index, 'otc')"
                     @drop="handleDrop($event, index, 'otc')"
                     @dragend="handleDragEnd"
+                    @dragleave="stopAutoScroll"
                     style="cursor: move;"
                     :class="{ 'drag-over': dragOverIndex === index && dragOverType === 'otc' }"
                   >
@@ -371,7 +371,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -419,6 +419,9 @@ const draggedIndex = ref<number | null>(null)
 const dragOverIndex = ref<number | null>(null)
 const dragOverType = ref<'exchange' | 'otc' | null>(null)
 const draggedType = ref<'exchange' | 'otc' | null>(null)
+const scrollInterval = ref<number | null>(null)
+const exchangeTableContainer = ref<HTMLElement | null>(null)
+const otcTableContainer = ref<HTMLElement | null>(null)
 
 const form = reactive<Partial<ProductMaster>>({
   productCode: '',
@@ -537,14 +540,20 @@ function handleDragStart(event: DragEvent, index: number, type: 'exchange' | 'ot
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData('text/plain', '')
   }
+  
+  // 开始边缘自动滚动检测
+  startAutoScroll(type)
 }
 
-function handleDragOver(_event: DragEvent, index: number, type: 'exchange' | 'otc') {
+function handleDragOver(event: DragEvent, index: number, type: 'exchange' | 'otc') {
   if (draggedIndex.value === null || draggedType.value !== type) return
   if (index !== draggedIndex.value) {
     dragOverIndex.value = index
     dragOverType.value = type
   }
+  
+  // 检测是否需要自动滚动
+  checkAutoScroll(event, type)
 }
 
 function handleDrop(event: DragEvent, dropIndex: number, type: 'exchange' | 'otc') {
@@ -579,6 +588,78 @@ function handleDragEnd() {
   dragOverIndex.value = null
   dragOverType.value = null
   draggedType.value = null
+  
+  // 停止自动滚动
+  stopAutoScroll()
+}
+
+// 边缘自动滚动功能
+function startAutoScroll(type: 'exchange' | 'otc') {
+  // 拖拽开始时，允许滚轮滚动
+  const container = type === 'exchange' ? exchangeTableContainer.value : otcTableContainer.value
+  if (container) {
+    // 允许滚轮事件 - 在拖拽过程中，滚轮可以正常滚动表格
+    const handleWheel = (e: WheelEvent) => {
+      e.stopPropagation()
+      container!.scrollTop += e.deltaY
+    }
+    container.addEventListener('wheel', handleWheel, { passive: true })
+    // 存储事件处理器以便清理
+    ;(container as any)._dragWheelHandler = handleWheel
+  }
+}
+
+function checkAutoScroll(event: DragEvent, type: 'exchange' | 'otc') {
+  const container = type === 'exchange' ? exchangeTableContainer.value : otcTableContainer.value
+  if (!container) return
+  
+  const rect = container.getBoundingClientRect()
+  const mouseY = event.clientY
+  const scrollThreshold = 50 // 距离边缘50px时开始滚动
+  const scrollSpeed = 10 // 滚动速度
+  
+  // 停止之前的滚动
+  stopAutoScroll()
+  
+  // 检查是否接近顶部边缘
+  if (mouseY - rect.top < scrollThreshold && container.scrollTop > 0) {
+    scrollInterval.value = window.setInterval(() => {
+      if (container.scrollTop > 0) {
+        container.scrollTop = Math.max(0, container.scrollTop - scrollSpeed)
+      } else {
+        stopAutoScroll()
+      }
+    }, 16) // 约60fps
+  }
+  // 检查是否接近底部边缘
+  else if (rect.bottom - mouseY < scrollThreshold && 
+           container.scrollTop < container.scrollHeight - container.clientHeight) {
+    scrollInterval.value = window.setInterval(() => {
+      const maxScroll = container.scrollHeight - container.clientHeight
+      if (container.scrollTop < maxScroll) {
+        container.scrollTop = Math.min(maxScroll, container.scrollTop + scrollSpeed)
+      } else {
+        stopAutoScroll()
+      }
+    }, 16) // 约60fps
+  }
+}
+
+function stopAutoScroll() {
+  if (scrollInterval.value !== null) {
+    clearInterval(scrollInterval.value)
+    scrollInterval.value = null
+  }
+  
+  // 移除滚轮事件监听器
+  if (exchangeTableContainer.value && (exchangeTableContainer.value as any)._dragWheelHandler) {
+    exchangeTableContainer.value.removeEventListener('wheel', (exchangeTableContainer.value as any)._dragWheelHandler)
+    delete (exchangeTableContainer.value as any)._dragWheelHandler
+  }
+  if (otcTableContainer.value && (otcTableContainer.value as any)._dragWheelHandler) {
+    otcTableContainer.value.removeEventListener('wheel', (otcTableContainer.value as any)._dragWheelHandler)
+    delete (otcTableContainer.value as any)._dragWheelHandler
+  }
 }
 
 // 保存产品排序（调用后端接口）
@@ -695,5 +776,10 @@ async function handleSave() {
 
 onMounted(async () => {
   await loadAllProducts()
+})
+
+onBeforeUnmount(() => {
+  // 清理时停止自动滚动
+  stopAutoScroll()
 })
 </script>
