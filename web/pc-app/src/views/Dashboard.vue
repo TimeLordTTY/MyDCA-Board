@@ -28,7 +28,7 @@
 
       <div class="kpi">
         <div class="label">📈 持仓市值</div>
-        <div class="value">{{ formatCurrency(overview.positionValue) }}</div>
+        <div class="value">{{ formatCurrency(positionValue) }}</div>
         <div class="mini">= Σ(持仓 shares × 价格)</div>
         <div class="row">
           <span class="chip" :class="unrealizedPnl >= 0 ? 'good' : 'bad'">
@@ -109,7 +109,15 @@
                 <td><b>{{ holding.productName || `产品${holding.productId}` }}</b></td>
                 <td class="right mono">{{ formatNumber(holding.totalShares || holding.shares || 0, 2) }}</td>
                 <td class="right mono">{{ formatNumber(holding.averageCost || holding.avgCost || 0, 4) }}</td>
-                <td class="right mono">{{ formatNumber(holding.marketValue && holding.totalShares ? holding.marketValue / holding.totalShares : 0, 4) }}</td>
+                <td class="right mono">
+                  <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
+                  <span v-else class="td-muted">—</span>
+                  <span v-if="holding.quote?.pctChg !== undefined && holding.quote.pctChg !== null" 
+                        :class="holding.quote.pctChg >= 0 ? 'text-green' : 'text-red'"
+                        style="margin-left: 8px; font-size: 0.9em;">
+                    {{ holding.quote.pctChg >= 0 ? '+' : '' }}{{ formatNumber(holding.quote.pctChg, 2) }}%
+                  </span>
+                </td>
                 <td class="right mono">{{ formatCurrency(holding.marketValue) }}</td>
                 <td class="right">
                   <span class="chip" :class="(holding.unrealizedPnl || 0) >= 0 ? 'good' : 'bad'">
@@ -170,8 +178,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { dashboardApi, holdingApi, settlementApi, useAccountStore } from '@wealth-hub/shared'
+import { dashboardApi, holdingApi, settlementApi, marketApi, navApi, useAccountStore } from '@wealth-hub/shared'
 import { formatCurrency, formatNumber, formatDate, getOrderTypeLabel } from '@wealth-hub/shared'
+import type { MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
 
 const accountStore = useAccountStore()
 
@@ -188,6 +197,8 @@ const overview = ref({
 const todayActions = ref<any[]>([])
 const pendingSettlements = ref<any[]>([])
 const holdings = ref<any[]>([])
+const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
+const navs = ref<Map<number, Nav>>(new Map())
 
 const availableFunds = computed(() => {
   return accountStore.cashLeafAccounts.reduce((sum, acc) => sum + (acc.balance || 0) - (acc.reservedAmount || 0), 0)
@@ -203,18 +214,51 @@ const spendableAmount = computed(() => {
     .reduce((sum, acc) => sum + (acc.balance || 0) - (acc.reservedAmount || 0), 0)
 })
 
-const unrealizedPnl = computed(() => {
-  if (!holdings.value || !Array.isArray(holdings.value)) {
-    return 0
-  }
-  return holdings.value.reduce((sum, h) => sum + (h.unrealizedPnl || 0), 0)
-})
-
-const topHoldings = computed(() => {
+// 合并持仓和行情数据
+const holdingsWithQuote = computed(() => {
   if (!holdings.value || !Array.isArray(holdings.value)) {
     return []
   }
-  return holdings.value
+  
+  return holdings.value.map(holding => {
+    const quote = quotes.value.get(holding.productId)
+    const nav = navs.value.get(holding.productId)
+    
+    // 优先使用实时行情价格，其次使用净值
+    let currentPrice = 0
+    if (quote) {
+      currentPrice = quote.price
+    } else if (nav) {
+      currentPrice = nav.nav
+    }
+    
+    const shares = holding.totalShares || holding.shares || 0
+    const avgCost = holding.averageCost || holding.avgCost || 0
+    const totalCost = shares * avgCost
+    const marketValue = currentPrice > 0 ? shares * currentPrice : (holding.marketValue || 0)
+    const unrealizedPnl = marketValue - totalCost
+    
+    return {
+      ...holding,
+      currentPrice,
+      marketValue,
+      unrealizedPnl,
+      quote,
+      nav,
+    }
+  })
+})
+
+const unrealizedPnl = computed(() => {
+  return holdingsWithQuote.value.reduce((sum, h) => sum + (h.unrealizedPnl || 0), 0)
+})
+
+const positionValue = computed(() => {
+  return holdingsWithQuote.value.reduce((sum, h) => sum + (h.marketValue || 0), 0)
+})
+
+const topHoldings = computed(() => {
+  return holdingsWithQuote.value
     .sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0))
     .slice(0, 5)
 })
@@ -255,6 +299,30 @@ async function loadData() {
       } else {
         holdings.value = []
       }
+      
+      // 加载实时行情和净值（用于计算持仓市值）
+      if (holdings.value.length > 0) {
+        const productIds = holdings.value.map(h => h.productId)
+        
+        // 批量获取实时行情
+        try {
+          const quotesData = await marketApi.getRealtimeQuotes(productIds)
+          quotes.value = new Map(quotesData.map(q => [q.productId, q]))
+        } catch (error: any) {
+          console.warn('加载实时行情失败:', error)
+        }
+        
+        // 批量获取最新净值（作为备用）
+        try {
+          const navPromises = productIds.map(id => navApi.getLatestNav(id))
+          const navsData = await Promise.all(navPromises)
+          navs.value = new Map(
+            navsData.filter(n => n !== null).map(n => [n!.productId, n!])
+          )
+        } catch (error: any) {
+          console.warn('加载净值失败:', error)
+        }
+      }
     } catch (error: any) {
       console.error('Failed to load holdings:', error)
       holdings.value = []
@@ -274,8 +342,8 @@ function updateAllocationChart() {
   if (!allocationChart) return
 
   const cashValue = overview.value.cashBalance
-  const positionValue = overview.value.positionValue
-  const total = cashValue + positionValue
+  const currentPositionValue = positionValue.value // 使用实时计算的持仓市值
+  const total = cashValue + currentPositionValue
 
   const option = {
     tooltip: {
@@ -287,7 +355,7 @@ function updateAllocationChart() {
         type: 'pie',
         radius: ['40%', '70%'],
         data: [
-          { value: positionValue, name: '持仓' },
+          { value: currentPositionValue, name: '持仓' },
           { value: cashValue, name: '现金' },
         ],
         emphasis: {

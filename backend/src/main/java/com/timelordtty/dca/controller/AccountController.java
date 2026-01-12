@@ -59,8 +59,8 @@ public class AccountController {
     @PutMapping("/{id}")
     public ResponseEntity<Account> updateAccount(@PathVariable Long id, @RequestBody Account account) {
         account.setId(id);
-        // 更新逻辑在Service中实现
-        return ResponseEntity.ok(account);
+        Account updated = accountService.updateAccount(account);
+        return ResponseEntity.ok(updated);
     }
 
     @PutMapping("/{id}/balance")

@@ -1,12 +1,9 @@
 <template>
   <div>
-    <!-- 统一记账模态框 -->
-    <UnifiedEntryModal v-model="unifiedEntryVisible" @success="loadTransactions" />
-
-    <!-- 快速录入模态框 -->
-    <QuickEntryModal
-      v-model="quickEntryVisible"
-      :type="quickEntryType"
+    <!-- 报销模态框 -->
+    <ReimburseModal
+      v-model="reimburseVisible"
+      :expense-txn="selectedExpenseTxn"
       @success="loadTransactions"
     />
 
@@ -56,11 +53,6 @@
             <span class="tag gray tiny">记账流水</span>
           </h3>
           <div class="sub">展示所有记账操作流水。流水记录的是记账操作（入金、支出、转账、订单结算等），不包括行情波动。</div>
-        </div>
-        <div class="row-gap">
-          <el-button @click="handleUnifiedEntry">📝 统一记账</el-button>
-          <el-button @click="handleQuickEntry('EXPENSE')">⚡ 快速支出</el-button>
-          <el-button @click="handleQuickEntry('INCOME')">⚡ 快速收入</el-button>
         </div>
       </div>
       <div class="divider"></div>
@@ -117,6 +109,14 @@
               <td class="td-muted">{{ txn.note || '' }}</td>
               <td class="right">
                 <button class="btn" @click="handleViewDetail(txn)">详情</button>
+                <button
+                  v-if="txn.txnType === 'EXPENSE' && (txn as any).isReimbursable"
+                  class="btn"
+                  style="margin-left: 8px"
+                  @click="handleReimburse(txn)"
+                >
+                  报销
+                </button>
               </td>
             </tr>
           </tbody>
@@ -131,19 +131,17 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ledgerApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore } from '@wealth-hub/shared'
 import type { LedgerTxn, LedgerTxnDetail, LedgerPosting } from '@wealth-hub/shared'
-import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
-import QuickEntryModal from '../components/QuickEntryModal.vue'
+import ReimburseModal from '../components/ReimburseModal.vue'
 
 const accountStore = useAccountStore()
 
 const loading = ref(false)
 const transactions = ref<LedgerTxn[]>([])
-const unifiedEntryVisible = ref(false)
-const quickEntryVisible = ref(false)
-const quickEntryType = ref<'EXPENSE' | 'INCOME'>('EXPENSE')
 const detailVisible = ref(false)
 const selectedTxn = ref<LedgerTxnDetail | null>(null)
 const postings = ref<LedgerPosting[]>([])
+const reimburseVisible = ref(false)
+const selectedExpenseTxn = ref<LedgerTxn | null>(null)
 
 const filters = reactive({
   dateRange: [] as Date[],
@@ -178,14 +176,6 @@ async function loadTransactions() {
   }
 }
 
-function handleUnifiedEntry() {
-  unifiedEntryVisible.value = true
-}
-
-function handleQuickEntry(type: 'EXPENSE' | 'INCOME') {
-  quickEntryType.value = type
-  quickEntryVisible.value = true
-}
 
 async function handleViewDetail(txn: LedgerTxn) {
   try {
@@ -205,6 +195,23 @@ function getAccountName(accountId: number): string {
     ? accountStore.accountTree.find((a) => a.id === account.parentAccountId)
     : null
   return parent ? `${parent.accountName} / ${account.accountName}` : account.accountName
+}
+
+function isReimbursable(txn: LedgerTxn): boolean {
+  // 检查isReimbursable字段，且未报销
+  const txnAny = txn as any
+  return txnAny.isReimbursable === true && txnAny.isReimbursed !== true
+}
+
+async function handleReimburse(txn: LedgerTxn) {
+  try {
+    // 获取完整的交易详情（包含postings）
+    const detail = await ledgerApi.getTransactionDetail(txn.txnId)
+    selectedExpenseTxn.value = detail as any
+    reimburseVisible.value = true
+  } catch (error: any) {
+    ElMessage.error(error.message || '加载失败')
+  }
 }
 
 onMounted(() => {

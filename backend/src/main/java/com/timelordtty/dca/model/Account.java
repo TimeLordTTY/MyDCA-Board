@@ -30,7 +30,7 @@ import java.util.List;
  * 3. 父子账户关系（parent_account_id）：
  *    - 父账户：平台容器/分组节点，用于组织管理，不参与任何记账分录，balance字段不作为真实余额来源
  *    - 子账户：真实信封余额，参与记账分录，是记账的最小单位
- *    - 规则：只有REAL且CASH类型的账户允许形成父子层级
+ *    - 规则：只有REAL类型的账户允许形成父子层级
  *    - 父账户展示余额 = Σ(子账户叶子余额)（仅展示层聚合）
  *    - ledger_posting.account_id 只允许引用叶子账户，父账户禁止出现在任何记账分录中
  * 
@@ -47,7 +47,7 @@ import java.util.List;
  * 业务规则：
  * 1. VIRTUAL账户不允许设置parent_account_id
  * 2. 子账户必须是REAL
- * 3. 只有CASH类型的REAL账户允许形成父子层级
+ * 3. REAL类型的账户允许形成父子层级（用于资金分区/信封系统）
  * 4. ledger_posting.account_id只允许引用叶子账户（禁止对父账户记账）
  * 5. REAL账户允许手工余额调整（需生成ADJUST流水）
  * 6. VIRTUAL账户禁止手工改余额，只能通过分录更新

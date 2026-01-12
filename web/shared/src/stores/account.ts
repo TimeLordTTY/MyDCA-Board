@@ -14,6 +14,7 @@ export const useAccountStore = defineStore('account', () => {
 
   /**
    * 账户树
+   * 后端返回的是扁平列表（所有账户），需要构建树形结构
    */
   const accountTree = computed(() => {
     return buildAccountTree(accounts.value)
@@ -21,11 +22,34 @@ export const useAccountStore = defineStore('account', () => {
 
   /**
    * 现金叶子账户
+   * 直接从扁平列表中提取叶子账户，避免重复处理
    */
   const cashLeafAccounts = computed(() => {
-    return getLeafAccounts(accountTree.value).filter(
-      (acc) => acc.accountKind === 'REAL' && acc.accountType === 'CASH'
+    // 获取所有账户ID集合（用于判断哪些账户是叶子账户）
+    const allAccountIds = new Set(accounts.value.map(acc => acc.id))
+    
+    // 找出所有有父账户的账户ID（这些是子账户）
+    const childAccountIds = new Set(
+      accounts.value
+        .filter(acc => acc.parentAccountId != null)
+        .map(acc => acc.id)
     )
+    
+    // 找出所有父账户ID（这些账户有子账户）
+    const parentAccountIds = new Set(
+      accounts.value
+        .filter(acc => acc.parentAccountId != null)
+        .map(acc => acc.parentAccountId!)
+    )
+    
+    // 叶子账户 = 没有子账户的账户（不在parentAccountIds中）
+    const leafAccounts = accounts.value.filter(
+      (acc) => !parentAccountIds.has(acc.id) &&
+               acc.accountKind === 'REAL' && 
+               acc.accountType === 'CASH'
+    )
+    
+    return leafAccounts
   })
 
   /**

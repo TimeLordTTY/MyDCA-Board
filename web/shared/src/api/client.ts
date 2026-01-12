@@ -40,11 +40,19 @@ apiClient.interceptors.response.use(
       const status = error.response.status
       const data = error.response.data as any
 
-      // 401未授权，清除token并跳转登录
-      if (status === 401) {
+      // 401未授权或403禁止访问（通常表示会话过期），清除token并跳转登录
+      if (status === 401 || status === 403) {
+        // 清除token
         localStorage.removeItem('token')
-        // 触发自定义事件，让应用层处理跳转
-        window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+        // 直接跳转到登录页
+        console.log('Session expired, redirecting to login...', {
+          currentPath: window.location.pathname,
+          status
+        })
+        if (window.location.pathname !== '/login') {
+          // 使用replace而不是href，避免在历史记录中留下记录
+          window.location.replace('/login')
+        }
       }
 
       // 返回错误信息

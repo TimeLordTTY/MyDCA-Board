@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.IndicatorDailyMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.IndicatorDaily">
+        <id column="id" property="id"/>
+        <result column="product_id" property="productId"/>
+        <result column="trade_date" property="tradeDate"/>
+        <result column="window_days" property="windowDays"/>
+        <result column="pct_rank" property="pctRank"/>
+        <result column="q_buy_price" property="qBuyPrice"/>
+        <result column="q_mid_price" property="qMidPrice"/>
+        <result column="q_high_price" property="qHighPrice"/>
+        <result column="peak_close" property="peakClose"/>
+        <result column="drawdown_from_peak" property="drawdownFromPeak"/>
+        <result column="ma20" property="ma20"/>
+        <result column="ma60" property="ma60"/>
+    </resultMap>
+
+    <select id="selectByProductId" resultMap="BaseResultMap">
+        SELECT * FROM indicator_daily
+        WHERE product_id = #{productId}
+        <if test="windowDays != null">
+            AND window_days = #{windowDays}
+        </if>
+        <if test="startDate != null">
+            AND trade_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND trade_date &lt;= #{endDate}
+        </if>
+        ORDER BY trade_date DESC
+    </select>
+
+    <select id="selectLatest" resultMap="BaseResultMap">
+        SELECT * FROM indicator_daily
+        WHERE product_id = #{productId}
+        <if test="windowDays != null">
+            AND window_days = #{windowDays}
+        </if>
+        ORDER BY trade_date DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO indicator_daily (
+            product_id, trade_date, window_days, pct_rank, q_buy_price,
+            q_mid_price, q_high_price, peak_close, drawdown_from_peak,
+            ma20, ma60, created_at
+        ) VALUES (
+            #{productId}, #{tradeDate}, #{windowDays}, #{pctRank}, #{qBuyPrice},
+            #{qMidPrice}, #{qHighPrice}, #{peakClose}, #{drawdownFromPeak},
+            #{ma20}, #{ma60}, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            pct_rank = VALUES(pct_rank),
+            q_buy_price = VALUES(q_buy_price),
+            q_mid_price = VALUES(q_mid_price),
+            q_high_price = VALUES(q_high_price),
+            peak_close = VALUES(peak_close),
+            drawdown_from_peak = VALUES(drawdown_from_peak),
+            ma20 = VALUES(ma20),
+            ma60 = VALUES(ma60)
+    </insert>
+
+    <update id="update">
+        UPDATE indicator_daily
+        SET pct_rank = #{pctRank},
+            q_buy_price = #{qBuyPrice},
+            q_mid_price = #{qMidPrice},
+            q_high_price = #{qHighPrice},
+            peak_close = #{peakClose},
+            drawdown_from_peak = #{drawdownFromPeak},
+            ma20 = #{ma20},
+            ma60 = #{ma60}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

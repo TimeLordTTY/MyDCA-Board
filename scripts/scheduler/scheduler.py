@@ -9,7 +9,9 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 # 添加父目录到路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 from market.fund_collector import FundCollector
 from market.etf_collector import ETFCollector

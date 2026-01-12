@@ -1,47 +1,61 @@
 @echo off
-chcp 65001 >nul
-echo ========================================
-echo 财富中枢系统 - 全项目编译脚本
-echo ========================================
-echo.
-
-REM 设置错误处理
+chcp 65001 >nul 2>&1
 setlocal enabledelayedexpansion
 
-REM 编译前端项目
-echo [1/3] 编译前端项目...
-cd web
+echo ========================================
+echo Wealth Hub System - Full Build Script
+echo ========================================
+echo.
+
+REM Save root directory
+set "ROOT_DIR=%~dp0"
+cd /d "%ROOT_DIR%"
+
+REM Build frontend
+echo [1/3] Building frontend...
+cd /d "%ROOT_DIR%web"
+if not exist "build-web.bat" (
+    echo Error: build-web.bat not found!
+    cd /d "%ROOT_DIR%"
+    exit /b 1
+)
 call build-web.bat
-if errorlevel 1 (
-    echo 前端编译失败！
-    cd ..
+if !errorlevel! neq 0 (
+    echo Frontend build failed!
+    cd /d "%ROOT_DIR%"
     exit /b 1
 )
-cd ..
+cd /d "%ROOT_DIR%"
 
-REM 编译Java后端
+REM Build Java backend
 echo.
-echo [2/3] 编译Java后端...
-cd backend
+echo [2/3] Building Java backend...
+cd /d "%ROOT_DIR%backend"
+if not exist "pom.xml" (
+    echo Error: pom.xml not found!
+    cd /d "%ROOT_DIR%"
+    exit /b 1
+)
 call mvn clean compile -DskipTests
-if errorlevel 1 (
-    echo Java后端编译失败！
-    cd ..
+if !errorlevel! neq 0 (
+    echo Java backend build failed!
+    cd /d "%ROOT_DIR%"
     exit /b 1
 )
-cd ..
+cd /d "%ROOT_DIR%"
 
-REM 编译Python脚本（如果有）
+REM Check Python scripts
 echo.
-echo [3/3] 检查Python脚本...
-if exist "scripts\python" (
-    echo Python脚本检查通过（暂不编译）
+echo [3/3] Checking Python scripts...
+if exist "%ROOT_DIR%scripts\python" (
+    echo Python scripts check passed (no compilation needed)
 ) else (
-    echo 未找到Python脚本目录
+    echo Python scripts directory not found
 )
 
 echo.
 echo ========================================
-echo ✓ 所有项目编译完成！
+echo All projects built successfully!
 echo ========================================
 pause
+endlocal

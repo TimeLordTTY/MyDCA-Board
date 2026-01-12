@@ -1,75 +1,84 @@
 @echo off
-chcp 65001 >nul
-REM 保存脚本所在目录（web目录）
+chcp 65001 >nul 2>&1
+setlocal enabledelayedexpansion
+
+REM Save script directory
 set "WEB_DIR=%~dp0"
-echo 开始编译前端项目...
+cd /d "%WEB_DIR%"
+echo Starting frontend build...
 
-REM 编译共享层
+REM Build shared layer
 echo.
-echo [1/3] 编译共享层...
-cd shared
+echo [1/3] Building shared layer...
+cd /d "%WEB_DIR%shared"
 if not exist "node_modules" (
-    echo 安装共享层依赖...
+    echo Installing shared layer dependencies...
     call npm install
-    if errorlevel 1 (
-        echo 共享层依赖安装失败！
-        cd ..
+    if !errorlevel! neq 0 (
+        echo Shared layer dependency installation failed!
+        cd /d "%WEB_DIR%"
         exit /b 1
     )
 )
 call npm run build
-if errorlevel 1 (
-    echo 共享层编译失败！
-    cd ..
+if !errorlevel! neq 0 (
+    echo Shared layer build failed!
+    cd /d "%WEB_DIR%"
     exit /b 1
 )
 
-REM 编译PC端
+REM Build PC app
 echo.
-echo [2/3] 编译PC端...
-cd ..\pc-app
+echo [2/3] Building PC app...
+cd /d "%WEB_DIR%pc-app"
 if not exist "node_modules" (
-    echo 安装PC端依赖...
+    echo Installing PC app dependencies...
     call npm install
-    if errorlevel 1 (
-        echo PC端依赖安装失败！
-        cd ..
+    if !errorlevel! neq 0 (
+        echo PC app dependency installation failed!
+        cd /d "%WEB_DIR%"
         exit /b 1
     )
 )
 call npm run build
-if errorlevel 1 (
-    echo PC端编译失败！
-    cd ..
+if !errorlevel! neq 0 (
+    echo PC app build failed!
+    cd /d "%WEB_DIR%"
     exit /b 1
 )
 
-REM 编译Mobile端
+REM Build Mobile app (if exists)
 echo.
-echo [3/3] 编译Mobile端...
-cd ..\mobile-app
-if not exist "node_modules" (
-    echo 安装Mobile端依赖...
-    call npm install
-    if errorlevel 1 (
-        echo Mobile端依赖安装失败！
-        cd ..
+echo [3/3] Building Mobile app...
+if not exist "%WEB_DIR%mobile-app" (
+    echo Skipping Mobile app (directory does not exist)
+) else (
+    cd /d "%WEB_DIR%mobile-app"
+    if not exist "node_modules" (
+        echo Installing Mobile app dependencies...
+        call npm install
+        if !errorlevel! neq 0 (
+            echo Mobile app dependency installation failed!
+            cd /d "%WEB_DIR%"
+            exit /b 1
+        )
+    )
+    call npm run build
+    if !errorlevel! neq 0 (
+        echo Mobile app build failed!
+        cd /d "%WEB_DIR%"
         exit /b 1
     )
 )
-call npm run build
-if errorlevel 1 (
-    echo Mobile端编译失败！
-    cd ..
-    exit /b 1
-)
 
 echo.
-echo ✓ 所有前端项目编译完成！
+echo All frontend projects built successfully!
 echo.
 
-REM 启动PC端开发服务器（新窗口）
-echo 正在启动PC端开发服务器（端口 3000）...
-start "PC端 - 财富中枢系统" cmd /k "cd /d %WEB_DIR%pc-app && npm run dev"
+REM Start PC app dev server (new window)
+echo Starting PC app dev server (port 3000)...
+set "PC_APP_DIR=%WEB_DIR%pc-app"
+start "PC App - Wealth Hub" cmd /k "cd /d %PC_APP_DIR% && npm run dev"
 
-cd ..
+cd /d "%WEB_DIR%"
+endlocal

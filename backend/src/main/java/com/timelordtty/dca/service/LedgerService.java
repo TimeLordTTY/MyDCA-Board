@@ -3,9 +3,11 @@ package com.timelordtty.dca.service;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.LedgerTxn;
+import com.timelordtty.dca.model.ProductMaster;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -62,13 +64,15 @@ public class LedgerService {
     private final LedgerPostingMapper ledgerPostingMapper;
     private final AccountMapper accountMapper;
     private final AccountService accountService;
+    private final ProductMasterMapper productMasterMapper;
 
     public LedgerService(LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
-                        AccountMapper accountMapper, AccountService accountService) {
+                        AccountMapper accountMapper, AccountService accountService, ProductMasterMapper productMasterMapper) {
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.accountMapper = accountMapper;
         this.accountService = accountService;
+        this.productMasterMapper = productMasterMapper;
     }
 
     /**
@@ -98,6 +102,18 @@ public class LedgerService {
     @Transactional
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note) {
+        return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, null, null, false);
+    }
+
+    @Transactional
+    public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
+                                      List<LedgerPosting> postings, String note, String requestedAtStr) {
+        return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, null, false);
+    }
+
+    @Transactional
+    public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
+                                      List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable) {
         // 生成唯一交易ID：格式为TXN-16位大写字母数字
         // 示例：TXN-A1B2C3D4E5F6G7H8
         String txnId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
@@ -142,10 +158,25 @@ public class LedgerService {
         txn.setTxnType(txnType);
         txn.setBizGroupKey(bizGroupKey != null ? bizGroupKey : txnId);
         txn.setRelationType("NONE"); // 默认无关联
-        txn.setRequestedAt(LocalDateTime.now());
-        txn.setTradeDate(LocalDate.now());
+        // 处理requestedAt
+        if (requestedAtStr != null && !requestedAtStr.isEmpty()) {
+            try {
+                // 解析格式：YYYY-MM-DD HH:mm:ss
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                txn.setRequestedAt(LocalDateTime.parse(requestedAtStr, formatter));
+            } catch (Exception e) {
+                // 解析失败，使用当前时间
+                txn.setRequestedAt(LocalDateTime.now());
+            }
+        } else {
+            txn.setRequestedAt(LocalDateTime.now());
+        }
+        txn.setTradeDate(txn.getRequestedAt().toLocalDate());
         txn.setStatus("CONFIRMED");
         txn.setNote(note);
+        txn.setCategoryId(categoryId);
+        txn.setIsReimbursable(isReimbursable != null ? isReimbursable : false);
+        txn.setIsReimbursed(false);
         txn.setIsReversed(false);
 
         ledgerTxnMapper.insert(txn);
@@ -366,6 +397,21 @@ public class LedgerService {
 
         return refundTxn;
     }
+    
+    /**
+     * 更新原交易的报销状态（在note中添加isReimbursed标记）
+     */
+    private void markTransactionAsReimbursed(String txnId) {
+        LedgerTxn txn = ledgerTxnMapper.selectByTxnId(txnId);
+        if (txn != null) {
+            String note = txn.getNote() != null ? txn.getNote() : "";
+            if (!note.contains("isReimbursed:true")) {
+                note += " [isReimbursed:true]";
+                txn.setNote(note);
+                ledgerTxnMapper.update(txn);
+            }
+        }
+    }
 
     /**
      * 创建报销交易
@@ -472,7 +518,156 @@ public class LedgerService {
             updateAccountBalance(posting.getAccountId(), posting.getPostingType(), posting.getAmount());
         }
 
+        // 更新原支出的报销状态
+        markTransactionAsReimbursed(relatedTxnId);
+
         return reimburseTxn;
+    }
+
+    /**
+     * 创建转托管交易
+     * 
+     * 业务场景：将场外产品持仓份额在某一天以某个价格（通常0费用）的方式直接转入指定份额到同一个产品id的场内产品持仓中
+     * 
+     * 流程说明：
+     * 1. 验证产品存在，且同时有场外和场内版本
+     * 2. 查询场外持仓账户（OTC渠道）
+     * 3. 查询场内持仓账户（EXCHANGE渠道）
+     * 4. 验证场外持仓有足够份额
+     * 5. 计算转出成本（按平均成本法）
+     * 6. 生成转托管分录：
+     *    - 场外POSITION CREDIT（减少份额和成本）
+     *    - 场内POSITION DEBIT（增加份额，成本按转出价格计算）
+     * 7. 设置关联关系：relationType='CUSTODY_TRANSFER_OF'
+     * 
+     * 分录模板：
+     * - CREDIT POSITION [场外持仓账户] shares=transferShares, amount=outCost（按平均成本计算）
+     * - DEBIT POSITION [场内持仓账户] shares=transferShares, amount=inCost（按转出价格计算）
+     * 
+     * @param userId 用户ID
+     * @param familyId 家庭ID，可为空
+     * @param productId 产品ID（场外和场内必须是同一个产品）
+     * @param transferShares 转出份额
+     * @param transferPrice 转出价格（通常为0费用，用于计算场内成本）
+     * @param transferDate 转出日期
+     * @param note 备注
+     * @return 创建的转托管交易记录
+     */
+    @Transactional
+    public LedgerTxn createCustodyTransfer(Long userId, Long familyId, Long productId,
+                                           BigDecimal transferShares, BigDecimal transferPrice,
+                                           LocalDate transferDate, String note) {
+        // 验证产品存在（通过ProductService获取）
+        // 简化处理：假设传入的productId是场外产品，需要找到对应的场内产品
+        // 实际应该通过产品代码查找同一产品的场外和场内版本
+        ProductMaster product = productMasterMapper.selectById(productId);
+        if (product == null) {
+            throw new RuntimeException("产品不存在: " + productId);
+        }
+        
+        // 查找场外和场内产品（同一个产品代码，不同渠道）
+        // 通过selectByCondition查找所有产品，然后过滤
+        List<ProductMaster> allProducts = productMasterMapper.selectByCondition(null, null, null);
+        ProductMaster otcProduct = allProducts.stream()
+            .filter(p -> product.getProductCode().equals(p.getProductCode()) && "OTC".equals(p.getChannel()))
+            .findFirst()
+            .orElse(product); // 如果找不到，使用原产品
+        ProductMaster exchangeProduct = allProducts.stream()
+            .filter(p -> product.getProductCode().equals(p.getProductCode()) && "EXCHANGE".equals(p.getChannel()))
+            .findFirst()
+            .orElseThrow(() -> new RuntimeException("找不到场内产品: " + product.getProductCode()));
+        
+        // 获取场外和场内持仓账户（通过产品名称+渠道区分）
+        String ownerType = "PERSONAL"; // 简化处理，实际应该从用户信息获取
+        Account otcPositionAccount = accountService.getOrCreatePositionAccount(
+            otcProduct.getId(), otcProduct.getProductName() + "(场外)", ownerType, userId, familyId);
+        Account exchangePositionAccount = accountService.getOrCreatePositionAccount(
+            exchangeProduct.getId(), exchangeProduct.getProductName() + "(场内)", ownerType, userId, familyId);
+        
+        // 验证场外持仓有足够份额并计算平均成本
+        // 查询场外持仓账户的所有分录，计算当前持仓
+        List<LedgerPosting> otcPostings = ledgerPostingMapper.selectByAccountId(otcPositionAccount.getId());
+        BigDecimal totalShares = BigDecimal.ZERO;
+        BigDecimal totalCost = BigDecimal.ZERO;
+        for (LedgerPosting p : otcPostings) {
+            if ("POSITION".equals(p.getAccountType())) {
+                if ("DEBIT".equals(p.getPostingType())) {
+                    if (p.getShares() != null) {
+                        totalShares = totalShares.add(p.getShares());
+                    }
+                    totalCost = totalCost.add(p.getAmount());
+                } else if ("CREDIT".equals(p.getPostingType())) {
+                    if (p.getShares() != null) {
+                        totalShares = totalShares.subtract(p.getShares());
+                    }
+                    totalCost = totalCost.subtract(p.getAmount());
+                }
+            }
+        }
+        
+        // 验证有足够份额
+        if (totalShares.compareTo(transferShares) < 0) {
+            throw new RuntimeException("场外持仓份额不足，当前持仓: " + totalShares + "，转出份额: " + transferShares);
+        }
+        
+        // 计算转出成本（按平均成本法）
+        BigDecimal avgCost = totalShares.compareTo(BigDecimal.ZERO) > 0 
+            ? totalCost.divide(totalShares, 6, java.math.RoundingMode.HALF_UP)
+            : BigDecimal.ZERO;
+        BigDecimal outCost = avgCost.multiply(transferShares);
+        
+        // 场内成本按转出价格计算（通常为0费用，但可以指定价格）
+        BigDecimal inCost = transferPrice.multiply(transferShares);
+        
+        // 生成转托管分录
+        List<LedgerPosting> postings = new java.util.ArrayList<>();
+        
+        // 场外POSITION CREDIT（减少份额和成本）
+        LedgerPosting otcPosting = new LedgerPosting();
+        otcPosting.setPostingType("CREDIT");
+        otcPosting.setAccountId(otcPositionAccount.getId());
+        otcPosting.setAccountType("POSITION");
+        otcPosting.setAmount(outCost);
+        otcPosting.setShares(transferShares);
+        otcPosting.setCurrency("CNY");
+        postings.add(otcPosting);
+        
+        // 场内POSITION DEBIT（增加份额，成本按转出价格计算）
+        LedgerPosting exchangePosting = new LedgerPosting();
+        exchangePosting.setPostingType("DEBIT");
+        exchangePosting.setAccountId(exchangePositionAccount.getId());
+        exchangePosting.setAccountType("POSITION");
+        exchangePosting.setAmount(inCost);
+        exchangePosting.setShares(transferShares);
+        exchangePosting.setCurrency("CNY");
+        postings.add(exchangePosting);
+        
+        // 创建转托管交易
+        String txnId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+        LedgerTxn transferTxn = new LedgerTxn();
+        transferTxn.setTxnId(txnId);
+        transferTxn.setUserId(userId);
+        transferTxn.setFamilyId(familyId);
+        transferTxn.setTxnType("CUSTODY_TRANSFER");
+        transferTxn.setBizGroupKey(txnId);
+        transferTxn.setProductId(productId);
+        transferTxn.setRelationType("CUSTODY_TRANSFER_OF");
+        transferTxn.setRequestedAt(transferDate.atStartOfDay());
+        transferTxn.setTradeDate(transferDate);
+        transferTxn.setStatus("CONFIRMED");
+        transferTxn.setNote(note != null ? note : "转托管：" + transferShares + "份");
+        transferTxn.setIsReversed(false);
+        
+        ledgerTxnMapper.insert(transferTxn);
+        
+        // 创建分录并更新账户余额
+        for (LedgerPosting posting : postings) {
+            posting.setTxnId(txnId);
+            ledgerPostingMapper.insert(posting);
+            updateAccountBalance(posting.getAccountId(), posting.getPostingType(), posting.getAmount());
+        }
+        
+        return transferTxn;
     }
 }
 

@@ -74,6 +74,9 @@ export interface CreateTransactionRequest {
   relatedTxnId?: string
   productId?: number
   note?: string
+  requestedAt?: string
+  categoryId?: number
+  isReimbursable?: boolean
 }
 
 export interface QuickEntryRequest {
@@ -82,6 +85,8 @@ export interface QuickEntryRequest {
   amount: number
   paymentLines?: PaymentLine[]
   note?: string
+  occurredAt?: string
+  categoryId?: number
 }
 
 export interface RefundRequest {

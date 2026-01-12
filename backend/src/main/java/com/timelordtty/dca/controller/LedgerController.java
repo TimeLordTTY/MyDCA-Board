@@ -62,11 +62,41 @@ public class LedgerController {
     }
 
     @GetMapping("/txns/{txnId}")
-    public ResponseEntity<LedgerTxn> getTransactionDetail(@PathVariable String txnId) {
+    public ResponseEntity<Map<String, Object>> getTransactionDetail(@PathVariable String txnId) {
         LedgerTxn txn = ledgerService.getTransactionDetail(txnId);
         List<LedgerPosting> postings = ledgerService.getPostingsByTxnId(txnId);
-        // 可以将postings附加到响应中
-        return ResponseEntity.ok(txn);
+        // 将postings附加到响应中
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("id", txn.getId());
+        result.put("txnId", txn.getTxnId());
+        result.put("userId", txn.getUserId());
+        result.put("familyId", txn.getFamilyId());
+        result.put("txnType", txn.getTxnType());
+        result.put("bizGroupKey", txn.getBizGroupKey());
+        result.put("productId", txn.getProductId());
+        result.put("orderId", txn.getOrderId());
+        result.put("relatedTxnId", txn.getRelatedTxnId());
+        result.put("relatedOrderId", txn.getRelatedOrderId());
+        result.put("relationType", txn.getRelationType());
+        result.put("requestedAt", txn.getRequestedAt());
+        result.put("tradeDate", txn.getTradeDate());
+        result.put("navDate", txn.getNavDate());
+        result.put("confirmDate", txn.getConfirmDate());
+        result.put("fetchDate", txn.getFetchDate());
+        result.put("status", txn.getStatus());
+        result.put("note", txn.getNote());
+        result.put("isReversed", txn.getIsReversed());
+        result.put("reversedByTxnId", txn.getReversedByTxnId());
+        result.put("createdAt", txn.getCreatedAt());
+        result.put("updatedAt", txn.getUpdatedAt());
+        result.put("postings", postings);
+        // 从note中解析isReimbursable（如果存在）
+        if (txn.getNote() != null && txn.getNote().contains("isReimbursable:true")) {
+            result.put("isReimbursable", true);
+        } else {
+            result.put("isReimbursable", false);
+        }
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/txns")
@@ -75,6 +105,11 @@ public class LedgerController {
         String txnType = request.get("txnType").toString();
         String bizGroupKey = request.containsKey("bizGroupKey") ? request.get("bizGroupKey").toString() : null;
         String note = request.containsKey("note") ? request.get("note").toString() : null;
+        
+        // 处理新字段
+        String requestedAtStr = request.containsKey("requestedAt") ? request.get("requestedAt").toString() : null;
+        Long categoryId = request.containsKey("categoryId") ? Long.valueOf(request.get("categoryId").toString()) : null;
+        Boolean isReimbursable = request.containsKey("isReimbursable") ? Boolean.valueOf(request.get("isReimbursable").toString()) : false;
         
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> postingsData = (List<Map<String, Object>>) request.get("postings");
@@ -93,7 +128,7 @@ public class LedgerController {
         }
 
         LedgerTxn txn = ledgerService.createTransaction(
-                currentUser.getId(), currentUser.getFamilyId(), txnType, bizGroupKey, postings, note);
+                currentUser.getId(), currentUser.getFamilyId(), txnType, bizGroupKey, postings, note, requestedAtStr);
         return ResponseEntity.ok(txn);
     }
 
@@ -104,12 +139,20 @@ public class LedgerController {
         Long accountId = Long.valueOf(request.get("accountId").toString());
         BigDecimal amount = new BigDecimal(request.get("amount").toString());
         String note = request.containsKey("note") ? request.get("note").toString() : null;
+        String occurredAt = request.containsKey("occurredAt") ? request.get("occurredAt").toString() : null;
+        Long categoryId = request.containsKey("categoryId") ? Long.valueOf(request.get("categoryId").toString()) : null;
+        Boolean isReimbursable = request.containsKey("isReimbursable") ? Boolean.valueOf(request.get("isReimbursable").toString()) : false;
+
+        // 将categoryId信息附加到note中
+        if (categoryId != null) {
+            note = (note != null ? note : "") + " [categoryId:" + categoryId + "]";
+        }
 
         LedgerTxn txn;
         if ("EXPENSE".equals(type)) {
-            txn = quickEntryService.quickExpense(currentUser.getId(), accountId, amount, note);
+            txn = quickEntryService.quickExpense(currentUser.getId(), accountId, amount, note, occurredAt, categoryId, isReimbursable);
         } else {
-            txn = quickEntryService.quickIncome(currentUser.getId(), accountId, amount, note);
+            txn = quickEntryService.quickIncome(currentUser.getId(), accountId, amount, note, occurredAt, categoryId);
         }
         return ResponseEntity.ok(txn);
     }
@@ -170,6 +213,37 @@ public class LedgerController {
         LedgerTxn reimburseTxn = ledgerService.createReimburse(
             currentUser.getId(), currentUser.getFamilyId(), txnId, reimburseAmount, accountId, note);
         return ResponseEntity.ok(reimburseTxn);
+    }
+
+    /**
+     * 创建转托管交易
+     * 
+     * 请求参数：
+     * - productId: 产品ID
+     * - transferShares: 转出份额
+     * - transferPrice: 转出价格（通常为0费用）
+     * - transferDate: 转出日期
+     * - note: 备注（可选）
+     * 
+     * @param request 请求体
+     * @return 转托管交易记录
+     */
+    @PostMapping("/txns/custody-transfer")
+    public ResponseEntity<LedgerTxn> createCustodyTransfer(@RequestBody Map<String, Object> request) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        Long productId = Long.valueOf(request.get("productId").toString());
+        BigDecimal transferShares = new BigDecimal(request.get("shares").toString());
+        BigDecimal transferPrice = request.containsKey("transferPrice") 
+            ? new BigDecimal(request.get("transferPrice").toString()) 
+            : BigDecimal.ZERO;
+        String transferDateStr = request.get("transferDate").toString();
+        String note = request.containsKey("note") ? request.get("note").toString() : null;
+
+        LocalDate transferDate = LocalDate.parse(transferDateStr);
+
+        LedgerTxn transferTxn = ledgerService.createCustodyTransfer(
+            currentUser.getId(), currentUser.getFamilyId(), productId, transferShares, transferPrice, transferDate, note);
+        return ResponseEntity.ok(transferTxn);
     }
 }
 

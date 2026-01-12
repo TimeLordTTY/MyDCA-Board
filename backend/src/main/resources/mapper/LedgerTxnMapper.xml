@@ -21,6 +21,9 @@
         <result column="fetch_date" property="fetchDate"/>
         <result column="status" property="status"/>
         <result column="note" property="note"/>
+        <result column="category_id" property="categoryId"/>
+        <result column="is_reimbursable" property="isReimbursable"/>
+        <result column="is_reimbursed" property="isReimbursed"/>
         <result column="is_reversed" property="isReversed"/>
         <result column="reversed_by_txn_id" property="reversedByTxnId"/>
         <result column="created_at" property="createdAt"/>
@@ -62,11 +65,13 @@
             txn_id, user_id, family_id, txn_type, biz_group_key, product_id, order_id,
             related_txn_id, related_order_id, relation_type,
             requested_at, trade_date, nav_date, confirm_date, fetch_date, status, note,
+            category_id, is_reimbursable, is_reimbursed,
             is_reversed, reversed_by_txn_id, created_at, updated_at
         ) VALUES (
             #{txnId}, #{userId}, #{familyId}, #{txnType}, #{bizGroupKey}, #{productId}, #{orderId},
             #{relatedTxnId}, #{relatedOrderId}, #{relationType},
             #{requestedAt}, #{tradeDate}, #{navDate}, #{confirmDate}, #{fetchDate}, #{status}, #{note},
+            #{categoryId}, #{isReimbursable}, #{isReimbursed},
             #{isReversed}, #{reversedByTxnId}, NOW(), NOW()
         )
     </insert>
@@ -75,6 +80,9 @@
         UPDATE ledger_txn
         SET status = #{status},
             note = #{note},
+            category_id = #{categoryId},
+            is_reimbursable = #{isReimbursable},
+            is_reimbursed = #{isReimbursed},
             is_reversed = #{isReversed},
             reversed_by_txn_id = #{reversedByTxnId},
             updated_at = NOW()

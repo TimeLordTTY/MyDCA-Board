@@ -11,12 +11,18 @@ from typing import List
 import numpy as np
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from market.config import DB_CONFIG
+
+# 导入数据库配置
+try:
+    from indicator.config import DB_CONFIG
+except ImportError:
+    # 如果indicator/config.py不存在，尝试从market/config.py导入
+    from market.config import DB_CONFIG
 
 # 导入各个指标计算器
-from ma_calculator import MACalculator
-from macd_calculator import MACDCalculator
-from rsi_calculator import RSICalculator
+from indicator.ma_calculator import MACalculator
+from indicator.macd_calculator import MACDCalculator
+from indicator.rsi_calculator import RSICalculator
 
 
 class IndicatorCalculator:

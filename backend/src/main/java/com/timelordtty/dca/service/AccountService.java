@@ -17,7 +17,7 @@ import java.util.UUID;
  * 重要规则：
  * - 仅叶子账户允许出现在记账分录中（ledger_posting.account_id）
  * - VIRTUAL 账户不允许设置父账户
- * - 子账户必须为 REAL 类型，且只有 REAL/CASH 允许形成父子层级
+ * - 子账户必须为 REAL 类型
  *
  * 该服务提供的操作会结合数据库查询与应用层校验；余额的正式变更应通过记账流程完成，手工调整应记录 ADJUST 类型流水。
  */
@@ -59,6 +59,14 @@ public class AccountService {
             throw new RuntimeException("账户代码已存在");
         }
 
+        // 如果创建的是子账户，确保账户类型与父账户一致（在插入前处理）
+        if (account.getParentAccountId() != null) {
+            Account parentAccount = accountMapper.selectById(account.getParentAccountId());
+            if (parentAccount != null && parentAccount.getAccountType() != null) {
+                account.setAccountType(parentAccount.getAccountType());
+            }
+        }
+        
         // 设置默认值
         if (account.getBalance() == null) {
             account.setBalance(BigDecimal.ZERO);
@@ -77,14 +85,13 @@ public class AccountService {
         
         // 如果创建的是父账户（平台账户），自动创建"待分配"子账户
         if (account.getParentAccountId() == null && 
-            "REAL".equals(account.getAccountKind()) && 
-            "CASH".equals(account.getAccountType())) {
-            // 创建默认的"待分配"子账户
+            "REAL".equals(account.getAccountKind())) {
+            // 创建默认的"待分配"子账户，子账户类型与父账户保持一致
             Account defaultEnvelope = new Account();
             defaultEnvelope.setAccountCode(account.getAccountCode() + "-待分配");
             defaultEnvelope.setAccountName("待分配");
             defaultEnvelope.setAccountKind("REAL");
-            defaultEnvelope.setAccountType("CASH");
+            defaultEnvelope.setAccountType(account.getAccountType()); // 子账户类型与父账户保持一致
             defaultEnvelope.setParentAccountId(account.getId());
             defaultEnvelope.setFundUsage("SPENDABLE");
             defaultEnvelope.setCurrency(account.getCurrency());
@@ -107,7 +114,7 @@ public class AccountService {
     /**
      * 校验账户创建规则（应用层）
      *
-     * 规则包括：VIRTUAL 不允许 parent、子账户必须为 REAL、只有 REAL/CASH 允许父子层级等
+     * 规则包括：VIRTUAL 不允许 parent、子账户必须为 REAL 等
      */
     private void validateAccountCreation(Account account) {
         // 规则1: VIRTUAL账户不允许设置parent_account_id
@@ -118,11 +125,6 @@ public class AccountService {
         // 规则2: 子账户必须是REAL
         if (account.getParentAccountId() != null && !"REAL".equals(account.getAccountKind())) {
             throw new RuntimeException("子账户必须是REAL类型");
-        }
-
-        // 规则3: 只有CASH类型的REAL账户允许形成父子层级
-        if (account.getParentAccountId() != null && !"CASH".equals(account.getAccountType())) {
-            throw new RuntimeException("只有CASH类型的REAL账户允许形成父子层级");
         }
     }
 
@@ -271,6 +273,49 @@ public class AccountService {
                                              String ownerType, Long ownerUserId, Long ownerFamilyId) {
         return getOrCreateVirtualAccount("POSITION", "POSITION", ownerType, ownerUserId, ownerFamilyId, 
                                         productId, productName);
+    }
+
+    /**
+     * 更新账户信息
+     * 
+     * 注意：此方法不更新余额，余额调整应使用adjustBalance方法
+     * 
+     * @param account 待更新的账户实体（必须包含id）
+     * @return 更新后的账户实体
+     */
+    @Transactional
+    public Account updateAccount(Account account) {
+        if (account.getId() == null) {
+            throw new RuntimeException("账户ID不能为空");
+        }
+        
+        // 检查账户是否存在
+        Account existing = accountMapper.selectById(account.getId());
+        if (existing == null) {
+            throw new RuntimeException("账户不存在");
+        }
+        
+        // 如果账户代码有变更，检查唯一性
+        if (account.getAccountCode() != null && !account.getAccountCode().equals(existing.getAccountCode())) {
+            Account codeExists = accountMapper.selectByCode(account.getAccountCode());
+            if (codeExists != null && !codeExists.getId().equals(account.getId())) {
+                throw new RuntimeException("账户代码已存在");
+            }
+        }
+        
+        // 应用层校验规则（如果父账户有变更）
+        if (account.getParentAccountId() != null && !account.getParentAccountId().equals(existing.getParentAccountId())) {
+            validateAccountCreation(account);
+        }
+        
+        // 更新账户（不更新余额，余额通过adjustBalance方法调整）
+        // 保留原有余额和占用金额
+        account.setBalance(existing.getBalance());
+        account.setReservedAmount(existing.getReservedAmount());
+        
+        accountMapper.update(account);
+        
+        return accountMapper.selectById(account.getId());
     }
 
     /**

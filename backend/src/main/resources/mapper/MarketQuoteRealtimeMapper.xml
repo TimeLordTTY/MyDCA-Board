@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.MarketQuoteRealtimeMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.MarketQuoteRealtime">
+        <id column="id" property="id"/>
+        <result column="product_id" property="productId"/>
+        <result column="quote_time" property="quoteTime"/>
+        <result column="price" property="price"/>
+        <result column="prev_close" property="prevClose"/>
+        <result column="pct_chg" property="pctChg"/>
+        <result column="volume" property="volume"/>
+        <result column="amount" property="amount"/>
+        <result column="iopv" property="iopv"/>
+        <result column="premium_rate" property="premiumRate"/>
+        <result column="open_price" property="openPrice"/>
+        <result column="high_price" property="highPrice"/>
+        <result column="low_price" property="lowPrice"/>
+        <result column="source" property="source"/>
+    </resultMap>
+
+    <select id="selectByProductIds" resultMap="BaseResultMap">
+        SELECT q1.* FROM market_quote_realtime q1
+        INNER JOIN (
+            SELECT product_id, MAX(quote_time) as max_time
+            FROM market_quote_realtime
+            WHERE product_id IN
+            <foreach collection="productIds" item="productId" open="(" separator="," close=")">
+                #{productId}
+            </foreach>
+            GROUP BY product_id
+        ) q2 ON q1.product_id = q2.product_id AND q1.quote_time = q2.max_time
+        ORDER BY q1.product_id
+    </select>
+
+    <select id="selectLatest" resultMap="BaseResultMap">
+        SELECT * FROM market_quote_realtime
+        WHERE product_id = #{productId}
+        ORDER BY quote_time DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO market_quote_realtime (
+            product_id, quote_time, price, prev_close, pct_chg,
+            volume, amount, iopv, premium_rate,
+            open_price, high_price, low_price, source, created_at
+        ) VALUES (
+            #{productId}, #{quoteTime}, #{price}, #{prevClose}, #{pctChg},
+            #{volume}, #{amount}, #{iopv}, #{premiumRate},
+            #{openPrice}, #{highPrice}, #{lowPrice}, #{source}, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            price = VALUES(price),
+            prev_close = VALUES(prev_close),
+            pct_chg = VALUES(pct_chg),
+            volume = VALUES(volume),
+            amount = VALUES(amount),
+            iopv = VALUES(iopv),
+            premium_rate = VALUES(premium_rate),
+            open_price = VALUES(open_price),
+            high_price = VALUES(high_price),
+            low_price = VALUES(low_price)
+    </insert>
+
+    <update id="update">
+        UPDATE market_quote_realtime
+        SET price = #{price},
+            prev_close = #{prevClose},
+            pct_chg = #{pctChg},
+            volume = #{volume},
+            amount = #{amount},
+            iopv = #{iopv},
+            premium_rate = #{premiumRate},
+            open_price = #{openPrice},
+            high_price = #{highPrice},
+            low_price = #{lowPrice}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

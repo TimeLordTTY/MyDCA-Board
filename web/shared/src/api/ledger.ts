@@ -28,11 +28,11 @@ export const ledgerApi = {
    * 需要前端单独获取postings或修改后端API
    */
   getTransactionDetail: async (txnId: string): Promise<LedgerTxnDetail> => {
-    const response = await apiClient.get<LedgerTxn>(`/ledger/txns/${txnId}`)
-    // 后端目前不返回postings，这里返回空数组
+    const response = await apiClient.get<LedgerTxnDetail>(`/ledger/txns/${txnId}`)
+    // 如果后端返回了postings，直接使用；否则返回空数组
     return {
       ...response.data,
-      postings: [],
+      postings: response.data.postings || [],
     } as LedgerTxnDetail
   },
 
@@ -73,6 +73,21 @@ export const ledgerApi = {
    */
   reverseTransaction: async (txnId: string): Promise<LedgerTxn> => {
     const response = await apiClient.post<LedgerTxn>(`/ledger/txns/${txnId}/reverse`)
+    return response.data
+  },
+
+  /**
+   * 创建转托管交易
+   */
+  createCustodyTransfer: async (data: {
+    productId: number
+    shares: number
+    transferOutPrice: number
+    transferInPrice: number
+    transferDate: string
+    note?: string
+  }): Promise<LedgerTxn> => {
+    const response = await apiClient.post<LedgerTxn>('/ledger/txns/custody-transfer', data)
     return response.data
   },
 }

@@ -74,9 +74,14 @@
 
     <update id="update">
         UPDATE accounts
-        SET account_name = #{accountName},
+        SET account_code = #{accountCode},
+            account_name = #{accountName},
+            account_type = #{accountType},
             account_subtype = #{accountSubtype},
+            currency = #{currency},
+            parent_account_id = #{parentAccountId},
             fund_usage = #{fundUsage},
+            initial_balance = #{initialBalance},
             is_active = #{isActive},
             note = #{note},
             updated_at = NOW()

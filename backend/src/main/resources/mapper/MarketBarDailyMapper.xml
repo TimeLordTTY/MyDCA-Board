@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.MarketBarDailyMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.MarketBarDaily">
+        <id column="id" property="id"/>
+        <result column="product_id" property="productId"/>
+        <result column="trade_date" property="tradeDate"/>
+        <result column="open_price" property="openPrice"/>
+        <result column="high_price" property="highPrice"/>
+        <result column="low_price" property="lowPrice"/>
+        <result column="close_price" property="closePrice"/>
+        <result column="volume" property="volume"/>
+        <result column="amount" property="amount"/>
+        <result column="prev_close" property="prevClose"/>
+        <result column="source" property="source"/>
+    </resultMap>
+
+    <select id="selectByProductId" resultMap="BaseResultMap">
+        SELECT * FROM market_bar_daily
+        WHERE product_id = #{productId}
+        <if test="startDate != null">
+            AND trade_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND trade_date &lt;= #{endDate}
+        </if>
+        ORDER BY trade_date DESC
+    </select>
+
+    <select id="selectLatest" resultMap="BaseResultMap">
+        SELECT * FROM market_bar_daily
+        WHERE product_id = #{productId}
+        ORDER BY trade_date DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO market_bar_daily (
+            product_id, trade_date, open_price, high_price, low_price,
+            close_price, volume, amount, prev_close, source, created_at
+        ) VALUES (
+            #{productId}, #{tradeDate}, #{openPrice}, #{highPrice}, #{lowPrice},
+            #{closePrice}, #{volume}, #{amount}, #{prevClose}, #{source}, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            open_price = VALUES(open_price),
+            high_price = VALUES(high_price),
+            low_price = VALUES(low_price),
+            close_price = VALUES(close_price),
+            volume = VALUES(volume),
+            amount = VALUES(amount),
+            prev_close = VALUES(prev_close)
+    </insert>
+
+    <update id="update">
+        UPDATE market_bar_daily
+        SET open_price = #{openPrice},
+            high_price = #{highPrice},
+            low_price = #{lowPrice},
+            close_price = #{closePrice},
+            volume = #{volume},
+            amount = #{amount},
+            prev_close = #{prevClose}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

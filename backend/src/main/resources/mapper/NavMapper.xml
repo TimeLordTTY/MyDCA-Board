@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.NavMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.Nav">
+        <id column="id" property="id"/>
+        <result column="product_id" property="productId"/>
+        <result column="nav_date" property="navDate"/>
+        <result column="nav" property="nav"/>
+        <result column="acc_nav" property="accNav"/>
+        <result column="daily_return" property="dailyReturn"/>
+        <result column="dividend" property="dividend"/>
+        <result column="source" property="source"/>
+    </resultMap>
+
+    <select id="selectByProductId" resultMap="BaseResultMap">
+        SELECT * FROM nav
+        WHERE product_id = #{productId}
+        <if test="startDate != null">
+            AND nav_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND nav_date &lt;= #{endDate}
+        </if>
+        ORDER BY nav_date DESC
+    </select>
+
+    <select id="selectLatest" resultMap="BaseResultMap">
+        SELECT * FROM nav
+        WHERE product_id = #{productId}
+        ORDER BY nav_date DESC
+        LIMIT 1
+    </select>
+
+    <select id="selectByDate" resultMap="BaseResultMap">
+        SELECT * FROM nav
+        WHERE product_id = #{productId}
+        AND nav_date = #{navDate}
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO nav (
+            product_id, nav_date, nav, acc_nav, daily_return, dividend, source, created_at
+        ) VALUES (
+            #{productId}, #{navDate}, #{nav}, #{accNav}, #{dailyReturn}, #{dividend}, #{source}, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            nav = VALUES(nav),
+            acc_nav = VALUES(acc_nav),
+            daily_return = VALUES(daily_return),
+            dividend = VALUES(dividend)
+    </insert>
+
+    <update id="update">
+        UPDATE nav
+        SET nav = #{nav},
+            acc_nav = #{accNav},
+            daily_return = #{dailyReturn},
+            dividend = #{dividend}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

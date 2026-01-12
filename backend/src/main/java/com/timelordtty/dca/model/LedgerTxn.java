@@ -109,6 +109,15 @@ public class LedgerTxn {
     /** 备注，用户自定义说明 */
     private String note;
     
+    /** 分类ID（外键categories.id，用于收入/支出分类） */
+    private Long categoryId;
+    
+    /** 是否可报销（仅用于EXPENSE类型交易） */
+    private Boolean isReimbursable;
+    
+    /** 是否已报销（仅用于EXPENSE类型交易） */
+    private Boolean isReimbursed;
+    
     /** 是否已撤销，true=已撤销，false=未撤销 */
     private Boolean isReversed;
     

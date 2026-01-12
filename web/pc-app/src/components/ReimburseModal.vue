@@ -1,8 +1,8 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="type === 'EXPENSE' ? '快速录入 - 支出' : '快速录入 - 收入'"
-    width="500px"
+    title="报销"
+    width="600px"
     :close-on-click-modal="false"
     @close="handleClose"
   >
@@ -37,16 +37,16 @@
           />
         </el-select>
       </el-form-item>
-      <el-form-item label="金额（元）" required>
+      <el-form-item label="报销金额（元）" required>
         <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
       </el-form-item>
       <el-form-item label="备注">
-        <el-input v-model="form.note" :placeholder="type === 'EXPENSE' ? '比如：咖啡 / 午餐' : '比如：工资 / 奖金'" />
+        <el-input v-model="form.note" placeholder="报销说明" />
       </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" @click="handleSubmit" :loading="submitting">提交</el-button>
+      <el-button type="primary" @click="handleSubmit" :loading="submitting">确认报销</el-button>
     </template>
   </el-dialog>
 </template>
@@ -55,12 +55,12 @@
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAccountStore } from '@wealth-hub/shared'
-import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, getCategoryDisplayName } from '@wealth-hub/shared'
-import type { Account, Category } from '@wealth-hub/shared'
+import { ledgerApi, getFundUsageLabel, incomeCategories, getCategoryGroups } from '@wealth-hub/shared'
+import type { Account, LedgerTxn } from '@wealth-hub/shared'
 
 const props = defineProps<{
   modelValue: boolean
-  type: 'EXPENSE' | 'INCOME'
+  expenseTxn?: LedgerTxn | null
 }>()
 
 const emit = defineEmits<{
@@ -87,23 +87,24 @@ const form = ref({
 
 const cashLeafAccounts = computed(() => accountStore.cashLeafAccounts)
 
-const categories = computed(() => props.type === 'EXPENSE' ? expenseCategories : incomeCategories)
+const categories = computed(() => incomeCategories)
 
 const categoryOptions = computed(() => {
+  if (categories.value.length === 0) return []
   const groups = getCategoryGroups(categories.value)
-  return groups.map(group => {
-    // 如果一级分类下只有一个分类且没有二级分类，直接返回一级分类
+  // 默认选择"报销"分类
+  const reimburseCategory = categories.value.find(cat => cat.categoryL1 === '报销')
+  return groups.map((group: any) => {
     if (group.categories.length === 1 && !group.categories[0].categoryL2) {
       return {
         value: group.categories[0].id,
         label: group.categoryL1,
       }
     }
-    // 否则返回级联结构
     return {
       value: group.categoryL1,
       label: group.categoryL1,
-      children: group.categories.map(cat => ({
+      children: group.categories.map((cat: any) => ({
         value: cat.id,
         label: cat.categoryL2 || cat.categoryL1,
       })),
@@ -121,13 +122,44 @@ const cascaderProps = {
 }
 
 watch(visible, (val) => {
-  if (val) {
+  if (val && props.expenseTxn) {
+    // 回显支出信息
+    const expense = props.expenseTxn
+    form.value = {
+      occurredAt: expense.requestedAt ? new Date(expense.requestedAt).toISOString().slice(0, 19).replace('T', ' ') : new Date().toISOString().slice(0, 19).replace('T', ' '),
+      category: [], // 默认选择报销分类
+      accountId: undefined, // 需要从postings中获取
+      amount: undefined, // 需要从postings中获取
+      note: expense.note || '',
+    }
+    
+    // 尝试从postings中获取账户和金额信息
+    // 这里假设后端会返回postings，如果没有则需要单独获取
+    if (expense && 'postings' in expense && (expense as any).postings) {
+      const postings = (expense as any).postings
+      const cashPosting = postings.find((p: any) => p.accountType === 'CASH' && p.postingType === 'CREDIT')
+      if (cashPosting) {
+        form.value.accountId = cashPosting.accountId
+        form.value.amount = cashPosting.amount
+      }
+    }
+    
+    // 设置默认分类为"报销"
+    const reimburseCategory = categories.value.find(cat => cat.categoryL1 === '报销')
+    if (reimburseCategory) {
+      form.value.category = [reimburseCategory.id]
+    }
+  } else if (val) {
     form.value = {
       occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
       category: [],
       accountId: undefined,
       amount: undefined,
       note: '',
+    }
+    const reimburseCategory = categories.value.find(cat => cat.categoryL1 === '报销')
+    if (reimburseCategory) {
+      form.value.category = [reimburseCategory.id]
     }
   }
 })
@@ -142,6 +174,11 @@ function handleClose() {
 }
 
 async function handleSubmit() {
+  if (!props.expenseTxn) {
+    ElMessage.error('缺少原支出信息')
+    return
+  }
+  
   if (!form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
     ElMessage.error('请填写完整信息')
     return
@@ -149,24 +186,20 @@ async function handleSubmit() {
 
   try {
     submitting.value = true
-    // 处理分类ID：如果是数组，取最后一个；如果是单个值，直接使用
     const categoryId = Array.isArray(form.value.category) 
       ? (form.value.category[form.value.category.length - 1] as number)
       : (form.value.category as number)
     
-    await ledgerApi.quickEntry({
-      type: props.type,
+    await ledgerApi.reimburse(props.expenseTxn.txnId, {
+      reimburseAmount: form.value.amount,
       accountId: form.value.accountId,
-      amount: form.value.amount,
       note: form.value.note || undefined,
-      occurredAt: form.value.occurredAt,
-      categoryId: categoryId,
     })
-    ElMessage.success('提交成功')
+    ElMessage.success('报销成功')
     emit('success')
     handleClose()
   } catch (error: any) {
-    ElMessage.error(error.message || '提交失败')
+    ElMessage.error(error.message || '报销失败')
   } finally {
     submitting.value = false
   }
