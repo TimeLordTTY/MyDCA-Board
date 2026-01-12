@@ -485,11 +485,14 @@ def get_account_group_name(account_id: str) -> str:
 
 
 def filter_records_by_account_group(records, group_name):
-    """根据账户组过滤记录"""
-    if group_name == '全部' or group_name not in ACCOUNT_GROUP_FILTERS:
+    """根据账户组或单个账户过滤记录"""
+    # 获取筛选选项（包括账户组和单个账户）
+    account_filter_options = get_account_filter_options()
+    
+    if group_name == '全部' or group_name not in account_filter_options:
         return records
     
-    accounts = ACCOUNT_GROUP_FILTERS[group_name]
+    accounts = account_filter_options[group_name]
     if not accounts:
         return records
     
@@ -501,6 +504,43 @@ def filter_records_by_account_group(records, group_name):
         if account_from in accounts or account_to in accounts or account in accounts:
             filtered.append(r)
     return filtered
+
+
+def get_account_filter_options():
+    """获取账户筛选选项（包括账户组和单个账户）"""
+    from data.account_service import get_accounts
+    
+    # 获取所有账户组中已包含的账户代码
+    all_grouped_accounts = set()
+    for accounts in ACCOUNT_GROUP_FILTERS.values():
+        if accounts:
+            all_grouped_accounts.update(accounts)
+    
+    # 获取所有账户
+    all_accounts = get_accounts(is_active=True)
+    
+    # 找出没有账户组的账户
+    standalone_accounts = {}
+    for acc in all_accounts:
+        account_code = acc.get('account_code') or acc.get('account_id', '')
+        account_name = acc.get('account_name', '')
+        account_type = acc.get('account_type', '')
+        
+        # 如果账户不在任何账户组中，则添加到独立账户列表
+        # 排除产品子账户（PRODUCT_SUB）和基金映射账户（FUND_MAPPED），但保留其他类型
+        if account_code and account_code not in all_grouped_accounts:
+            # 排除产品子账户和基金映射账户，其他都显示
+            if account_type not in ('PRODUCT_SUB', 'FUND_MAPPED'):
+                standalone_accounts[account_code] = account_name
+    
+    # 构建筛选选项
+    filter_options = dict(ACCOUNT_GROUP_FILTERS)  # 复制账户组选项
+    
+    # 添加独立账户（按名称排序）
+    for account_code, account_name in sorted(standalone_accounts.items(), key=lambda x: x[1]):
+        filter_options[account_name] = [account_code]
+    
+    return filter_options
 
 
 def merge_account_column(record):
@@ -2898,13 +2938,16 @@ def page_ledger():
     # 过滤器
     filter_col1, filter_col2 = st.columns([1, 3])
     with filter_col1:
+        # 获取筛选选项（包括账户组和单个账户）
+        account_filter_options = get_account_filter_options()
         ledger_group_filter = st.selectbox(
-            "筛选账户组",
-            list(ACCOUNT_GROUP_FILTERS.keys()),
+            "筛选账户",
+            list(account_filter_options.keys()),
             key="ledger_account_filter"
         )
     
     recent = list_recent_ledger(200, with_balances=True)  # 加载更多记录用于分页
+    # 使用新的筛选选项
     recent = filter_records_by_account_group(recent, ledger_group_filter)
     
     if recent:
@@ -3153,7 +3196,6 @@ def page_invest():
             
             # 场内模式：使用场内成交录入（自动扣款和确认）
             st.subheader("场内成交录入")
-            st.info("💡 场内交易：提交成交记录后会自动从账户扣款并创建买入确认记录，无需单独提交买入扣款")
             
             # 清空场外模式的session state，避免按钮残留
             if 'submit_buy_otc' in st.session_state:
@@ -3168,10 +3210,16 @@ def page_invest():
                     buy_product = st.selectbox("选择产品 *", exchange_product_names, key="buy_product_exchange")
                     buy_trade_type = st.selectbox(
                         "成交类型 *",
-                        ["BUY"],
-                        format_func=lambda x: {"BUY": "买入"}[x],
+                        ["BUY", "SELL"],
+                        format_func=lambda x: {"BUY": "买入", "SELL": "卖出"}[x],
                         key="buy_trade_type"
                     )
+                    
+                    # 根据交易类型显示不同的提示信息
+                    if buy_trade_type == "BUY":
+                        st.info("💡 场内买入：提交成交记录后会自动从账户扣款并创建买入确认记录，无需单独提交买入扣款")
+                    else:  # SELL
+                        st.info("💡 场内卖出：提交成交记录后会自动增加账户余额并创建卖出确认记录，无需单独提交卖出确认")
                     
                     # 账户选择
                     account_options = get_account_options()
@@ -3182,23 +3230,43 @@ def page_invest():
                     if '余利宝理财金' in account_names:
                         default_account_idx = account_names.index('余利宝理财金')
                     
+                    # 账户标签根据交易类型变化
+                    account_label = "资金来源账户 *" if buy_trade_type == "BUY" else "资金到账账户 *"
                     buy_account_name = st.selectbox(
-                        "资金来源账户 *",
+                        account_label,
                         account_names,
                         index=default_account_idx,
                         key="buy_account"
                     )
                     buy_account_id = account_dict[buy_account_name]
-                    # 显示资金来源账户当前余额
+                    # 显示账户当前余额
                     buy_account_balance = get_account_balance(buy_account_id)
                     st.caption(f"当前余额：¥{format_decimal(buy_account_balance)}")
                     
+                    # 显示当前持仓（卖出时）
+                    if buy_trade_type == "SELL" and buy_product:
+                        try:
+                            product = exchange_product_dict[buy_product]
+                            product_id = product['id']
+                            from core.exchange_holdings_calculator import calculate_exchange_holdings
+                            holdings = calculate_exchange_holdings(product_id)
+                            current_qty = holdings.get('current_qty', Decimal('0'))
+                            avg_cost = holdings.get('avg_cost', Decimal('0'))
+                            if current_qty > 0:
+                                st.success(f"📊 当前持仓: {float(current_qty):.4f} 份，平均成本: ¥{float(avg_cost):.4f}")
+                            else:
+                                st.warning("⚠️ 当前无持仓，无法卖出")
+                        except Exception as e:
+                            st.warning(f"⚠️ 无法获取持仓信息: {e}")
+                    
+                    # 成交金额说明根据交易类型变化
+                    amount_help = "成交金额（含手续费）" if buy_trade_type == "BUY" else "成交金额（净到账金额，手续费已扣除）"
                     buy_amount = st.number_input(
                         "成交金额 *",
                         min_value=0.01,
                         step=100.0,
                         key="buy_amount_exchange",
-                        help="成交金额（含手续费）"
+                        help=amount_help
                     )
                     
                     buy_shares = st.number_input(
@@ -3238,7 +3306,10 @@ def page_invest():
                     if buy_product and buy_amount > 0:
                         from core.exchange_trade_service import calc_default_fee
                         default_fee = float(calc_default_fee(Decimal(str(buy_amount))))
-                        st.info(f"💡 默认手续费: ¥{default_fee:.2f}（万0.845，最低0.20）")
+                        if buy_trade_type == "BUY":
+                            st.info(f"💡 默认手续费: ¥{default_fee:.2f}（万0.845，最低0.20）")
+                        else:  # SELL
+                            st.info(f"💡 默认手续费: ¥{default_fee:.2f}（万0.845，最低0.20），将从成交金额中扣除")
                     
                     buy_fee = st.number_input(
                         "手续费（可选）",
@@ -3251,13 +3322,26 @@ def page_invest():
                     
                     buy_note = st.text_input("备注（可选）", key="buy_note_exchange")
                 
-                if st.button("提交成交记录", type="primary", key="submit_buy_exchange"):
+                button_label = "提交成交记录"
+                if st.button(button_label, type="primary", key="submit_buy_exchange"):
                     if not buy_product or buy_amount <= 0 or buy_shares <= 0:
                         st.error("❌ 请填写必填项：产品、成交金额、成交份额")
                     else:
                         try:
                             product = exchange_product_dict[buy_product]
                             product_id = product['id']
+                            
+                            # 卖出时检查持仓
+                            if buy_trade_type == "SELL":
+                                try:
+                                    from core.exchange_holdings_calculator import calculate_exchange_holdings
+                                    holdings = calculate_exchange_holdings(product_id)
+                                    current_qty = holdings.get('current_qty', Decimal('0'))
+                                    if Decimal(str(buy_shares)) > current_qty:
+                                        st.error(f"❌ 卖出份额({buy_shares})超过当前持仓({float(current_qty):.4f})")
+                                        st.stop()
+                                except Exception as e:
+                                    st.warning(f"⚠️ 无法验证持仓: {e}")
                             
                             # 解析成交时间
                             try:
@@ -3283,7 +3367,7 @@ def page_invest():
                                 account_id=buy_account_id,
                                 trade_date=buy_trade_date,
                                 trade_time=trade_time,
-                                trade_type='BUY',
+                                trade_type=buy_trade_type,
                                 amount=Decimal(str(buy_amount)),
                                 shares=Decimal(str(buy_shares)),
                                 price=price,
@@ -3296,9 +3380,13 @@ def page_invest():
                                 
                                 # 显示详细信息
                                 if result:
-                                    buy_confirm_order_id = result.get('buy_confirm_order_id')
-                                    if buy_confirm_order_id:
-                                        st.info(f"📝 已自动创建买入确认记录，订单号: {buy_confirm_order_id}")
+                                    # 根据交易类型显示不同的确认信息
+                                    if buy_trade_type == "BUY":
+                                        buy_confirm_order_id = result.get('buy_confirm_order_id')
+                                        if buy_confirm_order_id:
+                                            st.info(f"📝 已自动创建买入确认记录，订单号: {buy_confirm_order_id}")
+                                    else:  # SELL
+                                        st.info(f"📝 已自动创建卖出确认记录")
                                     
                                     holdings_before = result.get('holdings_before', {})
                                     holdings_after = result.get('holdings_after', {})
@@ -3316,40 +3404,64 @@ def page_invest():
                                     col1, col2, col3 = st.columns(3)
                                     
                                     with col1:
+                                        qty_change = holdings_after.get('current_qty', 0) - holdings_before.get('current_qty', 0)
                                         st.metric(
                                             "持仓份额",
                                             f"{holdings_after.get('current_qty', 0):.4f}",
-                                            f"{holdings_after.get('current_qty', 0) - holdings_before.get('current_qty', 0):.4f}"
+                                            f"{qty_change:.4f}"
                                         )
                                     
                                     with col2:
                                         if deduction_result:
-                                            wait_pool_before = deduction_result.wait_pool_before
-                                            wait_pool_after = deduction_result.wait_pool_after
-                                            st.metric(
-                                                "等待池余额",
-                                                f"¥{wait_pool_after:.2f}",
-                                                f"¥{wait_pool_after - wait_pool_before:.2f}"
-                                            )
+                                            if buy_trade_type == "BUY":
+                                                wait_pool_before = deduction_result.wait_pool_before
+                                                wait_pool_after = deduction_result.wait_pool_after
+                                                st.metric(
+                                                    "等待池余额",
+                                                    f"¥{wait_pool_after:.2f}",
+                                                    f"¥{wait_pool_after - wait_pool_before:.2f}"
+                                                )
+                                            else:  # SELL - 卖出时不显示等待池
+                                                st.metric(
+                                                    "等待池余额",
+                                                    "¥0.00",
+                                                    "无变化"
+                                                )
                                     
                                     with col3:
                                         if deduction_result:
                                             cash_pool_before = deduction_result.cash_pool_before
                                             cash_pool_after = deduction_result.cash_pool_after
-                                            st.metric(
-                                                "现金池余额",
-                                                f"¥{cash_pool_after:.2f}",
-                                                f"¥{cash_pool_after - cash_pool_before:.2f}"
-                                            )
+                                            cash_change = cash_pool_after - cash_pool_before
+                                            if buy_trade_type == "BUY":
+                                                st.metric(
+                                                    "现金池余额",
+                                                    f"¥{cash_pool_after:.2f}",
+                                                    f"¥{cash_change:.2f}"
+                                                )
+                                            else:  # SELL - 显示资金增加
+                                                st.metric(
+                                                    "现金池余额",
+                                                    f"¥{cash_pool_after:.2f}",
+                                                    f"¥{cash_change:.2f}"
+                                                )
                                     
-                                    # 显示扣减明细
+                                    # 显示资金明细
                                     if deduction_result:
-                                        st.info(
-                                            f"💰 资金扣减明细：\n"
-                                            f"- 从等待池扣减: ¥{deduction_result.wait_pool_deducted:.2f}\n"
-                                            f"- 从现金池扣减: ¥{deduction_result.cash_pool_deducted:.2f}\n"
-                                            f"- 合计扣减: ¥{deduction_result.total_deducted:.2f}"
-                                        )
+                                        if buy_trade_type == "BUY":
+                                            st.info(
+                                                f"💰 资金扣减明细：\n"
+                                                f"- 从等待池扣减: ¥{deduction_result.wait_pool_deducted:.2f}\n"
+                                                f"- 从现金池扣减: ¥{deduction_result.cash_pool_deducted:.2f}\n"
+                                                f"- 合计扣减: ¥{deduction_result.total_deducted:.2f}"
+                                            )
+                                        else:  # SELL
+                                            cash_increase = -deduction_result.cash_pool_deducted  # 卖出时 cash_pool_deducted 是负数
+                                            st.info(
+                                                f"💰 资金到账明细：\n"
+                                                f"- 现金池增加: ¥{cash_increase:.2f}\n"
+                                                f"- 净到账金额: ¥{buy_amount:.2f}"
+                                            )
                                     
                                     # 显示最新建议
                                     if suggestion:

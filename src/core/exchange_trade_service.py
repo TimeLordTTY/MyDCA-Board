@@ -553,7 +553,13 @@ def save_exchange_trade(
         # 如果没有提供手续费，使用默认计算
         if fee is None:
             fee = calc_default_fee(amount)
-        total_amount = amount + fee + tax + other_fee  # 买入时，总金额 = 成交金额 + 所有费用
+        
+        # 买入时：total_amount = 成交金额 + 所有费用（需要从账户扣款的总金额）
+        # 卖出时：total_amount = 成交金额（净到账金额，手续费已从成交金额中扣除）
+        if trade_type == 'BUY':
+            total_amount = amount + fee + tax + other_fee
+        else:  # SELL
+            total_amount = amount  # 卖出时，amount 是净到账金额
         
         # 4. 生成订单号（用于关联记账记录和交易记录）
         from data.product_service import get_product_by_id
@@ -666,7 +672,8 @@ def save_exchange_trade(
             'deduction_result': deduction_result,
             'suggestion': suggestion,
             'warnings': validation.warnings,
-            'buy_confirm_order_id': buy_confirm_order_id  # 新增：买入确认订单号
+            'buy_confirm_order_id': buy_confirm_order_id,  # 买入确认订单号
+            'sell_confirm_order_id': sell_confirm_order_id  # 卖出确认订单号
         }
         
         return True, "保存成功", result
