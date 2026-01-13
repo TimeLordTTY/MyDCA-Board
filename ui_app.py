@@ -2946,7 +2946,16 @@ def page_ledger():
             key="ledger_account_filter"
         )
     
-    recent = list_recent_ledger(200, with_balances=True)  # 加载更多记录用于分页
+    # 加载所有记录
+    from data.data_store import load_ledger
+    all_records = load_ledger()
+    # 反转顺序（从新到旧）
+    all_records.reverse()
+    # 计算余额
+    from core.ledger_service import enrich_with_balances
+    recent = enrich_with_balances(all_records)
+    # 再次反转回倒序（从新到旧）
+    recent.reverse()
     # 使用新的筛选选项
     recent = filter_records_by_account_group(recent, ledger_group_filter)
     
@@ -4309,7 +4318,19 @@ def page_invest():
     product_filter_options = ['全部'] + [format_product_display_name(p) for p in all_products_for_filter]
     tx_product_filter = st.selectbox("筛选产品", product_filter_options, key="tx_product_filter")
     
-    recent_tx = list_recent_transactions(200)  # 显示更多记录
+    # 加载所有理财记录
+    from data.db_connector import execute_query
+    sql = """
+        SELECT id, product_id,
+               DATE_FORMAT(`date`, '%%Y-%%m-%%d') as `date`,
+               product_code, action, amount, shares, fee, nav,
+               DATE_FORMAT(nav_date, '%%Y-%%m-%%d') as nav_date,
+               order_id, note,
+               DATE_FORMAT(created_at, '%%Y-%%m-%%d %%H:%%i:%%s') as created_at
+        FROM transactions
+        ORDER BY created_at DESC, id DESC
+    """
+    recent_tx = execute_query(sql)
     
     # 产品过滤
     if tx_product_filter != '全部' and recent_tx:
