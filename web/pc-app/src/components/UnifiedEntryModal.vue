@@ -117,10 +117,22 @@
         <!-- 买入/申购 -->
         <template v-else-if="selectedType === 'BUY' || selectedType === 'SUBSCRIPTION'">
           <el-form-item label="场内/场外" required>
-            <el-select v-model="form.channel" placeholder="选择场内/场外" style="width: 100%" @change="handleChannelChange">
-              <el-option label="场内" value="EXCHANGE" />
-              <el-option label="场外" value="OTC" />
-            </el-select>
+            <div style="display: flex; gap: 8px">
+              <button
+                type="button"
+                :class="['channel-btn', form.channel === 'EXCHANGE' ? 'active' : '']"
+                @click="form.channel = 'EXCHANGE'; handleChannelChange()"
+              >
+                场内
+              </button>
+              <button
+                type="button"
+                :class="['channel-btn', form.channel === 'OTC' ? 'active' : '']"
+                @click="form.channel = 'OTC'; handleChannelChange()"
+              >
+                场外
+              </button>
+            </div>
           </el-form-item>
           <el-form-item label="产品" required>
             <el-select v-model="form.productId" placeholder="选择产品" style="width: 100%" filterable>
@@ -192,10 +204,22 @@
         <!-- 卖出/赎回 -->
         <template v-else-if="selectedType === 'SELL' || selectedType === 'REDEMPTION'">
           <el-form-item label="场内/场外" required>
-            <el-select v-model="form.channel" placeholder="选择场内/场外" style="width: 100%" @change="handleChannelChange">
-              <el-option label="场内" value="EXCHANGE" />
-              <el-option label="场外" value="OTC" />
-            </el-select>
+            <div style="display: flex; gap: 8px">
+              <button
+                type="button"
+                :class="['channel-btn', form.channel === 'EXCHANGE' ? 'active' : '']"
+                @click="form.channel = 'EXCHANGE'; handleChannelChange()"
+              >
+                场内
+              </button>
+              <button
+                type="button"
+                :class="['channel-btn', form.channel === 'OTC' ? 'active' : '']"
+                @click="form.channel = 'OTC'; handleChannelChange()"
+              >
+                场外
+              </button>
+            </div>
           </el-form-item>
           <el-form-item label="产品" required>
             <el-select v-model="form.productId" placeholder="选择产品" style="width: 100%" filterable>
@@ -472,6 +496,13 @@ const txnTypeOptions: Record<string, { name: string; icon: string }> = {
 const cashLeafAccounts = computed(() => accountStore.cashLeafAccounts)
 
 const products = computed(() => productStore.products.filter((p) => p.isActive))
+
+const filteredProducts = computed(() => {
+  if (!form.value.channel) {
+    return []
+  }
+  return products.value.filter((p) => p.channel === form.value.channel)
+})
 
 const categories = computed(() => {
   if (selectedType.value === 'EXPENSE') return expenseCategories
@@ -804,3 +835,37 @@ async function handleSubmit() {
   }
 }
 </script>
+
+<style scoped>
+/* 场内/场外开关按钮样式 */
+.channel-btn {
+  flex: 1;
+  padding: 10px 20px;
+  border: 1px solid rgba(230, 238, 247, 0.95);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.channel-btn:hover {
+  background: rgba(78, 164, 255, 0.08);
+  border-color: rgba(78, 164, 255, 0.3);
+}
+
+.channel-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.channel-btn.active:hover {
+  background: var(--primary2);
+  border-color: var(--primary2);
+}
+</style>
