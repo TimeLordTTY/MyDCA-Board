@@ -140,7 +140,7 @@ CREATE TABLE `accounts` (
   `owner_family_id` BIGINT NULL COMMENT '归属家庭ID（家庭账户）',
   `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
   `parent_account_id` BIGINT NULL COMMENT '父账户ID（用于现实账户的资金分区/子账户，父账户为平台容器/分组节点，子账户为真实信封余额）',
-  `fund_usage` ENUM('SPENDABLE','RESERVED','INVESTABLE') NOT NULL DEFAULT 'SPENDABLE' COMMENT '资金用途（SPENDABLE=可支出，允许日常支出/生活消费；RESERVED=专款，房租/项目/安全金等，禁止日常支出和默认禁止投资；INVESTABLE=可投资，可用于投资如ETF/逆回购等，默认不用于日常支出。仅对account_kind=REAL且account_type=CASH且为叶子账户的场景做约束校验）',
+  `fund_usage` ENUM('SPENDABLE','RESERVED','INVESTABLE') NULL DEFAULT NULL COMMENT '资金用途（SPENDABLE=可支出，允许日常支出/生活消费；RESERVED=专款，房租/项目/安全金等，禁止日常支出和默认禁止投资；INVESTABLE=可投资，可用于投资如ETF/逆回购等，默认不用于日常支出。仅对account_kind=REAL且account_type=CASH且为叶子账户的场景做约束校验。信贷账户（CREDIT_CARD、HUABEI、BAITIAO、LOAN）不需要资金用途，此字段为NULL）',
   `balance` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '账面余额（由流水推导，REAL账户可手工调整）',
   `reserved_amount` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '占用/冻结金额（下单占用，结算确认后释放）',
   `initial_balance` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '初始余额',
@@ -273,7 +273,7 @@ CREATE TABLE `ledger_txn` (
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易事件表';
 
--- 3.2 ledger_posting - 分录表（修订：明确借贷方向规则，amount永远为正数）
+-- 3.2 ledger_posting - 分录表（修订：明确借贷方向规则，amount永远为正数，增加历史余额字段）
 CREATE TABLE `ledger_posting` (
   `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '分录ID',
   `txn_id` VARCHAR(64) NOT NULL COMMENT '交易事件ID（外键ledger_txn.txn_id）',
@@ -281,6 +281,8 @@ CREATE TABLE `ledger_posting` (
   `account_id` BIGINT NOT NULL COMMENT '账户ID（外键accounts.id）',
   `account_type` ENUM('CASH', 'POSITION', 'FEE', 'INCOME', 'EXPENSE', 'LIABILITY', 'RECEIVABLE') NOT NULL COMMENT '账户类型',
   `amount` DECIMAL(18, 2) NOT NULL COMMENT '金额（永远为正数，方向由posting_type决定）',
+  `account_balance_after` DECIMAL(18, 2) NULL COMMENT '该分录发生后的账户余额（用于显示历史余额）',
+  `parent_account_balance_after` DECIMAL(18, 2) NULL COMMENT '该分录发生后的父账户余额（用于显示历史余额）',
   `shares` DECIMAL(20, 6) NULL COMMENT '份额（持仓类分录，永远为正数，方向由posting_type决定）',
   `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
   `note` VARCHAR(255) NULL COMMENT '分录备注',

@@ -80,7 +80,8 @@
             account_subtype = #{accountSubtype},
             currency = #{currency},
             parent_account_id = #{parentAccountId},
-            fund_usage = #{fundUsage},
+            <if test="fundUsage != null">fund_usage = #{fundUsage},</if>
+            <if test="fundUsage == null">fund_usage = NULL,</if>
             initial_balance = #{initialBalance},
             is_active = #{isActive},
             note = #{note},

@@ -1,7 +1,9 @@
 package com.timelordtty.dca.service;
 
 import com.timelordtty.dca.mapper.AccountMapper;
+import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.model.Account;
+import com.timelordtty.dca.model.LedgerPosting;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +19,7 @@ import java.util.UUID;
  * 重要规则：
  * - 仅叶子账户允许出现在记账分录中（ledger_posting.account_id）
  * - VIRTUAL 账户不允许设置父账户
- * - 子账户必须为 REAL 类型
+ * - 子账户必须为 REAL 类型，且只有 REAL/CASH 允许形成父子层级
  *
  * 该服务提供的操作会结合数据库查询与应用层校验；余额的正式变更应通过记账流程完成，手工调整应记录 ADJUST 类型流水。
  */
@@ -25,9 +27,11 @@ import java.util.UUID;
 public class AccountService {
 
     private final AccountMapper accountMapper;
+    private final LedgerPostingMapper ledgerPostingMapper;
 
-    public AccountService(AccountMapper accountMapper) {
+    public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper) {
         this.accountMapper = accountMapper;
+        this.ledgerPostingMapper = ledgerPostingMapper;
     }
 
     @Transactional
@@ -59,14 +63,6 @@ public class AccountService {
             throw new RuntimeException("账户代码已存在");
         }
 
-        // 如果创建的是子账户，确保账户类型与父账户一致（在插入前处理）
-        if (account.getParentAccountId() != null) {
-            Account parentAccount = accountMapper.selectById(account.getParentAccountId());
-            if (parentAccount != null && parentAccount.getAccountType() != null) {
-                account.setAccountType(parentAccount.getAccountType());
-            }
-        }
-        
         // 设置默认值
         if (account.getBalance() == null) {
             account.setBalance(BigDecimal.ZERO);
@@ -85,13 +81,14 @@ public class AccountService {
         
         // 如果创建的是父账户（平台账户），自动创建"待分配"子账户
         if (account.getParentAccountId() == null && 
-            "REAL".equals(account.getAccountKind())) {
-            // 创建默认的"待分配"子账户，子账户类型与父账户保持一致
+            "REAL".equals(account.getAccountKind()) && 
+            "CASH".equals(account.getAccountType())) {
+            // 创建默认的"待分配"子账户
             Account defaultEnvelope = new Account();
             defaultEnvelope.setAccountCode(account.getAccountCode() + "-待分配");
             defaultEnvelope.setAccountName("待分配");
             defaultEnvelope.setAccountKind("REAL");
-            defaultEnvelope.setAccountType(account.getAccountType()); // 子账户类型与父账户保持一致
+            defaultEnvelope.setAccountType("CASH");
             defaultEnvelope.setParentAccountId(account.getId());
             defaultEnvelope.setFundUsage("SPENDABLE");
             defaultEnvelope.setCurrency(account.getCurrency());
@@ -114,7 +111,7 @@ public class AccountService {
     /**
      * 校验账户创建规则（应用层）
      *
-     * 规则包括：VIRTUAL 不允许 parent、子账户必须为 REAL 等
+     * 规则包括：VIRTUAL 不允许 parent、子账户必须为 REAL、只有 REAL/CASH 允许父子层级等
      */
     private void validateAccountCreation(Account account) {
         // 规则1: VIRTUAL账户不允许设置parent_account_id
@@ -126,6 +123,11 @@ public class AccountService {
         if (account.getParentAccountId() != null && !"REAL".equals(account.getAccountKind())) {
             throw new RuntimeException("子账户必须是REAL类型");
         }
+
+        // 规则3: 只有CASH类型的REAL账户允许形成父子层级
+        if (account.getParentAccountId() != null && !"CASH".equals(account.getAccountType())) {
+            throw new RuntimeException("只有CASH类型的REAL账户允许形成父子层级");
+        }
     }
 
     /**
@@ -135,6 +137,59 @@ public class AccountService {
      */
     public Account getAccount(Long accountId) {
         return accountMapper.selectById(accountId);
+    }
+
+    /**
+     * 更新账户信息
+     * 
+     * @param account 待更新的账户实体（必须包含id）
+     * @return 更新后的账户实体
+     */
+    @Transactional
+    public Account updateAccount(Account account) {
+        if (account.getId() == null) {
+            throw new RuntimeException("账户ID不能为空");
+        }
+        
+        // 校验账户是否存在
+        Account existing = accountMapper.selectById(account.getId());
+        if (existing == null) {
+            throw new RuntimeException("账户不存在: " + account.getId());
+        }
+        
+        // 处理初始余额和余额的关系
+        if (account.getInitialBalance() != null) {
+            // 如果设置了初始余额，检查是否需要同步余额
+            // 如果账户没有其他交易（balance == initial_balance），则同步余额
+            if (existing.getBalance() != null && existing.getBalance().compareTo(existing.getInitialBalance()) == 0) {
+                // 余额等于初始余额，说明没有其他交易，可以直接同步
+                account.setBalance(account.getInitialBalance());
+            } else if (account.getBalance() == null) {
+                // 如果没有提供新余额，保持原余额不变
+                account.setBalance(existing.getBalance());
+            }
+        } else if (account.getBalance() != null) {
+            // 如果只提供了余额，使用余额作为初始余额
+            account.setInitialBalance(account.getBalance());
+        }
+        
+        // 信贷账户（信用卡、花呗、白条、贷款）不需要资金用途
+        if (isCreditAccount(account.getAccountType())) {
+            account.setFundUsage(null);
+        }
+        
+        accountMapper.update(account);
+        return accountMapper.selectById(account.getId());
+    }
+
+    /**
+     * 判断是否为信贷账户
+     */
+    private boolean isCreditAccount(String accountType) {
+        return "CREDIT_CARD".equals(accountType) || 
+               "HUABEI".equals(accountType) || 
+               "BAITIAO".equals(accountType) || 
+               "LOAN".equals(accountType);
     }
 
     /**
@@ -177,6 +232,15 @@ public class AccountService {
     }
 
     /**
+     * 获取账户的子账户列表
+     * @param parentAccountId 父账户ID
+     * @return 子账户列表
+     */
+    public List<Account> getAccountChildren(Long parentAccountId) {
+        return accountMapper.selectChildren(parentAccountId);
+    }
+
+    /**
      * 获取或创建虚拟账户（EXPENSE/INCOME/FEE/POSITION）
      * 
      * 业务规则：
@@ -213,6 +277,10 @@ public class AccountService {
             accountName = "收入账户";
         } else if ("FEE".equals(virtualSubtype)) {
             accountName = "手续费账户";
+        } else if ("RECEIVABLE".equals(virtualSubtype)) {
+            accountName = "应收账户";
+        } else if ("LIABILITY".equals(virtualSubtype)) {
+            accountName = "负债账户";
         } else {
             accountName = virtualSubtype + "账户";
         }
@@ -222,7 +290,9 @@ public class AccountService {
         Account existingAccount = existingAccounts.stream()
                 .filter(a -> "VIRTUAL".equals(a.getAccountKind()))
                 .filter(a -> virtualSubtype.equals(a.getVirtualSubtype()))
-                .filter(a -> accountType.equals(a.getAccountType()))
+                // 必须匹配 ownerType，确保个人账户使用个人虚拟账户，家庭账户使用家庭虚拟账户
+                .filter(a -> ownerType.equals(a.getOwnerType()))
+                // 虚拟账户的 account_type 都是 "OTHER"，所以不需要比较 accountType
                 .filter(a -> {
                     // POSITION账户需要匹配productId（通过账户名称或额外字段）
                     if ("POSITION".equals(virtualSubtype)) {
@@ -240,7 +310,9 @@ public class AccountService {
         // 创建新的虚拟账户
         Account virtualAccount = new Account();
         virtualAccount.setAccountKind("VIRTUAL");
-        virtualAccount.setAccountType(accountType);
+        // 虚拟账户的 account_type 使用 "OTHER"（因为 ENUM 只包含 REAL 账户类型）
+        // 真正的类型信息存储在 virtual_subtype 中
+        virtualAccount.setAccountType("OTHER");
         virtualAccount.setVirtualSubtype(virtualSubtype);
         virtualAccount.setOwnerType(ownerType);
         virtualAccount.setOwnerUserId(ownerUserId);
@@ -276,49 +348,6 @@ public class AccountService {
     }
 
     /**
-     * 更新账户信息
-     * 
-     * 注意：此方法不更新余额，余额调整应使用adjustBalance方法
-     * 
-     * @param account 待更新的账户实体（必须包含id）
-     * @return 更新后的账户实体
-     */
-    @Transactional
-    public Account updateAccount(Account account) {
-        if (account.getId() == null) {
-            throw new RuntimeException("账户ID不能为空");
-        }
-        
-        // 检查账户是否存在
-        Account existing = accountMapper.selectById(account.getId());
-        if (existing == null) {
-            throw new RuntimeException("账户不存在");
-        }
-        
-        // 如果账户代码有变更，检查唯一性
-        if (account.getAccountCode() != null && !account.getAccountCode().equals(existing.getAccountCode())) {
-            Account codeExists = accountMapper.selectByCode(account.getAccountCode());
-            if (codeExists != null && !codeExists.getId().equals(account.getId())) {
-                throw new RuntimeException("账户代码已存在");
-            }
-        }
-        
-        // 应用层校验规则（如果父账户有变更）
-        if (account.getParentAccountId() != null && !account.getParentAccountId().equals(existing.getParentAccountId())) {
-            validateAccountCreation(account);
-        }
-        
-        // 更新账户（不更新余额，余额通过adjustBalance方法调整）
-        // 保留原有余额和占用金额
-        account.setBalance(existing.getBalance());
-        account.setReservedAmount(existing.getReservedAmount());
-        
-        accountMapper.update(account);
-        
-        return accountMapper.selectById(account.getId());
-    }
-
-    /**
      * 手工调整账户余额（仅限 REAL 账户）
      * 注意：实际系统中应同时生成 ADJUST 类型的 ledger_txn/ledger_posting 以保证审计链完整
      *
@@ -336,6 +365,108 @@ public class AccountService {
         }
         accountMapper.updateBalance(accountId, newBalance);
         // 注意：余额调整需要生成ADJUST类型的流水，这将在LedgerService中实现
+    }
+
+    /**
+     * 重新计算账户余额（从分录中计算）
+     * 
+     * 这个方法会从 ledger_posting 表中重新计算指定账户的余额
+     * 适用于：修复历史数据、数据迁移、余额不一致等情况
+     * 
+     * 计算公式：
+     * - 资产类账户（CASH/POSITION/RECEIVABLE）：balance = initial_balance + Σ(DEBIT) - Σ(CREDIT)
+     * - 负债类账户（LIABILITY/CREDIT_CARD/HUABEI/BAITIAO/LOAN）：balance = initial_balance - Σ(DEBIT) + Σ(CREDIT)
+     * - 收入类账户（INCOME）：balance = initial_balance - Σ(DEBIT) + Σ(CREDIT)
+     * - 支出类账户（EXPENSE）：balance = initial_balance + Σ(DEBIT) - Σ(CREDIT)
+     * - 手续费类账户（FEE）：balance = initial_balance + Σ(DEBIT) - Σ(CREDIT)
+     * 
+     * @param accountId 账户ID
+     * @return 重新计算后的余额
+     */
+    @Transactional
+    public BigDecimal recalculateBalance(Long accountId) {
+        Account account = accountMapper.selectById(accountId);
+        if (account == null) {
+            throw new RuntimeException("账户不存在: " + accountId);
+        }
+
+        // 获取该账户的所有分录
+        List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountId(accountId);
+        
+        // 确定账户类型（虚拟账户使用 virtual_subtype，REAL账户使用 account_type）
+        String accountType = "VIRTUAL".equals(account.getAccountKind()) 
+            ? account.getVirtualSubtype() 
+            : account.getAccountType();
+        
+        // 从初始余额开始计算
+        BigDecimal balance = account.getInitialBalance() != null ? account.getInitialBalance() : BigDecimal.ZERO;
+        
+        // 根据账户类型和借贷方向计算余额
+        for (LedgerPosting posting : postings) {
+            if ("CASH".equals(accountType) || "POSITION".equals(accountType) || "RECEIVABLE".equals(accountType)) {
+                // 资产类账户：DEBIT增加，CREDIT减少
+                if ("DEBIT".equals(posting.getPostingType())) {
+                    balance = balance.add(posting.getAmount());
+                } else {
+                    balance = balance.subtract(posting.getAmount());
+                }
+            } else if ("LIABILITY".equals(accountType) || accountType.contains("CREDIT") || 
+                      accountType.contains("HUABEI") || accountType.contains("BAITIAO") ||
+                      accountType.contains("LOAN")) {
+                // 负债类账户：DEBIT减少，CREDIT增加
+                if ("DEBIT".equals(posting.getPostingType())) {
+                    balance = balance.subtract(posting.getAmount());
+                } else {
+                    balance = balance.add(posting.getAmount());
+                }
+            } else if ("INCOME".equals(accountType)) {
+                // 收入类账户：DEBIT减少，CREDIT增加
+                if ("DEBIT".equals(posting.getPostingType())) {
+                    balance = balance.subtract(posting.getAmount());
+                } else {
+                    balance = balance.add(posting.getAmount());
+                }
+            } else if ("EXPENSE".equals(accountType) || "FEE".equals(accountType)) {
+                // 支出类账户和手续费账户：DEBIT增加，CREDIT减少
+                if ("DEBIT".equals(posting.getPostingType())) {
+                    balance = balance.add(posting.getAmount());
+                } else {
+                    balance = balance.subtract(posting.getAmount());
+                }
+            }
+        }
+        
+        // 更新账户余额
+        accountMapper.updateBalance(accountId, balance);
+        
+        return balance;
+    }
+
+    /**
+     * 重新计算所有账户的余额（从分录中计算）
+     * 
+     * 这个方法会遍历所有账户，从 ledger_posting 表中重新计算每个账户的余额
+     * 适用于：修复历史数据、数据迁移、余额不一致等情况
+     * 
+     * @return 重新计算的账户数量
+     */
+    @Transactional
+    public int recalculateAllBalances() {
+        // 获取所有账户
+        List<Account> allAccounts = accountMapper.selectByOwner(null, null);
+        int count = 0;
+        
+        for (Account account : allAccounts) {
+            try {
+                recalculateBalance(account.getId());
+                count++;
+            } catch (Exception e) {
+                // 记录错误但继续处理其他账户
+                System.err.println("重新计算账户余额失败: " + account.getId() + ", 错误: " + e.getMessage());
+            }
+        }
+        
+        return count;
     }
 }
 

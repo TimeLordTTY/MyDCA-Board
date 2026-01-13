@@ -215,7 +215,11 @@
           </el-select>
           <div class="form-help-text">货币 <span class="field-en">(currency)</span></div>
         </el-form-item>
-        <el-form-item v-if="!isPlatform" label="资金用途" prop="fundUsage">
+        <el-form-item 
+          v-if="!isPlatform && !isCreditAccount(accountForm.accountType)" 
+          label="资金用途" 
+          prop="fundUsage"
+        >
           <el-select 
             v-model="accountForm.fundUsage" 
             placeholder="选择资金用途" 
@@ -418,6 +422,13 @@ function getAccountSubtypePlaceholder(accountType?: string): string {
     LOAN: '例如：房贷、车贷、消费贷、经营贷等',
   }
   return placeholders[accountType || ''] || '账户子类型（可选）'
+}
+
+function isCreditAccount(accountType?: string): boolean {
+  return accountType === 'CREDIT_CARD' || 
+         accountType === 'HUABEI' || 
+         accountType === 'BAITIAO' || 
+         accountType === 'LOAN'
 }
 
 function getParentAccountType(): string | undefined {

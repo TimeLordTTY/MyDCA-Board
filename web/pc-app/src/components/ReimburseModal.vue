@@ -193,6 +193,7 @@ async function handleSubmit() {
     await ledgerApi.reimburse(props.expenseTxn.txnId, {
       reimburseAmount: form.value.amount,
       accountId: form.value.accountId,
+      occurredAt: form.value.occurredAt,
       note: form.value.note || undefined,
     })
     ElMessage.success('报销成功')

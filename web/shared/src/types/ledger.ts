@@ -22,6 +22,9 @@ export interface LedgerTxn {
   fetchDate?: string
   status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'REVERSED'
   note?: string
+  categoryId?: number
+  isReimbursable?: boolean
+  isReimbursed?: boolean
   isReversed: boolean
   reversedByTxnId?: string
   createdAt: string
@@ -53,6 +56,16 @@ export interface LedgerQueryParams {
   startDate?: string
   endDate?: string
   productId?: number
+  page?: number
+  pageSize?: number
+}
+
+export interface LedgerListResponse {
+  list: LedgerTxn[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
 }
 
 export interface PaymentLine {
@@ -92,11 +105,13 @@ export interface QuickEntryRequest {
 export interface RefundRequest {
   refundAmount: number
   accountId: number
+  occurredAt?: string
   note?: string
 }
 
 export interface ReimburseRequest {
   reimburseAmount: number
   accountId: number
+  occurredAt?: string
   note?: string
 }

@@ -7,6 +7,7 @@ import type {
   LedgerTxn,
   LedgerTxnDetail,
   LedgerQueryParams,
+  LedgerListResponse,
   CreateTransactionRequest,
   QuickEntryRequest,
   RefundRequest,
@@ -15,10 +16,10 @@ import type {
 
 export const ledgerApi = {
   /**
-   * 获取流水列表
+   * 获取流水列表（支持分页）
    */
-  getTransactions: async (params?: LedgerQueryParams): Promise<LedgerTxn[]> => {
-    const response = await apiClient.get<LedgerTxn[]>('/ledger/txns', { params })
+  getTransactions: async (params?: LedgerQueryParams): Promise<LedgerListResponse> => {
+    const response = await apiClient.get<LedgerListResponse>('/ledger/txns', { params })
     return response.data
   },
 

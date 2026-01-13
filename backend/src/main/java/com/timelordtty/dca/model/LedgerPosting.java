@@ -65,6 +65,12 @@ public class LedgerPosting {
     /** 备注，用户自定义说明 */
     private String note;
     
+    /** 该分录发生后的账户余额（用于显示历史余额） */
+    private BigDecimal accountBalanceAfter;
+    
+    /** 该分录发生后的父账户余额（用于显示历史余额） */
+    private BigDecimal parentAccountBalanceAfter;
+    
     /** 创建时间 */
     private LocalDateTime createdAt;
 }

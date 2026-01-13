@@ -12,6 +12,8 @@
         <result column="shares" property="shares"/>
         <result column="currency" property="currency"/>
         <result column="note" property="note"/>
+        <result column="account_balance_after" property="accountBalanceAfter"/>
+        <result column="parent_account_balance_after" property="parentAccountBalanceAfter"/>
         <result column="created_at" property="createdAt"/>
     </resultMap>
 
@@ -35,19 +37,23 @@
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ledger_posting (
-            txn_id, posting_type, account_id, account_type, amount, shares, currency, note, created_at
+            txn_id, posting_type, account_id, account_type, amount, shares, currency, note, 
+            account_balance_after, parent_account_balance_after, created_at
         ) VALUES (
-            #{txnId}, #{postingType}, #{accountId}, #{accountType}, #{amount}, #{shares}, #{currency}, #{note}, NOW()
+            #{txnId}, #{postingType}, #{accountId}, #{accountType}, #{amount}, #{shares}, #{currency}, #{note},
+            #{accountBalanceAfter}, #{parentAccountBalanceAfter}, NOW()
         )
     </insert>
 
     <insert id="batchInsert">
         INSERT INTO ledger_posting (
-            txn_id, posting_type, account_id, account_type, amount, shares, currency, note, created_at
+            txn_id, posting_type, account_id, account_type, amount, shares, currency, note,
+            account_balance_after, parent_account_balance_after, created_at
         ) VALUES
         <foreach collection="postings" item="posting" separator=",">
             (#{posting.txnId}, #{posting.postingType}, #{posting.accountId}, #{posting.accountType},
-             #{posting.amount}, #{posting.shares}, #{posting.currency}, #{posting.note}, NOW())
+             #{posting.amount}, #{posting.shares}, #{posting.currency}, #{posting.note},
+             #{posting.accountBalanceAfter}, #{posting.parentAccountBalanceAfter}, NOW())
         </foreach>
     </insert>
 

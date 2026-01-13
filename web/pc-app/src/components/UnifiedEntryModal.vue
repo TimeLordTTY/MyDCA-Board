@@ -116,10 +116,16 @@
 
         <!-- 买入/申购 -->
         <template v-else-if="selectedType === 'BUY' || selectedType === 'SUBSCRIPTION'">
+          <el-form-item label="场内/场外" required>
+            <el-select v-model="form.channel" placeholder="选择场内/场外" style="width: 100%" @change="handleChannelChange">
+              <el-option label="场内" value="EXCHANGE" />
+              <el-option label="场外" value="OTC" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="产品" required>
             <el-select v-model="form.productId" placeholder="选择产品" style="width: 100%" filterable>
               <el-option
-                v-for="prod in products"
+                v-for="prod in filteredProducts"
                 :key="prod.id"
                 :label="`${prod.productName} (${prod.productCode})`"
                 :value="prod.id"
@@ -185,10 +191,16 @@
         
         <!-- 卖出/赎回 -->
         <template v-else-if="selectedType === 'SELL' || selectedType === 'REDEMPTION'">
+          <el-form-item label="场内/场外" required>
+            <el-select v-model="form.channel" placeholder="选择场内/场外" style="width: 100%" @change="handleChannelChange">
+              <el-option label="场内" value="EXCHANGE" />
+              <el-option label="场外" value="OTC" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="产品" required>
             <el-select v-model="form.productId" placeholder="选择产品" style="width: 100%" filterable>
               <el-option
-                v-for="prod in products"
+                v-for="prod in filteredProducts"
                 :key="prod.id"
                 :label="`${prod.productName} (${prod.productCode})`"
                 :value="prod.id"
@@ -252,6 +264,43 @@
           </el-form-item>
         </template>
         
+        <!-- 逆回购 -->
+        <template v-else-if="selectedType === 'BOND_REPO'">
+          <el-form-item label="发生时间" required>
+            <el-date-picker
+              v-model="form.occurredAt"
+              type="datetime"
+              placeholder="选择发生时间"
+              style="width: 100%"
+              format="YYYY-MM-DD HH:mm:ss"
+              value-format="YYYY-MM-DD HH:mm:ss"
+            />
+          </el-form-item>
+          <el-form-item label="账户" required>
+            <el-select v-model="form.accountId" placeholder="选择账户" style="width: 100%">
+              <el-option
+                v-for="acc in cashLeafAccounts"
+                :key="acc.id"
+                :label="`${getAccountDisplayName(acc)} (${getFundUsageLabel(acc.fundUsage)})`"
+                :value="acc.id"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="金额（元）" required>
+            <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="期限（天）" required>
+            <el-input-number v-model="form.repoDays" :min="1" :max="365" :precision="0" style="width: 100%" />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">通常为1天期逆回购</div>
+          </el-form-item>
+          <el-form-item label="年化利率（%）">
+            <el-input-number v-model="form.repoRate" :min="0" :precision="4" style="width: 100%" />
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="form.note" placeholder="逆回购说明" />
+          </el-form-item>
+        </template>
+
         <!-- 转托管 -->
         <template v-else-if="selectedType === 'CUSTODY_TRANSFER'">
           <el-form-item label="产品" required>
@@ -267,11 +316,13 @@
           <el-form-item label="转出类型" required>
             <el-select v-model="form.fromChannel" placeholder="选择转出类型" style="width: 100%">
               <el-option label="场外" value="OTC" />
+              <el-option label="场内" value="EXCHANGE" />
             </el-select>
           </el-form-item>
           <el-form-item label="转入类型" required>
             <el-select v-model="form.toChannel" placeholder="选择转入类型" style="width: 100%">
               <el-option label="场内" value="EXCHANGE" />
+              <el-option label="场外" value="OTC" />
             </el-select>
           </el-form-item>
           <el-form-item label="转出日期" required>
@@ -285,8 +336,11 @@
             />
           </el-form-item>
           <el-form-item label="转出价格" required>
-            <el-input-number v-model="form.transferPrice" :min="0" :precision="4" style="width: 100%" />
+            <el-input-number v-model="form.transferOutPrice" :min="0" :precision="4" style="width: 100%" />
             <div style="color: #909399; font-size: 12px; margin-top: 4px">转托管价格，通常为0费用</div>
+          </el-form-item>
+          <el-form-item label="转入价格" required>
+            <el-input-number v-model="form.transferInPrice" :min="0" :precision="4" style="width: 100%" />
           </el-form-item>
           <el-form-item label="份额" required>
             <el-input-number v-model="form.shares" :min="0.01" :precision="4" style="width: 100%" />
@@ -410,6 +464,8 @@ const txnTypeOptions: Record<string, { name: string; icon: string }> = {
   TRANSFER_OUT: { name: '转账/分配', icon: '⇄' },
   BUY: { name: '买入/申购', icon: '📈' },
   SELL: { name: '卖出/赎回', icon: '📉' },
+  BOND_REPO: { name: '逆回购', icon: '🔄' },
+  CUSTODY_TRANSFER: { name: '转托管', icon: '↔️' },
   ADJUST: { name: '调整', icon: '⚙️' },
 }
 
@@ -481,8 +537,11 @@ watch(visible, (val) => {
       transferInPrice: 0,
       fromChannel: 'OTC',
       toChannel: 'EXCHANGE',
+      channel: undefined,
       relatedTxnId: undefined,
       isReimbursable: false,
+      repoDays: 1,
+      repoRate: undefined,
       note: '',
     }
   }
@@ -491,6 +550,14 @@ watch(visible, (val) => {
 function selectType(type: string) {
   selectedType.value = type
   step.value = 2
+  // 重置表单
+  form.value.channel = undefined
+  form.value.productId = undefined
+}
+
+function handleChannelChange() {
+  // 切换场内/场外时，清空产品选择
+  form.value.productId = undefined
 }
 
 function getAccountDisplayName(acc: Account): string {
@@ -615,8 +682,8 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') {
-      if (!form.value.productId || !form.value.accountId || !form.value.amount || !form.value.orderType || !form.value.requestedAt) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.channel || !form.value.productId || !form.value.accountId || !form.value.amount || !form.value.orderType || !form.value.requestedAt) {
+        ElMessage.error('请填写完整信息（包括场内/场外）')
         return
       }
       await orderApi.createOrder({
@@ -636,8 +703,8 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION') {
-      if (!form.value.productId || !form.value.accountId || !form.value.shares || !form.value.orderType || !form.value.requestedAt) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.channel || !form.value.productId || !form.value.accountId || !form.value.shares || !form.value.orderType || !form.value.requestedAt) {
+        ElMessage.error('请填写完整信息（包括场内/场外）')
         return
       }
       await orderApi.createOrder({
@@ -656,12 +723,41 @@ async function handleSubmit() {
       emit('success')
       handleClose()
       return
+    } else if (selectedType.value === 'BOND_REPO') {
+      if (!form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.repoDays) {
+        ElMessage.error('请填写完整信息')
+        return
+      }
+      // 逆回购：CASH CREDIT + CASH DEBIT（到期后）
+      // 这里简化处理，只记录逆回购的发起，实际应该分为发起和到期两笔交易
+      // 暂时使用统一的记账接口
+      const postings: any[] = []
+      // CASH CREDIT（资金冻结）
+      postings.push({
+        postingType: 'CREDIT',
+        accountId: form.value.accountId,
+        accountType: 'CASH',
+        amount: form.value.amount,
+        currency: 'CNY',
+      })
+      // 逆回购作为特殊交易，暂时使用调整类型，或者创建专门的逆回购处理
+      // 这里先使用简单的记账方式
+      await ledgerApi.createTransaction({
+        txnType: 'BOND_REPO',
+        postings,
+        note: form.value.note || `逆回购 ${form.value.repoDays}天期${form.value.repoRate ? `，年化利率${form.value.repoRate}%` : ''}`,
+        requestedAt: form.value.occurredAt,
+      })
+      ElMessage.success('逆回购记录成功')
+      emit('success')
+      handleClose()
+      return
     } else if (selectedType.value === 'CUSTODY_TRANSFER') {
       if (!form.value.productId || !form.value.shares || !form.value.transferDate || form.value.transferOutPrice === undefined || form.value.transferInPrice === undefined) {
         ElMessage.error('请填写完整信息')
         return
       }
-      // 调用转托管API
+      // 调用转托管API（后端使用 transferPrice，这里使用 transferOutPrice）
       await ledgerApi.createCustodyTransfer({
         productId: form.value.productId,
         shares: form.value.shares,

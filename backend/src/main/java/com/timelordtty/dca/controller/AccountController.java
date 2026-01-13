@@ -48,8 +48,14 @@ public class AccountController {
         }
         if ("PERSONAL".equals(account.getOwnerType())) {
             account.setOwnerUserId(currentUser.getId());
+            // 即使是个账户，如果用户有家庭ID，也设置 familyId，这样账户可以在家庭视图中显示
+            if (currentUser.getFamilyId() != null) {
+                account.setOwnerFamilyId(currentUser.getFamilyId());
+            }
         } else if ("FAMILY".equals(account.getOwnerType())) {
             account.setOwnerFamilyId(currentUser.getFamilyId());
+            // 家庭账户也需要设置 ownerUserId（创建者）
+            account.setOwnerUserId(currentUser.getId());
         }
 
         Account created = accountService.createAccount(account);
@@ -68,6 +74,33 @@ public class AccountController {
         BigDecimal newBalance = new BigDecimal(request.get("balance").toString());
         accountService.adjustBalance(id, newBalance);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * 重新计算指定账户的余额（从分录中计算）
+     * 
+     * 适用于：修复历史数据、数据迁移、余额不一致等情况
+     * 
+     * @param id 账户ID
+     * @return 重新计算后的余额
+     */
+    @PostMapping("/{id}/recalculate-balance")
+    public ResponseEntity<Map<String, Object>> recalculateBalance(@PathVariable Long id) {
+        BigDecimal newBalance = accountService.recalculateBalance(id);
+        return ResponseEntity.ok(Map.of("accountId", id, "balance", newBalance));
+    }
+
+    /**
+     * 重新计算所有账户的余额（从分录中计算）
+     * 
+     * 适用于：修复历史数据、数据迁移、余额不一致等情况
+     * 
+     * @return 重新计算的账户数量
+     */
+    @PostMapping("/recalculate-all-balances")
+    public ResponseEntity<Map<String, Object>> recalculateAllBalances() {
+        int count = accountService.recalculateAllBalances();
+        return ResponseEntity.ok(Map.of("recalculatedCount", count));
     }
 }
 

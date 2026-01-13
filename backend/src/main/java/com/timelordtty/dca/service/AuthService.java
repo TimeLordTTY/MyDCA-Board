@@ -27,11 +27,13 @@ public class AuthService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final AccountService accountService;
 
-    public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider) {
+    public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider, AccountService accountService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.accountService = accountService;
     }
 
     @Transactional
@@ -60,6 +62,17 @@ public class AuthService {
         user.setIsActive(true);
 
         userMapper.insert(user);
+
+        // 为新用户创建所有虚拟账户（INCOME、EXPENSE、FEE、RECEIVABLE、LIABILITY）
+        // POSITION 账户会在买入/申购时按产品自动创建
+        String[] virtualSubtypes = {"INCOME", "EXPENSE", "FEE", "RECEIVABLE", "LIABILITY"};
+        String ownerType = "PERSONAL";
+        Long ownerFamilyId = user.getFamilyId(); // 如果用户有家庭，也设置 familyId
+        
+        for (String virtualSubtype : virtualSubtypes) {
+            accountService.getOrCreateVirtualAccount(
+                virtualSubtype, virtualSubtype, ownerType, user.getId(), ownerFamilyId, null, null);
+        }
 
         // 生成JWT token
         String token = jwtTokenProvider.generateToken(user.getUsername());

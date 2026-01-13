@@ -14,7 +14,11 @@ public interface LedgerTxnMapper {
     List<LedgerTxn> selectByBizGroupKey(@Param("bizGroupKey") String bizGroupKey);
     List<LedgerTxn> selectByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
                                        @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,
-                                       @Param("productId") Long productId);
+                                       @Param("productId") Long productId,
+                                       @Param("offset") Integer offset, @Param("limit") Integer limit);
+    int countByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
+                         @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,
+                         @Param("productId") Long productId);
     int insert(LedgerTxn txn);
     int update(LedgerTxn txn);
 }

@@ -44,14 +44,6 @@ public class QuickEntryService {
      * @return 创建的 LedgerTxn
      */
     public LedgerTxn quickExpense(Long userId, Long accountId, BigDecimal amount, String note) {
-        return quickExpense(userId, accountId, amount, note, null, null, false);
-    }
-
-    public LedgerTxn quickExpense(Long userId, Long accountId, BigDecimal amount, String note, String occurredAt) {
-        return quickExpense(userId, accountId, amount, note, occurredAt, null, false);
-    }
-
-    public LedgerTxn quickExpense(Long userId, Long accountId, BigDecimal amount, String note, String occurredAt, Long categoryId, Boolean isReimbursable) {
         Account account = accountMapper.selectById(accountId);
         if (account == null) {
             throw new RuntimeException("账户不存在");
@@ -89,7 +81,7 @@ public class QuickEntryService {
         expensePosting.setCurrency(account.getCurrency());
         postings.add(expensePosting);
 
-        return ledgerService.createTransaction(userId, null, "EXPENSE", null, postings, note, occurredAt, categoryId, isReimbursable);
+        return ledgerService.createTransaction(userId, null, "EXPENSE", null, postings, note);
     }
 
     @Transactional
@@ -103,14 +95,6 @@ public class QuickEntryService {
      * @return 创建的 LedgerTxn
      */
     public LedgerTxn quickIncome(Long userId, Long accountId, BigDecimal amount, String note) {
-        return quickIncome(userId, accountId, amount, note, null, null);
-    }
-
-    public LedgerTxn quickIncome(Long userId, Long accountId, BigDecimal amount, String note, String occurredAt) {
-        return quickIncome(userId, accountId, amount, note, occurredAt, null);
-    }
-
-    public LedgerTxn quickIncome(Long userId, Long accountId, BigDecimal amount, String note, String occurredAt, Long categoryId) {
         Account account = accountMapper.selectById(accountId);
         if (account == null) {
             throw new RuntimeException("账户不存在");
@@ -142,7 +126,7 @@ public class QuickEntryService {
         incomePosting.setCurrency(account.getCurrency());
         postings.add(incomePosting);
 
-        return ledgerService.createTransaction(userId, null, "INCOME", null, postings, note, occurredAt, categoryId, false);
+        return ledgerService.createTransaction(userId, null, "INCOME", null, postings, note);
     }
 }
 
