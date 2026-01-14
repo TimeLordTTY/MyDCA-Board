@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.BrokerFeeConfigMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.BrokerFeeConfig">
+        <id column="id" property="id"/>
+        <result column="account_id" property="accountId"/>
+        <result column="fee_rule_type" property="feeRuleType"/>
+        <result column="buy_fee_rate" property="buyFeeRate"/>
+        <result column="sell_fee_rate" property="sellFeeRate"/>
+        <result column="buy_min_fee" property="buyMinFee"/>
+        <result column="sell_min_fee" property="sellMinFee"/>
+        <result column="subscription_discount_rate" property="subscriptionDiscountRate"/>
+        <result column="is_active" property="isActive"/>
+        <result column="note" property="note"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM broker_fee_config WHERE id = #{id}
+    </select>
+
+    <select id="selectByAccountAndRuleType" resultMap="BaseResultMap">
+        SELECT * FROM broker_fee_config 
+        WHERE account_id = #{accountId} 
+        AND fee_rule_type = #{feeRuleType}
+        AND is_active = 1
+        LIMIT 1
+    </select>
+
+    <select id="selectByAccountId" resultMap="BaseResultMap">
+        SELECT * FROM broker_fee_config 
+        WHERE account_id = #{accountId}
+        AND is_active = 1
+        ORDER BY fee_rule_type
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO broker_fee_config (
+            account_id, fee_rule_type, buy_fee_rate, sell_fee_rate,
+            buy_min_fee, sell_min_fee, subscription_discount_rate,
+            is_active, note, created_at, updated_at
+        ) VALUES (
+            #{accountId}, #{feeRuleType}, #{buyFeeRate}, #{sellFeeRate},
+            #{buyMinFee}, #{sellMinFee}, #{subscriptionDiscountRate},
+            #{isActive}, #{note}, NOW(), NOW()
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE broker_fee_config
+        <set>
+            <if test="feeRuleType != null">fee_rule_type = #{feeRuleType},</if>
+            <if test="buyFeeRate != null">buy_fee_rate = #{buyFeeRate},</if>
+            <if test="sellFeeRate != null">sell_fee_rate = #{sellFeeRate},</if>
+            <if test="buyMinFee != null">buy_min_fee = #{buyMinFee},</if>
+            <if test="sellMinFee != null">sell_min_fee = #{sellMinFee},</if>
+            <if test="subscriptionDiscountRate != null">subscription_discount_rate = #{subscriptionDiscountRate},</if>
+            <if test="isActive != null">is_active = #{isActive},</if>
+            <if test="note != null">note = #{note},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM broker_fee_config WHERE id = #{id}
+    </delete>
+
+</mapper>

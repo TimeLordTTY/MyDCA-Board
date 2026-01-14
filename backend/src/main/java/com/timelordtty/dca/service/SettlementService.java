@@ -71,11 +71,13 @@ public class SettlementService {
     private final UserService userService;
     private final AccountService accountService;
     private final ProductMasterMapper productMasterMapper;
+    private final BrokerFeeService brokerFeeService;
 
     public SettlementService(OrderMapper orderMapper, SettlementConfirmMapper settlementConfirmMapper,
                             AccountMapper accountMapper, LedgerService ledgerService,
                             OrderFundingLineMapper orderFundingLineMapper, UserService userService,
-                            AccountService accountService, ProductMasterMapper productMasterMapper) {
+                            AccountService accountService, ProductMasterMapper productMasterMapper,
+                            BrokerFeeService brokerFeeService) {
         this.orderMapper = orderMapper;
         this.settlementConfirmMapper = settlementConfirmMapper;
         this.accountMapper = accountMapper;
@@ -84,6 +86,7 @@ public class SettlementService {
         this.userService = userService;
         this.accountService = accountService;
         this.productMasterMapper = productMasterMapper;
+        this.brokerFeeService = brokerFeeService;
     }
 
     /**
@@ -148,6 +151,38 @@ public class SettlementService {
             throw new RuntimeException("订单没有资金来源记录: " + orderId);
         }
 
+        // 获取产品信息（用于费率计算）
+        ProductMaster product = productMasterMapper.selectById(order.getProductId());
+        if (product == null) {
+            throw new RuntimeException("产品不存在: " + order.getProductId());
+        }
+
+        // 如果 confirmFee 为空，自动计算费率
+        if (confirmFee == null || confirmFee.compareTo(BigDecimal.ZERO) == 0) {
+            // 从资金来源账户中找到券商账户ID
+            List<Long> fundingAccountIds = fundingLines.stream()
+                    .map(OrderFundingLine::getAccountId)
+                    .collect(java.util.stream.Collectors.toList());
+            Long brokerAccountId = brokerFeeService.findBrokerAccountId(fundingAccountIds);
+            
+            // 计算交易金额（买入/申购用总金额，卖出/赎回用确认金额）
+            BigDecimal tradeAmount;
+            if ("BUY".equals(order.getOrderType()) || "SUBSCRIPTION".equals(order.getOrderType())) {
+                tradeAmount = fundingLines.stream()
+                        .map(OrderFundingLine::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+            } else {
+                tradeAmount = confirmAmount != null ? confirmAmount : BigDecimal.ZERO;
+            }
+            
+            // 计算手续费
+            if (brokerAccountId != null && tradeAmount.compareTo(BigDecimal.ZERO) > 0) {
+                confirmFee = brokerFeeService.calculateFee(brokerAccountId, product, order.getOrderType(), tradeAmount);
+            } else {
+                confirmFee = BigDecimal.ZERO;
+            }
+        }
+
         // 逐条释放各账户的reserved_amount（先释放，避免可用资金瞬间不一致）
         for (OrderFundingLine fundingLine : fundingLines) {
             Account account = accountMapper.selectById(fundingLine.getAccountId());
@@ -163,12 +198,6 @@ public class SettlementService {
         // 生成真实分录（调用LedgerService.createTransaction）
         // 根据订单类型生成不同的分录
         List<LedgerPosting> postings = new ArrayList<>();
-        
-        // 获取产品信息（用于创建持仓账户）
-        ProductMaster product = productMasterMapper.selectById(order.getProductId());
-        if (product == null) {
-            throw new RuntimeException("产品不存在: " + order.getProductId());
-        }
 
         // 获取用户信息（用于确定账户归属）
         com.timelordtty.dca.dto.AuthResponse.UserInfo currentUser = userService.getCurrentUser();

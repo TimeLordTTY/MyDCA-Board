@@ -305,30 +305,128 @@
           <el-input v-model="form.trackIndex" placeholder="如：沪深300" />
         </el-form-item>
 
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="买入费率" prop="buyFeeRate">
-              <el-input-number
-                v-model="form.buyFeeRate"
-                :precision="6"
-                :step="0.0001"
-                :min="0"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="卖出费率" prop="sellFeeRate">
-              <el-input-number
-                v-model="form.sellFeeRate"
-                :precision="6"
-                :step="0.0001"
-                :min="0"
-                style="width: 100%"
-              />
-            </el-form-item>
-          </el-col>
-        </el-row>
+        <!-- 场外产品显示费率配置，场内产品不显示（使用券商账户费率） -->
+        <template v-if="form.channel === 'OTC' && form.assetType !== 'BANK_WM_NAV' && form.assetType !== 'MMF'">
+          <el-form-item label="买入费率" prop="buyFeeRate">
+            <el-input-number
+              v-model="buyFeeRatePercent"
+              :precision="6"
+              :step="0.0001"
+              :min="0"
+              :max="100"
+              style="width: 100%"
+            >
+              <template #suffix>%</template>
+            </el-input-number>
+            <div class="sub">场外基金买入费率（0-100万档）</div>
+          </el-form-item>
+          
+          <!-- 卖出费率分段配置 -->
+          <el-form-item label="卖出费率分段" required>
+            <div style="margin-bottom: 8px;">
+              <el-button size="small" type="primary" @click="handleAddFeeTier">+ 添加分段</el-button>
+            </div>
+            <el-table :data="sellFeeTiers" border size="small" style="width: 100%">
+              <el-table-column prop="minDays" label="最小持有天数" width="120">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.minDays"
+                    :min="0"
+                    :precision="0"
+                    size="small"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column prop="maxDays" label="最大持有天数" width="180">
+                <template #default="{ row }">
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <el-input-number
+                      v-if="row.maxDays !== null"
+                      v-model="row.maxDays"
+                      :min="0"
+                      :precision="0"
+                      size="small"
+                      style="flex: 1;"
+                    />
+                    <el-input
+                      v-else
+                      value="无上限"
+                      disabled
+                      size="small"
+                      style="flex: 1;"
+                    />
+                    <el-button
+                      size="small"
+                      :type="row.maxDays === null ? 'primary' : 'default'"
+                      @click="row.maxDays = row.maxDays === null ? 0 : null"
+                    >
+                      {{ row.maxDays === null ? '设为有上限' : '设为无上限' }}
+                    </el-button>
+                  </div>
+                  <div class="sub" style="font-size: 11px; color: #999; margin-top: 2px;">
+                    {{ row.maxDays === null ? '无上限（不包含）' : `不包含${row.maxDays}天` }}
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="sellFeeRatePercent" label="卖出费率" width="150">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.sellFeeRatePercent"
+                    :precision="6"
+                    :step="0.0001"
+                    :min="0"
+                    :max="100"
+                    size="small"
+                    style="width: 100%"
+                  >
+                    <template #suffix>%</template>
+                  </el-input-number>
+                </template>
+              </el-table-column>
+              <el-table-column prop="sortOrder" label="排序" width="80">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.sortOrder"
+                    :min="0"
+                    :precision="0"
+                    size="small"
+                    style="width: 100%"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="80" fixed="right">
+                <template #default="{ $index }">
+                  <el-button
+                    type="danger"
+                    size="small"
+                    link
+                    @click="handleRemoveFeeTier($index)"
+                  >
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <div class="sub" style="margin-top: 8px; color: #999;">
+              提示：普通基金只使用分段费率，不使用默认卖出费率。持有天数使用左闭右开区间（如0-7表示[0, 7)，7-30表示[7, 30)）。最后一个分段可以使用空值表示"以上"。
+            </div>
+          </el-form-item>
+        </template>
+        <template v-else-if="form.channel === 'EXCHANGE'">
+          <el-form-item>
+            <div class="sub" style="color: #999;">
+              场内产品费率由券商账户配置决定，无需在此设置
+            </div>
+          </el-form-item>
+        </template>
+        <template v-else-if="form.assetType === 'BANK_WM_NAV' || form.assetType === 'MMF'">
+          <el-form-item>
+            <div class="sub" style="color: #999;">
+              银行理财净值型和货币基金无买入卖出费率
+            </div>
+          </el-form-item>
+        </template>
 
         <el-row :gutter="20">
           <el-col :span="12">
@@ -371,7 +469,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import {
@@ -385,6 +483,7 @@ import {
   productApi,
 } from '@wealth-hub/shared'
 import type { ProductMaster } from '@wealth-hub/shared'
+import type { FundSellFeeTier } from '@wealth-hub/shared/src/api/product'
 
 const productStore = useProductStore()
 const router = useRouter()
@@ -442,6 +541,24 @@ const form = reactive<Partial<ProductMaster>>({
   note: '',
 })
 
+// 费率百分比显示（用于前端输入）
+const buyFeeRatePercent = computed({
+  get: () => form.buyFeeRate != null ? form.buyFeeRate * 100 : 0,
+  set: (val) => { form.buyFeeRate = val != null ? val / 100 : 0 }
+})
+
+const sellFeeRatePercent = computed({
+  get: () => form.sellFeeRate != null ? form.sellFeeRate * 100 : 0,
+  set: (val) => { form.sellFeeRate = val != null ? val / 100 : 0 }
+})
+
+// 卖出费率分段配置（前端扩展字段，包含百分比显示）
+interface FeeTier extends Omit<FundSellFeeTier, 'sellFeeRate'> {
+  sellFeeRatePercent: number
+}
+
+const sellFeeTiers = ref<FeeTier[]>([])
+
 const rules: FormRules = {
   productCode: [{ required: true, message: '请输入产品代码', trigger: 'blur' }],
   productName: [{ required: true, message: '请输入产品名称', trigger: 'blur' }],
@@ -450,7 +567,8 @@ const rules: FormRules = {
   market: [{ required: true, message: '请选择市场', trigger: 'change' }],
   currency: [{ required: true, message: '请选择币种', trigger: 'change' }],
   buyFeeRate: [{ required: true, message: '请输入买入费率', trigger: 'blur' }],
-  sellFeeRate: [{ required: true, message: '请输入卖出费率', trigger: 'blur' }],
+  // 普通基金不再需要默认卖出费率，只使用分段费率
+  // sellFeeRate: [{ required: true, message: '请输入卖出费率', trigger: 'blur' }],
   buyConfirmOffset: [{ required: true, message: '请输入买入确认延迟', trigger: 'blur' }],
   sellConfirmOffset: [{ required: true, message: '请输入卖出确认延迟', trigger: 'blur' }],
   cutoffTime: [{ required: true, message: '请输入交易截单时间', trigger: 'blur' }],
@@ -715,9 +833,17 @@ function handleAddProduct() {
   dialogVisible.value = true
 }
 
-function handleEdit(product: ProductMaster) {
+async function handleEdit(product: ProductMaster) {
   editingProduct.value = product
   Object.assign(form, product)
+  
+  // 如果是场外产品，加载费率分段配置
+  if (product.channel === 'OTC' && product.assetType !== 'BANK_WM_NAV' && product.assetType !== 'MMF') {
+    await loadFeeTiers(product.id)
+  } else {
+    sellFeeTiers.value = []
+  }
+  
   dialogVisible.value = true
 }
 
@@ -741,11 +867,47 @@ function resetForm() {
     isActive: true,
     note: '',
   })
+  sellFeeTiers.value = []
+}
+
+function handleAddFeeTier() {
+  const maxSortOrder = sellFeeTiers.value.length > 0 
+    ? Math.max(...sellFeeTiers.value.map(t => t.sortOrder || 0))
+    : -1
+  
+  sellFeeTiers.value.push({
+    minDays: 0,
+    maxDays: null,
+    sellFeeRatePercent: 0,
+    sellFeeRate: 0,
+    sortOrder: maxSortOrder + 1,
+    isActive: true,
+    note: '',
+  })
+}
+
+function handleRemoveFeeTier(index: number) {
+  sellFeeTiers.value.splice(index, 1)
+}
+
+// 加载费率分段配置
+async function loadFeeTiers(productId: number) {
+  try {
+    const tiers = await productApi.getSellFeeTiers(productId)
+    sellFeeTiers.value = tiers.map(t => ({
+      ...t,
+      sellFeeRatePercent: (t.sellFeeRate || 0) * 100
+    }))
+  } catch (error: any) {
+    console.error('加载费率分段失败:', error)
+    sellFeeTiers.value = []
+  }
 }
 
 function handleDialogClose() {
   editingProduct.value = null
   resetForm()
+  sellFeeTiers.value = []
   formRef.value?.resetFields()
 }
 
@@ -755,15 +917,40 @@ async function handleSave() {
   await formRef.value.validate(async (valid) => {
     if (!valid) return
 
+    // 如果是场外产品，验证分段费率配置
+    if (form.channel === 'OTC' && form.assetType !== 'BANK_WM_NAV' && form.assetType !== 'MMF') {
+      if (!sellFeeTiers.value || sellFeeTiers.value.length === 0) {
+        ElMessage.warning('请至少配置一个卖出费率分段')
+        return
+      }
+      // 验证分段配置是否完整
+      for (const tier of sellFeeTiers.value) {
+        if (tier.minDays == null || tier.sellFeeRatePercent == null) {
+          ElMessage.warning('请完善卖出费率分段配置（最小持有天数和费率必填）')
+          return
+        }
+      }
+    }
+
     saving.value = true
     try {
+      let productId: number
+      
       if (editingProduct.value) {
-        await productStore.updateProduct(editingProduct.value.id, form)
+        const updated = await productStore.updateProduct(editingProduct.value.id, form)
+        productId = updated.id
         ElMessage.success('更新成功')
       } else {
-        await productStore.createProduct(form)
+        const created = await productStore.createProduct(form)
+        productId = created.id
         ElMessage.success('创建成功')
       }
+      
+      // 如果是场外产品，保存费率分段配置
+      if (form.channel === 'OTC' && form.assetType !== 'BANK_WM_NAV' && form.assetType !== 'MMF') {
+        await saveFeeTiers(productId)
+      }
+      
       dialogVisible.value = false
       await loadAllProducts()
     } catch (error: any) {
@@ -772,6 +959,26 @@ async function handleSave() {
       saving.value = false
     }
   })
+}
+
+// 保存费率分段配置
+async function saveFeeTiers(productId: number) {
+  try {
+    // 转换百分比为小数，移除前端扩展字段
+    const tiersToSave: FundSellFeeTier[] = sellFeeTiers.value.map(tier => {
+      const { sellFeeRatePercent, ...rest } = tier
+      return {
+        ...rest,
+        sellFeeRate: sellFeeRatePercent / 100,
+        productId: productId,
+      }
+    })
+    
+    await productApi.saveSellFeeTiers(productId, tiersToSave)
+  } catch (error: any) {
+    console.error('保存费率分段失败:', error)
+    ElMessage.warning('产品已保存，但费率分段保存失败')
+  }
 }
 
 onMounted(async () => {

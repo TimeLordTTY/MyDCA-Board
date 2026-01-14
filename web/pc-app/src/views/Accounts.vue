@@ -37,11 +37,18 @@
                     父账户（容器）余额 = Σ子账户余额：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
                   </div>
                 </div>
-                <div class="row-gap">
-                  <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
+                  <div class="row-gap">
+                    <button 
+                      v-if="platform.accountType === 'BROKER'" 
+                      class="btn" 
+                      @click.stop="handleManageFeeConfig(platform)"
+                    >
+                      费率配置
+                    </button>
+                    <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
+                  </div>
                 </div>
-              </div>
-              <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
+                <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
                 <div
                   v-for="child in platform.children"
                   :key="child.id"
@@ -106,6 +113,13 @@
                     </div>
                   </div>
                   <div class="row-gap">
+                    <button 
+                      v-if="platform.accountType === 'BROKER'" 
+                      class="btn" 
+                      @click.stop="handleManageFeeConfig(platform)"
+                    >
+                      费率配置
+                    </button>
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
                 </div>
@@ -295,6 +309,181 @@
       </template>
     </el-dialog>
 
+    <!-- 券商费率配置对话框 -->
+    <el-dialog v-model="feeConfigDialogVisible" title="券商费率配置" width="900px" @close="handleFeeConfigDialogClose">
+      <div v-if="currentBrokerAccount">
+        <div style="margin-bottom: 16px; padding: 12px; background: #f5f7fa; border-radius: 4px;">
+          <div style="font-weight: 600; margin-bottom: 4px;">账户：{{ currentBrokerAccount.accountName }}</div>
+          <div style="font-size: 12px; color: #666;">账户代码：{{ currentBrokerAccount.accountCode }}</div>
+        </div>
+        
+        <div style="margin-bottom: 12px;">
+          <el-button type="primary" size="small" @click="handleAddFeeConfig">+ 添加费率配置</el-button>
+        </div>
+        
+        <el-table :data="feeConfigs" border size="small" style="width: 100%">
+          <el-table-column prop="feeRuleType" label="费率规则类型" width="150">
+            <template #default="{ row }">
+              {{ getFeeRuleTypeLabel(row.feeRuleType) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="buyFeeRatePercent" label="买入费率" width="120">
+            <template #default="{ row }">
+              {{ row.buyFeeRatePercent?.toFixed(6) || '0.000000' }}%
+            </template>
+          </el-table-column>
+          <el-table-column prop="sellFeeRatePercent" label="卖出费率" width="120">
+            <template #default="{ row }">
+              {{ row.sellFeeRatePercent?.toFixed(6) || '0.000000' }}%
+            </template>
+          </el-table-column>
+          <el-table-column prop="buyMinFee" label="买入最低手续费" width="130">
+            <template #default="{ row }">
+              ¥{{ row.buyMinFee?.toFixed(2) || '0.00' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="sellMinFee" label="卖出最低手续费" width="130">
+            <template #default="{ row }">
+              ¥{{ row.sellMinFee?.toFixed(2) || '0.00' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="subscriptionDiscountRate" label="申购折扣率" width="120">
+            <template #default="{ row }">
+              <span v-if="row.subscriptionDiscountRate != null">
+                {{ (row.subscriptionDiscountRate * 100).toFixed(1) }}折
+              </span>
+              <span v-else style="color: #999;">-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="isActive" label="启用" width="80" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.isActive ? 'success' : 'info'" size="small">
+                {{ row.isActive ? '启用' : '停用' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="120" fixed="right">
+            <template #default="{ row, $index }">
+              <el-button type="primary" size="small" link @click="handleEditFeeConfig(row, $index)">编辑</el-button>
+              <el-button type="danger" size="small" link @click="handleDeleteFeeConfig(row.id, $index)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
+
+    <!-- 费率配置编辑对话框 -->
+    <el-dialog 
+      v-model="feeConfigEditDialogVisible" 
+      :title="editingFeeConfigIndex >= 0 ? '编辑费率配置' : '添加费率配置'" 
+      width="600px"
+      @close="handleFeeConfigEditDialogClose"
+    >
+      <el-form :model="feeConfigForm" label-width="140px" ref="feeConfigFormRef">
+        <el-form-item label="费率规则类型" prop="feeRuleType" required>
+          <el-select v-model="feeConfigForm.feeRuleType" placeholder="选择费率规则类型" style="width: 100%">
+            <el-option
+              v-for="(label, value) in feeRuleTypeMap"
+              :key="value"
+              :label="label"
+              :value="value"
+            />
+          </el-select>
+        </el-form-item>
+        
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="买入费率" prop="buyFeeRatePercent" required>
+              <el-input-number
+                v-model="buyFeeRatePercent"
+                :precision="6"
+                :step="0.0001"
+                :min="0"
+                :max="100"
+                style="width: 100%"
+              >
+                <template #suffix>%</template>
+              </el-input-number>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="卖出费率" prop="sellFeeRatePercent" required>
+              <el-input-number
+                v-model="sellFeeRatePercent"
+                :precision="6"
+                :step="0.0001"
+                :min="0"
+                :max="100"
+                style="width: 100%"
+              >
+                <template #suffix>%</template>
+              </el-input-number>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        <el-row :gutter="20">
+          <el-col :span="12">
+            <el-form-item label="买入最低手续费" prop="buyMinFee" required>
+              <el-input-number
+                v-model="feeConfigForm.buyMinFee"
+                :precision="2"
+                :step="0.01"
+                :min="0"
+                style="width: 100%"
+              >
+                <template #prefix>¥</template>
+              </el-input-number>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="卖出最低手续费" prop="sellMinFee" required>
+              <el-input-number
+                v-model="feeConfigForm.sellMinFee"
+                :precision="2"
+                :step="0.01"
+                :min="0"
+                style="width: 100%"
+              >
+                <template #prefix>¥</template>
+              </el-input-number>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        
+        <el-form-item 
+          v-if="feeConfigForm.feeRuleType === 'LOF_SUBSCRIPTION'" 
+          label="申购折扣率" 
+          prop="subscriptionDiscountRate"
+        >
+          <el-input-number
+            v-model="subscriptionDiscountRatePercent"
+            :precision="1"
+            :step="0.1"
+            :min="0"
+            :max="100"
+            style="width: 100%"
+          >
+            <template #suffix>折</template>
+          </el-input-number>
+          <div class="sub">如：10表示一折（0.1），50表示五折（0.5）</div>
+        </el-form-item>
+        
+        <el-form-item label="是否启用">
+          <el-switch v-model="feeConfigForm.isActive" />
+        </el-form-item>
+        
+        <el-form-item label="备注">
+          <el-input v-model="feeConfigForm.note" type="textarea" :rows="2" placeholder="备注信息" />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="feeConfigEditDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="feeConfigSaving" @click="handleSaveFeeConfig">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 余额调整对话框 -->
     <el-dialog v-model="balanceDialogVisible" title="调整余额" width="500px">
       <el-form :model="balanceForm" :rules="balanceRules" ref="balanceFormRef" label-width="120px">
@@ -318,7 +507,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import {
   useAccountStore,
@@ -330,6 +519,7 @@ import {
   accountTypeMap,
   currencyMap,
 } from '@wealth-hub/shared'
+import { brokerFeeApi, type BrokerFeeConfig } from '@wealth-hub/shared'
 import type { Account } from '@wealth-hub/shared'
 
 const accountStore = useAccountStore()
@@ -378,6 +568,58 @@ const balanceForm = reactive({
 const balanceRules: FormRules = {
   balance: [{ required: true, message: '请输入新余额', trigger: 'blur' }],
 }
+
+// 费率规则类型映射
+const feeRuleTypeMap: Record<string, string> = {
+  STOCK: 'A股',
+  ETF: 'ETF',
+  LOF: 'LOF场内交易',
+  LOF_SUBSCRIPTION: 'LOF场内申购',
+  CONVERTIBLE_BOND_SH: '上海可转债',
+  CONVERTIBLE_BOND_SZ: '深圳可转债',
+  BOND_REPO: '逆回购',
+  FUND_OTC: '场外基金',
+  DEFAULT: '默认规则',
+}
+
+function getFeeRuleTypeLabel(feeRuleType: string): string {
+  return feeRuleTypeMap[feeRuleType] || feeRuleType
+}
+
+// 券商费率配置相关
+const feeConfigDialogVisible = ref(false)
+const feeConfigEditDialogVisible = ref(false)
+const currentBrokerAccount = ref<Account | null>(null)
+const feeConfigs = ref<(BrokerFeeConfig & { buyFeeRatePercent?: number; sellFeeRatePercent?: number })[]>([])
+const editingFeeConfigIndex = ref(-1)
+const feeConfigSaving = ref(false)
+const feeConfigFormRef = ref<FormInstance>()
+const feeConfigForm = reactive<Partial<BrokerFeeConfig> & { buyFeeRatePercent?: number; sellFeeRatePercent?: number }>({
+  feeRuleType: 'STOCK',
+  buyFeeRate: 0,
+  sellFeeRate: 0,
+  buyMinFee: 0,
+  sellMinFee: 0,
+  subscriptionDiscountRate: undefined,
+  isActive: true,
+  note: '',
+})
+
+// 费率百分比显示（用于前端输入）
+const buyFeeRatePercent = computed({
+  get: () => feeConfigForm.buyFeeRate != null ? feeConfigForm.buyFeeRate * 100 : 0,
+  set: (val) => { feeConfigForm.buyFeeRate = val != null ? val / 100 : 0 }
+})
+
+const sellFeeRatePercent = computed({
+  get: () => feeConfigForm.sellFeeRate != null ? feeConfigForm.sellFeeRate * 100 : 0,
+  set: (val) => { feeConfigForm.sellFeeRate = val != null ? val / 100 : 0 }
+})
+
+const subscriptionDiscountRatePercent = computed({
+  get: () => feeConfigForm.subscriptionDiscountRate != null ? feeConfigForm.subscriptionDiscountRate * 100 : 0,
+  set: (val) => { feeConfigForm.subscriptionDiscountRate = val != null ? val / 100 : 0 }
+})
 
 function getFundUsageDescription(value: string): string {
   const descriptions: Record<string, string> = {
@@ -618,6 +860,133 @@ async function loadAccounts() {
   } catch (error) {
     console.error('Failed to load accounts:', error)
     accountTree.value = []
+  }
+}
+
+// 费率配置管理函数
+async function handleManageFeeConfig(account: Account) {
+  if (account.accountType !== 'BROKER') {
+    ElMessage.warning('只有券商账户才能配置费率')
+    return
+  }
+  
+  currentBrokerAccount.value = account
+  feeConfigDialogVisible.value = true
+  await loadFeeConfigs(account.id)
+}
+
+async function loadFeeConfigs(accountId: number) {
+  try {
+    const configs = await brokerFeeApi.getFeeConfigs(accountId)
+    feeConfigs.value = configs.map(config => ({
+      ...config,
+      buyFeeRatePercent: (config.buyFeeRate || 0) * 100,
+      sellFeeRatePercent: (config.sellFeeRate || 0) * 100,
+    }))
+  } catch (error: any) {
+    console.error('加载费率配置失败:', error)
+    ElMessage.error('加载费率配置失败')
+    feeConfigs.value = []
+  }
+}
+
+function handleFeeConfigDialogClose() {
+  currentBrokerAccount.value = null
+  feeConfigs.value = []
+}
+
+function handleAddFeeConfig() {
+  editingFeeConfigIndex.value = -1
+  resetFeeConfigForm()
+  feeConfigEditDialogVisible.value = true
+}
+
+function handleEditFeeConfig(config: BrokerFeeConfig & { buyFeeRatePercent?: number; sellFeeRatePercent?: number }, index: number) {
+  editingFeeConfigIndex.value = index
+  Object.assign(feeConfigForm, {
+    ...config,
+    buyFeeRate: config.buyFeeRate || 0,
+    sellFeeRate: config.sellFeeRate || 0,
+    subscriptionDiscountRate: config.subscriptionDiscountRate,
+  })
+  feeConfigEditDialogVisible.value = true
+}
+
+async function handleDeleteFeeConfig(id: number | undefined, index: number) {
+  if (!id || !currentBrokerAccount.value) return
+  
+  try {
+    await ElMessageBox.confirm('确定要删除这条费率配置吗？', '确认删除', {
+      type: 'warning',
+    })
+    
+    await brokerFeeApi.deleteFeeConfig(currentBrokerAccount.value.id, id)
+    ElMessage.success('删除成功')
+    await loadFeeConfigs(currentBrokerAccount.value.id)
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('删除费率配置失败:', error)
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+function resetFeeConfigForm() {
+  Object.assign(feeConfigForm, {
+    feeRuleType: 'STOCK',
+    buyFeeRate: 0,
+    sellFeeRate: 0,
+    buyMinFee: 0,
+    sellMinFee: 0,
+    subscriptionDiscountRate: undefined,
+    isActive: true,
+    note: '',
+  })
+}
+
+function handleFeeConfigEditDialogClose() {
+  editingFeeConfigIndex.value = -1
+  resetFeeConfigForm()
+  feeConfigFormRef.value?.resetFields()
+}
+
+async function handleSaveFeeConfig() {
+  if (!feeConfigFormRef.value || !currentBrokerAccount.value) return
+  
+  feeConfigSaving.value = true
+  try {
+    const configToSave: Partial<BrokerFeeConfig> = {
+      feeRuleType: feeConfigForm.feeRuleType,
+      buyFeeRate: feeConfigForm.buyFeeRate,
+      sellFeeRate: feeConfigForm.sellFeeRate,
+      buyMinFee: feeConfigForm.buyMinFee,
+      sellMinFee: feeConfigForm.sellMinFee,
+      subscriptionDiscountRate: feeConfigForm.subscriptionDiscountRate,
+      isActive: feeConfigForm.isActive,
+      note: feeConfigForm.note,
+    }
+    
+    if (editingFeeConfigIndex.value >= 0 && feeConfigs.value[editingFeeConfigIndex.value]?.id) {
+      // 更新
+      await brokerFeeApi.updateFeeConfig(
+        currentBrokerAccount.value.id,
+        feeConfigs.value[editingFeeConfigIndex.value].id!,
+        configToSave
+      )
+      ElMessage.success('更新成功')
+    } else {
+      // 创建
+      await brokerFeeApi.createFeeConfig(currentBrokerAccount.value.id, configToSave)
+      ElMessage.success('创建成功')
+    }
+    
+    feeConfigEditDialogVisible.value = false
+    await loadFeeConfigs(currentBrokerAccount.value.id)
+  } catch (error: any) {
+    console.error('保存费率配置失败:', error)
+    ElMessage.error(error.message || '保存失败')
+  } finally {
+    feeConfigSaving.value = false
   }
 }
 

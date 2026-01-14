@@ -87,8 +87,8 @@ CREATE TABLE `product_master` (
   `product_name` VARCHAR(128) NOT NULL COMMENT '产品名称',
   `is_qdii` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否QDII',
   `track_index` VARCHAR(64) NULL COMMENT '跟踪指数',
-  `buy_fee_rate` DECIMAL(10, 6) NOT NULL DEFAULT 0.000000 COMMENT '申购费率',
-  `sell_fee_rate` DECIMAL(10, 6) NOT NULL DEFAULT 0.000000 COMMENT '赎回费率',
+  `buy_fee_rate` DECIMAL(10, 7) NOT NULL DEFAULT 0.0000000 COMMENT '申购费率（默认值，实际费率优先从broker_fee_config获取）',
+  `sell_fee_rate` DECIMAL(10, 7) NOT NULL DEFAULT 0.0000000 COMMENT '赎回费率（默认值，实际费率优先从broker_fee_config获取）',
   `buy_confirm_offset` INT NOT NULL DEFAULT 1 COMMENT '买入确认延迟交易日数（T+N）',
   `sell_confirm_offset` INT NOT NULL DEFAULT 1 COMMENT '赎回确认延迟交易日数（T+N）',
   `cutoff_time` VARCHAR(10) NOT NULL DEFAULT '15:00' COMMENT '交易截止时间',
@@ -162,6 +162,48 @@ CREATE TABLE `accounts` (
   ),
   FOREIGN KEY (`parent_account_id`) REFERENCES `accounts`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='账户表';
+
+-- 2.3.1 broker_fee_config - 券商费率配置表
+CREATE TABLE `broker_fee_config` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '费率配置ID',
+  `account_id` BIGINT NOT NULL COMMENT '券商账户ID（外键accounts.id，account_type必须为BROKER）',
+  `fee_rule_type` ENUM('STOCK', 'ETF', 'LOF', 'LOF_SUBSCRIPTION', 'CONVERTIBLE_BOND_SH', 'CONVERTIBLE_BOND_SZ', 'BOND_REPO', 'FUND_OTC', 'DEFAULT') NOT NULL COMMENT '费率规则类型（STOCK=A股，ETF=ETF，LOF=LOF场内交易，LOF_SUBSCRIPTION=LOF场内申购，CONVERTIBLE_BOND_SH=上海可转债，CONVERTIBLE_BOND_SZ=深圳可转债，BOND_REPO=逆回购，FUND_OTC=场外基金，DEFAULT=默认规则）',
+  `buy_fee_rate` DECIMAL(10, 7) NOT NULL DEFAULT 0.0000000 COMMENT '买入费率（如0.0001154表示万1.154）',
+  `sell_fee_rate` DECIMAL(10, 7) NOT NULL DEFAULT 0.0000000 COMMENT '卖出费率',
+  `buy_min_fee` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '买入最低手续费（起收金额，如2.00表示2元起收）',
+  `sell_min_fee` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '卖出最低手续费',
+  `subscription_discount_rate` DECIMAL(10, 7) NULL COMMENT '申购折扣率（如0.1表示一折，仅用于LOF_SUBSCRIPTION）',
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  `note` VARCHAR(500) NULL COMMENT '备注',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_account_fee_rule` (`account_id`, `fee_rule_type`),
+  KEY `idx_account_id` (`account_id`),
+  KEY `idx_fee_rule_type` (`fee_rule_type`),
+  KEY `idx_is_active` (`is_active`),
+  CONSTRAINT `fk_broker_fee_account` FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='券商费率配置表';
+
+-- 2.3.2 fund_sell_fee_tier - 场外基金卖出费率分段表
+CREATE TABLE `fund_sell_fee_tier` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '费率分段ID',
+  `product_id` BIGINT NOT NULL COMMENT '产品ID（外键product_master.id）',
+  `min_days` INT NOT NULL COMMENT '最小持有天数（包含，如0表示持有0天及以上）',
+  `max_days` INT NULL COMMENT '最大持有天数（不包含，如7表示持有7天以下，NULL表示无上限）',
+  `sell_fee_rate` DECIMAL(10, 7) NOT NULL DEFAULT 0.0000000 COMMENT '卖出费率（如0.0015表示0.15%）',
+  `sort_order` INT NOT NULL DEFAULT 0 COMMENT '排序顺序（数字越小越靠前，用于确定分段优先级）',
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  `note` VARCHAR(500) NULL COMMENT '备注（如"持有0-7天"）',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_product_id` (`product_id`),
+  KEY `idx_min_days` (`min_days`),
+  KEY `idx_is_active` (`is_active`),
+  KEY `idx_product_sort` (`product_id`, `sort_order`),
+  CONSTRAINT `fk_fund_sell_fee_product` FOREIGN KEY (`product_id`) REFERENCES `product_master`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='场外基金卖出费率分段表';
 
 -- 父子账户约束说明（应用层必须校验，MySQL不支持在CHECK约束中引用外键列）：
 -- 1. VIRTUAL账户不允许设置parent_account_id（应用层校验）

@@ -11,6 +11,8 @@
     - 银行理财净值型：asset_type = 'BANK_WM_NAV'（如 FBAE41126E）→ 通过民生 API 写入 nav 表
   - 场内产品（channel='EXCHANGE'）：
     - ETF / 股票：asset_type in ('ETF', 'STOCK') → 写入 market_bar_daily（日 K）
+    - 期货：asset_type = 'FUTURES' → 写入 market_bar_daily（日 K）
+    - 期权：asset_type = 'OPTIONS' → 写入 market_bar_daily（日 K）
 
 - 对于每个产品：
   - nav 表：从 2000-01-01（或该产品已有 nav 的最后一天之后）补齐到今天；
@@ -33,6 +35,7 @@
 
 import os
 import sys
+import re
 from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional
 
@@ -104,14 +107,12 @@ def _normalize_cmbc_nav_record(raw_record: Dict, product_code: str) -> Dict:
 
 def query_cmbc_nav_for_range(product_code: str, start_date: date, end_date: date) -> List[Dict]:
     """
-    从民生银行接口按日期区间拉取历史净值。
+    从民生银行接口按日期区间拉取历史净值（参考cmbc_client.py）。
 
     说明：
-    - 为了避免 v1 中“递归回溯找最近净值”的行为，这里严格按每个交易日查询：
-      - begin_date = end_date = 当天
-      - 如果当天没有数据，则跳过，不回溯前一日。
-    - 民生接口本身支持按日期区间查询，但 v1 客户端是按单日查询的。
-      这里延续单日查询逻辑，以便控制每个 nav_date 精确对应。
+    - 优先按“区间”直接查询（begin_date=start_date, end_date=end_date），让接口一次性返回 list。
+    - 如果区间查询失败/返回非JSON，则降级为“逐日查询 + 空数据回溯（最多15天）”（与 v1 行为一致）。
+    - 只查询工作日（周一到周五），跳过周末。
     """
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -126,45 +127,103 @@ def query_cmbc_nav_for_range(product_code: str, start_date: date, end_date: date
     session = requests.Session()
     session.mount("https://", LegacySSLAdapter())
 
-    all_records: List[Dict] = []
-    cur = start_date
-    while cur <= end_date:
+    def _post(begin: date, end: date) -> Optional[Dict]:
         try:
             resp = session.post(
                 "https://www.cmbcwm.com.cn/gw/po_web/BTADailyQry",
                 data={
                     "chart_type": "1",
                     "real_prd_code": product_code,
-                    "begin_date": cur.strftime("%Y%m%d"),
-                    "end_date": cur.strftime("%Y%m%d"),
+                    "begin_date": begin.strftime("%Y%m%d"),
+                    "end_date": end.strftime("%Y%m%d"),
                 },
                 headers=headers,
-                timeout=10,
+                timeout=15,
                 verify=False,
             )
-            data = resp.json()
+            if resp.status_code != 200:
+                print(f"[CMBC] {product_code} {begin}~{end} HTTP {resp.status_code}: {resp.text[:300]}")
+                return None
+            try:
+                return resp.json()
+            except Exception as e:  # noqa: BLE001
+                print(f"[CMBC] {product_code} {begin}~{end} JSON解析失败: {e}; body={resp.text[:300]}")
+                return None
         except Exception as e:  # noqa: BLE001
-            print(f"[CMBC] {product_code} {cur} 请求失败: {e}")
+            print(f"[CMBC] {product_code} {begin}~{end} 请求失败: {e}")
+            return None
+
+    # 1) 优先按区间查询（一次性返回）
+    data = _post(start_date, end_date)
+    if data and (data.get("list") or []):
+        raw_list = data.get("list") or []
+        records: List[Dict] = []
+        for raw in raw_list:
+            try:
+                normalized = _normalize_cmbc_nav_record(raw, product_code)
+                d = normalized["nav_date"]
+                if start_date <= d <= end_date:
+                    records.append(normalized)
+            except Exception as e:  # noqa: BLE001
+                print(f"[CMBC] {product_code} 区间结果解析失败: {e}")
+                continue
+        records.sort(key=lambda x: x["nav_date"])
+        print(f"[CMBC] {product_code} 区间查询成功: {len(records)} 条")
+        return records
+
+    print(f"[CMBC] {product_code} 区间查询无数据/失败，降级为逐日回溯模式…")
+
+    # 2) 降级：逐日查询 + 空数据回溯（最多15天，与 v1 一致）
+    all_records: List[Dict] = []
+    cur = start_date
+    success_count = 0
+    fail_count = 0
+
+    while cur <= end_date:
+        if cur.weekday() >= 5:
             cur += timedelta(days=1)
             continue
 
-        raw_list = data.get("list") or []
-        if raw_list:
-            # 接口按日返回列表，但我们只关注当天这一条（一般也是 1 条）
-            normalized = _normalize_cmbc_nav_record(raw_list[0], product_code)
-            # 严格校验日期一致
-            if normalized["nav_date"] == cur:
-                all_records.append(normalized)
-            else:
-                # 如果返回日期和查询日期不一致，保守起见也写入，但打印提示
-                print(
-                    f"[CMBC] {product_code} 查询日期 {cur} 返回日期 {normalized['nav_date']}，仍写入记录"
-                )
-                all_records.append(normalized)
+        query_day = cur
+        retry_num = 0
+        found = False
+
+        while retry_num <= 15:
+            data = _post(query_day, query_day)
+            raw_list = (data.get("list") if data else None) or []
+            if raw_list:
+                try:
+                    normalized = _normalize_cmbc_nav_record(raw_list[0], product_code)
+                    all_records.append(normalized)
+                    success_count += 1
+                    found = True
+                except Exception as e:  # noqa: BLE001
+                    print(f"[CMBC] {product_code} {query_day} 解析失败: {e}")
+                    fail_count += 1
+                break
+
+            # 无数据：回溯
+            retry_num += 1
+            query_day = query_day - timedelta(days=1)
+
+        if not found:
+            # 依然无数据：不算失败（可能该产品当期未发行/接口无历史）
+            pass
 
         cur += timedelta(days=1)
 
-    return all_records
+        if (success_count + fail_count) % 200 == 0:
+            print(f"[CMBC] {product_code} 进度: 成功 {success_count}, 失败 {fail_count}, 当前日期 {cur}")
+
+    # 去重：回溯模式会产生重复日期，按 nav_date 去重保留最后一条
+    dedup: Dict[date, Dict] = {}
+    for r in all_records:
+        dedup[r["nav_date"]] = r
+    out = list(dedup.values())
+    out.sort(key=lambda x: x["nav_date"])
+
+    print(f"[CMBC] {product_code} 完成: 成功 {success_count}, 失败 {fail_count}, 去重后 {len(out)} 条")
+    return out
 
 
 class FundHistoryBackfiller:
@@ -207,6 +266,39 @@ class FundHistoryBackfiller:
             cursor.execute(sql)
             return cursor.fetchall()
 
+    def get_exchange_products(self) -> List[Dict]:
+        """
+        获取所有需要补齐历史行情的场内产品。
+
+        - ETF / 股票：asset_type in ('ETF', 'STOCK')
+        - 期货：asset_type = 'FUTURES'
+        - 期权：asset_type = 'OPTIONS'
+        """
+        sql = """
+            SELECT id, product_code, product_name, asset_type, market, data_source
+            FROM product_master
+            WHERE channel = 'EXCHANGE'
+              AND asset_type IN ('ETF', 'STOCK', 'FUTURES', 'OPTIONS')
+              AND is_active = 1
+        """
+        with self.conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute(sql)
+            return cursor.fetchall()
+
+    def get_existing_bar_range(self, product_id: int) -> Optional[Dict]:
+        """查询 market_bar_daily 表中某产品已存在的最早/最晚 trade_date。"""
+        sql = """
+            SELECT MIN(trade_date) AS min_date, MAX(trade_date) AS max_date
+            FROM market_bar_daily
+            WHERE product_id = %s
+        """
+        with self.conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            cursor.execute(sql, (product_id,))
+            row = cursor.fetchone()
+            if not row or (row["min_date"] is None and row["max_date"] is None):
+                return None
+            return row
+
     def get_existing_nav_range(self, product_id: int) -> Optional[Dict]:
         """查询 nav 表中某产品已存在的最早/最晚 nav_date。"""
         sql = """
@@ -220,6 +312,49 @@ class FundHistoryBackfiller:
             if not row or (row["min_date"] is None and row["max_date"] is None):
                 return None
             return row
+
+    def save_daily_bar_records(self, product_id: int, records: List[Dict], source: str) -> None:
+        """
+        批量写入 market_bar_daily 记录（带 UPSERT）。
+
+        records: 每个元素必须包含：
+            - trade_date: date
+            - open, high, low, close: float (对应数据库字段 open_price, high_price, low_price, close_price)
+            - volume, amount: float (可选)
+        """
+        if not records:
+            return
+
+        sql = """
+            INSERT INTO market_bar_daily (product_id, trade_date, open_price, high_price, low_price, close_price, volume, amount, source, created_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON DUPLICATE KEY UPDATE
+                open_price = VALUES(open_price),
+                high_price = VALUES(high_price),
+                low_price = VALUES(low_price),
+                close_price = VALUES(close_price),
+                volume = VALUES(volume),
+                amount = VALUES(amount)
+        """
+        params = []
+        for r in records:
+            params.append(
+                (
+                    product_id,
+                    r["trade_date"],
+                    r.get("open", 0),
+                    r.get("high", 0),
+                    r.get("low", 0),
+                    r.get("close", 0),
+                    r.get("volume", 0),
+                    r.get("amount", 0),
+                    source,
+                )
+            )
+
+        with self.conn.cursor() as cursor:
+            cursor.executemany(sql, params)
+        self.conn.commit()
 
     def save_nav_records(self, product_id: int, records: List[Dict], source: str) -> None:
         """
@@ -261,97 +396,338 @@ class FundHistoryBackfiller:
             cursor.executemany(sql, params)
         self.conn.commit()
 
-    # ======== akshare 相关采集 ========
+    # ======== 基金净值采集（使用东方财富HTTP API） ========
 
-    def fetch_history_by_akshare_fund(self, product_code: str) -> List[Dict]:
+    def fetch_history_by_fund_api(self, product_code: str, start_date: date, end_date: date) -> List[Dict]:
         """
-        使用 akshare 获取开放式基金/LOF 历史净值。
-        默认获取全量历史，然后由调用方按日期过滤。
+        使用东方财富HTTP API获取基金历史净值（参考fund_client.py）。
+        
+        Args:
+            product_code: 基金代码
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            历史净值记录列表
         """
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "http://fund.eastmoney.com/"
+        }
+        
+        all_records: List[Dict] = []
+        page = 1
+        page_size = 20
+        
+        while True:
+            try:
+                # 东方财富历史净值 API，支持日期范围
+                url = f"http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code={product_code}&page={page}&per={page_size}&sdate={start_date.strftime('%Y-%m-%d')}&edate={end_date.strftime('%Y-%m-%d')}"
+                response = requests.get(url, headers=headers, timeout=10)
+                
+                if response.status_code != 200:
+                    print(f"[fund_api] HTTP {response.status_code}")
+                    break
+                
+                html_text = response.text
+                
+                # 提取总记录数
+                records_match = re.search(r'records:(\d+)', html_text)
+                total_records = int(records_match.group(1)) if records_match else 0
+                
+                if total_records == 0:
+                    break
+                
+                # 提取 content 中的HTML内容
+                content_match = re.search(r'content:"(.*?)",records:', html_text, re.DOTALL)
+                if not content_match:
+                    break
+                
+                html_content = content_match.group(1)
+                html_content = html_content.replace(r'<\/td>', '</td>').replace(r'<\/tr>', '</tr>')
+                
+                # 解析HTML表格
+                records = self._parse_fund_html_table(html_content)
+                if not records:
+                    break
+                
+                for record in records:
+                    try:
+                        nav_date_str = record.get('jzrq', '').strip()
+                        if not nav_date_str:
+                            continue
+                        nav_date = datetime.strptime(nav_date_str, '%Y-%m-%d').date()
+                        
+                        dwjz = record.get('dwjz', '').strip()
+                        if not dwjz or dwjz == '---':
+                            continue
+
+                        # 有些行会出现“暂停申购/开放申购/开放赎回”等非数字文本，直接跳过
+                        try:
+                            nav = float(dwjz)
+                        except Exception:
+                            continue
+                        
+                        ljjz = record.get('ljjz', '').strip()
+                        # 处理累计净值：如果包含百分号或不是有效数字，则使用单位净值
+                        try:
+                            if '%' in str(ljjz):
+                                acc_nav = nav
+                            else:
+                                acc_nav = float(ljjz) if ljjz else nav
+                        except (ValueError, TypeError):
+                            acc_nav = nav
+
+                        jzzzl = (record.get('jzzzl', '0') or '').strip()
+                        daily_return = None
+                        if jzzzl and jzzzl != '---' and '%' in jzzzl:
+                            try:
+                                daily_return = float(jzzzl.replace('%', '')) / 100.0
+                            except Exception:
+                                daily_return = None
+                        
+                        all_records.append({
+                            "nav_date": nav_date,
+                            "nav": nav,
+                            "acc_nav": acc_nav,
+                            "daily_return": daily_return,
+                            "dividend": None,
+                        })
+                    except Exception as e:  # noqa: BLE001
+                        print(f"[fund_api] 解析记录失败: {e}")
+                        continue
+                
+                # 检查是否还有更多页
+                if page * page_size >= total_records:
+                    break
+                
+                page += 1
+                
+            except Exception as e:  # noqa: BLE001
+                print(f"[fund_api] 获取历史净值失败 (page={page}): {e}")
+                break
+        
+        # 按日期升序排列
+        all_records.sort(key=lambda x: x["nav_date"])
+        return all_records
+    
+    def _parse_fund_html_table(self, html_content: str) -> List[Dict]:
+        """解析东方财富返回的HTML表格，返回所有数据行"""
+        # 提取tbody中的所有数据行
+        tbody_match = re.search(r'<tbody>(.*?)</tbody>', html_content, re.DOTALL)
+        if not tbody_match:
+            # 没有 tbody，直接解析所有 tr
+            tr_pattern = r'<tr>(.*?)</tr>'
+            rows = re.findall(tr_pattern, html_content, re.DOTALL)
+            rows = rows[1:] if rows else []  # 跳过表头
+        else:
+            tbody_content = tbody_match.group(1)
+            tr_pattern = r'<tr>(.*?)</tr>'
+            rows = re.findall(tr_pattern, tbody_content, re.DOTALL)
+        
+        records = []
+        for row in rows:
+            # 提取单元格 <td>...</td>
+            td_pattern = r'<td[^>]*>(.*?)</td>'
+            cells = re.findall(td_pattern, row)
+            
+            if len(cells) >= 3:
+                records.append({
+                    'jzrq': cells[0].strip(),
+                    'dwjz': cells[1].strip(),
+                    'ljjz': cells[2].strip(),
+                    'jzzzl': cells[3].strip() if len(cells) > 3 else '0',
+                })
+        
+        return records
+
+    def fetch_history_by_akshare_mmf(self, product_code: str, start_date: date, end_date: date, force_nav_one: bool = False) -> List[Dict]:
+        """
+        使用东方财富HTTP API获取货币基金历史数据（货币基金也使用fund API）。
+        
+        货币基金特点：
+        - nav 表中单位净值固定为 1.0
+        - 收益通过分红或「每万份收益」体现
+        """
+        # 货币基金也使用fund API，但nav固定为1.0
+        records = self.fetch_history_by_fund_api(product_code, start_date, end_date)
+        
+        # 将所有记录的nav改为1.0
+        for record in records:
+            record["nav"] = 1.0
+            # 如果有daily_return，可以记录到dividend字段
+            if record.get("daily_return") is not None:
+                # 将日增长率转换为每万份收益（近似）
+                record["dividend"] = record["daily_return"] * 10000
+        
+        return records
+
+    def fetch_history_by_akshare_stock(self, product_code: str, market: str, start_date: date, end_date: date) -> List[Dict]:
+        """
+        使用 akshare 获取ETF/股票历史日K线数据（参考akshare_client.py）。
+        
+        优先使用 fund_etf_hist_em（ETF专用接口），如果失败则使用 stock_zh_a_hist。
+
+        Args:
+            product_code: 产品代码（6位代码）
+            market: 市场（SH/SZ）
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            历史日K线记录列表
+        """
+        # 优先尝试使用 fund_etf_hist_em（ETF专用接口，参考akshare_client.py）
         try:
-            df = ak.fund_em_open_fund_info(fund=product_code)
+            df = ak.fund_etf_hist_em(
+                symbol=product_code,
+                period='daily',
+                start_date=start_date.strftime('%Y%m%d'),
+                end_date=end_date.strftime('%Y%m%d'),
+                adjust=''
+            )
+            
+            if df is not None and not df.empty:
+                records: List[Dict] = []
+                for _, row in df.iterrows():
+                    try:
+                        # fund_etf_hist_em 返回中文列名
+                        date_str = str(row.get('日期', ''))
+                        if not date_str:
+                            continue
+                        trade_date = pd_to_date(date_str)
+                        
+                        records.append({
+                            "trade_date": trade_date,
+                            "open": float(row.get('开盘', 0)) if row.get('开盘') is not None else 0,
+                            "high": float(row.get('最高', 0)) if row.get('最高') is not None else 0,
+                            "low": float(row.get('最低', 0)) if row.get('最低') is not None else 0,
+                            "close": float(row.get('收盘', 0)) if row.get('收盘') is not None else 0,
+                            "volume": float(row.get('成交量', 0)) if row.get('成交量') is not None else 0,
+                            "amount": float(row.get('成交额', 0)) if row.get('成交额') is not None else 0,
+                        })
+                    except Exception:  # noqa: BLE001
+                        continue
+                
+                if records:
+                    return records
         except Exception as e:  # noqa: BLE001
-            print(f"[akshare] fund_em_open_fund_info({product_code}) 失败: {e}")
+            print(f"[akshare] fund_etf_hist_em({product_code}) 失败，尝试备用接口: {e}")
+        
+        # 备用方案：使用 stock_zh_a_hist
+        try:
+            df = ak.stock_zh_a_hist(
+                symbol=product_code,
+                period="daily",
+                start_date=start_date.strftime('%Y%m%d'),
+                end_date=end_date.strftime('%Y%m%d'),
+                adjust=""
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"[akshare] stock_zh_a_hist({product_code}) 失败: {e}")
             return []
 
         if df is None or df.empty:
-            print(f"[akshare] 未获取到基金 {product_code} 的历史净值")
+            print(f"[akshare] 未获取到产品 {product_code} 的历史K线数据")
             return []
 
         records: List[Dict] = []
-        # 兼容列名：常见为「净值日期」「单位净值」
         for _, row in df.iterrows():
-            nav_date_raw = row.get("净值日期", row.get("日期"))
-            if not nav_date_raw:
-                continue
-            nav_date = pd_to_date(nav_date_raw)
-            nav_val = row.get("单位净值", row.get("净值"))
-            if nav_val is None:
-                continue
-
             try:
-                nav = float(nav_val)
-            except Exception:
+                trade_date_raw = row.get("日期")
+                if not trade_date_raw:
+                    continue
+                trade_date = pd_to_date(trade_date_raw)
+
+                records.append(
+                    {
+                        "trade_date": trade_date,
+                        "open": float(row.get("开盘", 0)) if row.get("开盘") is not None else 0,
+                        "high": float(row.get("最高", 0)) if row.get("最高") is not None else 0,
+                        "low": float(row.get("最低", 0)) if row.get("最低") is not None else 0,
+                        "close": float(row.get("收盘", 0)) if row.get("收盘") is not None else 0,
+                        "volume": float(row.get("成交量", 0)) if row.get("成交量") is not None else 0,
+                        "amount": float(row.get("成交额", 0)) if row.get("成交额") is not None else 0,
+                    }
+                )
+            except Exception:  # noqa: BLE001
                 continue
 
-            records.append(
-                {
-                    "nav_date": nav_date,
-                    "nav": nav,
-                    "acc_nav": None,
-                    "daily_return": None,
-                    "dividend": None,
-                }
-            )
         return records
 
-    def fetch_history_by_akshare_mmf(self, product_code: str, force_nav_one: bool = False) -> List[Dict]:
+    def fetch_history_by_akshare_futures(self, product_code: str, start_date: date, end_date: date) -> List[Dict]:
         """
-        使用 akshare 获取货币基金历史数据。
+        使用 akshare 获取期货历史日K线数据。
 
-        - ak.fund_em_money_fund_info 一般提供：
-          - 净值日期
-          - 每万份收益
-          - 七日年化收益率
-        - nav 表中单位净值对于货币基金通常固定为 1.0，
-          收益通过分红或「每万份收益」体现。
-        - 这里为了简单和与现有交易记录对齐，nav 一律记为 1.0。
+        Args:
+            product_code: 期货代码
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            历史日K线记录列表
         """
         try:
-            df = ak.fund_em_money_fund_info(fund=product_code)
+            # 期货代码格式可能需要调整，这里使用通用接口
+            # 注意：akshare的期货接口可能需要根据实际代码格式调整
+            df = ak.futures_main_sina(symbol=product_code)
+            # 如果接口不支持，可以尝试其他接口
+            # df = ak.futures_zh_daily_sina(symbol=product_code, start_date=start_date.strftime('%Y%m%d'), end_date=end_date.strftime('%Y%m%d'))
         except Exception as e:  # noqa: BLE001
-            print(f"[akshare] fund_em_money_fund_info({product_code}) 失败: {e}")
+            print(f"[akshare] 期货 {product_code} 历史数据获取失败: {e}")
+            # 期货接口可能不稳定，这里先返回空，后续可以根据实际情况调整
             return []
 
         if df is None or df.empty:
-            print(f"[akshare] 未获取到货币基金 {product_code} 的历史数据")
+            print(f"[akshare] 未获取到期货 {product_code} 的历史数据")
             return []
 
         records: List[Dict] = []
+        # 根据实际返回的列名调整
         for _, row in df.iterrows():
-            nav_date_raw = row.get("净值日期", row.get("日期"))
-            if not nav_date_raw:
-                continue
-            nav_date = pd_to_date(nav_date_raw)
-
-            # 对于 MMF，nav 统一记为 1.0，dividend 可选记录为「每万份收益」
-            dividend_raw = row.get("每万份收益")
             try:
-                dividend_val = float(dividend_raw) if dividend_raw is not None else None
-            except Exception:
-                dividend_val = None
+                trade_date_raw = row.get("日期") or row.get("date")
+                if not trade_date_raw:
+                    continue
+                trade_date = pd_to_date(trade_date_raw)
 
-            records.append(
-                {
-                    "nav_date": nav_date,
-                    "nav": 1.0 if force_nav_one or True else 1.0,  # 始终 1.0
-                    "acc_nav": None,
-                    "daily_return": None,
-                    # 这里直接把「每万份收益」记在 dividend 字段，方便后续分析
-                    "dividend": dividend_val,
-                }
-            )
+                if start_date <= trade_date <= end_date:
+                    records.append(
+                        {
+                            "trade_date": trade_date,
+                            "open": float(row.get("开盘", row.get("open", 0))),
+                            "high": float(row.get("最高", row.get("high", 0))),
+                            "low": float(row.get("最低", row.get("low", 0))),
+                            "close": float(row.get("收盘", row.get("close", 0))),
+                            "volume": float(row.get("成交量", row.get("volume", 0))),
+                            "amount": float(row.get("成交额", row.get("amount", 0))),
+                        }
+                    )
+            except Exception:  # noqa: BLE001
+                continue
+
         return records
+
+    def fetch_history_by_akshare_options(self, product_code: str, start_date: date, end_date: date) -> List[Dict]:
+        """
+        使用 akshare 获取期权历史日K线数据。
+
+        Args:
+            product_code: 期权代码
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            历史日K线记录列表
+        """
+        try:
+            # 期权接口可能需要根据实际代码格式调整
+            # akshare的期权接口可能不稳定，这里先返回空，后续可以根据实际情况调整
+            print(f"[akshare] 期权 {product_code} 历史数据获取暂未实现，需要根据实际接口调整")
+            return []
+        except Exception as e:  # noqa: BLE001
+            print(f"[akshare] 期权 {product_code} 历史数据获取失败: {e}")
+            return []
 
     # ======== 主流程 ========
 
@@ -372,6 +748,10 @@ class FundHistoryBackfiller:
             start_date = self.START_DATE
 
         today = date.today()
+        # 如果数据库已覆盖到今天（或更晚），无需再拉取
+        if existing and existing.get("max_date") and existing["max_date"] >= today:
+            print(f"  已有数据覆盖到 {existing['max_date']}，无需补齐")
+            return
         if start_date > today:
             print(f"  已有数据覆盖到 {existing['max_date'] if existing else 'N/A'}，无需补齐")
             return
@@ -385,17 +765,13 @@ class FundHistoryBackfiller:
         if asset_type == "BANK_WM_NAV" or data_source == "cmbc" or code == "FBAE41126E":
             records = query_cmbc_nav_for_range(code, start_date, today)
             source_flag = "CMBC"
-        # 特殊：货币基金 000686
-        elif asset_type == "MMF" and code == "000686":
-            records = self.fetch_history_by_akshare_mmf(code, force_nav_one=True)
-            source_flag = "MMF"
-        # 一般货币基金
+        # 货币基金
         elif asset_type == "MMF":
-            records = self.fetch_history_by_akshare_mmf(code, force_nav_one=True)
+            records = self.fetch_history_by_akshare_mmf(code, start_date, today, force_nav_one=True)
             source_flag = "MMF"
-        # 普通基金/LOF
+        # 普通基金/LOF（使用东方财富HTTP API）
         else:
-            records = self.fetch_history_by_akshare_fund(code)
+            records = self.fetch_history_by_fund_api(code, start_date, today)
             source_flag = "FUND"
 
         if not records:
@@ -414,12 +790,77 @@ class FundHistoryBackfiller:
         self.save_nav_records(product_id, filtered, source_flag)
         print(f"  ✓ 补齐完成: 写入 {len(filtered)} 条（含已存在记录的 UPSERT）")
 
+    def backfill_for_exchange_product(self, product: Dict) -> None:
+        """为场内产品补齐历史日K线数据。"""
+        product_id = product["id"]
+        code = product["product_code"]
+        name = product["product_name"]
+        asset_type = product["asset_type"]
+        market = product.get("market", "SH")
+
+        print(f"\n==== 开始补齐: {name} ({code}), 类型={asset_type}, 市场={market} ====")
+
+        # 确定起始日期：已有数据则从最后一天之后开始，否则从 START_DATE
+        existing = self.get_existing_bar_range(product_id)
+        if existing and existing.get("max_date"):
+            start_date = existing["max_date"] + timedelta(days=1)
+        else:
+            start_date = self.START_DATE
+
+        today = date.today()
+        # 如果数据库已覆盖到今天（或更晚），无需再拉取
+        if existing and existing.get("max_date") and existing["max_date"] >= today:
+            print(f"  已有数据覆盖到 {existing['max_date']}，无需补齐")
+            return
+        if start_date > today:
+            print(f"  已有数据覆盖到 {existing['max_date'] if existing else 'N/A'}，无需补齐")
+            return
+
+        print(f"  补齐区间: {start_date} ~ {today}")
+
+        records: List[Dict] = []
+        source_flag = "AKSHARE"
+
+        # 根据资产类型选择不同的采集方法
+        if asset_type in ("ETF", "STOCK"):
+            records = self.fetch_history_by_akshare_stock(code, market, start_date, today)
+            source_flag = "ETF" if asset_type == "ETF" else "STOCK"
+        elif asset_type == "FUTURES":
+            records = self.fetch_history_by_akshare_futures(code, start_date, today)
+            source_flag = "FUTURES"
+        elif asset_type == "OPTIONS":
+            records = self.fetch_history_by_akshare_options(code, start_date, today)
+            source_flag = "OPTIONS"
+
+        if not records:
+            print("  未获取到任何历史K线数据，跳过")
+            return
+
+        # 只保留需要补齐区间内的数据
+        filtered = [r for r in records if start_date <= r["trade_date"] <= today]
+        filtered.sort(key=lambda x: x["trade_date"])
+
+        if not filtered:
+            print("  在补齐区间内没有可写入的数据")
+            return
+
+        print(f"  准备写入 {len(filtered)} 条记录...")
+        self.save_daily_bar_records(product_id, filtered, source_flag)
+        print(f"  ✓ 补齐完成: 写入 {len(filtered)} 条（含已存在记录的 UPSERT）")
+
     def run(self) -> None:
         try:
-            products = self.get_otc_products()
-            print(f"共找到 {len(products)} 个场外产品需要检查补齐历史净值")
-            for p in products:
+            # 补齐场外产品净值
+            otc_products = self.get_otc_products()
+            print(f"共找到 {len(otc_products)} 个场外产品需要检查补齐历史净值")
+            for p in otc_products:
                 self.backfill_for_product(p)
+
+            # 补齐场内产品日K线
+            exchange_products = self.get_exchange_products()
+            print(f"\n共找到 {len(exchange_products)} 个场内产品需要检查补齐历史日K线")
+            for p in exchange_products:
+                self.backfill_for_exchange_product(p)
         finally:
             self.close_db()
 

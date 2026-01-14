@@ -200,24 +200,40 @@ public class AccountService {
      * @return 账户列表（包含父账户及其子账户），父账户的 balance 为子账户总和
      */
     public List<Account> getAccountTree(Long ownerUserId, Long ownerFamilyId) {
-        List<Account> accounts = accountMapper.selectByOwner(ownerUserId, ownerFamilyId);
-        // 构建树形结构：为每个父账户计算聚合余额并设置children属性
-        for (Account account : accounts) {
+        List<Account> allAccounts = accountMapper.selectByOwner(ownerUserId, ownerFamilyId);
+        
+        // 分离父账户和子账户，只返回父账户
+        List<Account> parentAccounts = new java.util.ArrayList<>();
+        for (Account account : allAccounts) {
             if (account.getParentAccountId() == null) {
-                // 父账户，查询子账户
-                List<Account> children = accountMapper.selectChildren(account.getId());
-                
-                // 计算子账户余额总和
-                BigDecimal totalBalance = children.stream()
-                        .map(Account::getBalance)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                account.setBalance(totalBalance);
-                
-                // 设置children属性（用于前端树形展示）
-                account.setChildren(children);
+                parentAccounts.add(account);
             }
         }
-        return accounts;
+        
+        // 构建树形结构：为每个父账户计算聚合余额并设置children属性
+        for (Account parentAccount : parentAccounts) {
+            // 查询子账户
+            List<Account> children = accountMapper.selectChildren(parentAccount.getId());
+            
+            // 计算子账户余额总和
+            BigDecimal totalBalance = children.stream()
+                    .map(Account::getBalance)
+                    .filter(b -> b != null)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            parentAccount.setBalance(totalBalance);
+            
+            // 计算子账户占用总和
+            BigDecimal totalReserved = children.stream()
+                    .map(Account::getReservedAmount)
+                    .filter(b -> b != null)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            parentAccount.setReservedAmount(totalReserved);
+            
+            // 设置children属性（用于前端树形展示）
+            parentAccount.setChildren(children);
+        }
+        
+        return parentAccounts;
     }
 
     /**

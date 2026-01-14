@@ -4,6 +4,12 @@ ETF行情采集脚本
 """
 import sys
 import os
+import io
+
+# 设置标准输出编码为UTF-8（Windows兼容）
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 import pymysql
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -37,13 +43,13 @@ class ETFCollector:
             self.conn.close()
     
     def get_active_etfs(self) -> List[dict]:
-        """获取所有启用的ETF产品"""
+        """获取所有启用的场内产品（ETF、股票、期货、期权）"""
         with self.conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
                 SELECT id, product_code, product_name, market, asset_type
                 FROM product_master
                 WHERE is_active = 1
-                AND asset_type = 'ETF'
+                AND asset_type IN ('ETF', 'STOCK', 'FUTURES', 'OPTIONS')
                 AND channel = 'EXCHANGE'
             """
             cursor.execute(sql)
@@ -51,7 +57,7 @@ class ETFCollector:
     
     def fetch_realtime_quote(self, product_code: str, market: str) -> Optional[dict]:
         """
-        采集ETF实时行情
+        采集ETF/股票实时行情（参考akshare_client.py）
         
         Args:
             product_code: 产品代码
@@ -61,10 +67,71 @@ class ETFCollector:
             包含实时行情数据的字典
         """
         try:
-            # 构建股票代码（上海6位，深圳6位）
-            symbol = f"{product_code}.{'SH' if market == 'SH' else 'SZ'}"
+            # 优先使用 fund_etf_spot_em（ETF专用接口，效率更高）
+            try:
+                df = ak.fund_etf_spot_em()
+                if df is not None and not df.empty:
+                    # 查找对应的ETF（代码字段可能是纯数字或带前缀）
+                    product_row = None
+                    for _, row in df.iterrows():
+                        code = str(row.get('代码', '')).strip()
+                        code_clean = code.replace('sh', '').replace('sz', '').replace('SH', '').replace('SZ', '')
+                        if code_clean == product_code or code == product_code:
+                            product_row = row
+                            break
+                    
+                    if product_row is not None:
+                        # 解析ETF实时行情字段
+                        def safe_get(key, default=None):
+                            val = product_row.get(key, default)
+                            if val is None or (isinstance(val, float) and (val != val or val == float('inf') or val == float('-inf'))):
+                                return default
+                            return val
+                        
+                        def safe_float(key, default=None):
+                            val = safe_get(key, default)
+                            if val is None:
+                                return default
+                            try:
+                                return float(val)
+                            except (ValueError, TypeError):
+                                return default
+                        
+                        price = safe_float('最新价', 0)
+                        prev_close = safe_float('昨收', 0)
+                        pct_chg = safe_float('涨跌幅', 0)  # 已经是百分比，如 -0.1 表示 -0.1%
+                        if pct_chg is not None:
+                            pct_chg = pct_chg / 100.0  # 转换为小数
+                        
+                        open_price = safe_float('开盘价', 0)
+                        high_price = safe_float('最高价', 0)
+                        low_price = safe_float('最低价', 0)
+                        volume = safe_float('成交量', 0)
+                        amount = safe_float('成交额', 0)
+                        iopv = safe_float('IOPV实时估值')
+                        
+                        # 计算溢价率
+                        premium_rate = None
+                        if price and iopv and iopv > 0:
+                            premium_rate = (price - iopv) / iopv
+                        
+                        return {
+                            'price': price,
+                            'prev_close': prev_close,
+                            'pct_chg': pct_chg,
+                            'volume': volume,
+                            'amount': amount,
+                            'open_price': open_price,
+                            'high_price': high_price,
+                            'low_price': low_price,
+                            'iopv': iopv,
+                            'premium_rate': premium_rate,
+                            'quote_time': datetime.now(),
+                        }
+            except Exception as e:
+                print(f"[ETF接口] {product_code} 失败，尝试股票接口: {e}")
             
-            # 使用akshare获取实时行情
+            # 备用方案：使用股票接口
             df = ak.stock_zh_a_spot_em()
             if df is None or df.empty:
                 return None
@@ -76,14 +143,24 @@ class ETFCollector:
                 return None
             
             row = stock_data.iloc[0]
+            price = float(row.get('最新价', 0))
+            prev_close = float(row.get('昨收', 0))
+            pct_chg = float(row.get('涨跌幅', 0))
+            if pct_chg is not None:
+                pct_chg = pct_chg / 100.0  # 转换为小数
+            
             return {
-                'last_price': float(row.get('最新价', 0)),
-                'change_pct': float(row.get('涨跌幅', 0)),
+                'price': price,
+                'prev_close': prev_close,
+                'pct_chg': pct_chg,
                 'volume': float(row.get('成交量', 0)),
                 'amount': float(row.get('成交额', 0)),
-                'high': float(row.get('最高', 0)),
-                'low': float(row.get('最低', 0)),
-                'open': float(row.get('今开', 0)),
+                'open_price': float(row.get('今开', 0)),
+                'high_price': float(row.get('最高', 0)),
+                'low_price': float(row.get('最低', 0)),
+                'iopv': None,  # 股票没有IOPV
+                'premium_rate': None,
+                'quote_time': datetime.now(),
             }
         except Exception as e:
             print(f"采集产品 {product_code} 实时行情失败: {e}")
@@ -136,103 +213,102 @@ class ETFCollector:
             return None
     
     def save_realtime_quote(self, product_id: int, quote_data: dict):
-        """保存实时行情到数据库"""
+        """保存实时行情到数据库（字段名与数据库表结构匹配）"""
         with self.conn.cursor() as cursor:
-            # 检查是否已存在
-            check_sql = """
-                SELECT id FROM market_quote_realtime
-                WHERE product_id = %s
+            # 使用 UPSERT（ON DUPLICATE KEY UPDATE）处理唯一约束
+            insert_sql = """
+                INSERT INTO market_quote_realtime
+                (product_id, quote_time, price, prev_close, pct_chg, volume, amount, 
+                 iopv, premium_rate, open_price, high_price, low_price, source, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                    price = VALUES(price),
+                    prev_close = VALUES(prev_close),
+                    pct_chg = VALUES(pct_chg),
+                    volume = VALUES(volume),
+                    amount = VALUES(amount),
+                    iopv = VALUES(iopv),
+                    premium_rate = VALUES(premium_rate),
+                    open_price = VALUES(open_price),
+                    high_price = VALUES(high_price),
+                    low_price = VALUES(low_price)
             """
-            cursor.execute(check_sql, (product_id,))
-            existing = cursor.fetchone()
-            
-            if existing:
-                # 更新
-                update_sql = """
-                    UPDATE market_quote_realtime
-                    SET last_price = %s, change_pct = %s, volume = %s, amount = %s,
-                        high = %s, low = %s, open = %s, updated_at = NOW()
-                    WHERE product_id = %s
-                """
-                cursor.execute(update_sql, (
-                    quote_data['last_price'], quote_data['change_pct'],
-                    quote_data['volume'], quote_data['amount'],
-                    quote_data['high'], quote_data['low'], quote_data['open'],
-                    product_id
-                ))
-            else:
-                # 插入
-                insert_sql = """
-                    INSERT INTO market_quote_realtime
-                    (product_id, last_price, change_pct, volume, amount, high, low, open, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
-                """
-                cursor.execute(insert_sql, (
-                    product_id, quote_data['last_price'], quote_data['change_pct'],
-                    quote_data['volume'], quote_data['amount'],
-                    quote_data['high'], quote_data['low'], quote_data['open']
-                ))
+            cursor.execute(insert_sql, (
+                product_id,
+                quote_data.get('quote_time', datetime.now()),
+                quote_data.get('price', 0),
+                quote_data.get('prev_close'),
+                quote_data.get('pct_chg'),
+                quote_data.get('volume', 0),
+                quote_data.get('amount', 0),
+                quote_data.get('iopv'),
+                quote_data.get('premium_rate'),
+                quote_data.get('open_price', 0),
+                quote_data.get('high_price', 0),
+                quote_data.get('low_price', 0),
+                'AKSHARE'
+            ))
             self.conn.commit()
     
     def save_daily_bar(self, product_id: int, bar_data: dict):
-        """保存日K线到数据库"""
+        """保存日K线到数据库（字段名与数据库表结构匹配）"""
         with self.conn.cursor() as cursor:
-            # 检查是否已存在
-            check_sql = """
-                SELECT id FROM market_bar_daily
-                WHERE product_id = %s AND trade_date = %s
+            # 使用 UPSERT（ON DUPLICATE KEY UPDATE）处理唯一约束
+            insert_sql = """
+                INSERT INTO market_bar_daily
+                (product_id, trade_date, open_price, high_price, low_price, close_price, volume, amount, source, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                    open_price = VALUES(open_price),
+                    high_price = VALUES(high_price),
+                    low_price = VALUES(low_price),
+                    close_price = VALUES(close_price),
+                    volume = VALUES(volume),
+                    amount = VALUES(amount)
             """
-            cursor.execute(check_sql, (product_id, bar_data['trade_date']))
-            if cursor.fetchone():
-                # 更新
-                update_sql = """
-                    UPDATE market_bar_daily
-                    SET open = %s, high = %s, low = %s, close = %s,
-                        volume = %s, amount = %s, updated_at = NOW()
-                    WHERE product_id = %s AND trade_date = %s
-                """
-                cursor.execute(update_sql, (
-                    bar_data['open'], bar_data['high'], bar_data['low'], bar_data['close'],
-                    bar_data['volume'], bar_data['amount'],
-                    product_id, bar_data['trade_date']
-                ))
-            else:
-                # 插入
-                insert_sql = """
-                    INSERT INTO market_bar_daily
-                    (product_id, trade_date, open, high, low, close, volume, amount, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
-                """
-                cursor.execute(insert_sql, (
-                    product_id, bar_data['trade_date'],
-                    bar_data['open'], bar_data['high'], bar_data['low'], bar_data['close'],
-                    bar_data['volume'], bar_data['amount']
-                ))
+            cursor.execute(insert_sql, (
+                product_id,
+                bar_data['trade_date'],
+                bar_data.get('open', 0),
+                bar_data.get('high', 0),
+                bar_data.get('low', 0),
+                bar_data.get('close', 0),
+                bar_data.get('volume', 0),
+                bar_data.get('amount', 0),
+                'AKSHARE'
+            ))
             self.conn.commit()
     
     def collect_realtime(self):
-        """采集所有ETF的实时行情"""
-        etfs = self.get_active_etfs()
-        print(f"开始采集 {len(etfs)} 个ETF的实时行情...")
+        """采集所有场内产品（ETF、股票、期货、期权）的实时行情"""
+        products = self.get_active_etfs()
+        print(f"开始采集 {len(products)} 个场内产品的实时行情...")
         
         success_count = 0
         fail_count = 0
         
-        for etf in etfs:
-            product_id = etf['id']
-            product_code = etf['product_code']
-            product_name = etf['product_name']
-            market = etf['market']
+        for product in products:
+            product_id = product['id']
+            product_code = product['product_code']
+            product_name = product['product_name']
+            market = product['market']
+            asset_type = product['asset_type']
             
-            print(f"正在采集: {product_name} ({product_code})...")
+            print(f"正在采集: {product_name} ({product_code}, {asset_type})...")
             
-            quote_data = self.fetch_realtime_quote(product_code, market)
-            if quote_data:
-                self.save_realtime_quote(product_id, quote_data)
-                print(f"  ✓ 成功: 最新价={quote_data['last_price']}")
-                success_count += 1
+            # 目前只支持ETF和股票（使用相同的akshare接口）
+            # 期货和期权需要不同的接口，暂时跳过
+            if asset_type in ('ETF', 'STOCK'):
+                quote_data = self.fetch_realtime_quote(product_code, market)
+                if quote_data:
+                    self.save_realtime_quote(product_id, quote_data)
+                    print(f"  ✓ 成功: 最新价={quote_data.get('price', 0)}")
+                    success_count += 1
+                else:
+                    print(f"  ✗ 失败")
+                    fail_count += 1
             else:
-                print(f"  ✗ 失败")
+                print(f"  ⚠ 跳过: {asset_type} 类型暂不支持实时行情采集")
                 fail_count += 1
             
             time.sleep(0.5)  # 避免请求过快
@@ -240,31 +316,38 @@ class ETFCollector:
         print(f"\n实时行情采集完成: 成功 {success_count}, 失败 {fail_count}")
     
     def collect_daily_bars(self, trade_date: date = None):
-        """采集所有ETF的日K线数据"""
+        """采集所有场内产品（ETF、股票、期货、期权）的日K线数据"""
         if trade_date is None:
             trade_date = date.today()
         
-        etfs = self.get_active_etfs()
-        print(f"开始采集 {len(etfs)} 个ETF的日K线数据（日期: {trade_date}）...")
+        products = self.get_active_etfs()
+        print(f"开始采集 {len(products)} 个场内产品的日K线数据（日期: {trade_date}）...")
         
         success_count = 0
         fail_count = 0
         
-        for etf in etfs:
-            product_id = etf['id']
-            product_code = etf['product_code']
-            product_name = etf['product_name']
-            market = etf['market']
+        for product in products:
+            product_id = product['id']
+            product_code = product['product_code']
+            product_name = product['product_name']
+            market = product['market']
+            asset_type = product['asset_type']
             
-            print(f"正在采集: {product_name} ({product_code})...")
+            print(f"正在采集: {product_name} ({product_code}, {asset_type})...")
             
-            bar_data = self.fetch_daily_bar(product_code, market, trade_date)
-            if bar_data:
-                self.save_daily_bar(product_id, bar_data)
-                print(f"  ✓ 成功: 收盘价={bar_data['close']}")
-                success_count += 1
+            # 目前只支持ETF和股票（使用相同的akshare接口）
+            # 期货和期权需要不同的接口，暂时跳过
+            if asset_type in ('ETF', 'STOCK'):
+                bar_data = self.fetch_daily_bar(product_code, market, trade_date)
+                if bar_data:
+                    self.save_daily_bar(product_id, bar_data)
+                    print(f"  ✓ 成功: 收盘价={bar_data['close']}")
+                    success_count += 1
+                else:
+                    print(f"  ✗ 失败")
+                    fail_count += 1
             else:
-                print(f"  ✗ 失败")
+                print(f"  ⚠ 跳过: {asset_type} 类型暂不支持日K线采集")
                 fail_count += 1
             
             time.sleep(0.5)

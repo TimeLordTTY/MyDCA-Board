@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.FundSellFeeTierMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.FundSellFeeTier">
+        <id column="id" property="id"/>
+        <result column="product_id" property="productId"/>
+        <result column="min_days" property="minDays"/>
+        <result column="max_days" property="maxDays"/>
+        <result column="sell_fee_rate" property="sellFeeRate"/>
+        <result column="sort_order" property="sortOrder"/>
+        <result column="is_active" property="isActive"/>
+        <result column="note" property="note"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT * FROM fund_sell_fee_tier WHERE id = #{id}
+    </select>
+
+    <select id="selectByProductId" resultMap="BaseResultMap">
+        SELECT * FROM fund_sell_fee_tier 
+        WHERE product_id = #{productId}
+        AND is_active = 1
+        ORDER BY sort_order, min_days
+    </select>
+
+    <select id="selectByProductIdAndHoldingDays" resultMap="BaseResultMap">
+        SELECT * FROM fund_sell_fee_tier 
+        WHERE product_id = #{productId}
+        AND is_active = 1
+        AND min_days &lt;= #{holdingDays}
+        AND (max_days IS NULL OR max_days > #{holdingDays})
+        ORDER BY sort_order, min_days DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO fund_sell_fee_tier (
+            product_id, min_days, max_days, sell_fee_rate,
+            sort_order, is_active, note, created_at, updated_at
+        ) VALUES (
+            #{productId}, #{minDays}, #{maxDays}, #{sellFeeRate},
+            #{sortOrder}, #{isActive}, #{note}, NOW(), NOW()
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE fund_sell_fee_tier
+        <set>
+            <if test="minDays != null">min_days = #{minDays},</if>
+            <if test="maxDays != null">max_days = #{maxDays},</if>
+            <if test="sellFeeRate != null">sell_fee_rate = #{sellFeeRate},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="isActive != null">is_active = #{isActive},</if>
+            <if test="note != null">note = #{note},</if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM fund_sell_fee_tier WHERE id = #{id}
+    </delete>
+
+    <delete id="deleteByProductId">
+        DELETE FROM fund_sell_fee_tier WHERE product_id = #{productId}
+    </delete>
+
+</mapper>

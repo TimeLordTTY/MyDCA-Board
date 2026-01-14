@@ -16,6 +16,7 @@ export * from './dashboard'
 export * from './market'
 export * from './nav'
 export * from './indicator'
+export * from './brokerFee'
 
 // 导出所有API对象
 export { authApi } from './auth'
@@ -31,3 +32,4 @@ export { dashboardApi } from './dashboard'
 export { marketApi } from './market'
 export { navApi } from './nav'
 export { indicatorApi } from './indicator'
+export { brokerFeeApi } from './brokerFee'

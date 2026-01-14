@@ -36,6 +36,7 @@
     <select id="selectByOwner" resultMap="BaseResultMap">
         SELECT * FROM accounts
         WHERE is_active = 1
+        AND account_kind = 'REAL'
         AND (
             (owner_type = 'PERSONAL' AND owner_user_id = #{ownerUserId})
             OR (owner_type = 'FAMILY' AND owner_family_id = #{ownerFamilyId})
@@ -51,6 +52,7 @@
         SELECT a.* FROM accounts a
         LEFT JOIN accounts b ON a.id = b.parent_account_id AND b.is_active = 1
         WHERE a.is_active = 1
+        AND a.account_kind = 'REAL'
         AND b.id IS NULL
         AND (
             (a.owner_type = 'PERSONAL' AND a.owner_user_id = #{ownerUserId})

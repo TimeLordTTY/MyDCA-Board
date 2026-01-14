@@ -5,6 +5,17 @@
 import { apiClient } from './client'
 import type { ProductMaster, ProductQueryParams } from '../types'
 
+export interface FundSellFeeTier {
+  id?: number
+  productId?: number
+  minDays: number
+  maxDays: number | null
+  sellFeeRate: number
+  sortOrder: number
+  isActive: boolean
+  note?: string
+}
+
 export const productApi = {
   /**
    * 获取产品列表
@@ -43,5 +54,20 @@ export const productApi = {
    */
   updateProductSortOrder: async (updates: Array<{ id: number; sortOrder: number }>): Promise<void> => {
     await apiClient.post<void>('/products/sort-order', updates)
+  },
+
+  /**
+   * 获取产品的卖出费率分段
+   */
+  getSellFeeTiers: async (productId: number): Promise<FundSellFeeTier[]> => {
+    const response = await apiClient.get<FundSellFeeTier[]>(`/products/${productId}/sell-fee-tiers`)
+    return response.data
+  },
+
+  /**
+   * 保存产品的卖出费率分段
+   */
+  saveSellFeeTiers: async (productId: number, tiers: FundSellFeeTier[]): Promise<void> => {
+    await apiClient.post(`/products/${productId}/sell-fee-tiers`, tiers)
   },
 }
