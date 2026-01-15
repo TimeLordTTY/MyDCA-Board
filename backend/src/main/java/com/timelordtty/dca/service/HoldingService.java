@@ -3,10 +3,13 @@ package com.timelordtty.dca.service;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.LedgerTxn;
+import com.timelordtty.dca.model.ProductMaster;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
@@ -43,12 +46,21 @@ public class HoldingService {
     private final LedgerPostingMapper ledgerPostingMapper;
     private final LedgerTxnMapper ledgerTxnMapper;
     private final AccountMapper accountMapper;
+    private final ProductMasterMapper productMasterMapper;
+    private final ProductService productService;
+    private final AccountService accountService;
+    private final LedgerService ledgerService;
 
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
-                          AccountMapper accountMapper) {
+                          AccountMapper accountMapper, ProductMasterMapper productMasterMapper,
+                          ProductService productService, AccountService accountService, LedgerService ledgerService) {
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.accountMapper = accountMapper;
+        this.productMasterMapper = productMasterMapper;
+        this.productService = productService;
+        this.accountService = accountService;
+        this.ledgerService = ledgerService;
     }
 
     /**
@@ -164,6 +176,161 @@ public class HoldingService {
         public void setMarketValue(BigDecimal marketValue) { this.marketValue = marketValue; }
         public BigDecimal getUnrealizedPnl() { return unrealizedPnl; }
         public void setUnrealizedPnl(BigDecimal unrealizedPnl) { this.unrealizedPnl = unrealizedPnl; }
+    }
+
+    /**
+     * 初始持仓导入DTO
+     */
+    public static class InitialHoldingImport {
+        private String productCode;
+        private String productName;
+        private String channel; // EXCHANGE or OTC
+        private BigDecimal shares;
+        private BigDecimal costPrice;
+        private String note;
+
+        // Getters and setters
+        public String getProductCode() { return productCode; }
+        public void setProductCode(String productCode) { this.productCode = productCode; }
+        public String getProductName() { return productName; }
+        public void setProductName(String productName) { this.productName = productName; }
+        public String getChannel() { return channel; }
+        public void setChannel(String channel) { this.channel = channel; }
+        public BigDecimal getShares() { return shares; }
+        public void setShares(BigDecimal shares) { this.shares = shares; }
+        public BigDecimal getCostPrice() { return costPrice; }
+        public void setCostPrice(BigDecimal costPrice) { this.costPrice = costPrice; }
+        public String getNote() { return note; }
+        public void setNote(String note) { this.note = note; }
+    }
+
+    /**
+     * 导入初始持仓
+     * 
+     * 流程说明：
+     * 1. 对每个持仓记录，查找或创建产品（ProductMaster）
+     * 2. 获取或创建对应的POSITION账户
+     * 3. 创建ADJUST类型的交易，生成POSITION DEBIT分录
+     * 
+     * 注意：
+     * - 如果产品已存在持仓，导入会累加到现有持仓上
+     * - 使用ADJUST类型交易，表示这是初始余额调整
+     * - 持仓成本 = shares × costPrice
+     * 
+     * @param userId 用户ID
+     * @param familyId 家庭ID，可为空
+     * @param holdings 初始持仓列表
+     */
+    @Transactional
+    public void importInitialHoldings(Long userId, Long familyId, List<InitialHoldingImport> holdings) {
+        for (InitialHoldingImport holding : holdings) {
+            // 1. 查找或创建产品
+            ProductMaster product = findOrCreateProduct(holding);
+            
+            // 2. 获取或创建POSITION账户
+            String ownerType = familyId != null ? "FAMILY" : "PERSONAL";
+            Account positionAccount = accountService.getOrCreatePositionAccount(
+                product.getId(),
+                product.getProductName(),
+                ownerType,
+                userId,
+                familyId
+            );
+            
+            // 3. 计算持仓成本
+            BigDecimal totalCost = holding.getShares().multiply(holding.getCostPrice());
+            
+            // 4. 创建ADJUST类型的交易和流水
+            // 对于POSITION账户，DEBIT表示持仓增加
+            // 需要创建平衡的分录：POSITION DEBIT + INCOME CREDIT（表示初始余额调整）
+            
+            // 获取或创建"初始余额调整"收入账户（用于平衡初始持仓导入）
+            Account adjustIncomeAccount = accountService.getOrCreateVirtualAccount(
+                "INCOME", "INCOME", ownerType, userId, familyId, null, "初始余额调整"
+            );
+            
+            LedgerPosting positionPosting = new LedgerPosting();
+            positionPosting.setAccountId(positionAccount.getId());
+            positionPosting.setAccountType("POSITION");
+            positionPosting.setPostingType("DEBIT");
+            positionPosting.setAmount(totalCost);
+            positionPosting.setShares(holding.getShares());
+            positionPosting.setCurrency("CNY");
+            positionPosting.setNote(holding.getNote() != null ? holding.getNote() : "初始持仓导入");
+            
+            LedgerPosting incomePosting = new LedgerPosting();
+            incomePosting.setAccountId(adjustIncomeAccount.getId());
+            incomePosting.setAccountType("INCOME");
+            incomePosting.setPostingType("CREDIT");
+            incomePosting.setAmount(totalCost);
+            incomePosting.setCurrency("CNY");
+            incomePosting.setNote("初始持仓导入平衡分录");
+            
+            String note = String.format("初始持仓导入：%s %s份，成本价%s", 
+                product.getProductName(), holding.getShares(), holding.getCostPrice());
+            if (holding.getNote() != null && !holding.getNote().isEmpty()) {
+                note += "，" + holding.getNote();
+            }
+            
+            LedgerTxn txn = ledgerService.createTransaction(
+                userId,
+                familyId,
+                "ADJUST",
+                null,
+                List.of(positionPosting, incomePosting),
+                note
+            );
+            
+            // 设置产品ID（用于持仓计算）
+            txn.setProductId(product.getId());
+            ledgerTxnMapper.update(txn);
+        }
+    }
+
+    /**
+     * 查找或创建产品
+     * 
+     * @param holding 初始持仓信息
+     * @return 产品实体
+     */
+    private ProductMaster findOrCreateProduct(InitialHoldingImport holding) {
+        // 先尝试查找产品（根据产品代码和渠道）
+        String market = "EXCHANGE".equals(holding.getChannel()) ? "SH" : "NA"; // 简化处理，实际应该根据产品代码判断
+        ProductMaster product = productMasterMapper.selectByCode(holding.getProductCode(), holding.getChannel(), market);
+        
+        if (product != null) {
+            return product;
+        }
+        
+        // 如果产品不存在，创建新产品
+        product = new ProductMaster();
+        product.setProductCode(holding.getProductCode());
+        product.setProductName(holding.getProductName());
+        product.setChannel(holding.getChannel());
+        product.setMarket(market);
+        
+        // 根据渠道推断资产类型
+        if ("EXCHANGE".equals(holding.getChannel())) {
+            // 场内产品，默认为ETF
+            product.setAssetType("ETF");
+        } else {
+            // 场外产品，默认为FUND
+            product.setAssetType("FUND");
+        }
+        
+        product.setCurrency("CNY");
+        product.setIsQdii(false);
+        product.setBuyFeeRate(BigDecimal.ZERO);
+        product.setSellFeeRate(BigDecimal.ZERO);
+        product.setBuyConfirmOffset(1);
+        product.setSellConfirmOffset(1);
+        product.setCutoffTime("15:00");
+        product.setDataSource("MANUAL");
+        product.setIsActive(true);
+        product.setNote("初始持仓导入时自动创建");
+        
+        productService.createProduct(product);
+        return product;
     }
 }
 

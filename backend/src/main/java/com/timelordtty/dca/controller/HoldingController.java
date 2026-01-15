@@ -6,6 +6,7 @@ import com.timelordtty.dca.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -28,6 +29,16 @@ public class HoldingController {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(currentUser.getId());
         return ResponseEntity.ok(holdings);
+    }
+
+    /**
+     * 导入初始持仓
+     */
+    @PostMapping("/import-initial")
+    public ResponseEntity<Void> importInitialHoldings(@RequestBody List<HoldingService.InitialHoldingImport> holdings) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        holdingService.importInitialHoldings(currentUser.getId(), currentUser.getFamilyId(), holdings);
+        return ResponseEntity.ok().build();
     }
 }
 

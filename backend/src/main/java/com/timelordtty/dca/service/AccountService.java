@@ -364,6 +364,73 @@ public class AccountService {
     }
 
     /**
+     * 获取或创建券商账户的持仓市值汇总账户
+     * 
+     * 为每个BROKER类型的平台账户创建一个虚拟叶子账户，用于汇总该账户下所有场内产品的持仓市值
+     * 这个账户作为该券商账户的子账户，余额 = 该券商账户下所有场内产品的持仓市值总和
+     * 
+     * @param brokerAccountId 券商平台账户ID（BROKER类型的父账户）
+     * @return 持仓市值汇总账户实体
+     */
+    @Transactional
+    public Account getOrCreateBrokerPositionValueAccount(Long brokerAccountId) {
+        Account brokerAccount = accountMapper.selectById(brokerAccountId);
+        if (brokerAccount == null) {
+            throw new RuntimeException("券商账户不存在: " + brokerAccountId);
+        }
+        if (!"BROKER".equals(brokerAccount.getAccountType())) {
+            throw new RuntimeException("账户不是券商账户: " + brokerAccountId);
+        }
+        if (brokerAccount.getParentAccountId() != null) {
+            throw new RuntimeException("账户不是平台账户（父账户）: " + brokerAccountId);
+        }
+
+        // 查找是否已存在持仓市值汇总账户
+        // 账户代码格式：BROKER-POS-VALUE-{brokerAccountId}
+        String accountCode = "BROKER-POS-VALUE-" + brokerAccountId;
+        Account existing = accountMapper.selectByCode(accountCode);
+        if (existing != null) {
+            return existing;
+        }
+
+        // 创建新的持仓市值汇总账户
+        Account positionValueAccount = new Account();
+        positionValueAccount.setAccountCode(accountCode);
+        positionValueAccount.setAccountName(brokerAccount.getAccountName() + "-持仓市值");
+        positionValueAccount.setAccountKind("VIRTUAL");
+        positionValueAccount.setAccountType("CASH"); // 使用CASH类型，表示资产
+        positionValueAccount.setVirtualSubtype("POSITION_VALUE"); // 虚拟子类型：持仓市值汇总
+        positionValueAccount.setOwnerType(brokerAccount.getOwnerType());
+        positionValueAccount.setOwnerUserId(brokerAccount.getOwnerUserId());
+        positionValueAccount.setOwnerFamilyId(brokerAccount.getOwnerFamilyId());
+        positionValueAccount.setCurrency(brokerAccount.getCurrency() != null ? brokerAccount.getCurrency() : "CNY");
+        positionValueAccount.setParentAccountId(brokerAccountId); // 作为券商账户的子账户
+        positionValueAccount.setInitialBalance(BigDecimal.ZERO);
+        positionValueAccount.setBalance(BigDecimal.ZERO);
+        positionValueAccount.setReservedAmount(BigDecimal.ZERO);
+        positionValueAccount.setIsActive(true);
+        positionValueAccount.setNote("券商账户持仓市值汇总账户（自动创建）");
+
+        return createAccount(positionValueAccount);
+    }
+
+    /**
+     * 更新券商账户的持仓市值汇总账户余额
+     * 
+     * 这个方法用于更新券商账户下虚拟持仓市值汇总账户的余额
+     * 余额应该等于该券商账户下所有场内产品的持仓市值总和
+     * 
+     * @param brokerAccountId 券商平台账户ID
+     * @param totalMarketValue 持仓市值总和
+     */
+    @Transactional
+    public void updateBrokerPositionValue(Long brokerAccountId, BigDecimal totalMarketValue) {
+        Account positionValueAccount = getOrCreateBrokerPositionValueAccount(brokerAccountId);
+        // 直接更新余额（虚拟账户的余额更新不需要生成流水，因为这是汇总值）
+        accountMapper.updateBalance(positionValueAccount.getId(), totalMarketValue);
+    }
+
+    /**
      * 手工调整账户余额（仅限 REAL 账户）
      * 注意：实际系统中应同时生成 ADJUST 类型的 ledger_txn/ledger_posting 以保证审计链完整
      *

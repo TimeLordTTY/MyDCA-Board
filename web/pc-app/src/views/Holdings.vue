@@ -3,6 +3,9 @@
     <!-- 持仓详情模态框 -->
     <HoldingDetailModal v-model="detailVisible" :holding="selectedHolding" />
 
+    <!-- 初始持仓导入对话框 -->
+    <InitialHoldingImportModal v-model="importDialogVisible" @success="handleImportSuccess" />
+
     <div class="card">
       <div class="row-between">
         <div>
@@ -11,6 +14,9 @@
             <span class="tag blue tiny">实时计算</span>
           </h3>
           <div class="sub">买入/卖出来自"订单&结算"。持仓数据基于流水实时计算。</div>
+        </div>
+        <div>
+          <el-button type="primary" @click="handleOpenImport">导入初始持仓</el-button>
         </div>
       </div>
       <div class="divider"></div>
@@ -73,6 +79,7 @@ import { ElMessage } from 'element-plus'
 import { holdingApi, marketApi, navApi, formatCurrency, formatNumber } from '@wealth-hub/shared'
 import type { HoldingInfo, MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
 import HoldingDetailModal from '../components/HoldingDetailModal.vue'
+import InitialHoldingImportModal from '../components/InitialHoldingImportModal.vue'
 
 const loading = ref(false)
 const holdings = ref<HoldingInfo[]>([])
@@ -80,6 +87,7 @@ const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
 const navs = ref<Map<number, Nav>>(new Map())
 const detailVisible = ref(false)
 const selectedHolding = ref<any>(null)
+const importDialogVisible = ref(false)
 
 // 合并持仓和行情数据
 const holdingsWithQuote = computed(() => {
@@ -163,6 +171,15 @@ async function loadHoldings() {
 function handleViewDetail(holding: any) {
   selectedHolding.value = holding
   detailVisible.value = true
+}
+
+function handleOpenImport() {
+  importDialogVisible.value = true
+}
+
+function handleImportSuccess() {
+  // 导入成功后重新加载持仓
+  loadHoldings()
 }
 
 onMounted(() => {

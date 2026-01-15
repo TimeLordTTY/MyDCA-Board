@@ -323,84 +323,54 @@
           
           <!-- 卖出费率分段配置 -->
           <el-form-item label="卖出费率分段" required>
-            <div style="margin-bottom: 8px;">
+            <div style="margin-bottom: 12px;">
               <el-button size="small" type="primary" @click="handleAddFeeTier">+ 添加分段</el-button>
             </div>
-            <el-table :data="sellFeeTiers" border size="small" style="width: 100%">
-              <el-table-column prop="minDays" label="最小持有天数" width="120">
+            <el-table 
+              :data="sellFeeTiers" 
+              border 
+              style="width: 100%"
+              :cell-style="{ padding: '8px 6px' }"
+            >
+              <el-table-column prop="minDays" label="最小持有天数" width="120" align="center">
                 <template #default="{ row }">
-                  <el-input-number
+                  <el-input
                     v-model="row.minDays"
-                    :min="0"
-                    :precision="0"
-                    size="small"
+                    type="number"
+                    placeholder="0"
                     style="width: 100%"
+                    @blur="row.minDays = row.minDays === '' ? 0 : Number(row.minDays) || 0"
                   />
                 </template>
               </el-table-column>
-              <el-table-column prop="maxDays" label="最大持有天数" width="180">
+              <el-table-column prop="maxDays" label="最大持有天数" width="140" align="center">
                 <template #default="{ row }">
-                  <div style="display: flex; gap: 8px; align-items: center;">
-                    <el-input-number
-                      v-if="row.maxDays !== null"
-                      v-model="row.maxDays"
-                      :min="0"
-                      :precision="0"
-                      size="small"
-                      style="flex: 1;"
-                    />
-                    <el-input
-                      v-else
-                      value="无上限"
-                      disabled
-                      size="small"
-                      style="flex: 1;"
-                    />
-                    <el-button
-                      size="small"
-                      :type="row.maxDays === null ? 'primary' : 'default'"
-                      @click="row.maxDays = row.maxDays === null ? 0 : null"
-                    >
-                      {{ row.maxDays === null ? '设为有上限' : '设为无上限' }}
-                    </el-button>
-                  </div>
-                  <div class="sub" style="font-size: 11px; color: #999; margin-top: 2px;">
-                    {{ row.maxDays === null ? '无上限（不包含）' : `不包含${row.maxDays}天` }}
-                  </div>
+                  <el-input
+                    v-model="row.maxDaysInput"
+                    type="number"
+                    placeholder="留空表示无上限"
+                    style="width: 100%"
+                    @blur="handleMaxDaysBlur(row)"
+                  />
                 </template>
               </el-table-column>
-              <el-table-column prop="sellFeeRatePercent" label="卖出费率" width="150">
+              <el-table-column prop="sellFeeRatePercent" label="卖出费率(%)" width="130" align="center">
                 <template #default="{ row }">
-                  <el-input-number
+                  <el-input
                     v-model="row.sellFeeRatePercent"
-                    :precision="6"
-                    :step="0.0001"
-                    :min="0"
-                    :max="100"
-                    size="small"
+                    type="number"
+                    placeholder="0.000000"
                     style="width: 100%"
-                  >
-                    <template #suffix>%</template>
-                  </el-input-number>
-                </template>
-              </el-table-column>
-              <el-table-column prop="sortOrder" label="排序" width="80">
-                <template #default="{ row }">
-                  <el-input-number
-                    v-model="row.sortOrder"
-                    :min="0"
-                    :precision="0"
-                    size="small"
-                    style="width: 100%"
+                    @blur="row.sellFeeRatePercent = row.sellFeeRatePercent === '' ? 0 : Number(row.sellFeeRatePercent) || 0"
                   />
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="80" fixed="right">
+              <el-table-column label="操作" width="70" fixed="right" align="center">
                 <template #default="{ $index }">
                   <el-button
                     type="danger"
-                    size="small"
                     link
+                    size="small"
                     @click="handleRemoveFeeTier($index)"
                   >
                     删除
@@ -408,8 +378,8 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="sub" style="margin-top: 8px; color: #999;">
-              提示：普通基金只使用分段费率，不使用默认卖出费率。持有天数使用左闭右开区间（如0-7表示[0, 7)，7-30表示[7, 30)）。最后一个分段可以使用空值表示"以上"。
+            <div class="sub" style="margin-top: 12px; color: #999; line-height: 1.6;">
+              提示：普通基金只使用分段费率，不使用默认卖出费率。持有天数使用左闭右开区间（如0-7表示[0, 7)，7-30表示[7, 30)）。最大持有天数留空表示无上限。
             </div>
           </el-form-item>
         </template>
@@ -555,6 +525,7 @@ const sellFeeRatePercent = computed({
 // 卖出费率分段配置（前端扩展字段，包含百分比显示）
 interface FeeTier extends Omit<FundSellFeeTier, 'sellFeeRate'> {
   sellFeeRatePercent: number
+  maxDaysInput?: string | number  // 用于输入的临时字段
 }
 
 const sellFeeTiers = ref<FeeTier[]>([])
@@ -871,19 +842,28 @@ function resetForm() {
 }
 
 function handleAddFeeTier() {
-  const maxSortOrder = sellFeeTiers.value.length > 0 
-    ? Math.max(...sellFeeTiers.value.map(t => t.sortOrder || 0))
-    : -1
-  
+  // 使用索引作为排序值，保持后端兼容性
   sellFeeTiers.value.push({
     minDays: 0,
     maxDays: null,
+    maxDaysInput: '',
     sellFeeRatePercent: 0,
     sellFeeRate: 0,
-    sortOrder: maxSortOrder + 1,
+    sortOrder: sellFeeTiers.value.length,
     isActive: true,
     note: '',
   })
+}
+
+// 处理最大持有天数输入框失焦事件
+function handleMaxDaysBlur(row: FeeTier) {
+  const value = row.maxDaysInput
+  if (value === '' || value === null || value === undefined) {
+    row.maxDays = null
+  } else {
+    const numValue = Number(value)
+    row.maxDays = isNaN(numValue) ? null : numValue
+  }
 }
 
 function handleRemoveFeeTier(index: number) {
@@ -896,7 +876,8 @@ async function loadFeeTiers(productId: number) {
     const tiers = await productApi.getSellFeeTiers(productId)
     sellFeeTiers.value = tiers.map(t => ({
       ...t,
-      sellFeeRatePercent: (t.sellFeeRate || 0) * 100
+      sellFeeRatePercent: (t.sellFeeRate || 0) * 100,
+      maxDaysInput: t.maxDays === null || t.maxDays === undefined ? '' : t.maxDays
     }))
   } catch (error: any) {
     console.error('加载费率分段失败:', error)
@@ -964,12 +945,22 @@ async function handleSave() {
 // 保存费率分段配置
 async function saveFeeTiers(productId: number) {
   try {
-    // 转换百分比为小数，移除前端扩展字段
-    const tiersToSave: FundSellFeeTier[] = sellFeeTiers.value.map(tier => {
-      const { sellFeeRatePercent, ...rest } = tier
+    // 转换百分比为小数，移除前端扩展字段，处理最大持有天数
+    const tiersToSave: FundSellFeeTier[] = sellFeeTiers.value.map((tier, index) => {
+      const { sellFeeRatePercent, maxDaysInput, ...rest } = tier
+      // 处理最大持有天数：如果 maxDaysInput 为空，则 maxDays 为 null
+      let maxDays = tier.maxDays
+      if (maxDaysInput === '' || maxDaysInput === null || maxDaysInput === undefined) {
+        maxDays = null
+      } else if (typeof maxDaysInput === 'string') {
+        maxDays = maxDaysInput.trim() === '' ? null : Number(maxDaysInput) || null
+      }
+      
       return {
         ...rest,
+        maxDays: maxDays,
         sellFeeRate: sellFeeRatePercent / 100,
+        sortOrder: index, // 使用索引作为排序值
         productId: productId,
       }
     })

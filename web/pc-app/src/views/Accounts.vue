@@ -48,7 +48,7 @@
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
                 </div>
-                <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
+                <div v-if="expandedPlatforms.has(platform.id) && platform.children && platform.children.length > 0" class="platform-children">
                 <div
                   v-for="child in platform.children"
                   :key="child.id"
@@ -123,7 +123,7 @@
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
                 </div>
-                <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
+                <div v-if="expandedPlatforms.has(platform.id) && platform.children && platform.children.length > 0" class="platform-children">
                   <div
                     v-for="child in platform.children"
                     :key="child.id"

@@ -72,7 +72,6 @@ async function handleLogin() {
     loading.value = true
     try {
       await userStore.login(form)
-      ElMessage.success('登录成功')
       const redirect = (route.query.redirect as string) || '/dashboard'
       router.push(redirect)
     } catch (error: any) {
