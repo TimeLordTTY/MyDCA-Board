@@ -12,6 +12,9 @@ public interface AccountMapper {
     Account selectById(@Param("id") Long id);
     Account selectByCode(@Param("accountCode") String accountCode);
     List<Account> selectByOwner(@Param("ownerUserId") Long ownerUserId, @Param("ownerFamilyId") Long ownerFamilyId);
+    List<Account> selectVirtualAccountsByOwner(@Param("ownerUserId") Long ownerUserId,
+                                               @Param("ownerFamilyId") Long ownerFamilyId,
+                                               @Param("virtualSubtype") String virtualSubtype);
     List<Account> selectChildren(@Param("parentAccountId") Long parentAccountId);
     List<Account> selectLeafAccounts(@Param("ownerUserId") Long ownerUserId, @Param("ownerFamilyId") Long ownerFamilyId);
     int insert(Account account);

@@ -30,19 +30,27 @@
         </div>
       </div>
 
-      <!-- 图表标签页 -->
+      <!-- 图表标签页（按场内/场外差异化展示） -->
       <el-tabs v-model="activeTab">
-        <!-- 历史净值曲线 -->
-        <el-tab-pane label="净值曲线" name="nav">
+        <!-- 场外：净值曲线 -->
+        <el-tab-pane v-if="isOtc" label="净值曲线" name="nav">
           <div id="navChart" style="width: 100%; height: 400px"></div>
         </el-tab-pane>
 
-        <!-- K线图 -->
-        <el-tab-pane label="K线图" name="kline">
+        <!-- 场内：IOPV/估值与溢价 -->
+        <el-tab-pane v-if="isExchange" label="IOPV/估值" name="iopv">
+          <div id="iopvChart" style="width: 100%; height: 400px"></div>
+          <div class="td-muted" style="margin-top: 8px; font-size: 12px">
+            注：IOPV来自实时行情采集；历史范围仅覆盖系统开始采集后的数据。
+          </div>
+        </el-tab-pane>
+
+        <!-- 场内：K线图 -->
+        <el-tab-pane v-if="isExchange" label="K线图" name="kline">
           <div id="klineChart" style="width: 100%; height: 400px"></div>
         </el-tab-pane>
 
-        <!-- 技术指标 -->
+        <!-- 技术指标：场内/场外都可展示（场外基于净值派生） -->
         <el-tab-pane label="技术指标" name="indicator">
           <div style="margin-bottom: 16px">
             <label style="margin-right: 8px">窗口天数：</label>
@@ -68,6 +76,8 @@ import type { Nav, MarketBarDaily, IndicatorDaily } from '@wealth-hub/shared'
 interface HoldingWithQuote {
   productId: number
   productName?: string
+  channel?: 'EXCHANGE' | 'OTC'
+  assetType?: string
   totalShares?: number
   shares?: number
   averageCost?: number
@@ -97,10 +107,15 @@ const windowDays = ref(20)
 let navChart: echarts.ECharts | null = null
 let klineChart: echarts.ECharts | null = null
 let indicatorChart: echarts.ECharts | null = null
+let iopvChart: echarts.ECharts | null = null
 
 const navData = ref<Nav[]>([])
 const klineData = ref<MarketBarDaily[]>([])
 const indicatorData = ref<IndicatorDaily[]>([])
+const quoteHistory = ref<any[]>([])
+
+const isExchange = computed(() => props.holding?.channel === 'EXCHANGE')
+const isOtc = computed(() => props.holding?.channel === 'OTC')
 
 watch([visible, activeTab], async ([newVisible, newTab]) => {
   if (newVisible && props.holding) {
@@ -108,6 +123,9 @@ watch([visible, activeTab], async ([newVisible, newTab]) => {
     if (newTab === 'nav') {
       await loadNavData()
       renderNavChart()
+    } else if (newTab === 'iopv') {
+      await loadIopvData()
+      renderIopvChart()
     } else if (newTab === 'kline') {
       await loadKlineData()
       renderKlineChart()
@@ -117,6 +135,12 @@ watch([visible, activeTab], async ([newVisible, newTab]) => {
     }
   }
 }, { immediate: true })
+
+watch(visible, (v) => {
+  if (v && props.holding) {
+    activeTab.value = props.holding.channel === 'EXCHANGE' ? 'iopv' : 'nav'
+  }
+})
 
 async function loadNavData() {
   if (!props.holding) return
@@ -141,6 +165,22 @@ async function loadKlineData() {
   } catch (error: any) {
     console.error('加载K线数据失败:', error)
     klineData.value = []
+  }
+}
+
+async function loadIopvData() {
+  if (!props.holding) return
+  try {
+    const end = new Date()
+    const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    quoteHistory.value = await marketApi.getQuoteHistory(
+      props.holding.productId,
+      start.toISOString(),
+      end.toISOString()
+    )
+  } catch (error: any) {
+    console.error('加载IOPV/估值数据失败:', error)
+    quoteHistory.value = []
   }
 }
 
@@ -212,6 +252,34 @@ function renderNavChart() {
         }
       }
     ]
+  })
+}
+
+function renderIopvChart() {
+  if (!iopvChart) {
+    const chartDom = document.getElementById('iopvChart')
+    if (!chartDom) return
+    iopvChart = echarts.init(chartDom)
+  }
+
+  const dates = quoteHistory.value.map((q: any) => q.quoteTime)
+  const price = quoteHistory.value.map((q: any) => q.price ?? null)
+  const iopv = quoteHistory.value.map((q: any) => q.iopv ?? null)
+  const premium = quoteHistory.value.map((q: any) => q.premiumRate ?? null)
+
+  iopvChart.setOption({
+    tooltip: { trigger: 'axis' },
+    legend: { data: ['价格', 'IOPV', '溢价率'] },
+    xAxis: { type: 'category', data: dates },
+    yAxis: [
+      { type: 'value', name: '价格', scale: true },
+      { type: 'value', name: '溢价率', scale: true, position: 'right' },
+    ],
+    series: [
+      { name: '价格', type: 'line', data: price, smooth: true },
+      { name: 'IOPV', type: 'line', data: iopv, smooth: true },
+      { name: '溢价率', type: 'line', yAxisIndex: 1, data: premium, smooth: true },
+    ],
   })
 }
 
@@ -343,9 +411,11 @@ function handleClose() {
   navChart?.dispose()
   klineChart?.dispose()
   indicatorChart?.dispose()
+  iopvChart?.dispose()
   navChart = null
   klineChart = null
   indicatorChart = null
+  iopvChart = null
 }
 
 onUnmounted(() => {

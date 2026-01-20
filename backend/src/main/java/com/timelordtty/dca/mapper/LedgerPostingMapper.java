@@ -11,6 +11,9 @@ import java.util.List;
 public interface LedgerPostingMapper {
     List<LedgerPosting> selectByTxnId(@Param("txnId") String txnId);
     List<LedgerPosting> selectByAccountId(@Param("accountId") Long accountId);
+    List<LedgerPosting> selectByAccountTypeAndOwner(@Param("accountType") String accountType, 
+                                                     @Param("ownerUserId") Long ownerUserId, 
+                                                     @Param("ownerFamilyId") Long ownerFamilyId);
     BigDecimal sumDebitByAccount(@Param("accountId") Long accountId);
     BigDecimal sumCreditByAccount(@Param("accountId") Long accountId);
     int insert(LedgerPosting posting);

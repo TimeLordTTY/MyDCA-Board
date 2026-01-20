@@ -1,12 +1,12 @@
 <template>
-  <div>
+  <div class="products-page-container">
     <!-- 持仓详情模态框 -->
     <HoldingDetailModal v-model="detailVisible" :holding="selectedHolding" />
 
     <!-- 初始持仓导入对话框 -->
     <InitialHoldingImportModal v-model="importDialogVisible" @success="handleImportSuccess" />
 
-    <div class="card">
+    <div class="card" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
       <div class="row-between">
         <div>
           <h3>
@@ -21,53 +21,151 @@
       </div>
       <div class="divider"></div>
 
-      <div style="overflow: auto">
-        <table>
-          <thead>
-            <tr>
-              <th>标的</th>
-              <th>代码</th>
-              <th class="right">份额</th>
-              <th class="right">均价</th>
-              <th class="right">现价</th>
-              <th class="right">市值</th>
-              <th class="right">浮盈亏</th>
-              <th class="right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loading">
-              <td colspan="8" class="td-muted" style="text-align: center">加载中...</td>
-            </tr>
-            <tr v-else-if="holdings.length === 0">
-              <td colspan="8" class="td-muted" style="text-align: center">暂无持仓，去"订单&结算"买一笔试试。</td>
-            </tr>
-            <tr v-for="holding in holdingsWithQuote" :key="holding.productId">
-              <td><b>{{ holding.productName || `产品${holding.productId}` }}</b></td>
-              <td class="mono">{{ holding.productCode || '—' }}</td>
-              <td class="right mono">{{ formatNumber(holding.totalShares || holding.shares || 0, 2) }}</td>
-              <td class="right mono">{{ formatNumber(holding.averageCost || holding.avgCost || 0, 4) }}</td>
-              <td class="right mono">
-                <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
-                <span v-else class="td-muted">—</span>
-                <span v-if="holding.pctChg !== undefined && holding.pctChg !== null" 
-                      :class="holding.pctChg >= 0 ? 'text-green' : 'text-red'"
-                      style="margin-left: 8px; font-size: 0.9em;">
-                  {{ holding.pctChg >= 0 ? '+' : '' }}{{ formatNumber(holding.pctChg, 2) }}%
-                </span>
-              </td>
-              <td class="right mono">{{ formatCurrency(holding.marketValue) }}</td>
-              <td class="right">
-                <span class="chip" :class="(holding.unrealizedPnl || 0) >= 0 ? 'good' : 'bad'">
-                  {{ (holding.unrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatCurrency(holding.unrealizedPnl) }}
-                </span>
-              </td>
-              <td class="right">
-                <button class="btn" @click="handleViewDetail(holding)">详情</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- 左右分栏：左=场内，右=场外（结构/风格对齐“产品管理”页面） -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; min-height: 0; overflow: hidden;">
+        <!-- 左侧：场内产品 -->
+        <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
+          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">场内产品</h3>
+          </div>
+          <div class="hide-scrollbar holdings-scroll" style="flex: 1; overflow: auto; min-height: 0;">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th class="right">份额 / 市值</th>
+                  <th class="right">成本价 / 最新价</th>
+                  <th class="right">盈亏率 / 浮盈亏</th>
+                  <th class="right" style="min-width: 80px; white-space: nowrap;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="loading">
+                  <td colspan="5" class="td-muted" style="text-align: center">加载中...</td>
+                </tr>
+                <tr v-else-if="exchangeHoldings.length === 0">
+                  <td colspan="5" class="td-muted" style="text-align: center">暂无场内持仓</td>
+                </tr>
+                <tr v-for="holding in exchangeHoldings" :key="holding.productId">
+                  <!-- 名称 + 代码（灰显） -->
+                  <td>
+                    <div class="holding-name-cell">
+                      <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
+                      <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
+                        {{ holding.productCode || '—' }}
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 份额 + 市值（上下） -->
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                      <div class="mono">{{ formatNumber(holding.sharesCalc, 2) }}</div>
+                      <div class="mono td-muted">{{ formatCurrency(holding.marketValue) }}</div>
+                    </div>
+                  </td>
+
+                  <!-- 成本价（黑）+ 最新价（红/绿） -->
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                      <div class="mono" style="color: #0f172a;">{{ formatNumber(holding.avgCostCalc, 4) }}</div>
+                      <div class="mono" :style="{ color: priceColor(holding.currentPrice, holding.avgCostCalc) }">
+                        <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
+                        <span v-else class="td-muted">—</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <!-- 盈亏率（红/绿）+ 浮盈亏（红/绿） -->
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl) }">
+                        {{ pnlRateText(holding.unrealizedPnl, holding.totalCostCalc) }}
+                      </div>
+                      <div :style="{ color: pnlColor(holding.unrealizedPnl), fontWeight: 600 }">
+                        {{ formatSignedCurrency(holding.unrealizedPnl) }}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td class="right" style="white-space: nowrap;">
+                    <button class="btn-small" @click="handleViewDetail(holding)">详情</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 右侧：场外产品 -->
+        <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
+          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
+            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">场外产品</h3>
+          </div>
+          <div class="hide-scrollbar holdings-scroll" style="flex: 1; overflow: auto; min-height: 0;">
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th class="right">份额 / 市值</th>
+                  <th class="right">成本价 / 最新价</th>
+                  <th class="right">盈亏率 / 浮盈亏</th>
+                  <th class="right" style="min-width: 80px; white-space: nowrap;">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="loading">
+                  <td colspan="5" class="td-muted" style="text-align: center">加载中...</td>
+                </tr>
+                <tr v-else-if="otcHoldings.length === 0">
+                  <td colspan="5" class="td-muted" style="text-align: center">暂无场外持仓</td>
+                </tr>
+                <tr v-for="holding in otcHoldings" :key="holding.productId">
+                  <td>
+                    <div class="holding-name-cell">
+                      <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
+                      <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
+                        {{ holding.productCode || '—' }}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                      <div class="mono">{{ formatNumber(holding.sharesCalc, 2) }}</div>
+                      <div class="mono td-muted">{{ formatCurrency(holding.marketValue) }}</div>
+                    </div>
+                  </td>
+
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                      <div class="mono" style="color: #0f172a;">{{ formatNumber(holding.avgCostCalc, 4) }}</div>
+                      <div class="mono" :style="{ color: priceColor(holding.currentPrice, holding.avgCostCalc) }">
+                        <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
+                        <span v-else class="td-muted">—</span>
+                      </div>
+                    </div>
+                  </td>
+
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl) }">
+                        {{ pnlRateText(holding.unrealizedPnl, holding.totalCostCalc) }}
+                      </div>
+                      <div :style="{ color: pnlColor(holding.unrealizedPnl), fontWeight: 600 }">
+                        {{ formatSignedCurrency(holding.unrealizedPnl) }}
+                      </div>
+                    </div>
+                  </td>
+
+                  <td class="right" style="white-space: nowrap;">
+                    <button class="btn-small" @click="handleViewDetail(holding)">详情</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -104,14 +202,17 @@ const holdingsWithQuote = computed(() => {
     }
     
     const shares = holding.totalShares || holding.shares || 0
-    const marketValue = shares * currentPrice
     const avgCost = holding.averageCost || holding.avgCost || 0
     const totalCost = shares * avgCost
+    const marketValue = shares * currentPrice
     const unrealizedPnl = marketValue - totalCost
     const pctChg = quote?.pctChg
     
     return {
       ...holding,
+      sharesCalc: shares,
+      avgCostCalc: avgCost,
+      totalCostCalc: totalCost,
       currentPrice,
       marketValue,
       unrealizedPnl,
@@ -121,6 +222,43 @@ const holdingsWithQuote = computed(() => {
     }
   })
 })
+
+const exchangeHoldings = computed(() =>
+  holdingsWithQuote.value
+    .filter(h => h.channel === 'EXCHANGE')
+    .slice()
+    .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
+)
+const otcHoldings = computed(() =>
+  holdingsWithQuote.value
+    .filter(h => h.channel !== 'EXCHANGE')
+    .slice()
+    .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
+)
+
+function pnlColor(pnl: number) {
+  // 需求：盈利红色、亏损绿色（反直觉，但按用户要求）
+  return (pnl || 0) >= 0 ? 'var(--bad)' : 'var(--good)'
+}
+
+function priceColor(currentPrice: number, costPrice: number) {
+  if (!currentPrice || currentPrice <= 0) return 'var(--muted)'
+  if (!costPrice || costPrice <= 0) return '#0f172a'
+  return currentPrice >= costPrice ? 'var(--bad)' : 'var(--good)'
+}
+
+function pnlRateText(pnl: number, totalCost: number) {
+  const cost = totalCost || 0
+  if (!cost || cost <= 0) return '—'
+  const rate = (pnl || 0) / cost
+  return `${rate >= 0 ? '+' : ''}${formatNumber(rate * 100, 2)}%`
+}
+
+function formatSignedCurrency(amount: number) {
+  const v = Number(amount) || 0
+  const sign = v >= 0 ? '+' : '-'
+  return `${sign}${formatCurrency(Math.abs(v))}`
+}
 
 async function loadHoldings() {
   loading.value = true
@@ -133,32 +271,52 @@ async function loadHoldings() {
     } else if (Array.isArray(holdingsData)) {
       holdings.value = holdingsData
     } else if (typeof holdingsData === 'object' && holdingsData !== null) {
-      holdings.value = Object.values(holdingsData)
+      // 后端可能返回 { [productId]: HoldingInfo } 的对象结构，Object.values 会丢失 key
+      holdings.value = Object.entries(holdingsData as Record<string, any>).map(([productId, v]) => ({
+        ...v,
+        productId: v?.productId ?? Number(productId),
+      }))
     } else {
       holdings.value = []
     }
     
-    // 加载实时行情和净值
+    // 加载实时行情和净值（场内优先实时行情；场外使用净值）
     if (holdings.value.length > 0) {
-      const productIds = holdings.value.map(h => h.productId)
+      const exchangeIds = holdings.value
+        .filter(h => h.channel === 'EXCHANGE')
+        .map(h => Number(h.productId))
+        .filter(id => Number.isFinite(id) && id > 0)
+      const otcIds = holdings.value
+        .filter(h => h.channel !== 'EXCHANGE')
+        .map(h => Number(h.productId))
+        .filter(id => Number.isFinite(id) && id > 0)
       
-      // 批量获取实时行情
-      try {
-        const quotesData = await marketApi.getRealtimeQuotes(productIds)
-        quotes.value = new Map(quotesData.map(q => [q.productId, q]))
-      } catch (error: any) {
-        console.warn('加载实时行情失败:', error)
+      if (exchangeIds.length === 0 && otcIds.length === 0) {
+        console.warn('持仓数据缺少productId，跳过行情/净值加载', holdings.value)
+        return
       }
       
-      // 批量获取最新净值（作为备用）
-      try {
-        const navPromises = productIds.map(id => navApi.getLatestNav(id))
-        const navsData = await Promise.all(navPromises)
-        navs.value = new Map(
-          navsData.filter(n => n !== null).map(n => [n!.productId, n!])
-        )
-      } catch (error: any) {
-        console.warn('加载净值失败:', error)
+      // 场内：批量获取实时行情
+      if (exchangeIds.length > 0) {
+        try {
+          const quotesData = await marketApi.getRealtimeQuotes(exchangeIds)
+          quotes.value = new Map(quotesData.map(q => [q.productId, q]))
+        } catch (error: any) {
+          console.warn('加载实时行情失败:', error)
+        }
+      }
+      
+      // 场外：批量获取最新净值（场内去调 nav/latest 会 404，避免无意义请求）
+      if (otcIds.length > 0) {
+        try {
+          const navPromises = otcIds.map(id => navApi.getLatestNav(id))
+          const navsData = await Promise.all(navPromises)
+          navs.value = new Map(
+            navsData.filter(n => n !== null).map(n => [n!.productId, n!])
+          )
+        } catch (error: any) {
+          console.warn('加载净值失败:', error)
+        }
       }
     }
   } catch (error: any) {
@@ -186,3 +344,23 @@ onMounted(() => {
   loadHoldings()
 })
 </script>
+
+<style scoped>
+.holdings-scroll table {
+  /* 避免被压缩得太窄导致内容“奇怪换行/截断” */
+  min-width: 520px;
+}
+
+.holding-name-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.holding-name {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
+}
+</style>

@@ -62,23 +62,32 @@ from market.config import DB_CONFIG  # noqa: E402
 
 
 class LegacySSLAdapter(HTTPAdapter):
-    """支持 legacy SSL 重新协商的适配器（参考 v1 cmbc_client，做了简化）。"""
+    """
+    支持 legacy SSL 重新协商的适配器（严格参考 v1 的 adaptor/cmbc_client.py）。
+
+    说明：
+    - 使用 urllib3 的 create_urllib3_context 创建自定义 SSLContext
+    - 通过 OP_LEGACY_SERVER_CONNECT（或常量值 0x4）开启不安全的 legacy renegotiation
+    - 同时关闭主机名校验，并将 verify_mode 设为 CERT_NONE
+    """
 
     def init_poolmanager(self, *args, **kwargs):
         ctx = create_urllib3_context()
         # 允许 legacy renegotiation（Python 3.12+ 默认禁用）
         try:
             if hasattr(ssl, "OP_LEGACY_SERVER_CONNECT"):
-                ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT  # type: ignore[attr-defined]
+                ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT  # 与 v1 保持一致
             else:
                 # Python 3.12+ 使用数值 0x4
                 ctx.options |= 0x4
         except Exception:
-            # 如果设置失败，直接忽略，走默认配置
+            # 如果设置失败，尝试继续使用默认配置
             pass
-        # 必须同时设置 check_hostname / verify_mode
+
+        # 必须同时设置 check_hostname / verify_mode（顺序同 v1）
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE  # type: ignore[assignment]
+
         kwargs["ssl_context"] = ctx
         return super().init_poolmanager(*args, **kwargs)
 
@@ -105,14 +114,12 @@ def _normalize_cmbc_nav_record(raw_record: Dict, product_code: str) -> Dict:
     }
 
 
-def query_cmbc_nav_for_range(product_code: str, start_date: date, end_date: date) -> List[Dict]:
+def _query_latest_cmbc_nav(product_code: str, query_date: date, retry_num: int) -> List[Dict]:
     """
-    从民生银行接口按日期区间拉取历史净值（参考cmbc_client.py）。
+    严格参考 v1 的 cmbc_client.query_latest_nav 实现单日查询 + 回溯逻辑。
 
-    说明：
-    - 优先按“区间”直接查询（begin_date=start_date, end_date=end_date），让接口一次性返回 list。
-    - 如果区间查询失败/返回非JSON，则降级为“逐日查询 + 空数据回溯（最多15天）”（与 v1 行为一致）。
-    - 只查询工作日（周一到周五），跳过周末。
+    与 v1 的差异：
+    - 使用当前脚本的 _normalize_cmbc_nav_record，直接返回 nav_date 为 date 类型，便于后续写入 DB。
     """
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -124,98 +131,86 @@ def query_cmbc_nav_for_range(product_code: str, start_date: date, end_date: date
         "Referer": "https://www.cmbcwm.com.cn",
     }
 
-    session = requests.Session()
-    session.mount("https://", LegacySSLAdapter())
+    try:
+        print(f"[CMBC] 开始获取基金 {product_code} {query_date} 的净值 (重试={retry_num})")
+        # 创建支持 legacy SSL 的 session（用法与 v1 完全一致）
+        session = requests.Session()
+        session.mount("https://", LegacySSLAdapter())
 
-    def _post(begin: date, end: date) -> Optional[Dict]:
-        try:
-            resp = session.post(
-                "https://www.cmbcwm.com.cn/gw/po_web/BTADailyQry",
-                data={
-                    "chart_type": "1",
-                    "real_prd_code": product_code,
-                    "begin_date": begin.strftime("%Y%m%d"),
-                    "end_date": end.strftime("%Y%m%d"),
-                },
-                headers=headers,
-                timeout=15,
-                verify=False,
-            )
-            if resp.status_code != 200:
-                print(f"[CMBC] {product_code} {begin}~{end} HTTP {resp.status_code}: {resp.text[:300]}")
-                return None
-            try:
-                return resp.json()
-            except Exception as e:  # noqa: BLE001
-                print(f"[CMBC] {product_code} {begin}~{end} JSON解析失败: {e}; body={resp.text[:300]}")
-                return None
-        except Exception as e:  # noqa: BLE001
-            print(f"[CMBC] {product_code} {begin}~{end} 请求失败: {e}")
-            return None
+        resp = session.post(
+            "https://www.cmbcwm.com.cn/gw/po_web/BTADailyQry",
+            data={
+                "chart_type": "1",
+                "real_prd_code": product_code,
+                "begin_date": query_date.strftime("%Y%m%d"),
+                "end_date": query_date.strftime("%Y%m%d"),
+            },
+            headers=headers,
+            timeout=10,
+            verify=False,  # 与 v1 完全一致
+        )
+        data = resp.json()
+    except Exception as e:  # noqa: BLE001
+        print(f"[CMBC] 获取最新净值失败: {e}")
+        raise
 
-    # 1) 优先按区间查询（一次性返回）
-    data = _post(start_date, end_date)
-    if data and (data.get("list") or []):
-        raw_list = data.get("list") or []
-        records: List[Dict] = []
-        for raw in raw_list:
-            try:
-                normalized = _normalize_cmbc_nav_record(raw, product_code)
-                d = normalized["nav_date"]
-                if start_date <= d <= end_date:
-                    records.append(normalized)
-            except Exception as e:  # noqa: BLE001
-                print(f"[CMBC] {product_code} 区间结果解析失败: {e}")
-                continue
-        records.sort(key=lambda x: x["nav_date"])
-        print(f"[CMBC] {product_code} 区间查询成功: {len(records)} 条")
-        return records
+    raw_list = data.get("list") or []
 
-    print(f"[CMBC] {product_code} 区间查询无数据/失败，降级为逐日回溯模式…")
+    # 无数据时，向前回溯最多 15 天（与 v1 行为一致）
+    if not raw_list and retry_num < 15:
+        retry_num += 1
+        prev_date = query_date - timedelta(days=1)
+        print(f"[CMBC] 当前日期 {query_date} 无净值数据，回溯到前一天 {prev_date}（重试 {retry_num} 次）")
+        return _query_latest_cmbc_nav(product_code, prev_date, retry_num)
 
-    # 2) 降级：逐日查询 + 空数据回溯（最多15天，与 v1 一致）
+    if not raw_list:
+        print(f"[CMBC] 已重试 {retry_num} 次，仍无数据")
+        return []
+
+    # 只取第一条记录，做标准化（与 v1 的“只用一条”保持一致）
+    try:
+        normalized = _normalize_cmbc_nav_record(raw_list[0], product_code)
+        print(f"[CMBC] 产品 {product_code} 净值获取成功，日期 {normalized['nav_date']}, nav={normalized['nav']}")
+        return [normalized]
+    except Exception as e:  # noqa: BLE001
+        print(f"[CMBC] 解析净值记录失败: {e}")
+        return []
+
+
+def query_cmbc_nav_for_range(product_code: str, start_date: date, end_date: date) -> List[Dict]:
+    """
+    从民生银行接口按日期区间拉取历史净值。
+
+    实现方式：
+    - **严格参考 v1 的单日查询逻辑**（_query_latest_cmbc_nav），逐日调用并回溯最多15天；
+    - 只在 Python 侧做日期循环和去重，HTTP 部分完全与 v1 保持一致。
+    """
     all_records: List[Dict] = []
     cur = start_date
     success_count = 0
     fail_count = 0
 
     while cur <= end_date:
+        # 跳过周末
         if cur.weekday() >= 5:
             cur += timedelta(days=1)
             continue
 
-        query_day = cur
-        retry_num = 0
-        found = False
-
-        while retry_num <= 15:
-            data = _post(query_day, query_day)
-            raw_list = (data.get("list") if data else None) or []
-            if raw_list:
-                try:
-                    normalized = _normalize_cmbc_nav_record(raw_list[0], product_code)
-                    all_records.append(normalized)
-                    success_count += 1
-                    found = True
-                except Exception as e:  # noqa: BLE001
-                    print(f"[CMBC] {product_code} {query_day} 解析失败: {e}")
-                    fail_count += 1
-                break
-
-            # 无数据：回溯
-            retry_num += 1
-            query_day = query_day - timedelta(days=1)
-
-        if not found:
-            # 依然无数据：不算失败（可能该产品当期未发行/接口无历史）
-            pass
+        try:
+            daily_records = _query_latest_cmbc_nav(product_code, cur, 0)
+            if daily_records:
+                all_records.extend(daily_records)
+                success_count += 1
+        except Exception as e:  # noqa: BLE001
+            print(f"[CMBC] {product_code} {cur} 单日查询失败: {e}")
+            fail_count += 1
 
         cur += timedelta(days=1)
 
-        if (success_count + fail_count) % 200 == 0:
+        if (success_count + fail_count) % 50 == 0:
             print(f"[CMBC] {product_code} 进度: 成功 {success_count}, 失败 {fail_count}, 当前日期 {cur}")
 
-    # 去重：回溯模式会产生重复日期，按 nav_date 去重保留最后一条
+    # 去重：不同日期可能因为回溯指向同一 nav_date，这里按 nav_date 去重
     dedup: Dict[date, Dict] = {}
     for r in all_records:
         dedup[r["nav_date"]] = r
@@ -783,7 +778,15 @@ class FundHistoryBackfiller:
         filtered.sort(key=lambda x: x["nav_date"])
 
         if not filtered:
-            print("  在补齐区间内没有可写入的数据")
+            # 检查是否有区间外的数据（可能是回溯到的）
+            out_of_range = [r for r in records if r["nav_date"] < start_date]
+            if out_of_range:
+                latest_out = max(out_of_range, key=lambda x: x["nav_date"])
+                print(f"  在补齐区间 {start_date} ~ {today} 内没有可写入的数据")
+                print(f"  说明：区间内日期无净值更新（可能是周末或产品未更新）")
+                print(f"  回溯到的最新数据日期为 {latest_out['nav_date']}，但该日期已在数据库中或早于补齐区间")
+            else:
+                print(f"  在补齐区间 {start_date} ~ {today} 内没有可写入的数据")
             return
 
         print(f"  准备写入 {len(filtered)} 条记录...")

@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -76,5 +77,24 @@ public class MarketController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(quote);
+    }
+
+    /**
+     * 获取实时行情历史（用于IOPV/估值曲线）
+     * GET /api/v2/market/quotes/history?productId=1&startTime=2026-01-01T09:30:00&endTime=2026-01-01T15:00:00
+     */
+    @GetMapping("/quotes/history")
+    public ResponseEntity<List<MarketQuoteRealtime>> getQuoteHistory(
+            @RequestParam Long productId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime
+    ) {
+        if (endTime == null) {
+            endTime = LocalDateTime.now();
+        }
+        if (startTime == null) {
+            startTime = endTime.minusDays(7);
+        }
+        return ResponseEntity.ok(marketService.getQuoteHistory(productId, startTime, endTime));
     }
 }

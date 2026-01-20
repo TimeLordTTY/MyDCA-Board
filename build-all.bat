@@ -36,7 +36,7 @@ if not exist "pom.xml" (
     cd /d "%ROOT_DIR%"
     exit /b 1
 )
-call mvn clean compile -DskipTests
+call mvn clean package -DskipTests
 if !errorlevel! neq 0 (
     echo Java backend build failed!
     cd /d "%ROOT_DIR%"

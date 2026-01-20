@@ -25,6 +25,18 @@
         SELECT * FROM ledger_posting WHERE account_id = #{accountId} ORDER BY created_at DESC
     </select>
 
+    <select id="selectByAccountTypeAndOwner" resultMap="BaseResultMap">
+        SELECT lp.* FROM ledger_posting lp
+        INNER JOIN accounts a ON lp.account_id = a.id
+        WHERE lp.account_type = #{accountType}
+        AND a.is_active = 1
+        AND (
+            (a.owner_type = 'PERSONAL' AND a.owner_user_id = #{ownerUserId})
+            OR (a.owner_type = 'FAMILY' AND a.owner_family_id = #{ownerFamilyId})
+        )
+        ORDER BY lp.created_at DESC
+    </select>
+
     <select id="sumDebitByAccount" resultType="java.math.BigDecimal">
         SELECT COALESCE(SUM(amount), 0) FROM ledger_posting
         WHERE account_id = #{accountId} AND posting_type = 'DEBIT'
@@ -58,4 +70,3 @@
     </insert>
 
 </mapper>
-

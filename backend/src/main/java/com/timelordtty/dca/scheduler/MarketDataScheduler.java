@@ -10,6 +10,8 @@ import jakarta.annotation.PostConstruct;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 行情数据定时采集任务
@@ -25,6 +27,12 @@ public class MarketDataScheduler {
     private static final Logger logger = LoggerFactory.getLogger(MarketDataScheduler.class);
 
     private final PythonScriptService pythonScriptService;
+
+    // 避免重复/并发执行（启动时 + 定时任务可能重叠）
+    private final AtomicBoolean exchangeRealtimeRunning = new AtomicBoolean(false);
+    private final AtomicLong lastExchangeRealtimeRunAtMs = new AtomicLong(0);
+    // 冷却窗口：防止短时间重复采集（单位：毫秒）
+    private static final long EXCHANGE_REALTIME_COOLDOWN_MS = 90_000L;
 
     // 交易时间：上午 9:30-11:30，下午 13:00-15:00
     private static final LocalTime MARKET_OPEN_MORNING = LocalTime.of(9, 30);
@@ -43,6 +51,9 @@ public class MarketDataScheduler {
      */
     @Scheduled(cron = "0 * * * * ?")
     public void collectExchangeRealtime() {
+        if (!tryEnterExchangeRealtime("scheduled")) {
+            return;
+        }
         LocalDateTime now = LocalDateTime.now();
         LocalTime currentTime = now.toLocalTime();
         DayOfWeek dayOfWeek = now.getDayOfWeek();
@@ -59,6 +70,7 @@ public class MarketDataScheduler {
                 && (currentTime.isBefore(MARKET_CLOSE_AFTERNOON) || currentTime.equals(MARKET_CLOSE_AFTERNOON));
         
         if (!inTradingHours) {
+            exitExchangeRealtime();
             return;
         }
 
@@ -68,7 +80,32 @@ public class MarketDataScheduler {
             logger.info("场内产品实时行情采集完成: {}", result);
         } catch (Exception e) {
             logger.error("场内产品实时行情采集异常", e);
+        } finally {
+            exitExchangeRealtime();
         }
+    }
+
+    /**
+     * 启动时/定时任务共用的门禁：并发锁 + 冷却窗口
+     */
+    private boolean tryEnterExchangeRealtime(String source) {
+        long nowMs = System.currentTimeMillis();
+        long last = lastExchangeRealtimeRunAtMs.get();
+        if (nowMs - last < EXCHANGE_REALTIME_COOLDOWN_MS) {
+            logger.info("跳过场内实时行情采集（冷却中，source={}，距上次={}ms）", source, (nowMs - last));
+            return false;
+        }
+        if (!exchangeRealtimeRunning.compareAndSet(false, true)) {
+            logger.info("跳过场内实时行情采集（已有任务在运行，source={}）", source);
+            return false;
+        }
+        // 进入即记录，避免并发窗口
+        lastExchangeRealtimeRunAtMs.set(nowMs);
+        return true;
+    }
+
+    private void exitExchangeRealtime() {
+        exchangeRealtimeRunning.set(false);
     }
 
     /**
@@ -115,6 +152,23 @@ public class MarketDataScheduler {
                     Thread.sleep(5000); // 等待5秒，确保数据库连接等初始化完成
                     String result = pythonScriptService.backfillMarketHistory();
                     logger.info("历史行情补齐完成: {}", result);
+
+                    // 启动后主动采集一次场内实时行情，确保IOPV/溢价等字段尽快有数据可展示
+                    // 需求：即使在闭市后新加的产品，启动时也要采一次（不再依赖交易时间判断）
+                    try {
+                        if (tryEnterExchangeRealtime("startup")) {
+                            logger.info("服务启动后主动采集一次场内实时行情（用于IOPV/估值展示）...");
+                            String rt = pythonScriptService.collectETFRealtime();
+                            logger.info("启动实时行情采集完成: {}", rt);
+                        } else {
+                            logger.info("启动后不触发场内实时行情采集（冷却窗口内或已有任务在运行）");
+                        }
+                    } catch (Exception e) {
+                        logger.error("启动实时行情采集异常", e);
+                    } finally {
+                        // 若启动触发走了 tryEnter，这里兜底释放
+                        exitExchangeRealtime();
+                    }
                 } catch (Exception e) {
                     logger.error("历史行情补齐异常", e);
                 }

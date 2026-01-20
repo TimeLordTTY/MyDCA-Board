@@ -22,8 +22,45 @@ public class PythonScriptService {
     private static final Logger logger = LoggerFactory.getLogger(PythonScriptService.class);
 
     // 项目根目录（相对于jar包或工作目录）
-    private static final String PROJECT_ROOT = System.getProperty("user.dir");
+    private static final String PROJECT_ROOT = detectProjectRoot();
     private static final String PYTHON_CMD = "python"; // Windows: python, Linux: python3
+
+    /**
+     * 检测项目根目录
+     * 通过检查 scripts 目录是否存在来定位项目根目录
+     */
+    private static String detectProjectRoot() {
+        String userDir = System.getProperty("user.dir");
+        Path currentPath = Paths.get(userDir);
+        
+        // 检查当前目录及其父目录，找到包含 scripts 目录的项目根目录
+        Path checkPath = currentPath;
+        int maxDepth = 5; // 最多向上查找5级，防止无限循环
+        
+        for (int i = 0; i < maxDepth; i++) {
+            // 检查是否存在 scripts/market 目录
+            Path scriptsPath = checkPath.resolve("scripts").resolve("market");
+            if (java.nio.file.Files.exists(scriptsPath) && java.nio.file.Files.isDirectory(scriptsPath)) {
+                if (!checkPath.equals(currentPath)) {
+                    logger.info("检测到项目根目录: {} (从 {} 向上查找)", checkPath, currentPath);
+                } else {
+                    logger.info("使用当前目录作为项目根目录: {}", checkPath);
+                }
+                return checkPath.toString();
+            }
+            
+            // 向上查找
+            Path parentPath = checkPath.getParent();
+            if (parentPath == null || parentPath.equals(checkPath)) {
+                break; // 已到达根目录
+            }
+            checkPath = parentPath;
+        }
+        
+        // 如果找不到，使用当前目录（可能是从项目根目录启动）
+        logger.warn("未找到 scripts/market 目录，使用当前目录作为项目根目录: {}", userDir);
+        return userDir;
+    }
 
     /**
      * 执行Python脚本（同步）

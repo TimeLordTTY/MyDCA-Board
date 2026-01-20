@@ -27,7 +27,7 @@ public class HoldingController {
     @GetMapping
     public ResponseEntity<Map<Long, HoldingService.HoldingInfo>> getHoldings() {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
-        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(currentUser.getId());
+        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(currentUser.getId(), currentUser.getFamilyId());
         return ResponseEntity.ok(holdings);
     }
 

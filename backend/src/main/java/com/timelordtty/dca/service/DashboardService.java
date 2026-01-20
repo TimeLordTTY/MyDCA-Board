@@ -116,7 +116,7 @@ public class DashboardService {
         // 计算持仓市值（通过HoldingService）
         // 注意：持仓市值需要外部行情数据，当前HoldingService不计算marketValue，所以这里为0
         // 后续集成行情数据后，可以从HoldingService获取marketValue
-        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(userId);
+        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(userId, familyId);
         BigDecimal positionValue = holdings.values().stream()
             .map(h -> h.getMarketValue() != null ? h.getMarketValue() : BigDecimal.ZERO)
             .reduce(BigDecimal.ZERO, BigDecimal::add);

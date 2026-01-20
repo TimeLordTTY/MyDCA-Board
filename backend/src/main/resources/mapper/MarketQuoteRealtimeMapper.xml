@@ -40,6 +40,18 @@
         LIMIT 1
     </select>
 
+    <select id="selectHistory" resultMap="BaseResultMap">
+        SELECT * FROM market_quote_realtime
+        WHERE product_id = #{productId}
+        <if test="startTime != null">
+            AND quote_time &gt;= #{startTime}
+        </if>
+        <if test="endTime != null">
+            AND quote_time &lt;= #{endTime}
+        </if>
+        ORDER BY quote_time ASC
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO market_quote_realtime (
             product_id, quote_time, price, prev_close, pct_chg,

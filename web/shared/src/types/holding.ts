@@ -7,6 +7,8 @@ export interface HoldingInfo {
   productId: number
   productCode?: string
   productName?: string
+  channel?: 'EXCHANGE' | 'OTC'
+  assetType?: string
   // 后端返回的字段名（与HoldingService.HoldingInfo一致）
   totalShares: number
   totalCost: number

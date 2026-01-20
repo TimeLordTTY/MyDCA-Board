@@ -44,9 +44,7 @@
               size="small"
               style="width: 100%"
               filterable
-              remote
-              :remote-method="(query) => handleSearchProduct(query, $index)"
-              :loading="productLoading"
+              :filter-method="(query) => handleLocalFilterProduct(query, $index)"
               placeholder="请选择产品"
               @change="handleProductChange($index)"
             >
@@ -76,6 +74,7 @@
               size="small"
               :precision="6"
               :min="0"
+              :controls="false"
               style="width: 100%"
             />
           </template>
@@ -87,6 +86,7 @@
               size="small"
               :precision="6"
               :min="0"
+              :controls="false"
               style="width: 100%"
             />
           </template>
@@ -192,7 +192,6 @@ const saving = ref(false)
 const holdings = ref<InitialHolding[]>([])
 const csvDialogVisible = ref(false)
 const csvContent = ref('')
-const productLoading = ref(false)
 const filteredProducts = ref<Record<number, ProductMaster[]>>({})
 const allProducts = ref<ProductMaster[]>([])
 
@@ -203,7 +202,7 @@ watch(() => props.modelValue, (val) => {
     if (holdings.value.length === 0) {
       handleAddRow()
     }
-    // 加载所有产品列表
+    // 弹窗打开时一次性加载全量产品列表（场内/场外），后续本地过滤，不再每次remote请求
     loadAllProducts()
   }
 })
@@ -254,14 +253,12 @@ function handleClearAll() {
 
 async function loadAllProducts() {
   try {
-    productLoading.value = true
     const products = await productApi.getProducts()
     allProducts.value = products
+    refreshAllFilteredProducts()
   } catch (error: any) {
     console.error('加载产品列表失败:', error)
     ElMessage.error('加载产品列表失败')
-  } finally {
-    productLoading.value = false
   }
 }
 
@@ -271,30 +268,27 @@ function handleChannelChange(index: number) {
   holding.productId = undefined
   holding.productName = ''
   holding.productCode = ''
-  filteredProducts.value[index] = []
+  // 重新按渠道刷新该行可选产品
+  updateFilteredProducts(index)
 }
 
-async function handleSearchProduct(query: string, index: number) {
+function handleLocalFilterProduct(query: string, index: number) {
   const holding = holdings.value[index]
   if (!holding.channel) {
-    ElMessage.warning('请先选择渠道')
+    filteredProducts.value[index] = []
     return
   }
 
-  productLoading.value = true
-  try {
-    // 根据渠道和关键词搜索产品
-    const products = await productApi.getProducts({
-      channel: holding.channel,
-      keyword: query,
-    })
-    filteredProducts.value[index] = products
-  } catch (error: any) {
-    console.error('搜索产品失败:', error)
-    ElMessage.error('搜索产品失败')
-  } finally {
-    productLoading.value = false
+  const q = (query || '').trim().toLowerCase()
+  const base = allProducts.value.filter(p => p.channel === holding.channel)
+  if (!q) {
+    filteredProducts.value[index] = base
+    return
   }
+  filteredProducts.value[index] = base.filter(p =>
+    (p.productName || '').toLowerCase().includes(q) ||
+    (p.productCode || '').toLowerCase().includes(q)
+  )
 }
 
 function handleProductChange(index: number) {
@@ -379,9 +373,17 @@ function handleParseCSV() {
 
   // 合并到现有持仓列表
   holdings.value = [...holdings.value, ...newHoldings]
+  refreshAllFilteredProducts()
   csvDialogVisible.value = false
   csvContent.value = ''
   ElMessage.success(`成功导入${newHoldings.length}条持仓记录`)
+}
+
+function refreshAllFilteredProducts() {
+  // 弹窗打开/产品列表加载/CSV导入后，确保每一行都有对应的可选产品列表
+  for (let i = 0; i < holdings.value.length; i++) {
+    updateFilteredProducts(i)
+  }
 }
 
 async function handleSave() {
@@ -413,7 +415,16 @@ async function handleSave() {
 
   saving.value = true
   try {
-    await holdingApi.importInitialHoldings(validHoldings)
+    // 只发送后端需要的字段
+    const importData = validHoldings.map(h => ({
+      productCode: h.productCode,
+      productName: h.productName,
+      channel: h.channel,
+      shares: h.shares,
+      costPrice: h.costPrice,
+      note: h.note,
+    }))
+    await holdingApi.importInitialHoldings(importData)
     ElMessage.success(`成功导入${validHoldings.length}条持仓记录`)
     emit('success')
     visible.value = false

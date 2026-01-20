@@ -283,6 +283,21 @@ public class AccountService {
     public Account getOrCreateVirtualAccount(String virtualSubtype, String accountType, 
                                               String ownerType, Long ownerUserId, Long ownerFamilyId,
                                               Long productId, String productName) {
+        // 先用稳定的 accountCode 做幂等（尤其是 POSITION：同一产品应复用同一账户）
+        // 这样即便历史上存在重复账户，也能保证后续不再继续新增
+        String ownerKey = "PERSONAL".equals(ownerType) ? String.valueOf(ownerUserId) : String.valueOf(ownerFamilyId);
+        String accountCode;
+        if ("POSITION".equals(virtualSubtype)) {
+            accountCode = String.format("VIRTUAL-POSITION-%s-%s-%s", ownerType, ownerKey, String.valueOf(productId));
+        } else {
+            accountCode = String.format("VIRTUAL-%s-%s-%s", virtualSubtype, ownerType, ownerKey);
+        }
+
+        Account byCode = accountMapper.selectByCode(accountCode);
+        if (byCode != null) {
+            return byCode;
+        }
+
         // 构建账户名称
         String accountName;
         if ("POSITION".equals(virtualSubtype) && productName != null) {
@@ -302,7 +317,8 @@ public class AccountService {
         }
 
         // 查询是否已存在虚拟账户
-        List<Account> existingAccounts = accountMapper.selectByOwner(ownerUserId, ownerFamilyId);
+        // 注意：必须查 VIRTUAL 账户；selectByOwner 只查 REAL，会导致永远找不到从而重复创建
+        List<Account> existingAccounts = accountMapper.selectVirtualAccountsByOwner(ownerUserId, ownerFamilyId, virtualSubtype);
         Account existingAccount = existingAccounts.stream()
                 .filter(a -> "VIRTUAL".equals(a.getAccountKind()))
                 .filter(a -> virtualSubtype.equals(a.getVirtualSubtype()))
@@ -325,6 +341,7 @@ public class AccountService {
 
         // 创建新的虚拟账户
         Account virtualAccount = new Account();
+        virtualAccount.setAccountCode(accountCode);
         virtualAccount.setAccountKind("VIRTUAL");
         // 虚拟账户的 account_type 使用 "OTHER"（因为 ENUM 只包含 REAL 账户类型）
         // 真正的类型信息存储在 virtual_subtype 中

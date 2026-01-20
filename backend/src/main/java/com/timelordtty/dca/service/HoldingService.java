@@ -1,6 +1,5 @@
 package com.timelordtty.dca.service;
 
-import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
 import com.timelordtty.dca.mapper.ProductMasterMapper;
@@ -45,18 +44,16 @@ public class HoldingService {
 
     private final LedgerPostingMapper ledgerPostingMapper;
     private final LedgerTxnMapper ledgerTxnMapper;
-    private final AccountMapper accountMapper;
     private final ProductMasterMapper productMasterMapper;
     private final ProductService productService;
     private final AccountService accountService;
     private final LedgerService ledgerService;
 
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
-                          AccountMapper accountMapper, ProductMasterMapper productMasterMapper,
+                          ProductMasterMapper productMasterMapper,
                           ProductService productService, AccountService accountService, LedgerService ledgerService) {
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.ledgerTxnMapper = ledgerTxnMapper;
-        this.accountMapper = accountMapper;
         this.productMasterMapper = productMasterMapper;
         this.productService = productService;
         this.accountService = accountService;
@@ -82,65 +79,70 @@ public class HoldingService {
      * - 持仓账户名称格式："持仓账户-{产品名称}"，通过名称可以匹配产品
      * 
      * @param userId 用户ID
+     * @param familyId 家庭ID，可为空
      * @return 持仓信息Map，key为productId，value为HoldingInfo
      */
-    public Map<Long, HoldingInfo> calculateHoldings(Long userId) {
-        // 查询所有POSITION类型的账户（虚拟账户）
-        List<Account> accounts = accountMapper.selectByOwner(userId, null);
-        List<Account> positionAccounts = accounts.stream()
-                .filter(a -> "VIRTUAL".equals(a.getAccountKind()) && "POSITION".equals(a.getAccountType()))
-                .toList();
+    public Map<Long, HoldingInfo> calculateHoldings(Long userId, Long familyId) {
+        // 直接查询所有POSITION类型的分录（属于该用户或家庭的）
+        // 这样更直接，不需要先查账户
+        List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountTypeAndOwner("POSITION", userId, familyId);
 
         Map<Long, HoldingInfo> holdings = new HashMap<>();
 
-        for (Account positionAccount : positionAccounts) {
-            // 查询该持仓账户的所有分录
-            List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountId(positionAccount.getId());
-
-            for (LedgerPosting posting : postings) {
-                if (!"POSITION".equals(posting.getAccountType())) {
-                    continue;
-                }
-
-                // 通过ledger_txn获取productId
-                LedgerTxn txn = ledgerTxnMapper.selectByTxnId(posting.getTxnId());
-                if (txn == null || txn.getProductId() == null) {
-                    continue; // 跳过没有productId的交易
-                }
-
-                Long productId = txn.getProductId();
-
-                // 创建或获取持仓信息
-                HoldingInfo holding = holdings.getOrDefault(productId, new HoldingInfo());
-                if (holding.getTotalShares() == null) {
-                    holding.setTotalShares(BigDecimal.ZERO);
-                }
-                if (holding.getTotalCost() == null) {
-                    holding.setTotalCost(BigDecimal.ZERO);
-                }
-
-                // 计算份额和成本
-                if ("DEBIT".equals(posting.getPostingType())) {
-                    // DEBIT：持仓增加
-                    if (posting.getShares() != null) {
-                        holding.setTotalShares(holding.getTotalShares().add(posting.getShares()));
-                    }
-                    holding.setTotalCost(holding.getTotalCost().add(posting.getAmount()));
-                } else if ("CREDIT".equals(posting.getPostingType())) {
-                    // CREDIT：持仓减少
-                    if (posting.getShares() != null) {
-                        holding.setTotalShares(holding.getTotalShares().subtract(posting.getShares()));
-                    }
-                    holding.setTotalCost(holding.getTotalCost().subtract(posting.getAmount()));
-                }
-
-                holdings.put(productId, holding);
+        for (LedgerPosting posting : postings) {
+            // 通过ledger_txn获取productId
+            LedgerTxn txn = ledgerTxnMapper.selectByTxnId(posting.getTxnId());
+            if (txn == null || txn.getProductId() == null) {
+                continue; // 跳过没有productId的交易
             }
+
+            Long productId = txn.getProductId();
+
+            // 创建或获取持仓信息
+            HoldingInfo holding = holdings.get(productId);
+            if (holding == null) {
+                holding = new HoldingInfo();
+                holding.setProductId(productId);
+            }
+            if (holding.getTotalShares() == null) {
+                holding.setTotalShares(BigDecimal.ZERO);
+            }
+            if (holding.getTotalCost() == null) {
+                holding.setTotalCost(BigDecimal.ZERO);
+            }
+
+            // 计算份额和成本
+            if ("DEBIT".equals(posting.getPostingType())) {
+                // DEBIT：持仓增加
+                if (posting.getShares() != null) {
+                    holding.setTotalShares(holding.getTotalShares().add(posting.getShares()));
+                }
+                holding.setTotalCost(holding.getTotalCost().add(posting.getAmount()));
+            } else if ("CREDIT".equals(posting.getPostingType())) {
+                // CREDIT：持仓减少
+                if (posting.getShares() != null) {
+                    holding.setTotalShares(holding.getTotalShares().subtract(posting.getShares()));
+                }
+                holding.setTotalCost(holding.getTotalCost().subtract(posting.getAmount()));
+            }
+
+            holdings.put(productId, holding);
         }
 
         // 计算平均成本
         for (Map.Entry<Long, HoldingInfo> entry : holdings.entrySet()) {
             HoldingInfo holding = entry.getValue();
+            // 回填产品信息，供前端展示/行情查询使用
+            if (holding.getProductId() == null) {
+                holding.setProductId(entry.getKey());
+            }
+            ProductMaster product = productMasterMapper.selectById(entry.getKey());
+            if (product != null) {
+                holding.setProductCode(product.getProductCode());
+                holding.setProductName(product.getProductName());
+                holding.setChannel(product.getChannel());
+                holding.setAssetType(product.getAssetType());
+            }
             if (holding.getTotalShares() != null && 
                 holding.getTotalShares().compareTo(BigDecimal.ZERO) > 0 &&
                 holding.getTotalCost() != null) {
@@ -159,6 +161,11 @@ public class HoldingService {
     }
 
     public static class HoldingInfo {
+        private Long productId;
+        private String productCode;
+        private String productName;
+        private String channel;
+        private String assetType;
         private BigDecimal totalShares;
         private BigDecimal totalCost;
         private BigDecimal avgCost;
@@ -166,6 +173,16 @@ public class HoldingService {
         private BigDecimal unrealizedPnl;
 
         // Getters and setters
+        public Long getProductId() { return productId; }
+        public void setProductId(Long productId) { this.productId = productId; }
+        public String getProductCode() { return productCode; }
+        public void setProductCode(String productCode) { this.productCode = productCode; }
+        public String getProductName() { return productName; }
+        public void setProductName(String productName) { this.productName = productName; }
+        public String getChannel() { return channel; }
+        public void setChannel(String channel) { this.channel = channel; }
+        public String getAssetType() { return assetType; }
+        public void setAssetType(String assetType) { this.assetType = assetType; }
         public BigDecimal getTotalShares() { return totalShares; }
         public void setTotalShares(BigDecimal totalShares) { this.totalShares = totalShares; }
         public BigDecimal getTotalCost() { return totalCost; }

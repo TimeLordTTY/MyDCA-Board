@@ -43,13 +43,13 @@ class ETFCollector:
             self.conn.close()
     
     def get_active_etfs(self) -> List[dict]:
-        """获取所有启用的场内产品（ETF、股票、期货、期权）"""
+        """获取所有启用的场内产品（ETF/LOF/股票/期货/期权）"""
         with self.conn.cursor(pymysql.cursors.DictCursor) as cursor:
             sql = """
                 SELECT id, product_code, product_name, market, asset_type
                 FROM product_master
                 WHERE is_active = 1
-                AND asset_type IN ('ETF', 'STOCK', 'FUTURES', 'OPTIONS')
+                AND asset_type IN ('ETF', 'LOF', 'STOCK', 'FUTURES', 'OPTIONS')
                 AND channel = 'EXCHANGE'
             """
             cursor.execute(sql)
@@ -296,9 +296,9 @@ class ETFCollector:
             
             print(f"正在采集: {product_name} ({product_code}, {asset_type})...")
             
-            # 目前只支持ETF和股票（使用相同的akshare接口）
+            # 目前支持 ETF、LOF 和股票（使用相同的 akshare 接口）
             # 期货和期权需要不同的接口，暂时跳过
-            if asset_type in ('ETF', 'STOCK'):
+            if asset_type in ('ETF', 'LOF', 'STOCK'):
                 quote_data = self.fetch_realtime_quote(product_code, market)
                 if quote_data:
                     self.save_realtime_quote(product_id, quote_data)
@@ -335,9 +335,9 @@ class ETFCollector:
             
             print(f"正在采集: {product_name} ({product_code}, {asset_type})...")
             
-            # 目前只支持ETF和股票（使用相同的akshare接口）
+            # 目前支持 ETF、LOF 和股票（使用相同的 akshare 接口）
             # 期货和期权需要不同的接口，暂时跳过
-            if asset_type in ('ETF', 'STOCK'):
+            if asset_type in ('ETF', 'LOF', 'STOCK'):
                 bar_data = self.fetch_daily_bar(product_code, market, trade_date)
                 if bar_data:
                     self.save_daily_bar(product_id, bar_data)

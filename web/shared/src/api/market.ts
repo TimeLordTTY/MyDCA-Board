@@ -60,4 +60,20 @@ export const marketApi = {
       throw error
     }
   },
+
+  /**
+   * 获取实时行情历史（用于IOPV/估值曲线）
+   */
+  getQuoteHistory: async (
+    productId: number,
+    startTime?: string,
+    endTime?: string
+  ): Promise<MarketQuoteRealtime[]> => {
+    const params = new URLSearchParams()
+    params.append('productId', productId.toString())
+    if (startTime) params.append('startTime', startTime)
+    if (endTime) params.append('endTime', endTime)
+    const response = await apiClient.get<MarketQuoteRealtime[]>(`/market/quotes/history?${params.toString()}`)
+    return response.data
+  },
 }
