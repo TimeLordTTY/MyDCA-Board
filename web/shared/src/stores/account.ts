@@ -43,11 +43,16 @@ export const useAccountStore = defineStore('account', () => {
     )
     
     // 叶子账户 = 没有子账户的账户（不在parentAccountIds中）
-    const leafAccounts = accounts.value.filter(
-      (acc) => !parentAccountIds.has(acc.id) &&
-               acc.accountKind === 'REAL' && 
-               acc.accountType === 'CASH'
-    )
+    const assetTypes = new Set(['CASH', 'BANK', 'PAYMENT', 'MMF', 'BROKER'])
+    const leafAccounts = accounts.value.filter((acc) => {
+      // 叶子账户：没有子账户
+      if (parentAccountIds.has(acc.id)) return false
+      // 仅 REAL 账户参与现金叶子统计
+      if (acc.accountKind !== 'REAL') return false
+      // 只统计资产类账户（信贷账户如 CREDIT_CARD/HUABEI/BAITIAO/LOAN 视为负债，不计入可用资金）
+      if (!assetTypes.has(acc.accountType)) return false
+      return true
+    })
     
     return leafAccounts
   })

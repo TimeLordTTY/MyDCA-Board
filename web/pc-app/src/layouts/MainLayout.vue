@@ -53,7 +53,11 @@
 
     <div class="wrap" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;">
       <!-- Page Content -->
-      <router-view style="flex: 1; min-height: 0; overflow: hidden;" />
+      <!--
+        关键：页面滚动应该发生在 router-view 内部（而不是 body）。
+        否则 MainLayout/body 的 overflow:hidden 会导致 Dashboard 等页面无法上下滚动。
+      -->
+      <router-view style="flex: 1; min-height: 0; overflow: auto;" />
     </div>
   </div>
 </template>

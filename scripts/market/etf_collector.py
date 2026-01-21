@@ -5,11 +5,17 @@ ETF行情采集脚本
 import sys
 import os
 import io
+import logging
 
 # 设置标准输出编码为UTF-8（Windows兼容）
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+# 重要：禁用系统代理，避免走 127.0.0.1:7890 等无效代理，导致东财行情全部失败
+for _k in ["HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"]:
+    if _k in os.environ:
+        os.environ.pop(_k, None)
 import pymysql
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -19,6 +25,8 @@ import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from market.config import DB_CONFIG, COLLECT_CONFIG
+
+logger = logging.getLogger(__name__)
 
 
 class ETFCollector:
@@ -67,7 +75,7 @@ class ETFCollector:
             包含实时行情数据的字典
         """
         try:
-            # 优先使用 fund_etf_spot_em（ETF专用接口，效率更高）
+            # 优先使用 fund_etf_spot_em（ETF专用接口，效率更高，与 v1 akshare_client 保持一致）
             try:
                 df = ak.fund_etf_spot_em()
                 if df is not None and not df.empty:
@@ -131,37 +139,83 @@ class ETFCollector:
             except Exception as e:
                 print(f"[ETF接口] {product_code} 失败，尝试股票接口: {e}")
             
-            # 备用方案：使用股票接口
-            df = ak.stock_zh_a_spot_em()
-            if df is None or df.empty:
+            # 备用方案：优先尝试 LOF 接口，其次使用股票接口
+            try:
+                df = None
+                # 1) 如果 akshare 支持 fund_lof_spot_em，优先用于 LOF 基金
+                if hasattr(ak, 'fund_lof_spot_em'):
+                    try:
+                        df = ak.fund_lof_spot_em()
+                        print(f"[AKShare] 使用 fund_lof_spot_em 获取 {product_code} 实时行情")
+                    except Exception as e:
+                        print(f"[AKShare] fund_lof_spot_em 失败，改用 stock_zh_a_spot_em: {e}")
+                        df = None
+                
+                # 2) 如果 LOF 接口不可用或没数据，退回 A 股现货接口
+                if df is None or df.empty:
+                    df = ak.stock_zh_a_spot_em()
+                    print(f"[AKShare] 使用 stock_zh_a_spot_em 获取 {product_code} 实时行情")
+
+                if df is None or df.empty:
+                    print(f"未获取到 {product_code} 的股票/LOF 实时行情数据")
+                    return None
+
+                # 查找对应的产品：代码可能带 sh/sz 前缀，需要做清洗（参考 v1 的 akshare_client）
+                product_row = None
+                for _, row in df.iterrows():
+                    code = str(row.get('代码', '')).strip()
+                    code_clean = code.replace('sh', '').replace('sz', '').replace('SH', '').replace('SZ', '')
+                    if code_clean == product_code or code == product_code:
+                        product_row = row
+                        break
+
+                if product_row is None:
+                    print(f"未找到产品 {product_code} 的行情数据")
+                    return None
+
+                def safe_get(key, default=None):
+                    val = product_row.get(key, default)
+                    if val is None or (isinstance(val, float) and (val != val or val == float('inf') or val == float('-inf'))):
+                        return default
+                    return val
+
+                def safe_float(key, default=None):
+                    val = safe_get(key, default)
+                    if val is None:
+                        return default
+                    try:
+                        return float(val)
+                    except (ValueError, TypeError):
+                        return default
+
+                price = safe_float('最新价', safe_float('现价', 0))
+                prev_close = safe_float('昨收', safe_float('前收盘', 0))
+                pct_chg = safe_float('涨跌幅')
+                if pct_chg is not None:
+                    pct_chg = pct_chg / 100.0  # 转换为小数
+
+                open_price = safe_float('开盘', safe_float('今开', 0))
+                high_price = safe_float('最高', 0)
+                low_price = safe_float('最低', 0)
+                volume = safe_float('成交量', 0)
+                amount = safe_float('成交额', 0)
+
+                return {
+                    'price': price or 0,
+                    'prev_close': prev_close or 0,
+                    'pct_chg': pct_chg,
+                    'volume': volume or 0,
+                    'amount': amount or 0,
+                    'open_price': open_price or 0,
+                    'high_price': high_price or 0,
+                    'low_price': low_price or 0,
+                    'iopv': None,  # 股票 / LOF 接口通常不提供 IOPV
+                    'premium_rate': None,
+                    'quote_time': datetime.now(),
+                }
+            except Exception as e:
+                print(f"[股票/LOF接口] 采集产品 {product_code} 实时行情失败: {e}")
                 return None
-            
-            # 查找对应的股票
-            stock_data = df[df['代码'] == product_code]
-            if stock_data.empty:
-                print(f"未找到产品 {product_code} 的行情数据")
-                return None
-            
-            row = stock_data.iloc[0]
-            price = float(row.get('最新价', 0))
-            prev_close = float(row.get('昨收', 0))
-            pct_chg = float(row.get('涨跌幅', 0))
-            if pct_chg is not None:
-                pct_chg = pct_chg / 100.0  # 转换为小数
-            
-            return {
-                'price': price,
-                'prev_close': prev_close,
-                'pct_chg': pct_chg,
-                'volume': float(row.get('成交量', 0)),
-                'amount': float(row.get('成交额', 0)),
-                'open_price': float(row.get('今开', 0)),
-                'high_price': float(row.get('最高', 0)),
-                'low_price': float(row.get('最低', 0)),
-                'iopv': None,  # 股票没有IOPV
-                'premium_rate': None,
-                'quote_time': datetime.now(),
-            }
         except Exception as e:
             print(f"采集产品 {product_code} 实时行情失败: {e}")
             return None

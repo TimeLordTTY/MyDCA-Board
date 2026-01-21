@@ -15,6 +15,7 @@
         <result column="owner_family_id" property="ownerFamilyId"/>
         <result column="currency" property="currency"/>
         <result column="parent_account_id" property="parentAccountId"/>
+        <result column="linked_product_id" property="linkedProductId"/>
         <result column="fund_usage" property="fundUsage"/>
         <result column="balance" property="balance"/>
         <result column="reserved_amount" property="reservedAmount"/>
@@ -78,12 +79,12 @@
         INSERT INTO accounts (
             account_code, account_name, account_kind, account_type, account_subtype,
             virtual_subtype, owner_type, owner_user_id, owner_family_id, currency,
-            parent_account_id, fund_usage, balance, reserved_amount, initial_balance,
+            parent_account_id, linked_product_id, fund_usage, balance, reserved_amount, initial_balance,
             is_active, note, created_at, updated_at
         ) VALUES (
             #{accountCode}, #{accountName}, #{accountKind}, #{accountType}, #{accountSubtype},
             #{virtualSubtype}, #{ownerType}, #{ownerUserId}, #{ownerFamilyId}, #{currency},
-            #{parentAccountId}, #{fundUsage}, #{balance}, #{reservedAmount}, #{initialBalance},
+            #{parentAccountId}, #{linkedProductId}, #{fundUsage}, #{balance}, #{reservedAmount}, #{initialBalance},
             #{isActive}, #{note}, NOW(), NOW()
         )
     </insert>

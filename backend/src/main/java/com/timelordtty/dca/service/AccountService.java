@@ -111,7 +111,10 @@ public class AccountService {
     /**
      * 校验账户创建规则（应用层）
      *
-     * 规则包括：VIRTUAL 不允许 parent、子账户必须为 REAL、只有 REAL/CASH 允许父子层级等
+     * 规则包括：
+     * - VIRTUAL 不允许 parent
+     * - 子账户必须为 REAL
+     * - 父账户可以是 BANK/PAYMENT/BROKER/CASH 等平台容器，子账户类型可独立选择（如支付宝下的花呗、余额宝等）
      */
     private void validateAccountCreation(Account account) {
         // 规则1: VIRTUAL账户不允许设置parent_account_id
@@ -123,11 +126,9 @@ public class AccountService {
         if (account.getParentAccountId() != null && !"REAL".equals(account.getAccountKind())) {
             throw new RuntimeException("子账户必须是REAL类型");
         }
-
-        // 规则3: 只有CASH类型的REAL账户允许形成父子层级
-        if (account.getParentAccountId() != null && !"CASH".equals(account.getAccountType())) {
-            throw new RuntimeException("只有CASH类型的REAL账户允许形成父子层级");
-        }
+        // 不再限制子账户 accountType 必须为 CASH：
+        // - 允许在同一平台下挂载 CASH/MMF/BANK/PAYMENT 等资产账户
+        // - 也允许挂载 CREDIT_CARD/HUABEI/BAITIAO/LOAN 等信贷账户，后续在统计时单独作为负债处理
     }
 
     /**

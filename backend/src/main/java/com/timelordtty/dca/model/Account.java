@@ -93,6 +93,15 @@ public class Account {
     
     /** 父账户ID，用于现实账户的资金分区/子账户，外键关联accounts表 */
     private Long parentAccountId;
+
+    /**
+     * 关联产品ID（可选）
+     *
+     * 使用场景：
+     * - 稳利宝、小荷包等账户需要与具体理财/基金产品绑定，便于初始化持仓和后续对账
+     * - 为空表示该账户不直接绑定产品
+     */
+    private Long linkedProductId;
     
     /** 资金用途（仅对REAL CASH叶子账户生效）：SPENDABLE/RESERVED/INVESTABLE */
     private String fundUsage;

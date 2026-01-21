@@ -197,15 +197,21 @@
                 :value="platform.id"
               />
             </el-select>
-          <div class="form-help-text">父账户 <span class="field-en">(parent_account_id)</span>，选择后将自动继承父账户的账户类型</div>
+          <div class="form-help-text">父账户 <span class="field-en">(parent_account_id)</span>，子账户可以有自己的账户类型（如支付宝下的花呗、余额宝等）</div>
         </el-form-item>
-        <el-form-item v-if="!isPlatform" label="账户类型">
-          <el-input 
-            :value="getParentAccountType() || accountForm.accountType || '未设置'" 
-            disabled 
-            style="width: 100%"
-          />
-          <div class="form-help-text">账户类型 <span class="field-en">(account_type)</span>，继承自父账户（平台）</div>
+        <el-form-item v-if="!isPlatform" label="账户类型" prop="accountType">
+          <el-select v-model="accountForm.accountType" placeholder="选择账户类型" style="width: 100%">
+            <el-option
+              v-for="(label, value) in accountTypeMap"
+              :key="value"
+              :label="label"
+              :value="value"
+            />
+          </el-select>
+          <div class="form-help-text">
+            账户类型 <span class="field-en">(account_type)</span>。
+            资产类账户（BANK/PAYMENT/MMF/CASH/BROKER）计入资产，信贷账户（CREDIT_CARD/HUABEI/BAITIAO/LOAN）计入负债，录入金额视为待还金额。
+          </div>
         </el-form-item>
         <el-form-item 
           v-if="!isPlatform && (accountForm.accountType === 'CREDIT_CARD' || accountForm.accountType === 'HUABEI' || accountForm.accountType === 'BAITIAO' || accountForm.accountType === 'LOAN')" 
@@ -259,6 +265,18 @@
           <div class="form-help-text">
             <span class="field-en">fund_usage: </span>
             SPENDABLE：可支出，用于日常消费；RESERVED：专款，用于特定用途（如逆回购占用）；INVESTABLE：可投资，用于购买理财产品
+          </div>
+        </el-form-item>
+        <el-form-item v-if="!isPlatform" label="关联产品">
+          <el-input-number
+            v-model="(accountForm as any).linkedProductId"
+            :min="0"
+            :step="1"
+            :precision="0"
+            style="width: 100%"
+          />
+          <div class="form-help-text">
+            关联产品ID <span class="field-en">(linked_product_id)</span>，用于像“稳利宝、小荷包”等与具体理财/基金产品绑定的账户，后续可用于初始化持仓与对账（可选）。
           </div>
         </el-form-item>
         <el-form-item v-if="!isPlatform" label="初始余额">

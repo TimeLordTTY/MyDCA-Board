@@ -50,6 +50,13 @@ from requests.adapters import HTTPAdapter
 # 禁用 SSL 警告（民生银行接口使用 verify=False）
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# 重要：禁用环境变量代理（例如 http(s)_proxy 指向 127.0.0.1:7890），
+# 否则在没有本地代理服务时会导致所有 requests 连接失败。
+def _new_session_no_proxy() -> requests.Session:
+    s = requests.Session()
+    s.trust_env = False
+    return s
+
 # 将 scripts 目录加入路径，导入现有配置
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(os.path.dirname(CURRENT_DIR))
@@ -134,7 +141,7 @@ def _query_latest_cmbc_nav(product_code: str, query_date: date, retry_num: int) 
     try:
         print(f"[CMBC] 开始获取基金 {product_code} {query_date} 的净值 (重试={retry_num})")
         # 创建支持 legacy SSL 的 session（用法与 v1 完全一致）
-        session = requests.Session()
+        session = _new_session_no_proxy()
         session.mount("https://", LegacySSLAdapter())
 
         resp = session.post(
@@ -407,8 +414,11 @@ class FundHistoryBackfiller:
         """
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Referer": "http://fund.eastmoney.com/"
+            # fund.eastmoney.com 在部分网络环境可能无法解析/连通；fundf10.eastmoney.com 更稳定
+            "Referer": "http://fundf10.eastmoney.com/"
         }
+        
+        session = _new_session_no_proxy()
         
         all_records: List[Dict] = []
         page = 1
@@ -417,8 +427,8 @@ class FundHistoryBackfiller:
         while True:
             try:
                 # 东方财富历史净值 API，支持日期范围
-                url = f"http://fund.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code={product_code}&page={page}&per={page_size}&sdate={start_date.strftime('%Y-%m-%d')}&edate={end_date.strftime('%Y-%m-%d')}"
-                response = requests.get(url, headers=headers, timeout=10)
+                url = f"http://fundf10.eastmoney.com/f10/F10DataApi.aspx?type=lsjz&code={product_code}&page={page}&per={page_size}&sdate={start_date.strftime('%Y-%m-%d')}&edate={end_date.strftime('%Y-%m-%d')}"
+                response = session.get(url, headers=headers, timeout=10)
                 
                 if response.status_code != 200:
                     print(f"[fund_api] HTTP {response.status_code}")

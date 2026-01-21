@@ -16,6 +16,8 @@ export interface Account {
   ownerFamilyId?: number
   currency: 'CNY' | 'USD' | 'HKD'
   parentAccountId?: number
+  // 关联产品ID（如稳利宝、小荷包等与具体理财/基金产品绑定的账户，可用于初始化持仓）
+  linkedProductId?: number
   fundUsage?: 'SPENDABLE' | 'RESERVED' | 'INVESTABLE'
   balance: number
   reservedAmount: number
