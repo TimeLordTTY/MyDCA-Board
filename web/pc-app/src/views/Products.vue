@@ -333,45 +333,49 @@
               :cell-style="{ padding: '8px 6px' }"
             >
               <el-table-column prop="minDays" label="最小持有天数" width="120" align="center">
-                <template #default="{ row }">
+                <template #default="scope">
                   <el-input
-                    v-model="row.minDays"
+                    v-if="scope.row"
+                    v-model="scope.row.minDays"
                     type="number"
                     placeholder="0"
                     style="width: 100%"
-                    @blur="row.minDays = row.minDays === '' ? 0 : Number(row.minDays) || 0"
+                    @blur="scope.row.minDays = scope.row.minDays === '' ? 0 : Number(scope.row.minDays) || 0"
                   />
                 </template>
               </el-table-column>
               <el-table-column prop="maxDays" label="最大持有天数" width="140" align="center">
-                <template #default="{ row }">
+                <template #default="scope">
                   <el-input
-                    v-model="row.maxDaysInput"
+                    v-if="scope.row"
+                    v-model="scope.row.maxDaysInput"
                     type="number"
                     placeholder="留空表示无上限"
                     style="width: 100%"
-                    @blur="handleMaxDaysBlur(row)"
+                    @blur="handleMaxDaysBlur(scope.row)"
                   />
                 </template>
               </el-table-column>
               <el-table-column prop="sellFeeRatePercent" label="卖出费率(%)" width="130" align="center">
-                <template #default="{ row }">
+                <template #default="scope">
                   <el-input
-                    v-model="row.sellFeeRatePercent"
+                    v-if="scope.row"
+                    v-model="scope.row.sellFeeRatePercent"
                     type="number"
                     placeholder="0.000000"
                     style="width: 100%"
-                    @blur="row.sellFeeRatePercent = row.sellFeeRatePercent === '' ? 0 : Number(row.sellFeeRatePercent) || 0"
+                    @blur="scope.row.sellFeeRatePercent = scope.row.sellFeeRatePercent === '' ? 0 : Number(scope.row.sellFeeRatePercent) || 0"
                   />
                 </template>
               </el-table-column>
               <el-table-column label="操作" width="70" fixed="right" align="center">
-                <template #default="{ $index }">
+                <template #default="scope">
                   <el-button
+                    v-if="scope.$index !== undefined"
                     type="danger"
                     link
                     size="small"
-                    @click="handleRemoveFeeTier($index)"
+                    @click="handleRemoveFeeTier(scope.$index)"
                   >
                     删除
                   </el-button>

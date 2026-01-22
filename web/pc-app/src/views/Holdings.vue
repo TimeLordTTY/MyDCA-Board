@@ -237,14 +237,15 @@ const otcHoldings = computed(() =>
 )
 
 function pnlColor(pnl: number) {
-  // 需求：盈利红色、亏损绿色（反直觉，但按用户要求）
-  return (pnl || 0) >= 0 ? 'var(--bad)' : 'var(--good)'
+  // 中国股市习惯：红涨绿跌（盈利红色、亏损绿色）
+  return (pnl || 0) >= 0 ? 'var(--good)' : 'var(--bad)'
 }
 
 function priceColor(currentPrice: number, costPrice: number) {
   if (!currentPrice || currentPrice <= 0) return 'var(--muted)'
   if (!costPrice || costPrice <= 0) return '#0f172a'
-  return currentPrice >= costPrice ? 'var(--bad)' : 'var(--good)'
+  // 中国股市习惯：红涨绿跌
+  return currentPrice >= costPrice ? 'var(--good)' : 'var(--bad)'
 }
 
 function pnlRateText(pnl: number, totalCost: number) {

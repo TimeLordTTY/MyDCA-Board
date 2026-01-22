@@ -28,6 +28,7 @@ export interface OrderFundingLine {
   lineNo: number
   accountId: number
   amount: number
+  shares?: number  // 卖出份额（卖出/赎回时使用，买入/申购时为undefined）
   currency: 'CNY' | 'USD' | 'HKD'
   createdAt: string
   updatedAt: string
@@ -67,7 +68,8 @@ export interface CreateOrderRequest {
   shares?: number
   fundingLines: Array<{
     accountId: number
-    amount: number
+    amount?: number  // 买入时使用
+    shares?: number  // 卖出时使用
   }>
   tradeDate?: string
   expectedNavDate?: string
@@ -84,7 +86,8 @@ export interface PendingSettlement {
   fundingLines: Array<{
     accountId: number
     accountName?: string
-    amount: number
+    amount?: number  // 买入时使用
+    shares?: number  // 卖出时使用
   }>
 }
 

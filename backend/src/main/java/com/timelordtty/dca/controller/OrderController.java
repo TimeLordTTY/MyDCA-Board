@@ -63,7 +63,13 @@ public class OrderController {
             for (Map<String, Object> fl : fundingLinesData) {
                 com.timelordtty.dca.model.OrderFundingLine fundingLine = new com.timelordtty.dca.model.OrderFundingLine();
                 fundingLine.setAccountId(Long.valueOf(fl.get("accountId").toString()));
-                fundingLine.setAmount(new BigDecimal(fl.get("amount").toString()));
+                // 买入时使用amount，卖出时使用shares
+                if (fl.containsKey("amount") && fl.get("amount") != null) {
+                    fundingLine.setAmount(new BigDecimal(fl.get("amount").toString()));
+                }
+                if (fl.containsKey("shares") && fl.get("shares") != null) {
+                    fundingLine.setShares(new BigDecimal(fl.get("shares").toString()));
+                }
                 fundingLines.add(fundingLine);
             }
         }

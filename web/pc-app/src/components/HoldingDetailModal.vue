@@ -23,7 +23,7 @@
           </div>
           <div>
             <div class="td-muted" style="font-size: 12px">浮动盈亏</div>
-            <div style="font-size: 18px; font-weight: 600" :class="(holding.unrealizedPnl || 0) >= 0 ? 'text-green' : 'text-red'">
+            <div style="font-size: 18px; font-weight: 600" :class="(holding.unrealizedPnl || 0) >= 0 ? 'text-red' : 'text-green'">
               {{ (holding.unrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatCurrency(holding.unrealizedPnl || 0) }}
             </div>
           </div>

@@ -34,8 +34,10 @@ public class DashboardController {
     public ResponseEntity<DashboardService.AssetOverview> getAssetOverview(
             @RequestParam(defaultValue = "personal") String viewType) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        // 统一转换为大写进行比较
+        String normalizedViewType = viewType != null ? viewType.toUpperCase() : "PERSONAL";
         DashboardService.AssetOverview overview = dashboardService.getAssetOverview(
-                currentUser.getId(), currentUser.getFamilyId(), viewType);
+                currentUser.getId(), currentUser.getFamilyId(), normalizedViewType);
         return ResponseEntity.ok(overview);
     }
 

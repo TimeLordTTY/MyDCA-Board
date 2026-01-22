@@ -90,12 +90,33 @@
           style="width: 240px"
           @change="handleDateRangeChange"
         />
-        <el-select v-model="filters.txnType" placeholder="交易类型" style="width: 150px" clearable @change="handleFilterChange">
+        <el-select 
+          v-model="filters.parentAccountId" 
+          placeholder="父账户" 
+          style="width: 150px" 
+          clearable 
+          @change="handleParentAccountChange"
+        >
           <el-option
-            v-for="(label, value) in txnTypeMap"
-            :key="value"
-            :label="label"
-            :value="value"
+            v-for="acc in parentAccounts"
+            :key="acc.id"
+            :label="acc.accountName"
+            :value="acc.id"
+          />
+        </el-select>
+        <el-select 
+          v-model="filters.accountId" 
+          placeholder="子账户" 
+          style="width: 150px" 
+          clearable 
+          :disabled="!filters.parentAccountId"
+          @change="handleFilterChange"
+        >
+          <el-option
+            v-for="acc in availableChildAccounts"
+            :key="acc.id"
+            :label="acc.accountName"
+            :value="acc.id"
           />
         </el-select>
         <el-button @click="handleFilterChange">搜索</el-button>
@@ -174,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElPagination } from 'element-plus'
 import { ledgerApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
 import type { LedgerTxn, LedgerTxnDetail, LedgerPosting } from '@wealth-hub/shared'
@@ -202,10 +223,60 @@ const pagination = reactive({
 
 const filters = reactive({
   dateRange: [] as Date[],
-  txnType: '',
+  parentAccountId: undefined as number | undefined,
+  accountId: undefined as number | undefined,
   startDate: '',
   endDate: '',
 })
+
+// 父账户列表（有子账户的账户）
+const parentAccounts = computed(() => {
+  const parentList: any[] = []
+  
+  function traverse(accounts: any[]) {
+    accounts.forEach(acc => {
+      // 如果有children且children不为空，说明是父账户
+      if (acc.children && acc.children.length > 0 && acc.accountKind === 'REAL') {
+        parentList.push(acc)
+        // 递归处理子账户（因为子账户可能也是父账户）
+        traverse(acc.children)
+      }
+    })
+  }
+  
+  traverse(accountStore.accountTree)
+  return parentList
+})
+
+// 可用的子账户（根据选择的父账户）
+const availableChildAccounts = computed(() => {
+  if (!filters.parentAccountId) return []
+  
+  // 从账户树中查找父账户，然后返回其子账户
+  function findAccountById(accounts: any[], id: number): any | null {
+    for (const acc of accounts) {
+      if (acc.id === id) {
+        return acc
+      }
+      if (acc.children && acc.children.length > 0) {
+        const found = findAccountById(acc.children, id)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  
+  const parentAccount = findAccountById(accountStore.accountTree, filters.parentAccountId)
+  if (!parentAccount || !parentAccount.children) return []
+  
+  // 返回父账户的所有REAL类型的子账户
+  return parentAccount.children.filter((acc: any) => acc.accountKind === 'REAL')
+})
+
+function handleParentAccountChange() {
+  filters.accountId = undefined
+  handleFilterChange()
+}
 
 function handleDateRangeChange() {
   if (filters.dateRange && filters.dateRange.length === 2) {
@@ -227,9 +298,9 @@ async function loadTransactions() {
   loading.value = true
   try {
     const response = await ledgerApi.getTransactions({
-      txnType: filters.txnType || undefined,
       startDate: filters.startDate || undefined,
       endDate: filters.endDate || undefined,
+      accountId: filters.accountId || undefined,
       page: pagination.page,
       pageSize: pagination.pageSize,
     })

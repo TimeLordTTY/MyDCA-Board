@@ -109,50 +109,95 @@ public class OrderService {
 
         // 处理组合支付或单个账户
         if (fundingLines != null && !fundingLines.isEmpty()) {
-            // 组合支付模式
-            BigDecimal totalFunding = fundingLines.stream()
-                    .map(OrderFundingLine::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            // 判断是买入还是卖出
+            boolean isBuyOrder = "BUY".equals(orderType) || "SUBSCRIPTION".equals(orderType);
+            boolean isSellOrder = "SELL".equals(orderType) || "REDEMPTION".equals(orderType);
 
-            // 校验总额：Σ(fundingLines.amount) = amount
-            if (amount != null && totalFunding.compareTo(amount) != 0) {
-                throw new RuntimeException(
-                    String.format("组合支付总额(%s)必须等于订单金额(%s)", totalFunding, amount)
-                );
-            }
+            if (isBuyOrder) {
+                // 买入/申购：使用amount字段，需要占用资金
+                BigDecimal totalFunding = fundingLines.stream()
+                        .filter(fl -> fl.getAmount() != null)
+                        .map(OrderFundingLine::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-            // 校验每个账户并增加reserved_amount
-            int lineNo = 1;
-            for (OrderFundingLine fundingLine : fundingLines) {
-                Long fundingAccountId = fundingLine.getAccountId();
-                
-                // 校验账户存在且为叶子账户
-                Account fundingAccount = accountMapper.selectById(fundingAccountId);
-                if (fundingAccount == null) {
-                    throw new RuntimeException("资金来源账户不存在: " + fundingAccountId);
-                }
-                if (!accountService.isLeafAccount(fundingAccountId)) {
-                    throw new RuntimeException("资金来源账户必须是叶子账户: " + fundingAccountId);
-                }
-
-                // 校验可用余额
-                BigDecimal available = fundingAccount.getBalance().subtract(fundingAccount.getReservedAmount());
-                if (available.compareTo(fundingLine.getAmount()) < 0) {
+                // 校验总额：Σ(fundingLines.amount) = amount
+                if (amount != null && totalFunding.compareTo(amount) != 0) {
                     throw new RuntimeException(
-                        String.format("账户[%d]可用余额不足: 可用=%s, 需要=%s", 
-                            fundingAccountId, available, fundingLine.getAmount())
+                        String.format("组合支付总额(%s)必须等于订单金额(%s)", totalFunding, amount)
                     );
                 }
 
-                // 写入order_funding_line
-                fundingLine.setOrderId(orderId);
-                fundingLine.setLineNo(lineNo++);
-                fundingLine.setCurrency(fundingAccount.getCurrency() != null ? fundingAccount.getCurrency() : "CNY");
-                orderFundingLineMapper.insert(fundingLine);
+                // 校验每个账户并增加reserved_amount
+                int lineNo = 1;
+                for (OrderFundingLine fundingLine : fundingLines) {
+                    Long fundingAccountId = fundingLine.getAccountId();
+                    
+                    // 校验账户存在且为叶子账户
+                    Account fundingAccount = accountMapper.selectById(fundingAccountId);
+                    if (fundingAccount == null) {
+                        throw new RuntimeException("资金来源账户不存在: " + fundingAccountId);
+                    }
+                    if (!accountService.isLeafAccount(fundingAccountId)) {
+                        throw new RuntimeException("资金来源账户必须是叶子账户: " + fundingAccountId);
+                    }
 
-                // 增加reserved_amount（占用资金，不扣款，不生成流水）
-                BigDecimal newReservedAmount = fundingAccount.getReservedAmount().add(fundingLine.getAmount());
-                accountMapper.updateReservedAmount(fundingAccountId, newReservedAmount);
+                    // 校验可用余额
+                    if (fundingLine.getAmount() != null) {
+                        BigDecimal available = fundingAccount.getBalance().subtract(fundingAccount.getReservedAmount());
+                        if (available.compareTo(fundingLine.getAmount()) < 0) {
+                            throw new RuntimeException(
+                                String.format("账户[%d]可用余额不足: 可用=%s, 需要=%s", 
+                                    fundingAccountId, available, fundingLine.getAmount())
+                            );
+                        }
+                    }
+
+                    // 写入order_funding_line
+                    fundingLine.setOrderId(orderId);
+                    fundingLine.setLineNo(lineNo++);
+                    fundingLine.setCurrency(fundingAccount.getCurrency() != null ? fundingAccount.getCurrency() : "CNY");
+                    orderFundingLineMapper.insert(fundingLine);
+
+                    // 增加reserved_amount（占用资金，不扣款，不生成流水）
+                    if (fundingLine.getAmount() != null) {
+                        BigDecimal newReservedAmount = fundingAccount.getReservedAmount().add(fundingLine.getAmount());
+                        accountMapper.updateReservedAmount(fundingAccountId, newReservedAmount);
+                    }
+                }
+            } else if (isSellOrder) {
+                // 卖出/赎回：使用shares字段，不需要占用资金，只需要记录卖出份额
+                BigDecimal totalShares = fundingLines.stream()
+                        .filter(fl -> fl.getShares() != null)
+                        .map(OrderFundingLine::getShares)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                // 校验总份额：Σ(fundingLines.shares) = shares
+                if (shares != null && totalShares.compareTo(shares) != 0) {
+                    throw new RuntimeException(
+                        String.format("组合卖出总份额(%s)必须等于订单份额(%s)", totalShares, shares)
+                    );
+                }
+
+                // 校验每个账户并记录卖出份额
+                int lineNo = 1;
+                for (OrderFundingLine fundingLine : fundingLines) {
+                    Long fundingAccountId = fundingLine.getAccountId();
+                    
+                    // 校验账户存在且为叶子账户
+                    Account fundingAccount = accountMapper.selectById(fundingAccountId);
+                    if (fundingAccount == null) {
+                        throw new RuntimeException("卖出账户不存在: " + fundingAccountId);
+                    }
+                    if (!accountService.isLeafAccount(fundingAccountId)) {
+                        throw new RuntimeException("卖出账户必须是叶子账户: " + fundingAccountId);
+                    }
+
+                    // 写入order_funding_line（卖出时不需要占用资金，只记录份额）
+                    fundingLine.setOrderId(orderId);
+                    fundingLine.setLineNo(lineNo++);
+                    fundingLine.setCurrency(fundingAccount.getCurrency() != null ? fundingAccount.getCurrency() : "CNY");
+                    orderFundingLineMapper.insert(fundingLine);
+                }
             }
         } else {
             // 单个账户模式（兼容旧接口）

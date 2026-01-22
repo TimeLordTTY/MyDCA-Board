@@ -1,5 +1,6 @@
 package com.timelordtty.dca.service;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.Order;
@@ -78,11 +79,18 @@ public class DashboardService {
     public AssetOverview getAssetOverview(Long userId, Long familyId, String viewType) {
         AssetOverview overview = new AssetOverview();
         
+        // 统一转换为大写进行比较
+        String normalizedViewType = viewType != null ? viewType.toUpperCase() : "PERSONAL";
+        
         // 查询账户余额（获取账户树，父账户余额已自动计算为子账户之和）
         List<Account> accounts = accountService.getAccountTree(
-            "PERSONAL".equals(viewType) ? userId : null,
-            "FAMILY".equals(viewType) ? familyId : null
+            "PERSONAL".equals(normalizedViewType) ? userId : null,
+            "FAMILY".equals(normalizedViewType) ? familyId : null
         );
+        
+        // 调试日志：检查查询结果
+        System.out.println("DashboardService.getAssetOverview - userId: " + userId + ", familyId: " + familyId + ", viewType: " + normalizedViewType);
+        System.out.println("DashboardService.getAssetOverview - 查询到的账户数量: " + accounts.size());
 
         // 收集所有叶子账户（包括父账户的children中的子账户）
         List<Account> allLeafAccounts = new java.util.ArrayList<>();
@@ -94,6 +102,12 @@ public class DashboardService {
                 // 叶子账户（没有子账户的独立账户）
                 allLeafAccounts.add(account);
             }
+        }
+        
+        // 调试日志：检查叶子账户
+        System.out.println("DashboardService.getAssetOverview - 叶子账户数量: " + allLeafAccounts.size());
+        for (Account acc : allLeafAccounts) {
+            System.out.println("  - 账户: " + acc.getAccountName() + ", 类型: " + acc.getAccountType() + ", 余额: " + acc.getBalance());
         }
 
         // 计算现金余额（包括所有资产类账户：BANK、PAYMENT、BROKER、MMF、CASH）
@@ -150,11 +164,20 @@ public class DashboardService {
         overview.setCashBalance(cashBalance);
         overview.setPositionValue(positionValue); // 设置持仓市值
 
+        // 调试日志：检查计算结果
+        System.out.println("DashboardService.getAssetOverview - 计算结果:");
+        System.out.println("  - cashBalance: " + cashBalance);
+        System.out.println("  - positionValue: " + positionValue);
+        System.out.println("  - totalLiabilities: " + totalLiabilities);
+        System.out.println("  - totalAssets: " + totalAssets);
+        System.out.println("  - netWorth: " + overview.getNetWorth());
+
         return overview;
     }
 
     public static class AssetOverview {
         private BigDecimal totalAssets;
+        @JsonProperty("liability")
         private BigDecimal totalLiabilities;
         private BigDecimal netWorth;
         private BigDecimal cashBalance;

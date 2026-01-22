@@ -8,13 +8,14 @@
         <result column="line_no" property="lineNo" jdbcType="INTEGER"/>
         <result column="account_id" property="accountId" jdbcType="BIGINT"/>
         <result column="amount" property="amount" jdbcType="DECIMAL"/>
+        <result column="shares" property="shares" jdbcType="DECIMAL"/>
         <result column="currency" property="currency" jdbcType="VARCHAR"/>
         <result column="created_at" property="createdAt" jdbcType="TIMESTAMP"/>
         <result column="updated_at" property="updatedAt" jdbcType="TIMESTAMP"/>
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, order_id, line_no, account_id, amount, currency, created_at, updated_at
+        id, order_id, line_no, account_id, amount, shares, currency, created_at, updated_at
     </sql>
 
     <select id="selectByOrderId" resultMap="BaseResultMap">
@@ -27,18 +28,18 @@
 
     <insert id="insert" parameterType="com.timelordtty.dca.model.OrderFundingLine" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO order_funding_line (
-            order_id, line_no, account_id, amount, currency, created_at, updated_at
+            order_id, line_no, account_id, amount, shares, currency, created_at, updated_at
         ) VALUES (
-            #{orderId}, #{lineNo}, #{accountId}, #{amount}, #{currency}, NOW(), NOW()
+            #{orderId}, #{lineNo}, #{accountId}, #{amount}, #{shares}, #{currency}, NOW(), NOW()
         )
     </insert>
 
     <insert id="batchInsert" parameterType="java.util.List">
         INSERT INTO order_funding_line (
-            order_id, line_no, account_id, amount, currency, created_at, updated_at
+            order_id, line_no, account_id, amount, shares, currency, created_at, updated_at
         ) VALUES
         <foreach collection="fundingLines" item="item" separator=",">
-            (#{item.orderId}, #{item.lineNo}, #{item.accountId}, #{item.amount}, #{item.currency}, NOW(), NOW())
+            (#{item.orderId}, #{item.lineNo}, #{item.accountId}, #{item.amount}, #{item.shares}, #{item.currency}, NOW(), NOW())
         </foreach>
     </insert>
 

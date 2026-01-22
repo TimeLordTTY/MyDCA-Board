@@ -36,6 +36,14 @@
         AND market = #{market}
     </select>
 
+    <!-- 只按产品代码查找（不限制市场），用于初始持仓导入时避免重复创建产品 -->
+    <select id="selectByCodeOnly" resultMap="BaseResultMap">
+        SELECT * FROM product_master 
+        WHERE product_code = #{productCode}
+        ORDER BY is_active DESC, created_at ASC
+        LIMIT 1
+    </select>
+
     <select id="selectByCondition" resultMap="BaseResultMap">
         SELECT * FROM product_master
         WHERE is_active = 1
@@ -103,4 +111,3 @@
     </update>
 
 </mapper>
-

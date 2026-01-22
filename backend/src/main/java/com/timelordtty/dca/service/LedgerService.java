@@ -114,6 +114,12 @@ public class LedgerService {
     @Transactional
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable) {
+        return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable, null);
+    }
+
+    @Transactional
+    public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
+                                      List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable, Long productId) {
         // 生成唯一交易ID：格式为TXN-16位大写字母数字
         // 示例：TXN-A1B2C3D4E5F6G7H8
         String txnId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
@@ -244,6 +250,7 @@ public class LedgerService {
         txn.setStatus("CONFIRMED");
         txn.setNote(note);
         txn.setCategoryId(categoryId);
+        txn.setProductId(productId);
         txn.setIsReimbursable(isReimbursable != null ? isReimbursable : false);
         txn.setIsReimbursed(false);
         txn.setIsReversed(false);
@@ -459,19 +466,19 @@ public class LedgerService {
     }
 
     public List<LedgerTxn> getTransactions(Long userId, String txnType, LocalDate startDate, 
-                                          LocalDate endDate, Long productId, Integer page, Integer pageSize) {
+                                          LocalDate endDate, Long productId, Long accountId, Integer page, Integer pageSize) {
         Integer offset = null;
         Integer limit = null;
         if (page != null && pageSize != null && page > 0 && pageSize > 0) {
             offset = (page - 1) * pageSize;
             limit = pageSize;
         }
-        return ledgerTxnMapper.selectByCondition(userId, txnType, startDate, endDate, productId, offset, limit);
+        return ledgerTxnMapper.selectByCondition(userId, txnType, startDate, endDate, productId, accountId, offset, limit);
     }
     
     public int countTransactions(Long userId, String txnType, LocalDate startDate, 
-                                LocalDate endDate, Long productId) {
-        return ledgerTxnMapper.countByCondition(userId, txnType, startDate, endDate, productId);
+                                LocalDate endDate, Long productId, Long accountId) {
+        return ledgerTxnMapper.countByCondition(userId, txnType, startDate, endDate, productId, accountId);
     }
 
     public LedgerTxn getTransactionDetail(String txnId) {

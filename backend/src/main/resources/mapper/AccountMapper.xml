@@ -16,6 +16,9 @@
         <result column="currency" property="currency"/>
         <result column="parent_account_id" property="parentAccountId"/>
         <result column="linked_product_id" property="linkedProductId"/>
+        <result column="initial_shares" property="initialShares"/>
+        <result column="is_fixed_amount" property="isFixedAmount"/>
+        <result column="fixed_amount" property="fixedAmount"/>
         <result column="fund_usage" property="fundUsage"/>
         <result column="balance" property="balance"/>
         <result column="reserved_amount" property="reservedAmount"/>
@@ -75,16 +78,30 @@
         )
     </select>
 
+    <select id="selectByLinkedProduct" resultMap="BaseResultMap">
+        SELECT * FROM accounts
+        WHERE is_active = 1
+        AND account_kind = 'REAL'
+        AND linked_product_id = #{productId}
+        AND (
+            (owner_type = 'PERSONAL' AND owner_user_id = #{ownerUserId})
+            OR (owner_type = 'FAMILY' AND owner_family_id = #{ownerFamilyId})
+        )
+        ORDER BY account_name
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO accounts (
             account_code, account_name, account_kind, account_type, account_subtype,
             virtual_subtype, owner_type, owner_user_id, owner_family_id, currency,
-            parent_account_id, linked_product_id, fund_usage, balance, reserved_amount, initial_balance,
+            parent_account_id, linked_product_id, initial_shares, is_fixed_amount, fixed_amount,
+            fund_usage, balance, reserved_amount, initial_balance,
             is_active, note, created_at, updated_at
         ) VALUES (
             #{accountCode}, #{accountName}, #{accountKind}, #{accountType}, #{accountSubtype},
             #{virtualSubtype}, #{ownerType}, #{ownerUserId}, #{ownerFamilyId}, #{currency},
-            #{parentAccountId}, #{linkedProductId}, #{fundUsage}, #{balance}, #{reservedAmount}, #{initialBalance},
+            #{parentAccountId}, #{linkedProductId}, #{initialShares}, #{isFixedAmount}, #{fixedAmount},
+            #{fundUsage}, #{balance}, #{reservedAmount}, #{initialBalance},
             #{isActive}, #{note}, NOW(), NOW()
         )
     </insert>
@@ -97,6 +114,10 @@
             account_subtype = #{accountSubtype},
             currency = #{currency},
             parent_account_id = #{parentAccountId},
+            linked_product_id = #{linkedProductId},
+            initial_shares = #{initialShares},
+            is_fixed_amount = #{isFixedAmount},
+            fixed_amount = #{fixedAmount},
             balance = #{balance},
             <if test="fundUsage != null">fund_usage = #{fundUsage},</if>
             <if test="fundUsage == null">fund_usage = NULL,</if>

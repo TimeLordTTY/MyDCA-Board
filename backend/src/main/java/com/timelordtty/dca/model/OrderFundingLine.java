@@ -60,6 +60,9 @@ public class OrderFundingLine {
     /** 出资金额，该账户为此订单出资的金额 */
     private BigDecimal amount;
     
+    /** 卖出份额（卖出/赎回时使用，买入/申购时为NULL） */
+    private BigDecimal shares;
+    
     /** 货币，CNY/USD/HKD，默认CNY */
     private String currency;
     

@@ -82,13 +82,32 @@ export function buildAccountTree(accounts: Account[]): Account[] {
 }
 
 /**
- * 计算父账户聚合余额（所有子账户余额之和）
+ * 判断是否为信贷账户类型
+ */
+function isCreditAccountType(accountType: string): boolean {
+  return accountType === 'CREDIT_CARD' || 
+         accountType === 'HUABEI' || 
+         accountType === 'BAITIAO' ||
+         accountType === 'LOAN'
+}
+
+/**
+ * 计算父账户聚合余额（所有子账户余额之和，排除信贷账户）
+ * 信贷账户（CREDIT_CARD/HUABEI/BAITIAO/LOAN）不计入余额，因为它们的余额是欠款，不是资产
  */
 export function calculateParentBalance(account: Account): number {
   if (!account.children || account.children.length === 0) {
+    // 如果是信贷账户类型，不计入余额
+    if (isCreditAccountType(account.accountType)) {
+      return 0
+    }
     return account.balance || 0
   }
   return account.children.reduce((sum, child) => {
+    // 排除信贷账户
+    if (isCreditAccountType(child.accountType)) {
+      return sum
+    }
     return sum + (child.balance || 0)
   }, 0)
 }

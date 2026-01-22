@@ -10,7 +10,7 @@
     - 货币基金：asset_type = 'MMF' → 写入 nav 表（nav 固定 1.0，记录每万份收益到 dividend）
     - 银行理财净值型：asset_type = 'BANK_WM_NAV'（如 FBAE41126E）→ 通过民生 API 写入 nav 表
   - 场内产品（channel='EXCHANGE'）：
-    - ETF / 股票：asset_type in ('ETF', 'STOCK') → 写入 market_bar_daily（日 K）
+    - ETF / LOF / 股票：asset_type in ('ETF', 'LOF', 'STOCK') → 写入 market_bar_daily（日 K）
     - 期货：asset_type = 'FUTURES' → 写入 market_bar_daily（日 K）
     - 期权：asset_type = 'OPTIONS' → 写入 market_bar_daily（日 K）
 
@@ -35,15 +35,28 @@
 
 import os
 import sys
+import os
+import io
 import re
 from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional
+
+# ============================================================
+# 【重要】设置 UTF-8 编码，解决 Windows 控制台中文乱码
+# ============================================================
+if sys.platform == 'win32':
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    else:
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 import pymysql
 import akshare as ak
 import requests
 import ssl
 import urllib3
+import math
 from urllib3.util.ssl_ import create_urllib3_context
 from requests.adapters import HTTPAdapter
 
@@ -232,6 +245,8 @@ class FundHistoryBackfiller:
     """为所有场外产品补齐历史净值的执行器。"""
 
     START_DATE = date(2000, 1, 1)
+    # 民生银行理财产品的起始日期（这类产品 2020 年之前不存在）
+    CMBC_START_DATE = date(2023, 1, 1)
 
     def __init__(self):
         self.conn: Optional[pymysql.Connection] = None
@@ -272,7 +287,7 @@ class FundHistoryBackfiller:
         """
         获取所有需要补齐历史行情的场内产品。
 
-        - ETF / 股票：asset_type in ('ETF', 'STOCK')
+        - ETF / LOF / 股票：asset_type in ('ETF', 'LOF', 'STOCK')
         - 期货：asset_type = 'FUTURES'
         - 期权：asset_type = 'OPTIONS'
         """
@@ -280,7 +295,7 @@ class FundHistoryBackfiller:
             SELECT id, product_code, product_name, asset_type, market, data_source
             FROM product_master
             WHERE channel = 'EXCHANGE'
-              AND asset_type IN ('ETF', 'STOCK', 'FUTURES', 'OPTIONS')
+              AND asset_type IN ('ETF', 'LOF', 'STOCK', 'FUTURES', 'OPTIONS')
               AND is_active = 1
         """
         with self.conn.cursor(pymysql.cursors.DictCursor) as cursor:
@@ -340,16 +355,27 @@ class FundHistoryBackfiller:
         """
         params = []
         for r in records:
+            # 确保所有数值字段都不是 NaN，如果是则转换为 0 或 None
+            def safe_float(val, default=0):
+                if val is None:
+                    return default
+                if isinstance(val, float) and math.isnan(val):
+                    return default
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+            
             params.append(
                 (
                     product_id,
                     r["trade_date"],
-                    r.get("open", 0),
-                    r.get("high", 0),
-                    r.get("low", 0),
-                    r.get("close", 0),
-                    r.get("volume", 0),
-                    r.get("amount", 0),
+                    safe_float(r.get("open"), 0),
+                    safe_float(r.get("high"), 0),
+                    safe_float(r.get("low"), 0),
+                    safe_float(r.get("close"), 0),
+                    safe_float(r.get("volume"), 0),
+                    safe_float(r.get("amount"), 0),
                     source,
                 )
             )
@@ -382,14 +408,31 @@ class FundHistoryBackfiller:
         """
         params = []
         for r in records:
+            # 确保所有数值字段都不是 NaN，如果是则转换为 None
+            nav = r["nav"]
+            if isinstance(nav, float) and math.isnan(nav):
+                nav = None
+            
+            acc_nav = r.get("acc_nav")
+            if acc_nav is not None and isinstance(acc_nav, float) and math.isnan(acc_nav):
+                acc_nav = None
+            
+            daily_return = r.get("daily_return")
+            if daily_return is not None and isinstance(daily_return, float) and math.isnan(daily_return):
+                daily_return = None
+            
+            dividend = r.get("dividend")
+            if dividend is not None and isinstance(dividend, float) and math.isnan(dividend):
+                dividend = None
+            
             params.append(
                 (
                     product_id,
                     r["nav_date"],
-                    r["nav"],
-                    r.get("acc_nav"),
-                    r.get("daily_return"),
-                    r.get("dividend"),
+                    nav,
+                    acc_nav,
+                    daily_return,
+                    dividend,
                     source,
                 )
             )
@@ -566,6 +609,93 @@ class FundHistoryBackfiller:
                 record["dividend"] = record["daily_return"] * 10000
         
         return records
+
+    def fetch_history_by_akshare_fund(self, product_code: str, start_date: date, end_date: date) -> List[Dict]:
+        """
+        使用 akshare 获取基金历史净值数据（主要方案）。
+        
+        使用 fund_etf_fund_info_em 接口，该接口支持更多基金代码（包括某些 LOF）。
+        优先使用此方法，因为 akshare 支持更多基金代码，数据更完整。
+        
+        Args:
+            product_code: 基金代码
+            start_date: 开始日期
+            end_date: 结束日期
+            
+        Returns:
+            历史净值记录列表
+        """
+        try:
+            # 使用 fund_etf_fund_info_em 获取基金历史净值
+            # 这个接口返回的是累计净值走势，需要转换
+            df = ak.fund_etf_fund_info_em(fund=product_code)
+            
+            if df is None or df.empty:
+                print(f"  [akshare] 基金 {product_code} 未获取到历史净值数据")
+                return []
+            
+            records: List[Dict] = []
+            
+            # fund_etf_fund_info_em 返回列：日期、累计净值、日增长率
+            for _, row in df.iterrows():
+                try:
+                    # 获取日期（可能是多种格式）
+                    date_val = row.get('净值日期') or row.get('日期')
+                    if date_val is None:
+                        # 尝试使用索引作为日期
+                        date_val = row.name if hasattr(row, 'name') else None
+                    
+                    if date_val is None:
+                        continue
+                    
+                    nav_date = pd_to_date(date_val)
+                    if nav_date is None or not (start_date <= nav_date <= end_date):
+                        continue
+                    
+                    # 获取净值（可能是单位净值或累计净值）
+                    nav = row.get('单位净值') or row.get('累计净值') or row.get('净值')
+                    if nav is None:
+                        continue
+                    
+                    try:
+                        nav_float = float(nav)
+                    except (ValueError, TypeError):
+                        continue
+                    
+                    # 检查是否为 NaN 或无效值
+                    if math.isnan(nav_float) or nav_float <= 0:
+                        continue
+                    
+                    # 日增长率
+                    daily_return = row.get('日增长率') or row.get('涨跌幅')
+                    daily_return_float = None
+                    if daily_return is not None:
+                        try:
+                            daily_return_val = float(daily_return)
+                            # 检查是否为 NaN
+                            if not math.isnan(daily_return_val):
+                                daily_return_float = daily_return_val
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    records.append({
+                        "nav_date": nav_date,
+                        "nav": nav_float,
+                        "acc_nav": nav_float,  # 如果没有累计净值，使用单位净值
+                        "daily_return": daily_return_float
+                    })
+                    
+                except Exception as e:
+                    continue
+            
+            if records:
+                print(f"  [akshare] 成功获取 {len(records)} 条历史净值数据")
+            
+            return records
+            
+        except Exception as e:
+            print(f"  [akshare] 基金 {product_code} 历史净值获取失败: {e}")
+            return []
 
     def fetch_history_by_akshare_stock(self, product_code: str, market: str, start_date: date, end_date: date) -> List[Dict]:
         """
@@ -745,20 +875,33 @@ class FundHistoryBackfiller:
 
         print(f"\n==== 开始补齐: {name} ({code}), 类型={asset_type}, 源={data_source} ====")
 
-        # 确定起始日期：已有数据则从最后一天之后开始，否则从 START_DATE
+        # 确定起始日期
         existing = self.get_existing_nav_range(product_id)
-        if existing and existing.get("max_date"):
-            start_date = existing["max_date"] + timedelta(days=1)
-        else:
-            start_date = self.START_DATE
-
         today = date.today()
-        # 如果数据库已覆盖到今天（或更晚），无需再拉取
-        if existing and existing.get("max_date") and existing["max_date"] >= today:
-            print(f"  已有数据覆盖到 {existing['max_date']}，无需补齐")
-            return
+        
+        # 判断是否是 CMBC 产品（民生银行理财）
+        is_cmbc = (asset_type == "BANK_WM_NAV" or data_source == "cmbc" or code == "FBAE41126E")
+        
+        if is_cmbc:
+            # CMBC 产品：从已有数据的最大日期+1开始，或从 CMBC_START_DATE 开始
+            # 因为 CMBC 是逐天查询，从 2000 年开始太慢
+            if existing and existing.get("max_date"):
+                start_date = existing["max_date"] + timedelta(days=1)
+                print(f"  已有数据: {existing.get('min_date')} ~ {existing.get('max_date')}")
+            else:
+                start_date = self.CMBC_START_DATE
+                print(f"  无历史数据，从 {start_date} 开始补齐（CMBC产品）")
+        else:
+            # 普通产品：从 START_DATE 开始，确保能补齐中间缺失的数据
+            start_date = self.START_DATE
+            if existing and existing.get("max_date"):
+                print(f"  已有数据: {existing.get('min_date')} ~ {existing.get('max_date')}")
+            else:
+                print(f"  无历史数据，从头开始补齐")
+        
+        # 如果起始日期已经超过今天，无需补齐
         if start_date > today:
-            print(f"  已有数据覆盖到 {existing['max_date'] if existing else 'N/A'}，无需补齐")
+            print(f"  已覆盖到 {existing['max_date'] if existing else 'N/A'}，无需补齐")
             return
 
         print(f"  补齐区间: {start_date} ~ {today}")
@@ -774,10 +917,17 @@ class FundHistoryBackfiller:
         elif asset_type == "MMF":
             records = self.fetch_history_by_akshare_mmf(code, start_date, today, force_nav_one=True)
             source_flag = "MMF"
-        # 普通基金/LOF（使用东方财富HTTP API）
+        # 普通基金/LOF（优先使用 akshare，如果失败则尝试东方财富 HTTP API）
         else:
-            records = self.fetch_history_by_fund_api(code, start_date, today)
-            source_flag = "FUND"
+            # 优先使用 akshare（支持更多基金代码，数据更完整）
+            records = self.fetch_history_by_akshare_fund(code, start_date, today)
+            source_flag = "AKSHARE"
+            # 如果 akshare 没有返回数据，尝试使用东方财富 HTTP API 作为后备
+            if not records:
+                print(f"  akshare 无数据，尝试使用东方财富 API 后备方案...")
+                records = self.fetch_history_by_fund_api(code, start_date, today)
+                if records:
+                    source_flag = "FUND"
 
         if not records:
             print("  未获取到任何历史净值数据，跳过")
@@ -813,21 +963,20 @@ class FundHistoryBackfiller:
 
         print(f"\n==== 开始补齐: {name} ({code}), 类型={asset_type}, 市场={market} ====")
 
-        # 确定起始日期：已有数据则从最后一天之后开始，否则从 START_DATE
+        # 确定起始日期：始终从 START_DATE 开始，确保能补齐中间缺失的数据
+        # UPSERT 会自动跳过已有的记录
         existing = self.get_existing_bar_range(product_id)
-        if existing and existing.get("max_date"):
-            start_date = existing["max_date"] + timedelta(days=1)
-        else:
-            start_date = self.START_DATE
-
+        start_date = self.START_DATE
+        
         today = date.today()
-        # 如果数据库已覆盖到今天（或更晚），无需再拉取
-        if existing and existing.get("max_date") and existing["max_date"] >= today:
-            print(f"  已有数据覆盖到 {existing['max_date']}，无需补齐")
-            return
-        if start_date > today:
-            print(f"  已有数据覆盖到 {existing['max_date'] if existing else 'N/A'}，无需补齐")
-            return
+        
+        if existing and existing.get("max_date"):
+            print(f"  已有数据: {existing.get('min_date')} ~ {existing.get('max_date')}")
+            # 如果已覆盖到今天，检查是否有中间缺失
+            if existing["max_date"] >= today:
+                print(f"  已覆盖到今天，检查是否有中间缺失数据...")
+        else:
+            print(f"  无历史数据，从头开始补齐")
 
         print(f"  补齐区间: {start_date} ~ {today}")
 
@@ -835,9 +984,9 @@ class FundHistoryBackfiller:
         source_flag = "AKSHARE"
 
         # 根据资产类型选择不同的采集方法
-        if asset_type in ("ETF", "STOCK"):
+        if asset_type in ("ETF", "LOF", "STOCK"):
             records = self.fetch_history_by_akshare_stock(code, market, start_date, today)
-            source_flag = "ETF" if asset_type == "ETF" else "STOCK"
+            source_flag = asset_type  # ETF / LOF / STOCK
         elif asset_type == "FUTURES":
             records = self.fetch_history_by_akshare_futures(code, start_date, today)
             source_flag = "FUTURES"

@@ -103,6 +103,27 @@ public class Account {
      */
     private Long linkedProductId;
     
+    /**
+     * 初始份额（仅MMF平台账户使用）
+     * 
+     * 用于货币基金类型平台的份额管理：
+     * - 总金额 = 初始份额 × 最新净值
+     * - 子账户可分配份额
+     */
+    private BigDecimal initialShares;
+    
+    /**
+     * 是否固定金额子账户（仅MMF子账户使用）
+     * 
+     * 如房租预备金，金额固定为4000，不随净值变化
+     */
+    private Boolean isFixedAmount;
+    
+    /**
+     * 固定金额值（仅is_fixed_amount=true时有效）
+     */
+    private BigDecimal fixedAmount;
+    
     /** 资金用途（仅对REAL CASH叶子账户生效）：SPENDABLE/RESERVED/INVESTABLE */
     private String fundUsage;
     

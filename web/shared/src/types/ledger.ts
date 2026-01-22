@@ -56,6 +56,7 @@ export interface LedgerQueryParams {
   startDate?: string
   endDate?: string
   productId?: number
+  accountId?: number
   page?: number
   pageSize?: number
 }

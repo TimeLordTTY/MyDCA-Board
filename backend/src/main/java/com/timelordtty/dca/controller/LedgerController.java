@@ -59,13 +59,14 @@ public class LedgerController {
             @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate,
             @RequestParam(required = false) Long productId,
+            @RequestParam(required = false) Long accountId,
             @RequestParam(required = false, defaultValue = "1") Integer page,
             @RequestParam(required = false, defaultValue = "20") Integer pageSize) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         List<LedgerTxn> txns = ledgerService.getTransactions(
-                currentUser.getId(), txnType, startDate, endDate, productId, page, pageSize);
+                currentUser.getId(), txnType, startDate, endDate, productId, accountId, page, pageSize);
         int total = ledgerService.countTransactions(
-                currentUser.getId(), txnType, startDate, endDate, productId);
+                currentUser.getId(), txnType, startDate, endDate, productId, accountId);
         
         // 为每个交易计算摘要信息（金额、主要账户等）
         List<Map<String, Object>> result = new ArrayList<>();
@@ -313,6 +314,7 @@ public class LedgerController {
         String requestedAtStr = request.containsKey("requestedAt") ? request.get("requestedAt").toString() : null;
         Long categoryId = request.containsKey("categoryId") ? Long.valueOf(request.get("categoryId").toString()) : null;
         Boolean isReimbursable = request.containsKey("isReimbursable") ? Boolean.valueOf(request.get("isReimbursable").toString()) : false;
+        Long productId = request.containsKey("productId") ? Long.valueOf(request.get("productId").toString()) : null;
         
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> postingsData = (List<Map<String, Object>>) request.get("postings");
@@ -331,7 +333,7 @@ public class LedgerController {
         }
 
         LedgerTxn txn = ledgerService.createTransaction(
-                currentUser.getId(), currentUser.getFamilyId(), txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable);
+                currentUser.getId(), currentUser.getFamilyId(), txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable, productId);
         return ResponseEntity.ok(txn);
     }
 

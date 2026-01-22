@@ -11,10 +11,12 @@ import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.OrderFundingLine;
 import com.timelordtty.dca.model.ProductMaster;
 import com.timelordtty.dca.model.SettlementConfirm;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -72,12 +74,13 @@ public class SettlementService {
     private final AccountService accountService;
     private final ProductMasterMapper productMasterMapper;
     private final BrokerFeeService brokerFeeService;
+    private final HoldingService holdingService;
 
     public SettlementService(OrderMapper orderMapper, SettlementConfirmMapper settlementConfirmMapper,
                             AccountMapper accountMapper, LedgerService ledgerService,
                             OrderFundingLineMapper orderFundingLineMapper, UserService userService,
-                            AccountService accountService, ProductMasterMapper productMasterMapper,
-                            BrokerFeeService brokerFeeService) {
+                            @Lazy AccountService accountService, ProductMasterMapper productMasterMapper,
+                            BrokerFeeService brokerFeeService, HoldingService holdingService) {
         this.orderMapper = orderMapper;
         this.settlementConfirmMapper = settlementConfirmMapper;
         this.accountMapper = accountMapper;
@@ -87,6 +90,7 @@ public class SettlementService {
         this.accountService = accountService;
         this.productMasterMapper = productMasterMapper;
         this.brokerFeeService = brokerFeeService;
+        this.holdingService = holdingService;
     }
 
     /**
@@ -256,49 +260,130 @@ public class SettlementService {
         } else if ("SELL".equals(order.getOrderType()) || "REDEMPTION".equals(order.getOrderType())) {
             // 卖出/赎回：CASH DEBIT + POSITION CREDIT + FEE DEBIT
             
-            // CASH DEBIT（实际到账净额，使用第一个资金来源账户作为到账账户）
-            if (!fundingLines.isEmpty()) {
-                LedgerPosting cashPosting = new LedgerPosting();
-                cashPosting.setPostingType("DEBIT");
-                cashPosting.setAccountId(fundingLines.get(0).getAccountId());
-                cashPosting.setAccountType("CASH");
-                cashPosting.setAmount(confirmAmount != null ? confirmAmount : BigDecimal.ZERO);
-                cashPosting.setCurrency(fundingLines.get(0).getCurrency());
-                postings.add(cashPosting);
-            }
-
-            // POSITION CREDIT（卖出部分成本扣减，按平均成本法计算）
             // 获取持仓账户
             Account positionAccount = accountService.getOrCreatePositionAccount(
                 order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
 
-            // 计算卖出成本（按平均成本法：卖出份额 × 平均成本）
-            // 这里简化处理，使用确认金额减去手续费作为成本扣减
-            // 实际应该从持仓快照或历史分录计算平均成本
-            BigDecimal costDeduction = confirmAmount != null ? 
-                confirmAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO) : BigDecimal.ZERO;
+            // 获取当前持仓信息（用于计算平均成本）
+            HoldingService.HoldingInfo holdingInfo = holdingService.getHolding(order.getProductId(), ownerUserId, ownerFamilyId);
+            BigDecimal avgCost = BigDecimal.ZERO;
+            if (holdingInfo != null && holdingInfo.getTotalShares() != null && 
+                holdingInfo.getTotalShares().compareTo(BigDecimal.ZERO) > 0 &&
+                holdingInfo.getTotalCost() != null) {
+                avgCost = holdingInfo.getTotalCost().divide(
+                    holdingInfo.getTotalShares(), 6, RoundingMode.HALF_UP);
+            }
 
-            LedgerPosting positionCreditPosting = new LedgerPosting();
-            positionCreditPosting.setPostingType("CREDIT");
-            positionCreditPosting.setAccountId(positionAccount.getId());
-            positionCreditPosting.setAccountType("POSITION");
-            positionCreditPosting.setAmount(costDeduction);
-            positionCreditPosting.setShares(confirmShares != null ? confirmShares : BigDecimal.ZERO);
-            positionCreditPosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
-            postings.add(positionCreditPosting);
+            // 检查是否从多个子账户卖出（fundingLines中有shares字段）
+            boolean isMultiAccountSell = fundingLines.stream()
+                .anyMatch(fl -> fl.getShares() != null && fl.getShares().compareTo(BigDecimal.ZERO) > 0);
 
-            // FEE DEBIT（手续费）
-            if (confirmFee != null && confirmFee.compareTo(BigDecimal.ZERO) > 0) {
-                Account feeAccount = accountService.getOrCreateVirtualAccount(
-                    "FEE", "FEE", ownerType, ownerUserId, ownerFamilyId, null, null);
-                
-                LedgerPosting feePosting = new LedgerPosting();
-                feePosting.setPostingType("DEBIT");
-                feePosting.setAccountId(feeAccount.getId());
-                feePosting.setAccountType("FEE");
-                feePosting.setAmount(confirmFee);
-                feePosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
-                postings.add(feePosting);
+            if (isMultiAccountSell) {
+                // 多子账户卖出：按每个子账户的份额从POSITION账户扣除
+                BigDecimal totalShares = fundingLines.stream()
+                    .filter(fl -> fl.getShares() != null)
+                    .map(OrderFundingLine::getShares)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                // 计算总成本（按平均成本法）
+                BigDecimal totalCostDeduction = totalShares.multiply(avgCost);
+
+                // 按比例分配确认金额到各个子账户
+                BigDecimal totalConfirmAmount = confirmAmount != null ? confirmAmount : BigDecimal.ZERO;
+                BigDecimal remainingAmount = totalConfirmAmount;
+
+                for (int i = 0; i < fundingLines.size(); i++) {
+                    OrderFundingLine fundingLine = fundingLines.get(i);
+                    if (fundingLine.getShares() == null || fundingLine.getShares().compareTo(BigDecimal.ZERO) <= 0) {
+                        continue;
+                    }
+
+                    // 计算该子账户应得的金额（按份额比例）
+                    BigDecimal accountAmount = totalConfirmAmount.multiply(fundingLine.getShares())
+                        .divide(totalShares, 2, RoundingMode.HALF_UP);
+                    if (i == fundingLines.size() - 1) {
+                        // 最后一个账户，使用剩余金额（避免精度问题）
+                        accountAmount = remainingAmount;
+                    } else {
+                        remainingAmount = remainingAmount.subtract(accountAmount);
+                    }
+
+                    // CASH DEBIT：到账到该子账户
+                    LedgerPosting cashPosting = new LedgerPosting();
+                    cashPosting.setPostingType("DEBIT");
+                    cashPosting.setAccountId(fundingLine.getAccountId());
+                    cashPosting.setAccountType("CASH");
+                    cashPosting.setAmount(accountAmount);
+                    cashPosting.setCurrency(fundingLine.getCurrency() != null ? fundingLine.getCurrency() : "CNY");
+                    postings.add(cashPosting);
+
+                    // 计算该子账户的成本扣减
+                    BigDecimal accountCostDeduction = fundingLine.getShares().multiply(avgCost);
+                    
+                    // POSITION CREDIT：从持仓账户扣除该子账户的份额和成本
+                    LedgerPosting positionCreditPosting = new LedgerPosting();
+                    positionCreditPosting.setPostingType("CREDIT");
+                    positionCreditPosting.setAccountId(positionAccount.getId());
+                    positionCreditPosting.setAccountType("POSITION");
+                    positionCreditPosting.setAmount(accountCostDeduction);
+                    positionCreditPosting.setShares(fundingLine.getShares());
+                    positionCreditPosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
+                    postings.add(positionCreditPosting);
+                }
+
+                // FEE DEBIT（手续费，按总金额计算）
+                if (confirmFee != null && confirmFee.compareTo(BigDecimal.ZERO) > 0) {
+                    Account feeAccount = accountService.getOrCreateVirtualAccount(
+                        "FEE", "FEE", ownerType, ownerUserId, ownerFamilyId, null, null);
+                    
+                    LedgerPosting feePosting = new LedgerPosting();
+                    feePosting.setPostingType("DEBIT");
+                    feePosting.setAccountId(feeAccount.getId());
+                    feePosting.setAccountType("FEE");
+                    feePosting.setAmount(confirmFee);
+                    feePosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
+                    postings.add(feePosting);
+                }
+            } else {
+                // 单账户卖出（兼容旧逻辑）
+                // CASH DEBIT（实际到账净额，使用第一个资金来源账户作为到账账户）
+                if (!fundingLines.isEmpty()) {
+                    LedgerPosting cashPosting = new LedgerPosting();
+                    cashPosting.setPostingType("DEBIT");
+                    cashPosting.setAccountId(fundingLines.get(0).getAccountId());
+                    cashPosting.setAccountType("CASH");
+                    cashPosting.setAmount(confirmAmount != null ? confirmAmount : BigDecimal.ZERO);
+                    cashPosting.setCurrency(fundingLines.get(0).getCurrency());
+                    postings.add(cashPosting);
+                }
+
+                // POSITION CREDIT（卖出部分成本扣减，按平均成本法计算）
+                BigDecimal costDeduction = confirmShares != null && confirmShares.compareTo(BigDecimal.ZERO) > 0 ?
+                    confirmShares.multiply(avgCost) :
+                    (confirmAmount != null ? confirmAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO) : BigDecimal.ZERO);
+
+                LedgerPosting positionCreditPosting = new LedgerPosting();
+                positionCreditPosting.setPostingType("CREDIT");
+                positionCreditPosting.setAccountId(positionAccount.getId());
+                positionCreditPosting.setAccountType("POSITION");
+                positionCreditPosting.setAmount(costDeduction);
+                positionCreditPosting.setShares(confirmShares != null ? confirmShares : BigDecimal.ZERO);
+                positionCreditPosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
+                postings.add(positionCreditPosting);
+
+                // FEE DEBIT（手续费）
+                if (confirmFee != null && confirmFee.compareTo(BigDecimal.ZERO) > 0) {
+                    Account feeAccount = accountService.getOrCreateVirtualAccount(
+                        "FEE", "FEE", ownerType, ownerUserId, ownerFamilyId, null, null);
+                    
+                    LedgerPosting feePosting = new LedgerPosting();
+                    feePosting.setPostingType("DEBIT");
+                    feePosting.setAccountId(feeAccount.getId());
+                    feePosting.setAccountType("FEE");
+                    feePosting.setAmount(confirmFee);
+                    feePosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
+                    postings.add(feePosting);
+                }
             }
         }
 

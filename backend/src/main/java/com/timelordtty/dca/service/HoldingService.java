@@ -7,6 +7,7 @@ import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.LedgerTxn;
 import com.timelordtty.dca.model.ProductMaster;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,7 +52,7 @@ public class HoldingService {
 
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
                           ProductMasterMapper productMasterMapper,
-                          ProductService productService, AccountService accountService, LedgerService ledgerService) {
+                          ProductService productService, @Lazy AccountService accountService, LedgerService ledgerService) {
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.productMasterMapper = productMasterMapper;
@@ -158,6 +159,19 @@ public class HoldingService {
         }
 
         return holdings;
+    }
+
+    /**
+     * 获取指定产品的持仓信息
+     * 
+     * @param productId 产品ID
+     * @param userId 用户ID
+     * @param familyId 家庭ID，可为空
+     * @return 持仓信息，如果不存在则返回null
+     */
+    public HoldingInfo getHolding(Long productId, Long userId, Long familyId) {
+        Map<Long, HoldingInfo> holdings = calculateHoldings(userId, familyId);
+        return holdings.get(productId);
     }
 
     public static class HoldingInfo {
@@ -311,15 +325,27 @@ public class HoldingService {
      * @return 产品实体
      */
     private ProductMaster findOrCreateProduct(InitialHoldingImport holding) {
-        // 先尝试查找产品（根据产品代码和渠道）
-        String market = "EXCHANGE".equals(holding.getChannel()) ? "SH" : "NA"; // 简化处理，实际应该根据产品代码判断
-        ProductMaster product = productMasterMapper.selectByCode(holding.getProductCode(), holding.getChannel(), market);
+        // 先尝试查找产品（只按产品代码查找，不限制市场，避免重复创建）
+        ProductMaster product = productMasterMapper.selectByCodeOnly(holding.getProductCode());
         
         if (product != null) {
             return product;
         }
         
         // 如果产品不存在，创建新产品
+        // 根据产品代码判断市场（深圳：0/1/2/3开头，上海：5/6/9开头）
+        String market;
+        if ("EXCHANGE".equals(holding.getChannel())) {
+            String firstChar = holding.getProductCode().substring(0, 1);
+            if ("0123".contains(firstChar)) {
+                market = "SZ";
+            } else {
+                market = "SH";
+            }
+        } else {
+            market = "NA";
+        }
+        
         product = new ProductMaster();
         product.setProductCode(holding.getProductCode());
         product.setProductName(holding.getProductName());

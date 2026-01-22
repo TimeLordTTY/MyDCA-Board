@@ -33,8 +33,14 @@
                 <span class="expand-icon">{{ expandedPlatforms.has(platform.id) ? '▼' : '▶' }}</span>
                 <div style="flex: 1;">
                   <div style="font-weight: 700;">{{ platform.accountName }}</div>
-                  <div class="tiny muted">
-                    父账户（容器）余额 = Σ子账户余额：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                  <!-- MMF 平台显示份额信息 -->
+                  <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
+                    总份额：<span class="mono">{{ formatNumber(platform.initialShares, 2) }}</span>；
+                    总金额：<span class="mono">{{ formatCurrency(getMmfTotalAmount(platform)) }}</span>
+                    <span v-if="platform.linkedProductId" class="tag blue tiny" style="margin-left: 8px;">已关联产品</span>
+                  </div>
+                  <div v-else class="tiny muted">
+                    父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
                   </div>
                 </div>
                   <div class="row-gap">
@@ -44,6 +50,13 @@
                       @click.stop="handleManageFeeConfig(platform)"
                     >
                       费率配置
+                    </button>
+                    <button 
+                      v-if="platform.accountType === 'MMF'" 
+                      class="btn" 
+                      @click.stop="handleEditMmfPlatform(platform)"
+                    >
+                      编辑
                     </button>
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
@@ -58,12 +71,35 @@
                   <div style="font-weight: 800">
                     {{ child.accountName }}
                     <span v-if="!child.isActive" class="tag red" style="margin-left: 8px;">已停用</span>
+                    <span v-if="child.isFixedAmount" class="tag orange tiny">固定</span>
                     <span class="tag" :class="getFundUsageTagClass(child.fundUsage)">
                       {{ getFundUsageLabel(child.fundUsage) }}
                     </span>
                   </div>
-                  <div class="tiny muted">
-                    余额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
+                  <!-- MMF 子账户显示份额和金额 -->
+                  <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
+                    <template v-if="child.isFixedAmount">
+                      <span class="tag orange tiny">固定</span>
+                      金额：<span class="mono">{{ formatCurrency(child.fixedAmount || 0) }}</span>；
+                      折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
+                    </template>
+                    <template v-else-if="child.balance && child.balance > 0">
+                      金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
+                      折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
+                    </template>
+                    <template v-else>
+                      <span class="tag gray tiny">待分配</span>
+                      预估份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>；
+                      预估金额：<span class="mono">{{ formatCurrency(getMmfChildAmount(platform, child)) }}</span>
+                    </template>
+                  </div>
+                  <div v-else class="tiny muted">
+                    <template v-if="isCreditAccount(child.accountType)">
+                      信贷金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
+                    </template>
+                    <template v-else>
+                      余额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
+                    </template>
                   </div>
                   <div class="bucket-actions">
                     <button class="btn" @click="handleEditAccount(child)">编辑</button>
@@ -108,8 +144,14 @@
                   <span class="expand-icon">{{ expandedPlatforms.has(platform.id) ? '▼' : '▶' }}</span>
                   <div style="flex: 1;">
                     <div style="font-weight: 700;">{{ platform.accountName }}</div>
-                    <div class="tiny muted">
-                      父账户（容器）余额 = Σ子账户余额：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                    <!-- MMF 平台显示份额信息 -->
+                    <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
+                      总份额：<span class="mono">{{ formatNumber(platform.initialShares, 2) }}</span>；
+                      总金额：<span class="mono">{{ formatCurrency(getMmfTotalAmount(platform)) }}</span>
+                      <span v-if="platform.linkedProductId" class="tag blue tiny" style="margin-left: 8px;">已关联产品</span>
+                    </div>
+                    <div v-else class="tiny muted">
+                      父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
                     </div>
                   </div>
                   <div class="row-gap">
@@ -119,6 +161,13 @@
                       @click.stop="handleManageFeeConfig(platform)"
                     >
                       费率配置
+                    </button>
+                    <button 
+                      v-if="platform.accountType === 'MMF'" 
+                      class="btn" 
+                      @click.stop="handleEditMmfPlatform(platform)"
+                    >
+                      编辑
                     </button>
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
@@ -133,12 +182,35 @@
                     <div style="font-weight: 800">
                       {{ child.accountName }}
                       <span v-if="!child.isActive" class="tag red" style="margin-left: 8px;">已停用</span>
+                      <span v-if="child.isFixedAmount" class="tag orange tiny">固定</span>
                       <span class="tag" :class="getFundUsageTagClass(child.fundUsage)">
                         {{ getFundUsageLabel(child.fundUsage) }}
                       </span>
                     </div>
-                    <div class="tiny muted">
-                      余额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
+                    <!-- MMF 子账户显示份额和金额 -->
+                    <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
+                      <template v-if="child.isFixedAmount">
+                        <span class="tag orange tiny">固定</span>
+                        金额：<span class="mono">{{ formatCurrency(child.fixedAmount || 0) }}</span>；
+                        折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
+                      </template>
+                      <template v-else-if="child.balance && child.balance > 0">
+                        金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
+                        折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
+                      </template>
+                      <template v-else>
+                        <span class="tag gray tiny">待分配</span>
+                        预估份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>；
+                        预估金额：<span class="mono">{{ formatCurrency(getMmfChildAmount(platform, child)) }}</span>
+                      </template>
+                    </div>
+                    <div v-else class="tiny muted">
+                      <template v-if="isCreditAccount(child.accountType)">
+                        信贷金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
+                      </template>
+                      <template v-else>
+                        余额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
+                      </template>
                     </div>
                     <div class="bucket-actions">
                       <button class="btn" @click="handleEditAccount(child)">编辑</button>
@@ -267,21 +339,46 @@
             SPENDABLE：可支出，用于日常消费；RESERVED：专款，用于特定用途（如逆回购占用）；INVESTABLE：可投资，用于购买理财产品
           </div>
         </el-form-item>
-        <el-form-item v-if="!isPlatform" label="关联产品">
-          <el-input-number
-            v-model="(accountForm as any).linkedProductId"
-            :min="0"
-            :step="1"
-            :precision="0"
-            style="width: 100%"
-          />
-          <div class="form-help-text">
-            关联产品ID <span class="field-en">(linked_product_id)</span>，用于像“稳利宝、小荷包”等与具体理财/基金产品绑定的账户，后续可用于初始化持仓与对账（可选）。
-          </div>
-        </el-form-item>
         <el-form-item v-if="!isPlatform" label="初始余额">
           <el-input-number v-model="accountForm.initialBalance" :precision="2" style="width: 100%" />
-          <div class="form-help-text">初始余额 <span class="field-en">(initial_balance)</span></div>
+          <div class="form-help-text">
+            初始余额 <span class="field-en">(initial_balance)</span>。
+            <span v-if="accountForm.linkedProductId" style="color: #f59e0b;">
+              注意：此账户已关联产品，设置初始余额将自动生成初始持仓。
+            </span>
+          </div>
+        </el-form-item>
+        <el-form-item 
+          v-if="!isPlatform && accountForm.accountType === 'MMF'" 
+          label="关联产品"
+        >
+          <el-select
+            v-model="accountForm.linkedProductId"
+            placeholder="选择关联产品（可选，仅场外产品，如稳利宝、小荷包等）"
+            filterable
+            clearable
+            style="width: 100%"
+            :loading="loadingProducts"
+            @focus="loadProducts"
+          >
+            <el-option
+              v-for="product in otcProducts"
+              :key="product.id"
+              :label="`${product.productName} (${product.productCode})`"
+              :value="product.id"
+            >
+              <div>
+                <div>{{ product.productName }}</div>
+                <div style="font-size: 12px; color: #999;">
+                  {{ product.productCode }} · {{ product.assetType }} · {{ product.channel }}
+                </div>
+              </div>
+            </el-option>
+          </el-select>
+          <div class="form-help-text">
+            关联产品ID <span class="field-en">(linked_product_id)</span>。
+            用于像"稳利宝、小荷包"等与具体理财/基金产品绑定的账户，设置初始余额时将自动生成初始持仓，后续买入/卖出也会自动同步持仓。仅支持场外产品（OTC）。
+          </div>
         </el-form-item>
         <el-form-item v-if="!isPlatform && accountForm.id" label="状态">
           <el-switch
@@ -301,6 +398,78 @@
             信封（LEAF）：实际存储余额的账户，如"生活费"、"理财金"。每个平台默认有"待分配"。
           </div>
         </el-form-item>
+        <!-- MMF 平台：关联产品和初始份额 -->
+        <template v-if="isPlatform && accountForm.accountType === 'MMF'">
+          <el-form-item label="关联产品">
+            <el-select
+              v-model="accountForm.linkedProductId"
+              placeholder="选择关联产品（如银行理财、货币基金）"
+              filterable
+              clearable
+              style="width: 100%"
+              :loading="loadingProducts"
+              @focus="loadProducts"
+            >
+              <el-option
+                v-for="product in otcProducts"
+                :key="product.id"
+                :label="`${product.productName} (${product.productCode})`"
+                :value="product.id"
+              >
+                <div>
+                  <div>{{ product.productName }}</div>
+                  <div style="font-size: 12px; color: #999;">
+                    {{ product.productCode }} · {{ product.assetType }}
+                  </div>
+                </div>
+              </el-option>
+            </el-select>
+            <div class="form-help-text">
+              MMF 平台关联的理财/基金产品，用于份额管理和金额计算
+            </div>
+          </el-form-item>
+          <el-form-item label="初始份额">
+            <el-input-number 
+              v-model="accountForm.initialShares" 
+              :precision="6" 
+              :min="0"
+              style="width: 100%" 
+              placeholder="请输入初始份额"
+            />
+            <div class="form-help-text">
+              初始份额 <span class="field-en">(initial_shares)</span>。
+              总金额 = 初始份额 × 最新净值，份额固定不变，金额随净值波动
+            </div>
+          </el-form-item>
+        </template>
+        
+        <!-- MMF 子账户：固定金额选项 -->
+        <template v-if="!isPlatform && isParentMmf">
+          <el-form-item label="固定金额">
+            <el-switch
+              v-model="accountForm.isFixedAmount"
+              active-text="是"
+              inactive-text="否"
+            />
+            <div class="form-help-text">
+              开启后，该信封金额固定不随净值变化（如房租预备金 4000 元）
+            </div>
+          </el-form-item>
+          <el-form-item v-if="accountForm.isFixedAmount" label="固定金额值">
+            <el-input-number 
+              v-model="accountForm.fixedAmount" 
+              :precision="2" 
+              :min="0"
+              style="width: 100%" 
+              placeholder="请输入固定金额"
+            />
+            <div class="form-help-text">
+              固定金额值 <span class="field-en">(fixed_amount)</span>。
+              此金额不随净值变化，剩余份额将分配给非固定子账户
+            </div>
+          </el-form-item>
+        </template>
+        
         <el-form-item label="备注">
           <el-input v-model="accountForm.note" type="textarea" :rows="3" placeholder="备注信息" />
           <div class="form-help-text">备注 <span class="field-en">(note)</span></div>
@@ -503,12 +672,12 @@
     </el-dialog>
 
     <!-- 余额调整对话框 -->
-    <el-dialog v-model="balanceDialogVisible" title="调整余额" width="500px">
+    <el-dialog v-model="balanceDialogVisible" :title="currentAccount && isCreditAccount(currentAccount.accountType) ? '调整信贷金额' : '调整余额'" width="500px">
       <el-form :model="balanceForm" :rules="balanceRules" ref="balanceFormRef" label-width="120px">
-        <el-form-item label="当前余额">
+        <el-form-item :label="currentAccount && isCreditAccount(currentAccount.accountType) ? '当前信贷金额' : '当前余额'">
           <el-input :value="formatCurrency(currentAccount?.balance)" disabled />
         </el-form-item>
-        <el-form-item label="新余额" prop="balance">
+        <el-form-item :label="currentAccount && isCreditAccount(currentAccount.accountType) ? '新信贷金额' : '新余额'" prop="balance">
           <el-input-number v-model="balanceForm.balance" :precision="2" style="width: 100%" />
         </el-form-item>
         <el-form-item label="备注">
@@ -530,15 +699,18 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import {
   useAccountStore,
   formatCurrency,
+  formatNumber,
   fundUsageMap,
   getFundUsageLabel,
   calculateParentBalance,
   calculateParentReservedAmount,
   accountTypeMap,
   currencyMap,
+  accountApi,
+  navApi,
 } from '@wealth-hub/shared'
-import { brokerFeeApi, type BrokerFeeConfig } from '@wealth-hub/shared'
-import type { Account } from '@wealth-hub/shared'
+import { brokerFeeApi, type BrokerFeeConfig, productApi, type ProductMaster } from '@wealth-hub/shared'
+import type { Account, Nav } from '@wealth-hub/shared'
 
 const accountStore = useAccountStore()
 
@@ -562,11 +734,24 @@ const accountForm = reactive<Partial<Account>>({
   accountSubtype: undefined,
   ownerType: 'PERSONAL',
   parentAccountId: undefined,
+  linkedProductId: undefined,
+  initialShares: undefined,     // MMF 平台初始份额
+  isFixedAmount: false,         // MMF 子账户是否固定金额
+  fixedAmount: undefined,       // MMF 子账户固定金额值
   fundUsage: 'SPENDABLE',
   initialBalance: 0,
   currency: 'CNY',
   isActive: true,
   note: '',
+})
+
+// 产品列表（用于关联产品下拉）
+const products = ref<ProductMaster[]>([])
+const loadingProducts = ref(false)
+
+// 计算属性：只显示场外产品
+const otcProducts = computed(() => {
+  return products.value.filter(p => p.channel === 'OTC')
 })
 
 const accountRules: FormRules = {
@@ -648,6 +833,131 @@ function getFundUsageDescription(value: string): string {
   return descriptions[value] || ''
 }
 
+// ========== MMF 份额管理相关 ==========
+
+// 存储 MMF 平台的最新净值
+const mmfNavCache = ref<Map<number, number>>(new Map())
+
+// 获取 MMF 平台的净值
+function getMmfNav(platform: Account): number {
+  if (!platform.linkedProductId) return 1
+  return mmfNavCache.value.get(platform.linkedProductId) || 1
+}
+
+// 获取 MMF 平台的总金额（总份额 × 净值）
+function getMmfTotalAmount(platform: Account): number {
+  if (!platform.initialShares || !platform.linkedProductId) return 0
+  const nav = getMmfNav(platform)
+  return platform.initialShares * nav
+}
+
+// 获取 MMF 子账户的份额（使用子账户的 balance 作为份额值）
+function getMmfChildShares(platform: Account, child: Account): number {
+  if (!platform.initialShares) return 0
+  
+  // 如果是固定金额，计算其份额
+  if (child.isFixedAmount && child.fixedAmount) {
+    const nav = getMmfNav(platform)
+    return child.fixedAmount / nav
+  }
+  
+  // 非固定金额子账户：使用其 balance 值作为已分配的金额，然后计算份额
+  // 如果 balance > 0，说明已经分配了金额
+  if (child.balance && child.balance > 0) {
+    const nav = getMmfNav(platform)
+    return child.balance / nav
+  }
+  
+  // 如果还没分配（balance 为 0），计算待分配份额
+  return getMmfUnallocatedShares(platform) / getNonAllocatedChildrenCount(platform)
+}
+
+// 获取非固定且未分配金额的子账户数量
+function getNonAllocatedChildrenCount(platform: Account): number {
+  if (!platform.children) return 1
+  let count = 0
+  for (const c of platform.children) {
+    if (!c.isFixedAmount && (!c.balance || c.balance === 0)) {
+      count++
+    }
+  }
+  return count || 1
+}
+
+// 获取 MMF 平台未分配的份额
+function getMmfUnallocatedShares(platform: Account): number {
+  if (!platform.initialShares || !platform.children) return 0
+  
+  const nav = getMmfNav(platform)
+  let allocatedShares = 0
+  
+  for (const c of platform.children) {
+    if (c.isFixedAmount && c.fixedAmount) {
+      // 固定金额子账户
+      allocatedShares += c.fixedAmount / nav
+    } else if (c.balance && c.balance > 0) {
+      // 非固定但已分配金额的子账户
+      allocatedShares += c.balance / nav
+    }
+  }
+  
+  return Math.max(0, platform.initialShares - allocatedShares)
+}
+
+// 获取 MMF 子账户的金额
+function getMmfChildAmount(platform: Account, child: Account): number {
+  if (child.isFixedAmount) {
+    return child.fixedAmount || 0
+  }
+  // 优先使用子账户自己的 balance 值
+  if (child.balance && child.balance > 0) {
+    return child.balance
+  }
+  // 否则使用计算的份额 × 净值
+  const shares = getMmfChildShares(platform, child)
+  const nav = getMmfNav(platform)
+  return shares * nav
+}
+
+// 加载 MMF 平台关联产品的净值
+async function loadMmfNavs() {
+  const mmfPlatforms = accountTree.value.filter(p => p.accountType === 'MMF' && p.linkedProductId)
+  console.log('加载 MMF 平台净值，平台数量:', mmfPlatforms.length)
+  
+  for (const platform of mmfPlatforms) {
+    try {
+      console.log(`正在加载产品 ${platform.linkedProductId} 的净值...`)
+      const nav = await navApi.getLatestNav(platform.linkedProductId!)
+      console.log(`产品 ${platform.linkedProductId} 净值返回:`, nav)
+      if (nav && nav.nav) {
+        mmfNavCache.value.set(platform.linkedProductId!, nav.nav)
+        console.log(`设置产品 ${platform.linkedProductId} 净值为 ${nav.nav}`)
+      } else {
+        console.warn(`产品 ${platform.linkedProductId} 没有净值数据，使用默认值 1`)
+        mmfNavCache.value.set(platform.linkedProductId!, 1)
+      }
+    } catch (error) {
+      console.warn(`加载产品 ${platform.linkedProductId} 净值失败:`, error)
+      // 默认净值为 1
+      mmfNavCache.value.set(platform.linkedProductId!, 1)
+    }
+  }
+  
+  console.log('MMF 净值缓存:', Object.fromEntries(mmfNavCache.value))
+}
+
+// 编辑 MMF 平台（完整编辑，包括关联产品和初始份额）
+function handleEditMmfPlatform(platform: Account) {
+  isPlatform.value = true
+  accountDialogTitle.value = '编辑平台'
+  Object.assign(accountForm, platform)
+  accountDialogVisible.value = true
+  if (platform.id) {
+    expandedPlatforms.value.add(platform.id)
+    lastEditedAccountId.value = platform.id
+  }
+}
+
 function togglePlatform(platformId: number) {
   if (expandedPlatforms.value.has(platformId)) {
     expandedPlatforms.value.delete(platformId)
@@ -696,6 +1006,11 @@ function getParentAccountType(): string | undefined {
   const parentAccount = accountTree.value.find(p => p.id === accountForm.parentAccountId)
   return parentAccount?.accountType
 }
+
+// 判断父账户是否是 MMF 类型
+const isParentMmf = computed(() => {
+  return getParentAccountType() === 'MMF'
+})
 
 function handleParentAccountChange() {
   // 当父账户改变时，自动继承父账户的账户类型
@@ -768,12 +1083,31 @@ function resetAccountForm() {
     accountSubtype: undefined,
     ownerType: 'PERSONAL',
     parentAccountId: undefined,
+    linkedProductId: undefined,
+    initialShares: undefined,
+    isFixedAmount: false,
+    fixedAmount: undefined,
     fundUsage: 'SPENDABLE',
     initialBalance: 0,
     currency: 'CNY',
     isActive: true,
     note: '',
   })
+}
+
+// 加载产品列表（用于关联产品下拉，只加载场外产品）
+async function loadProducts() {
+  if (products.value.length > 0) return // 已加载过
+  loadingProducts.value = true
+  try {
+    // 只加载场外产品（OTC），然后在前端过滤 isActive
+    const allProducts = await productApi.getProducts({ channel: 'OTC' })
+    products.value = allProducts.filter(p => p.isActive)
+  } catch (error: any) {
+    console.error('加载产品列表失败:', error)
+  } finally {
+    loadingProducts.value = false
+  }
 }
 
 function handleAccountDialogClose() {
@@ -1010,6 +1344,8 @@ async function handleSaveFeeConfig() {
 
 onMounted(async () => {
   await loadAccounts()
+  // 加载 MMF 平台的净值
+  await loadMmfNavs()
 })
 </script>
 

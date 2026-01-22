@@ -5,6 +5,32 @@
 import { apiClient } from './client'
 import type { Account, AccountQueryParams, AdjustBalanceRequest } from '../types'
 
+/**
+ * MMF 子账户份额详情
+ */
+export interface ChildAccountShares {
+  accountId: number
+  accountName: string
+  isFixedAmount: boolean
+  amount: number
+  shares: number
+}
+
+/**
+ * MMF 平台份额分配详情
+ */
+export interface MmfSharesDetail {
+  platformId: number
+  platformName: string
+  productId: number
+  nav: number
+  totalShares: number
+  totalAmount: number
+  allocatedAmount: number
+  unallocatedAmount: number
+  childAccounts: ChildAccountShares[]
+}
+
 export const accountApi = {
   /**
    * 获取账户列表（树形结构）
@@ -44,5 +70,20 @@ export const accountApi = {
   adjustBalance: async (id: number, data: AdjustBalanceRequest): Promise<Account> => {
     const response = await apiClient.put<Account>(`/accounts/${id}/balance`, data)
     return response.data
+  },
+
+  /**
+   * 获取 MMF 平台的份额分配详情
+   */
+  getMmfSharesDetail: async (platformId: number): Promise<MmfSharesDetail | null> => {
+    try {
+      const response = await apiClient.get<MmfSharesDetail>(`/accounts/${platformId}/mmf-shares`)
+      return response.data
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        return null
+      }
+      throw error
+    }
   },
 }

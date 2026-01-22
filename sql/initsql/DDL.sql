@@ -141,6 +141,9 @@ CREATE TABLE `accounts` (
   `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
   `parent_account_id` BIGINT NULL COMMENT '父账户ID（用于现实账户的资金分区/子账户，父账户为平台容器/分组节点，子账户为真实信封余额）',
   `linked_product_id` BIGINT NULL COMMENT '关联产品ID（如稳利宝、小荷包等与具体理财/基金产品绑定的账户，可用于初始化持仓）',
+  `initial_shares` DECIMAL(18, 6) NULL DEFAULT NULL COMMENT '初始份额（仅MMF平台账户使用，用于份额管理）',
+  `is_fixed_amount` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否固定金额子账户（仅MMF子账户使用，如房租预备金）',
+  `fixed_amount` DECIMAL(18, 2) NULL DEFAULT NULL COMMENT '固定金额值（仅is_fixed_amount=1时有效）',
   `fund_usage` ENUM('SPENDABLE','RESERVED','INVESTABLE') NULL DEFAULT NULL COMMENT '资金用途（SPENDABLE=可支出，允许日常支出/生活消费；RESERVED=专款，房租/项目/安全金等，禁止日常支出和默认禁止投资；INVESTABLE=可投资，可用于投资如ETF/逆回购等，默认不用于日常支出。仅对account_kind=REAL且account_type=CASH且为叶子账户的场景做约束校验。信贷账户（CREDIT_CARD、HUABEI、BAITIAO、LOAN）不需要资金用途，此字段为NULL）',
   `balance` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '账面余额（由流水推导，REAL账户可手工调整）',
   `reserved_amount` DECIMAL(18, 2) NOT NULL DEFAULT 0.00 COMMENT '占用/冻结金额（下单占用，结算确认后释放）',
@@ -401,7 +404,8 @@ CREATE TABLE `order_funding_line` (
   `order_id` VARCHAR(64) NOT NULL COMMENT '订单ID（外键orders.order_id）',
   `line_no` INT NOT NULL COMMENT '行号（同一订单内从1开始递增）',
   `account_id` BIGINT NOT NULL COMMENT '资金来源账户ID（外键accounts.id，必须是叶子账户）',
-  `amount` DECIMAL(18, 2) NOT NULL COMMENT '出资金额',
+  `amount` DECIMAL(18, 2) NULL COMMENT '出资金额（买入/申购时使用，卖出/赎回时为NULL）',
+  `shares` DECIMAL(18, 6) NULL COMMENT '卖出份额（卖出/赎回时使用，买入/申购时为NULL）',
   `currency` ENUM('CNY', 'USD', 'HKD') NOT NULL DEFAULT 'CNY' COMMENT '货币',
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -410,7 +414,11 @@ CREATE TABLE `order_funding_line` (
   KEY `idx_order_id` (`order_id`),
   KEY `idx_account_id` (`account_id`),
   CONSTRAINT `fk_funding_line_order` FOREIGN KEY (`order_id`) REFERENCES `orders`(`order_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_funding_line_account` FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON DELETE RESTRICT
+  CONSTRAINT `fk_funding_line_account` FOREIGN KEY (`account_id`) REFERENCES `accounts`(`id`) ON DELETE RESTRICT,
+  CONSTRAINT `chk_funding_line_amount_or_shares` CHECK (
+    (`amount` IS NOT NULL AND `shares` IS NULL) OR 
+    (`amount` IS NULL AND `shares` IS NOT NULL)
+  )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='订单资金来源拆分表';
 
 -- ============================================

@@ -30,11 +30,23 @@
         <div class="label">📈 持仓市值</div>
         <div class="value">{{ formatCurrency(positionValue) }}</div>
         <div class="mini">= Σ(持仓 shares × 价格)</div>
-        <div class="row">
-          <span class="chip" :class="unrealizedPnl >= 0 ? 'good' : 'bad'">
-            浮动盈亏 {{ unrealizedPnl >= 0 ? '+' : '' }}{{ formatCurrency(unrealizedPnl) }}
+        <div class="row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <span class="chip" :class="totalPnl >= 0 ? 'good' : 'bad'">
+            总盈亏 {{ totalPnl >= 0 ? '+' : '' }}{{ formatCurrency(totalPnl) }}
+          </span>
+          <span class="chip" :class="exchangePnl >= 0 ? 'good' : 'bad'" style="font-size: 11px;">
+            场内盈亏 {{ exchangePnl >= 0 ? '+' : '' }}{{ formatCurrency(exchangePnl) }}
+          </span>
+          <span class="chip" :class="otcPnl >= 0 ? 'good' : 'bad'" style="font-size: 11px;">
+            场外盈亏 {{ otcPnl >= 0 ? '+' : '' }}{{ formatCurrency(otcPnl) }}
           </span>
         </div>
+      </div>
+
+      <div class="kpi">
+        <div class="label">💳 负债</div>
+        <div class="value">{{ formatCurrency(overview.liability) }}</div>
+        <div class="mini">= Σ(信贷账户余额：花呗/信用卡/白条/贷款)</div>
       </div>
     </div>
 
@@ -90,43 +102,71 @@
         </h3>
         <div class="sub">来自持仓数据的实时计算</div>
         <div style="margin-top: 10px; overflow: auto">
-          <table>
-            <thead>
-              <tr>
-                <th>标的</th>
-                <th class="right">份额</th>
-                <th class="right">成本</th>
-                <th class="right">现价</th>
-                <th class="right">市值</th>
-                <th class="right">盈亏</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-if="topHoldings.length === 0">
-                <td colspan="6" class="td-muted">暂无持仓，去"订单&结算"买一笔试试。</td>
-              </tr>
-              <tr v-for="holding in topHoldings" :key="holding.productId">
-                <td><b>{{ holding.productName || `产品${holding.productId}` }}</b></td>
-                <td class="right mono">{{ formatNumber(holding.totalShares || holding.shares || 0, 2) }}</td>
-                <td class="right mono">{{ formatNumber(holding.averageCost || holding.avgCost || 0, 4) }}</td>
-                <td class="right mono">
-                  <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
-                  <span v-else class="td-muted">—</span>
-                  <span v-if="holding.quote?.pctChg !== undefined && holding.quote.pctChg !== null" 
-                        :class="holding.quote.pctChg >= 0 ? 'text-green' : 'text-red'"
-                        style="margin-left: 8px; font-size: 0.9em;">
-                    {{ holding.quote.pctChg >= 0 ? '+' : '' }}{{ formatNumber(holding.quote.pctChg, 2) }}%
-                  </span>
-                </td>
-                <td class="right mono">{{ formatCurrency(holding.marketValue) }}</td>
-                <td class="right">
-                  <span class="chip" :class="(holding.unrealizedPnl || 0) >= 0 ? 'good' : 'bad'">
-                    {{ (holding.unrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatCurrency(holding.unrealizedPnl) }}
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+            <table>
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                      <div>份额</div>
+                      <div style="font-size: 11px; color: #999; font-weight: normal;">市值</div>
+                    </div>
+                  </th>
+                  <th class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                      <div>成本价</div>
+                      <div style="font-size: 11px; color: #999; font-weight: normal;">最新价</div>
+                    </div>
+                  </th>
+                  <th class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                      <div>盈亏率</div>
+                      <div style="font-size: 11px; color: #999; font-weight: normal;">浮盈亏</div>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="topHoldings.length === 0">
+                  <td colspan="4" class="td-muted">暂无持仓，去"订单&结算"买一笔试试。</td>
+                </tr>
+                <tr v-for="holding in topHoldings" :key="holding.productId">
+                  <td>
+                    <div class="holding-name-cell">
+                      <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
+                      <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
+                        {{ holding.productCode || '—' }}
+                      </div>
+                    </div>
+                  </td>
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                      <div class="mono">{{ formatNumber(holding.sharesCalc || 0, 2) }}</div>
+                      <div class="mono td-muted">{{ formatCurrency(holding.marketValue || 0) }}</div>
+                    </div>
+                  </td>
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                      <div class="mono" style="color: #0f172a;">{{ formatNumber(holding.avgCostCalc || 0, 4) }}</div>
+                      <div class="mono" :style="{ color: priceColor(holding.currentPrice || 0, holding.avgCostCalc || 0) }">
+                        <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
+                        <span v-else class="td-muted">—</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="right">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl || 0) }">
+                        {{ pnlRateText(holding.unrealizedPnl || 0, holding.totalCostCalc || 0) }}
+                      </div>
+                      <div :style="{ color: pnlColor(holding.unrealizedPnl || 0), fontWeight: 600 }">
+                        {{ formatSignedCurrency(holding.unrealizedPnl || 0) }}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
         </div>
       </div>
     </div>
@@ -178,13 +218,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import * as echarts from 'echarts'
-import { dashboardApi, holdingApi, settlementApi, marketApi, navApi, useAccountStore } from '@wealth-hub/shared'
+import { dashboardApi, holdingApi, marketApi, navApi, useAccountStore } from '@wealth-hub/shared'
 import { formatCurrency, formatNumber, formatDate, getOrderTypeLabel } from '@wealth-hub/shared'
-import type { MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
+import type { MarketQuoteRealtime, Nav, AssetOverview, Account } from '@wealth-hub/shared'
 
 const accountStore = useAccountStore()
 
-const overview = ref({
+const overview = ref<AssetOverview>({
   totalAssets: 0,
   netWorth: 0,
   cashBalance: 0,
@@ -226,16 +266,17 @@ const holdingsWithQuote = computed(() => {
     
     // 优先使用实时行情价格，其次使用净值
     let currentPrice = 0
-    if (quote) {
+    if (quote && quote.price > 0) {
       currentPrice = quote.price
-    } else if (nav) {
+    } else if (nav && nav.nav > 0) {
       currentPrice = nav.nav
     }
     
-    const shares = holding.totalShares || holding.shares || 0
-    const avgCost = holding.averageCost || holding.avgCost || 0
+    // 使用后端返回的份额和成本（更准确）
+    const shares = Number(holding.totalShares || holding.shares || 0)
+    const avgCost = Number(holding.averageCost || holding.avgCost || 0)
     const totalCost = shares * avgCost
-    const marketValue = currentPrice > 0 ? shares * currentPrice : (holding.marketValue || 0)
+    const marketValue = currentPrice > 0 ? shares * currentPrice : 0
     const unrealizedPnl = marketValue - totalCost
     
     return {
@@ -245,21 +286,76 @@ const holdingsWithQuote = computed(() => {
       unrealizedPnl,
       quote,
       nav,
+      // 确保这些字段是数字类型
+      totalShares: shares,
+      averageCost: avgCost,
+      // 保留 assetType 用于资产配比分类
+      assetType: holding.assetType,
     }
   })
 })
 
-const unrealizedPnl = computed(() => {
-  return holdingsWithQuote.value.reduce((sum, h) => sum + (h.unrealizedPnl || 0), 0)
+// 计算总盈亏、场内盈亏、场外盈亏
+const totalPnl = computed(() => {
+  return holdingsWithQuote.value.reduce((sum, h) => {
+    // 确保计算正确：市值 - 成本
+    const shares = h.totalShares || h.shares || 0
+    const avgCost = h.averageCost || h.avgCost || 0
+    const totalCost = shares * avgCost
+    const marketValue = h.marketValue || 0
+    const pnl = marketValue - totalCost
+    return sum + pnl
+  }, 0)
+})
+
+const exchangePnl = computed(() => {
+  return holdingsWithQuote.value
+    .filter(h => h.channel === 'EXCHANGE')
+    .reduce((sum, h) => {
+      const shares = h.totalShares || h.shares || 0
+      const avgCost = h.averageCost || h.avgCost || 0
+      const totalCost = shares * avgCost
+      const marketValue = h.marketValue || 0
+      const pnl = marketValue - totalCost
+      return sum + pnl
+    }, 0)
+})
+
+const otcPnl = computed(() => {
+  return holdingsWithQuote.value
+    .filter(h => h.channel === 'OTC')
+    .reduce((sum, h) => {
+      const shares = h.totalShares || h.shares || 0
+      const avgCost = h.averageCost || h.avgCost || 0
+      const totalCost = shares * avgCost
+      const marketValue = h.marketValue || 0
+      const pnl = marketValue - totalCost
+      return sum + pnl
+    }, 0)
 })
 
 const positionValue = computed(() => {
   return holdingsWithQuote.value.reduce((sum, h) => sum + (h.marketValue || 0), 0)
 })
 
+// 按盈亏排序，取绝对值最大的前5个
 const topHoldings = computed(() => {
   return holdingsWithQuote.value
-    .sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0))
+    .map(h => {
+      const shares = h.totalShares || h.shares || 0
+      const avgCost = h.averageCost || h.avgCost || 0
+      const totalCost = shares * avgCost
+      const marketValue = h.marketValue || 0
+      const unrealizedPnl = marketValue - totalCost
+      return {
+        ...h,
+        sharesCalc: shares,
+        avgCostCalc: avgCost,
+        totalCostCalc: totalCost,
+        unrealizedPnl,
+      }
+    })
+    .sort((a, b) => Math.abs(b.unrealizedPnl || 0) - Math.abs(a.unrealizedPnl || 0))
     .slice(0, 5)
 })
 
@@ -267,8 +363,17 @@ let allocationChart: echarts.ECharts | null = null
 
 async function loadData() {
   try {
+    // 确保账户数据已加载
+    if (accountStore.accounts.length === 0) {
+      await accountStore.fetchAccounts()
+    }
+    
     // 加载资产概览
-    overview.value = await dashboardApi.getAssetOverview()
+    const overviewData = await dashboardApi.getAssetOverview()
+    console.log('资产概览数据:', overviewData)
+    console.log('账户数据:', accountStore.accounts)
+    console.log('账户树:', accountStore.accountTree)
+    overview.value = overviewData
 
     // 加载今日建议
     todayActions.value = await dashboardApi.getTodayActions()
@@ -301,26 +406,40 @@ async function loadData() {
       }
       
       // 加载实时行情和净值（用于计算持仓市值）
+      // 场内产品用实时行情，场外产品用净值
       if (holdings.value.length > 0) {
-        const productIds = holdings.value.map(h => h.productId)
+        // 区分场内和场外产品
+        const exchangeIds = holdings.value
+          .filter(h => h.channel === 'EXCHANGE')
+          .map(h => h.productId)
+          .filter(id => id)
+        const otcIds = holdings.value
+          .filter(h => h.channel !== 'EXCHANGE')
+          .map(h => h.productId)
+          .filter(id => id)
         
-        // 批量获取实时行情
-        try {
-          const quotesData = await marketApi.getRealtimeQuotes(productIds)
-          quotes.value = new Map(quotesData.map(q => [q.productId, q]))
-        } catch (error: any) {
-          console.warn('加载实时行情失败:', error)
+        // 场内：批量获取实时行情
+        if (exchangeIds.length > 0) {
+          try {
+            const quotesData = await marketApi.getRealtimeQuotes(exchangeIds)
+            quotes.value = new Map(quotesData.map(q => [q.productId, q]))
+          } catch (error: any) {
+            console.warn('加载实时行情失败:', error)
+          }
         }
         
-        // 批量获取最新净值（作为备用）
-        try {
-          const navPromises = productIds.map(id => navApi.getLatestNav(id))
+        // 场外：批量获取最新净值（每个请求独立处理，避免单个失败影响全部）
+        if (otcIds.length > 0) {
+          const navPromises = otcIds.map(id => 
+            navApi.getLatestNav(id).catch(err => {
+              console.warn(`获取产品${id}净值失败:`, err)
+              return null
+            })
+          )
           const navsData = await Promise.all(navPromises)
           navs.value = new Map(
             navsData.filter(n => n !== null).map(n => [n!.productId, n!])
           )
-        } catch (error: any) {
-          console.warn('加载净值失败:', error)
         }
       }
     } catch (error: any) {
@@ -338,12 +457,88 @@ async function loadData() {
   }
 }
 
+// 辅助函数：盈亏颜色
+function pnlColor(pnl: number) {
+  return (pnl || 0) >= 0 ? 'var(--good)' : 'var(--bad)'
+}
+
+// 辅助函数：价格颜色
+function priceColor(currentPrice: number, costPrice: number) {
+  if (!currentPrice || currentPrice <= 0) return 'var(--muted)'
+  if (!costPrice || costPrice <= 0) return '#0f172a'
+  return currentPrice >= costPrice ? 'var(--good)' : 'var(--bad)'
+}
+
+// 辅助函数：盈亏率文本
+function pnlRateText(pnl: number, totalCost: number) {
+  const cost = totalCost || 0
+  if (!cost || cost <= 0) return '—'
+  const rate = (pnl || 0) / cost
+  return `${rate >= 0 ? '+' : ''}${formatNumber(rate * 100, 2)}%`
+}
+
+// 辅助函数：带符号的货币格式
+function formatSignedCurrency(amount: number) {
+  const v = Number(amount) || 0
+  const sign = v >= 0 ? '+' : '-'
+  return `${sign}${formatCurrency(Math.abs(v))}`
+}
+
 function updateAllocationChart() {
   if (!allocationChart) return
 
-  const cashValue = overview.value.cashBalance
-  const currentPositionValue = positionValue.value // 使用实时计算的持仓市值
-  const total = cashValue + currentPositionValue
+  // 计算现金：包括CASH、PAYMENT、MMF账户余额，以及BROKER账户余额
+  // 注意：MMF账户余额是通过份额*净值计算的，已经包含在账户余额中
+  // 从账户树中获取所有叶子账户
+  let cashValue = 0
+  
+  function traverseAccounts(accounts: Account[]) {
+    accounts.forEach(acc => {
+      // 如果是叶子账户（没有子账户）
+      if (!acc.children || acc.children.length === 0) {
+        // 只统计REAL账户
+        if (acc.accountKind === 'REAL') {
+          // 现金类账户：CASH、PAYMENT、MMF、BROKER（余额）
+          if (acc.accountType === 'CASH' || 
+              acc.accountType === 'PAYMENT' || 
+              acc.accountType === 'MMF' ||
+              acc.accountType === 'BROKER') {
+            cashValue += (acc.balance || 0)
+          }
+        }
+      } else {
+        // 递归处理子账户
+        traverseAccounts(acc.children)
+      }
+    })
+  }
+  
+  traverseAccounts(accountStore.accountTree)
+  
+  // 计算持仓市值，按产品类型分类
+  // 注意：持仓市值只包括通过持仓表（holdings）计算的产品持仓
+  let bankWmValue = 0  // 银行理财产品（BANK_WM_NAV/BANK_WM_BOX）
+  let fundValue = 0    // 基金（ETF/LOF/FUND等，不包括MMF和银行理财）
+  let stockValue = 0   // 股票
+  
+  holdingsWithQuote.value.forEach(h => {
+    const marketValue = h.marketValue || 0
+    const assetType = h.assetType || ''
+    
+    // 银行理财产品
+    if (assetType === 'BANK_WM_NAV' || assetType === 'BANK_WM_BOX') {
+      bankWmValue += marketValue
+    } 
+    // 股票
+    else if (assetType === 'STOCK') {
+      stockValue += marketValue
+    }
+    // 基金类：ETF/LOF/FUND等（不包括MMF，MMF已通过账户余额计入现金）
+    else if (assetType === 'ETF' || assetType === 'LOF' || assetType === 'FUND') {
+      fundValue += marketValue
+    }
+    // MMF 不计入持仓市值，因为MMF账户余额已经通过份额*净值计算并包含在现金中
+  })
 
   const option = {
     tooltip: {
@@ -355,9 +550,11 @@ function updateAllocationChart() {
         type: 'pie',
         radius: ['40%', '70%'],
         data: [
-          { value: currentPositionValue, name: '持仓' },
           { value: cashValue, name: '现金' },
-        ],
+          { value: fundValue, name: '基金' },
+          { value: bankWmValue, name: '银行理财' },
+          { value: stockValue, name: '股票' },
+        ].filter(item => item.value > 0), // 只显示有值的项
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
@@ -372,7 +569,7 @@ function updateAllocationChart() {
   allocationChart.setOption(option)
 }
 
-function handleConfirmSettlement(orderId: string) {
+function handleConfirmSettlement(_orderId: string) {
   // TODO: 打开结算确认对话框
   ElMessage.info('结算确认功能开发中')
 }

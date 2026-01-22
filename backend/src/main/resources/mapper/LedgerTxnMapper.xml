@@ -43,21 +43,29 @@
     </select>
 
     <select id="selectByCondition" resultMap="BaseResultMap">
-        SELECT * FROM ledger_txn
-        WHERE user_id = #{userId}
+        SELECT DISTINCT lt.* FROM ledger_txn lt
+        WHERE lt.user_id = #{userId}
+        AND lt.txn_type != 'ADJUST'
         <if test="txnType != null and txnType != ''">
-            AND txn_type = #{txnType}
+            AND lt.txn_type = #{txnType}
         </if>
         <if test="startDate != null">
-            AND trade_date >= #{startDate}
+            AND lt.trade_date >= #{startDate}
         </if>
         <if test="endDate != null">
-            AND trade_date &lt;= #{endDate}
+            AND lt.trade_date &lt;= #{endDate}
         </if>
         <if test="productId != null">
-            AND product_id = #{productId}
+            AND lt.product_id = #{productId}
         </if>
-        ORDER BY trade_date DESC, created_at DESC
+        <if test="accountId != null">
+            AND EXISTS (
+                SELECT 1 FROM ledger_posting lp 
+                WHERE lp.txn_id = lt.txn_id 
+                AND lp.account_id = #{accountId}
+            )
+        </if>
+        ORDER BY lt.trade_date DESC, lt.created_at DESC
         <if test="limit != null and limit > 0">
             LIMIT #{limit}
             <if test="offset != null and offset > 0">
@@ -67,19 +75,27 @@
     </select>
 
     <select id="countByCondition" resultType="int">
-        SELECT COUNT(*) FROM ledger_txn
-        WHERE user_id = #{userId}
+        SELECT COUNT(DISTINCT lt.txn_id) FROM ledger_txn lt
+        WHERE lt.user_id = #{userId}
+        AND lt.txn_type != 'ADJUST'
         <if test="txnType != null and txnType != ''">
-            AND txn_type = #{txnType}
+            AND lt.txn_type = #{txnType}
         </if>
         <if test="startDate != null">
-            AND trade_date >= #{startDate}
+            AND lt.trade_date >= #{startDate}
         </if>
         <if test="endDate != null">
-            AND trade_date &lt;= #{endDate}
+            AND lt.trade_date &lt;= #{endDate}
         </if>
         <if test="productId != null">
-            AND product_id = #{productId}
+            AND lt.product_id = #{productId}
+        </if>
+        <if test="accountId != null">
+            AND EXISTS (
+                SELECT 1 FROM ledger_posting lp 
+                WHERE lp.txn_id = lt.txn_id 
+                AND lp.account_id = #{accountId}
+            )
         </if>
     </select>
 

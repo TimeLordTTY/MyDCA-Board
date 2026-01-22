@@ -17,6 +17,9 @@ public interface AccountMapper {
                                                @Param("virtualSubtype") String virtualSubtype);
     List<Account> selectChildren(@Param("parentAccountId") Long parentAccountId);
     List<Account> selectLeafAccounts(@Param("ownerUserId") Long ownerUserId, @Param("ownerFamilyId") Long ownerFamilyId);
+    List<Account> selectByLinkedProduct(@Param("productId") Long productId, 
+                                       @Param("ownerUserId") Long ownerUserId, 
+                                       @Param("ownerFamilyId") Long ownerFamilyId);
     int insert(Account account);
     int update(Account account);
     int updateBalance(@Param("id") Long id, @Param("balance") BigDecimal balance);

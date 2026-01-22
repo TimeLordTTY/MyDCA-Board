@@ -2,6 +2,7 @@ package com.timelordtty.dca.controller;
 
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.service.AccountService;
+import com.timelordtty.dca.service.MmfSharesService;
 import com.timelordtty.dca.service.UserService;
 import com.timelordtty.dca.dto.AuthResponse;
 import org.springframework.http.ResponseEntity;
@@ -19,10 +20,12 @@ import java.util.Map;
 public class AccountController {
 
     private final AccountService accountService;
+    private final MmfSharesService mmfSharesService;
     private final UserService userService;
 
-    public AccountController(AccountService accountService, UserService userService) {
+    public AccountController(AccountService accountService, MmfSharesService mmfSharesService, UserService userService) {
         this.accountService = accountService;
+        this.mmfSharesService = mmfSharesService;
         this.userService = userService;
     }
 
@@ -101,6 +104,21 @@ public class AccountController {
     public ResponseEntity<Map<String, Object>> recalculateAllBalances() {
         int count = accountService.recalculateAllBalances();
         return ResponseEntity.ok(Map.of("recalculatedCount", count));
+    }
+
+    /**
+     * 获取 MMF 平台的份额分配详情
+     * 
+     * @param id MMF 平台账户 ID
+     * @return 份额分配详情
+     */
+    @GetMapping("/{id}/mmf-shares")
+    public ResponseEntity<MmfSharesService.MmfSharesDetail> getMmfSharesDetail(@PathVariable Long id) {
+        MmfSharesService.MmfSharesDetail detail = mmfSharesService.calculateShares(id);
+        if (detail == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(detail);
     }
 }
 

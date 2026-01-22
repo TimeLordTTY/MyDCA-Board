@@ -1,13 +1,21 @@
 package com.timelordtty.dca.service;
 
+import com.timelordtty.dca.dto.AuthResponse;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
+import com.timelordtty.dca.model.Nav;
+import com.timelordtty.dca.model.ProductMaster;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,10 +36,22 @@ public class AccountService {
 
     private final AccountMapper accountMapper;
     private final LedgerPostingMapper ledgerPostingMapper;
+    private final ProductMasterMapper productMasterMapper;
+    private final NavService navService;
+    private final LedgerService ledgerService;
+    private final HoldingService holdingService;
+    private final UserService userService;
 
-    public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper) {
+    public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper,
+                         ProductMasterMapper productMasterMapper, NavService navService,
+                         @Lazy LedgerService ledgerService, @Lazy HoldingService holdingService, UserService userService) {
         this.accountMapper = accountMapper;
         this.ledgerPostingMapper = ledgerPostingMapper;
+        this.productMasterMapper = productMasterMapper;
+        this.navService = navService;
+        this.ledgerService = ledgerService;
+        this.holdingService = holdingService;
+        this.userService = userService;
     }
 
     @Transactional
@@ -75,6 +95,10 @@ public class AccountService {
         }
         if (account.getIsActive() == null) {
             account.setIsActive(true);
+        }
+        // 设置 is_fixed_amount 默认值（数据库字段不允许为null）
+        if (account.getIsFixedAmount() == null) {
+            account.setIsFixedAmount(false);
         }
 
         accountMapper.insert(account);
@@ -161,13 +185,20 @@ public class AccountService {
         // 处理初始余额和余额的关系
         if (account.getInitialBalance() != null) {
             // 如果设置了初始余额，检查是否需要同步余额
-            // 如果账户没有其他交易（balance == initial_balance），则同步余额
-            if (existing.getBalance() != null && existing.getBalance().compareTo(existing.getInitialBalance()) == 0) {
-                // 余额等于初始余额，说明没有其他交易，可以直接同步
+            BigDecimal existingInitial = existing.getInitialBalance();
+            BigDecimal existingBalance = existing.getBalance();
+            
+            // 判断账户是否还没有发生过交易（初始状态）
+            // 条件：1) 原初始余额为 null 或 0  2) 原余额等于原初始余额
+            boolean isInitialState = (existingInitial == null || existingInitial.compareTo(BigDecimal.ZERO) == 0)
+                || (existingBalance != null && existingInitial != null && existingBalance.compareTo(existingInitial) == 0);
+            
+            if (isInitialState) {
+                // 账户处于初始状态，设置初始余额时同步余额
                 account.setBalance(account.getInitialBalance());
             } else if (account.getBalance() == null) {
                 // 如果没有提供新余额，保持原余额不变
-                account.setBalance(existing.getBalance());
+                account.setBalance(existingBalance);
             }
         } else if (account.getBalance() != null) {
             // 如果只提供了余额，使用余额作为初始余额
@@ -179,8 +210,107 @@ public class AccountService {
             account.setFundUsage(null);
         }
         
+        // 如果账户关联了产品且设置了初始余额，自动生成初始持仓
+        if (account.getLinkedProductId() != null && account.getInitialBalance() != null 
+            && account.getInitialBalance().compareTo(BigDecimal.ZERO) > 0) {
+            syncInitialHoldingFromAccount(account.getId(), account.getLinkedProductId(), account.getInitialBalance());
+        }
+        
         accountMapper.update(account);
         return accountMapper.selectById(account.getId());
+    }
+
+    /**
+     * 为关联产品的账户同步初始持仓
+     * 
+     * 流程：
+     * 1. 获取产品信息
+     * 2. 获取最新净值（或指定日期的净值）
+     * 3. 计算份额 = 初始余额 / 净值
+     * 4. 生成初始持仓分录：POSITION DEBIT + CASH CREDIT（从账户扣款）
+     * 
+     * @param accountId 账户ID
+     * @param productId 产品ID
+     * @param initialBalance 初始余额
+     */
+    @Transactional
+    private void syncInitialHoldingFromAccount(Long accountId, Long productId, BigDecimal initialBalance) {
+        try {
+            Account account = accountMapper.selectById(accountId);
+            if (account == null) {
+                return;
+            }
+            
+            ProductMaster product = productMasterMapper.selectById(productId);
+            if (product == null) {
+                return;
+            }
+            
+            // 获取最新净值
+            Nav latestNav = navService.getLatestNav(productId);
+            if (latestNav == null || latestNav.getNav() == null || latestNav.getNav().compareTo(BigDecimal.ZERO) <= 0) {
+                // 如果没有净值，跳过（可能是新产品，后续有净值后再同步）
+                return;
+            }
+            
+            BigDecimal nav = latestNav.getNav();
+            BigDecimal shares = initialBalance.divide(nav, 6, RoundingMode.HALF_UP);
+            
+            // 检查是否已有初始持仓（避免重复生成）
+            // 通过查询该账户是否有对应的持仓分录来判断
+            List<LedgerPosting> existingPostings = ledgerPostingMapper.selectByAccountId(accountId);
+            boolean hasHolding = existingPostings.stream()
+                .anyMatch(p -> "POSITION".equals(p.getAccountType()) && "DEBIT".equals(p.getPostingType()));
+            
+            if (hasHolding) {
+                // 已有持仓，跳过（避免重复生成）
+                return;
+            }
+            
+            // 获取或创建持仓账户
+            Account positionAccount = getOrCreatePositionAccount(
+                productId, product.getProductName(),
+                account.getOwnerType(), account.getOwnerUserId(), account.getOwnerFamilyId()
+            );
+            
+            // 生成初始持仓分录
+            List<LedgerPosting> postings = new ArrayList<>();
+            
+            // POSITION DEBIT：增加持仓
+            LedgerPosting positionDebit = new LedgerPosting();
+            positionDebit.setAccountId(positionAccount.getId());
+            positionDebit.setAccountType("POSITION");
+            positionDebit.setPostingType("DEBIT");
+            positionDebit.setAmount(initialBalance); // 成本金额
+            positionDebit.setShares(shares);
+            postings.add(positionDebit);
+            
+            // CASH CREDIT：从账户扣款
+            LedgerPosting cashCredit = new LedgerPosting();
+            cashCredit.setAccountId(accountId);
+            cashCredit.setAccountType(account.getAccountType());
+            cashCredit.setPostingType("CREDIT");
+            cashCredit.setAmount(initialBalance);
+            postings.add(cashCredit);
+            
+            // 获取用户信息
+            AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+            
+            // 创建交易记录
+            ledgerService.createTransaction(
+                currentUser.getId(),
+                currentUser.getFamilyId() != null ? currentUser.getFamilyId() : null,
+                "ADJUST", // 使用ADJUST类型，表示初始持仓调整
+                null,
+                postings,
+                String.format("账户[%s]初始持仓同步，产品[%s]，金额=%s，份额=%s", 
+                    account.getAccountName(), product.getProductName(), initialBalance, shares)
+            );
+        } catch (Exception e) {
+            // 记录错误但不影响账户更新
+            System.err.println("同步初始持仓失败: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -216,8 +346,17 @@ public class AccountService {
             // 查询子账户
             List<Account> children = accountMapper.selectChildren(parentAccount.getId());
             
-            // 计算子账户余额总和
+            // 计算子账户余额总和（排除信贷账户）
+            // 信贷账户（CREDIT_CARD/HUABEI/BAITIAO/LOAN）不计入余额，因为它们的余额是欠款，不是资产
             BigDecimal totalBalance = children.stream()
+                    .filter(child -> {
+                        String accountType = child.getAccountType();
+                        return accountType != null && 
+                               !"CREDIT_CARD".equals(accountType) && 
+                               !"HUABEI".equals(accountType) && 
+                               !"BAITIAO".equals(accountType) && 
+                               !"LOAN".equals(accountType);
+                    })
                     .map(Account::getBalance)
                     .filter(b -> b != null)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -255,6 +394,17 @@ public class AccountService {
      */
     public List<Account> getAccountChildren(Long parentAccountId) {
         return accountMapper.selectChildren(parentAccountId);
+    }
+
+    /**
+     * 查询绑定指定产品的账户列表
+     * @param productId 产品ID
+     * @param ownerUserId 用户ID，可为空
+     * @param ownerFamilyId 家庭ID，可为空
+     * @return 绑定该产品的账户列表
+     */
+    public List<Account> getAccountsByLinkedProduct(Long productId, Long ownerUserId, Long ownerFamilyId) {
+        return accountMapper.selectByLinkedProduct(productId, ownerUserId, ownerFamilyId);
     }
 
     /**

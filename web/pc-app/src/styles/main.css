@@ -16,8 +16,9 @@
   --primary2: #7cc7ff;
   --primarySoft: rgba(78, 164, 255, 0.12);
 
-  --good: #16a34a;
-  --bad: #ef4444;
+  /* 中国股市习惯：红涨绿跌 */
+  --good: #ef4444;  /* 红色表示盈利 */
+  --bad: #16a34a;   /* 绿色表示亏损 */
   --warn: #f59e0b;
 
   --shadow: 0 14px 35px rgba(15, 23, 42, 0.08);
@@ -406,14 +407,14 @@ a {
 
 .chip.good {
   color: var(--good);
-  background: rgba(22, 163, 74, 0.1);
-  border-color: rgba(22, 163, 74, 0.18);
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.18);
 }
 
 .chip.bad {
   color: var(--bad);
-  background: rgba(239, 68, 68, 0.1);
-  border-color: rgba(239, 68, 68, 0.18);
+  background: rgba(22, 163, 74, 0.1);
+  border-color: rgba(22, 163, 74, 0.18);
 }
 
 .chip.warn {
@@ -515,6 +516,14 @@ tbody tr:hover td {
   background: rgba(239, 68, 68, 0.1);
   border-color: rgba(239, 68, 68, 0.18);
   color: var(--bad);
+}
+
+/* 涨跌颜色类（中国股市：红涨绿跌） */
+.text-red {
+  color: #ef4444 !important;  /* 红色 = 涨/盈利 */
+}
+.text-green {
+  color: #16a34a !important;  /* 绿色 = 跌/亏损 */
 }
 
 .row-between {

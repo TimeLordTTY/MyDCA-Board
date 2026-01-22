@@ -10,6 +10,9 @@ import java.util.List;
 public interface ProductMasterMapper {
     ProductMaster selectById(@Param("id") Long id);
     ProductMaster selectByCode(@Param("productCode") String productCode, @Param("channel") String channel, @Param("market") String market);
+    
+    /** 只按产品代码查找（不限制市场），用于初始持仓导入时避免重复创建产品 */
+    ProductMaster selectByCodeOnly(@Param("productCode") String productCode);
     List<ProductMaster> selectByCondition(@Param("keyword") String keyword, @Param("assetType") String assetType, @Param("channel") String channel);
     int insert(ProductMaster product);
     int update(ProductMaster product);
