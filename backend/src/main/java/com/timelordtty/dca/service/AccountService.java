@@ -120,6 +120,7 @@ public class AccountService {
             defaultEnvelope.setReservedAmount(BigDecimal.ZERO);
             defaultEnvelope.setInitialBalance(BigDecimal.ZERO);
             defaultEnvelope.setIsActive(true);
+            defaultEnvelope.setIsFixedAmount(false); // 设置默认值
             defaultEnvelope.setOwnerType(account.getOwnerType());
             defaultEnvelope.setOwnerUserId(account.getOwnerUserId());
             defaultEnvelope.setOwnerFamilyId(account.getOwnerFamilyId());
@@ -507,6 +508,7 @@ public class AccountService {
         virtualAccount.setReservedAmount(BigDecimal.ZERO);
         virtualAccount.setInitialBalance(BigDecimal.ZERO);
         virtualAccount.setIsActive(true);
+        virtualAccount.setIsFixedAmount(false); // 设置默认值
         virtualAccount.setNote("系统自动创建的虚拟账户");
 
         return createAccount(virtualAccount);
@@ -577,6 +579,7 @@ public class AccountService {
         positionValueAccount.setBalance(BigDecimal.ZERO);
         positionValueAccount.setReservedAmount(BigDecimal.ZERO);
         positionValueAccount.setIsActive(true);
+        positionValueAccount.setIsFixedAmount(false); // 设置默认值
         positionValueAccount.setNote("券商账户持仓市值汇总账户（自动创建）");
 
         return createAccount(positionValueAccount);
