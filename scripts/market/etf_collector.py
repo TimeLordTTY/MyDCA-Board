@@ -818,6 +818,29 @@ class ETFCollector:
                 logger.debug(f"产品 {product_id} 在 {quote_time} 的行情已存在，跳过")
                 return
             
+            # 检查当天是否已有行情记录，如果有且价格相同，则跳过（避免非交易时间段重复插入）
+            # 这种情况发生在服务启动时或非交易时间段查询，可能获取到的是当天收盘价
+            quote_date = quote_time.date()
+            current_price = quote_data.get('price')
+            if current_price is not None:
+                check_today_sql = """
+                    SELECT id, price FROM market_quote_realtime 
+                    WHERE product_id = %s 
+                      AND DATE(quote_time) = %s 
+                      AND source = %s
+                    ORDER BY quote_time DESC
+                    LIMIT 1
+                """
+                cursor.execute(check_today_sql, (product_id, quote_date, 'EASTMONEY'))
+                today_existing = cursor.fetchone()
+                
+                if today_existing:
+                    existing_price = today_existing[1]
+                    # 如果价格相同（允许小的浮点误差），跳过插入
+                    if existing_price is not None and abs(float(existing_price) - float(current_price)) < 0.0001:
+                        logger.debug(f"产品 {product_id} 在 {quote_date} 已有相同价格的行情记录（价格={current_price}），跳过重复插入")
+                        return
+            
             # 保存到 market_quote_realtime 表（DDL 定义的表名）
             insert_sql = """
                 INSERT INTO market_quote_realtime 

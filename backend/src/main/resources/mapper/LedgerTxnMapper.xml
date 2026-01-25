@@ -38,6 +38,10 @@
         SELECT * FROM ledger_txn WHERE txn_id = #{txnId}
     </select>
 
+    <select id="selectByOrderId" resultMap="BaseResultMap">
+        SELECT * FROM ledger_txn WHERE order_id = #{orderId} ORDER BY created_at
+    </select>
+
     <select id="selectByBizGroupKey" resultMap="BaseResultMap">
         SELECT * FROM ledger_txn WHERE biz_group_key = #{bizGroupKey} ORDER BY created_at
     </select>

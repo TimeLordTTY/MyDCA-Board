@@ -185,8 +185,19 @@ public class LedgerService {
                     // 2. 如果用户属于家庭，同时创建额外的分录来更新家庭虚拟账户
                     Account virtualAccount;
                     if ("POSITION".equals(accountType)) {
-                        // POSITION 账户需要产品信息，这里无法创建，抛出异常提示
-                        throw new RuntimeException("POSITION 账户必须通过 getOrCreatePositionAccount 方法创建，需要提供 productId 和 productName");
+                        // POSITION 账户需要产品信息，如果提供了 productId，自动创建或获取 POSITION 账户
+                        if (productId != null) {
+                            ProductMaster product = productMasterMapper.selectById(productId);
+                            if (product == null) {
+                                throw new RuntimeException("产品不存在: productId=" + productId);
+                            }
+                            virtualAccount = accountService.getOrCreatePositionAccount(
+                                productId, product.getProductName(), ownerType, 
+                                realAccount.getOwnerUserId(), realAccount.getOwnerFamilyId());
+                        } else {
+                            // 如果没有提供 productId，抛出异常提示
+                            throw new RuntimeException("POSITION 账户必须通过 getOrCreatePositionAccount 方法创建，需要提供 productId 和 productName");
+                        }
                     } else {
                         if ("PERSONAL".equals(ownerType)) {
                             // 个人账户，使用个人虚拟账户

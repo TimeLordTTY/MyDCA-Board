@@ -41,6 +41,7 @@
               <tr>
                 <th>方向</th>
                 <th>账户</th>
+                <th>父账户</th>
                 <th class="right">金额</th>
                 <th>币种</th>
               </tr>
@@ -52,7 +53,19 @@
                     {{ posting.postingType === 'DEBIT' ? '借' : '贷' }}
                   </span>
                 </td>
-                <td>{{ getLeafAccountName(posting.accountId) }}</td>
+                <td>
+                  <div>{{ getLeafAccountName(posting.accountId) }}</div>
+                  <div v-if="getAccountBalance(posting.accountId) !== null" style="font-size: 12px; color: #909399; margin-top: 4px;">
+                    余额：{{ formatCurrency(getAccountBalance(posting.accountId) || 0) }}
+                  </div>
+                </td>
+                <td>
+                  <div v-if="getParentAccountName(posting.accountId)">{{ getParentAccountName(posting.accountId) }}</div>
+                  <div v-else style="color: #909399;">—</div>
+                  <div v-if="getParentAccountBalance(posting.accountId) !== null" style="font-size: 12px; color: #909399; margin-top: 4px;">
+                    余额：{{ formatCurrency(getParentAccountBalance(posting.accountId) || 0) }}
+                  </div>
+                </td>
                 <td class="right mono">{{ formatCurrency(posting.amount) }}</td>
                 <td>{{ posting.currency }}</td>
               </tr>
@@ -155,23 +168,25 @@
               <td class="right mono">{{ formatCurrency((txn as any).parentAccountBalance || 0) }}</td>
               <td class="td-muted">{{ txn.note || '' }}</td>
               <td class="right">
-                <button class="btn-small" @click="handleViewDetail(txn)">详情</button>
-                <button
-                  v-if="txn.txnType === 'EXPENSE'"
-                  class="btn-small"
-                  style="margin-left: 8px"
-                  @click="handleRefund(txn)"
-                >
-                  退款
-                </button>
-                <button
-                  v-if="txn.txnType === 'EXPENSE' && (txn as any).isReimbursable"
-                  class="btn-small"
-                  style="margin-left: 8px"
-                  @click="handleReimburse(txn)"
-                >
-                  报销
-                </button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <div style="display: flex; gap: 8px;">
+                    <button
+                      v-if="txn.txnType === 'EXPENSE'"
+                      class="btn-small"
+                      @click="handleRefund(txn)"
+                    >
+                      退款
+                    </button>
+                    <button
+                      v-if="txn.txnType === 'EXPENSE' && (txn as any).isReimbursable"
+                      class="btn-small"
+                      @click="handleReimburse(txn)"
+                    >
+                      报销
+                    </button>
+                  </div>
+                  <button class="btn-small" style="margin-left: auto;" @click="handleViewDetail(txn)">详情</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -350,11 +365,97 @@ function getAccountName(accountId: number): string {
 }
 
 function getLeafAccountName(accountId: number): string {
-  // 只显示叶子账户名称，不显示父账户
-  const account = accountStore.accountTree.find((a) => a.id === accountId) ||
-    accountStore.accountTree.flatMap(p => p.children || []).find((a) => a.id === accountId)
-  if (!account) return `账户ID: ${accountId}`
+  // 显示规则：父账户名称-叶子账户名称
+  const account = findAccountInTree(accountId)
+  if (!account) {
+    // 如果找不到账户，尝试从accountStore.accounts中查找（包括虚拟账户）
+    const flatAccount = accountStore.accounts.find((a) => a.id === accountId)
+    if (flatAccount) {
+      // 如果是虚拟账户，直接返回名称
+      if (flatAccount.accountKind === 'VIRTUAL') {
+        return flatAccount.accountName
+      }
+      // 如果是真实账户，查找父账户
+      if (flatAccount.parentAccountId) {
+        const parent = accountStore.accounts.find((a) => a.id === flatAccount.parentAccountId)
+        if (parent) {
+          return `${parent.accountName}-${flatAccount.accountName}`
+        }
+      }
+      return flatAccount.accountName
+    }
+    return `账户ID: ${accountId}`
+  }
+  // 如果有父账户，显示父账户名称-叶子账户名称
+  if (account.parentAccountId) {
+    const parent = findAccountInTree(account.parentAccountId)
+    if (parent) {
+      return `${parent.accountName}-${account.accountName}`
+    }
+  }
   return account.accountName
+}
+
+function findAccountInTree(accountId: number): any | null {
+  function traverse(accounts: any[]): any | null {
+    for (const acc of accounts) {
+      if (acc.id === accountId) {
+        return acc
+      }
+      if (acc.children && acc.children.length > 0) {
+        const found = traverse(acc.children)
+        if (found) return found
+      }
+    }
+    return null
+  }
+  return traverse(accountStore.accountTree)
+}
+
+function getParentAccountName(accountId: number): string | null {
+  const account = findAccountInTree(accountId)
+  if (!account) {
+    // 如果找不到账户，尝试从accountStore.accounts中查找（包括虚拟账户）
+    const flatAccount = accountStore.accounts.find((a) => a.id === accountId)
+    if (flatAccount && flatAccount.parentAccountId) {
+      const parent = accountStore.accounts.find((a) => a.id === flatAccount.parentAccountId)
+      if (parent) {
+        return parent.accountName
+      }
+    }
+    return null
+  }
+  if (!account.parentAccountId) return null
+  const parent = findAccountInTree(account.parentAccountId)
+  if (!parent) return null
+  return parent.accountName
+}
+
+function getAccountBalance(accountId: number): number | null {
+  const account = findAccountInTree(accountId)
+  if (!account) {
+    // 如果找不到账户，尝试从accountStore.accounts中查找（包括虚拟账户）
+    const flatAccount = accountStore.accounts.find((a) => a.id === accountId)
+    if (flatAccount) {
+      return flatAccount.balance || 0
+    }
+    return null
+  }
+  return account.balance || 0
+}
+
+function getParentAccountBalance(accountId: number): number | null {
+  const account = findAccountInTree(accountId)
+  if (!account || !account.parentAccountId) return null
+  const parent = findAccountInTree(account.parentAccountId)
+  if (!parent) return null
+  // 计算父账户余额（所有子账户余额之和）
+  if (parent.children && parent.children.length > 0) {
+    return parent.children.reduce((sum: number, child: any) => {
+      return sum + (child.balance || 0)
+    }, 0)
+  }
+  return parent.balance || 0
 }
 
 function getSummaryText(txn: LedgerTxn): string {

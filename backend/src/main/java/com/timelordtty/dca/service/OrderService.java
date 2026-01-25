@@ -3,9 +3,11 @@ package com.timelordtty.dca.service;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.OrderMapper;
 import com.timelordtty.dca.mapper.OrderFundingLineMapper;
+import com.timelordtty.dca.mapper.SettlementConfirmMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.OrderFundingLine;
+import com.timelordtty.dca.model.SettlementConfirm;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,13 +48,15 @@ public class OrderService {
     private final AccountMapper accountMapper;
     private final AccountService accountService;
     private final OrderFundingLineMapper orderFundingLineMapper;
+    private final SettlementConfirmMapper settlementConfirmMapper;
 
     public OrderService(OrderMapper orderMapper, AccountMapper accountMapper, AccountService accountService,
-                       OrderFundingLineMapper orderFundingLineMapper) {
+                       OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper) {
         this.orderMapper = orderMapper;
         this.accountMapper = accountMapper;
         this.accountService = accountService;
         this.orderFundingLineMapper = orderFundingLineMapper;
+        this.settlementConfirmMapper = settlementConfirmMapper;
     }
 
     /**
@@ -305,6 +309,26 @@ public class OrderService {
 
     public List<Order> getPendingOrders() {
         return orderMapper.selectByStatus("PENDING");
+    }
+
+    public List<Order> getOrdersByStatus(String status) {
+        return orderMapper.selectByStatus(status);
+    }
+
+    public List<Order> getOrdersByUserId(Long userId) {
+        return orderMapper.selectByUserId(userId);
+    }
+
+    public Order getOrderByOrderId(String orderId) {
+        return orderMapper.selectByOrderId(orderId);
+    }
+
+    public List<OrderFundingLine> getOrderFundingLines(String orderId) {
+        return orderFundingLineMapper.selectByOrderId(orderId);
+    }
+
+    public SettlementConfirm getSettlementByOrderId(String orderId) {
+        return settlementConfirmMapper.selectByOrderId(orderId);
     }
 }
 

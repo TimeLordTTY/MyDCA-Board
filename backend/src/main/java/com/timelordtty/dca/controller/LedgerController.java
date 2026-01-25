@@ -110,7 +110,13 @@ public class LedgerController {
                     if ("CASH".equals(posting.getAccountType())) {
                         Account acc = accountService.getAccount(posting.getAccountId());
                         if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                            summaryAmount = posting.getAmount();
+                            // 对于BUY/SUBSCRIPTION交易，CASH CREDIT表示现金减少，应该显示为负数
+                            if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) 
+                                && "CREDIT".equals(posting.getPostingType())) {
+                                summaryAmount = posting.getAmount().negate();
+                            } else {
+                                summaryAmount = posting.getAmount();
+                            }
                             mainAccountId = posting.getAccountId();
                             break;
                         }
@@ -143,59 +149,68 @@ public class LedgerController {
                 // 只对 REAL 账户显示余额信息，虚拟账户不显示
                 if (mainAccountId != null) {
                     Account account = accountService.getAccount(mainAccountId);
-                    if (account != null && "REAL".equals(account.getAccountKind())) {
-                        txnMap.put("leafAccountName", account.getAccountName());
-                        
-                        // 从分录中获取该交易发生时的历史余额
-                        // 查找该交易中涉及该账户的分录，使用其记录的历史余额
-                        BigDecimal leafBalance = null;
-                        BigDecimal parentBalance = null;
-                        for (LedgerPosting posting : postings) {
-                            if (posting.getAccountId().equals(mainAccountId) && posting.getAccountBalanceAfter() != null) {
-                                leafBalance = posting.getAccountBalanceAfter();
-                                parentBalance = posting.getParentAccountBalanceAfter();
-                                break;
-                            }
-                        }
-                        
-                        // 如果分录中没有记录历史余额，使用当前余额（兼容旧数据）
-                        if (leafBalance == null) {
-                            leafBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
-                        }
-                        txnMap.put("leafAccountBalance", leafBalance);
-                        
-                        // 获取父账户余额
+                    if (account != null) {
+                        // 显示规则：父账户名称-叶子账户名称
+                        String leafAccountName = account.getAccountName();
                         if (account.getParentAccountId() != null) {
                             Account parentAccount = accountService.getAccount(account.getParentAccountId());
                             if (parentAccount != null) {
-                                // 如果分录中记录了父账户余额，使用历史余额；否则计算当前余额
-                                if (parentBalance != null) {
-                                    txnMap.put("parentAccountBalance", parentBalance);
-                                } else {
-                                    // 计算父账户余额（所有子账户余额之和）
-                                    List<Account> children = accountService.getAccountChildren(account.getParentAccountId());
-                                    BigDecimal calculatedParentBalance = children.stream()
-                                        .map(Account::getBalance)
-                                        .filter(b -> b != null)
-                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                                    txnMap.put("parentAccountBalance", calculatedParentBalance);
+                                leafAccountName = parentAccount.getAccountName() + "-" + account.getAccountName();
+                            }
+                        }
+                        txnMap.put("leafAccountName", leafAccountName);
+                        
+                        if ("REAL".equals(account.getAccountKind())) {
+                            // 从分录中获取该交易发生时的历史余额
+                            // 查找该交易中涉及该账户的分录，使用其记录的历史余额
+                            BigDecimal leafBalance = null;
+                            BigDecimal parentBalance = null;
+                            for (LedgerPosting posting : postings) {
+                                if (posting.getAccountId().equals(mainAccountId) && posting.getAccountBalanceAfter() != null) {
+                                    leafBalance = posting.getAccountBalanceAfter();
+                                    parentBalance = posting.getParentAccountBalanceAfter();
+                                    break;
                                 }
-                                txnMap.put("parentAccountName", parentAccount.getAccountName());
+                            }
+                            
+                            // 如果分录中没有记录历史余额，使用当前余额（兼容旧数据）
+                            if (leafBalance == null) {
+                                leafBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+                            }
+                            txnMap.put("leafAccountBalance", leafBalance);
+                            
+                            // 获取父账户余额
+                            if (account.getParentAccountId() != null) {
+                                Account parentAccount = accountService.getAccount(account.getParentAccountId());
+                                if (parentAccount != null) {
+                                    // 如果分录中记录了父账户余额，使用历史余额；否则计算当前余额
+                                    if (parentBalance != null) {
+                                        txnMap.put("parentAccountBalance", parentBalance);
+                                    } else {
+                                        // 计算父账户余额（所有子账户余额之和）
+                                        List<Account> children = accountService.getAccountChildren(account.getParentAccountId());
+                                        BigDecimal calculatedParentBalance = children.stream()
+                                            .map(Account::getBalance)
+                                            .filter(b -> b != null)
+                                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                        txnMap.put("parentAccountBalance", calculatedParentBalance);
+                                    }
+                                    txnMap.put("parentAccountName", parentAccount.getAccountName());
+                                } else {
+                                    txnMap.put("parentAccountBalance", BigDecimal.ZERO);
+                                    txnMap.put("parentAccountName", null);
+                                }
                             } else {
-                                txnMap.put("parentAccountBalance", BigDecimal.ZERO);
+                                txnMap.put("parentAccountBalance", null);
                                 txnMap.put("parentAccountName", null);
                             }
                         } else {
+                            // 虚拟账户，不显示余额信息
+                            txnMap.put("leafAccountBalance", null);
                             txnMap.put("parentAccountBalance", null);
-                            txnMap.put("parentAccountName", null);
                         }
                     } else {
-                        // 虚拟账户，不显示余额信息
-                        if (account != null) {
-                            txnMap.put("leafAccountName", account.getAccountName());
-                        } else {
-                            txnMap.put("leafAccountName", null);
-                        }
+                        txnMap.put("leafAccountName", null);
                         txnMap.put("leafAccountBalance", null);
                         txnMap.put("parentAccountBalance", null);
                     }
@@ -268,7 +283,13 @@ public class LedgerController {
                 if ("CASH".equals(posting.getAccountType())) {
                     Account acc = accountService.getAccount(posting.getAccountId());
                     if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                        summaryAmount = posting.getAmount();
+                        // 对于BUY/SUBSCRIPTION交易，CASH CREDIT表示现金减少，应该显示为负数
+                        if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) 
+                            && "CREDIT".equals(posting.getPostingType())) {
+                            summaryAmount = posting.getAmount().negate();
+                        } else {
+                            summaryAmount = posting.getAmount();
+                        }
                         mainAccountId = posting.getAccountId();
                         break;
                     }

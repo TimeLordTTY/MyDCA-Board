@@ -569,9 +569,9 @@ function updateAllocationChart() {
   allocationChart.setOption(option)
 }
 
-function handleConfirmSettlement(_orderId: string) {
-  // TODO: 打开结算确认对话框
-  ElMessage.info('结算确认功能开发中')
+function handleConfirmSettlement(orderId: string) {
+  // 跳转到订单页面进行结算
+  window.location.href = `/orders?settle=${orderId}`
 }
 
 onMounted(() => {

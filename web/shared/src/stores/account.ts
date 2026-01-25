@@ -22,31 +22,21 @@ export const useAccountStore = defineStore('account', () => {
 
   /**
    * 现金叶子账户
-   * 直接从扁平列表中提取叶子账户，避免重复处理
+   * 从账户树中递归获取所有叶子账户，确保准确性
+   * 只包含没有子账户的账户（叶子账户）
    */
   const cashLeafAccounts = computed(() => {
-    // 获取所有账户ID集合（用于判断哪些账户是叶子账户）
-    const allAccountIds = new Set(accounts.value.map(acc => acc.id))
+    // 使用账户树来获取所有叶子账户（更可靠）
+    const allLeafAccounts = getLeafAccounts(accountTree.value)
     
-    // 找出所有有父账户的账户ID（这些是子账户）
-    const childAccountIds = new Set(
-      accounts.value
-        .filter(acc => acc.parentAccountId != null)
-        .map(acc => acc.id)
-    )
-    
-    // 找出所有父账户ID（这些账户有子账户）
-    const parentAccountIds = new Set(
-      accounts.value
-        .filter(acc => acc.parentAccountId != null)
-        .map(acc => acc.parentAccountId!)
-    )
-    
-    // 叶子账户 = 没有子账户的账户（不在parentAccountIds中）
+    // 过滤条件：只返回REAL类型的资产类账户
     const assetTypes = new Set(['CASH', 'BANK', 'PAYMENT', 'MMF', 'BROKER'])
-    const leafAccounts = accounts.value.filter((acc) => {
-      // 叶子账户：没有子账户
-      if (parentAccountIds.has(acc.id)) return false
+    const filtered = allLeafAccounts.filter((acc) => {
+      // 再次确认是叶子账户（没有子账户）
+      if (acc.children && acc.children.length > 0) {
+        console.warn('发现非叶子账户被包含在 cashLeafAccounts 中:', acc)
+        return false
+      }
       // 仅 REAL 账户参与现金叶子统计
       if (acc.accountKind !== 'REAL') return false
       // 只统计资产类账户（信贷账户如 CREDIT_CARD/HUABEI/BAITIAO/LOAN 视为负债，不计入可用资金）
@@ -54,7 +44,7 @@ export const useAccountStore = defineStore('account', () => {
       return true
     })
     
-    return leafAccounts
+    return filtered
   })
 
   /**

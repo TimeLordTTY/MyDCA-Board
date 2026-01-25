@@ -3,7 +3,7 @@
  */
 
 import { apiClient } from './client'
-import type { Order, OrderDetail, OrderQueryParams, CreateOrderRequest } from '../types'
+import type { Order, OrderDetail, OrderQueryParams, CreateOrderRequest, ConfirmSettlementRequest } from '../types'
 
 export const orderApi = {
   /**
@@ -35,5 +35,12 @@ export const orderApi = {
    */
   cancelOrder: async (orderId: string): Promise<void> => {
     await apiClient.post(`/orders/${orderId}/cancel`)
+  },
+
+  /**
+   * 确认结算
+   */
+  confirmSettlement: async (data: ConfirmSettlementRequest): Promise<void> => {
+    await apiClient.post(`/orders/${data.orderId}/settle`, data)
   },
 }

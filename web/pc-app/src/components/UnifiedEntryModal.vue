@@ -53,34 +53,65 @@
             />
           </el-form-item>
           <el-form-item label="父账户" required>
-            <el-select 
-              v-model="form.parentAccountId" 
-              placeholder="选择父账户" 
-              style="width: 100%"
-              @change="handleParentAccountChange"
-            >
-              <el-option
-                v-for="acc in parentAccounts"
-                :key="acc.id"
-                :label="acc.accountName"
-                :value="acc.id"
-              />
-            </el-select>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择父账户" 
+                style="flex: 1"
+                @change="handleParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="子账户" required>
-            <el-select 
-              v-model="form.accountId" 
-              placeholder="选择子账户" 
-              style="width: 100%"
-              :disabled="!form.parentAccountId"
-            >
-              <el-option
-                v-for="acc in availableChildAccounts"
-                :key="acc.id"
-                :label="`${acc.accountName}${acc.fundUsage ? ' (' + getFundUsageLabel(acc.fundUsage) + ')' : ''}`"
-                :value="acc.id"
-              />
-            </el-select>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="金额（元）" required>
             <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
@@ -107,34 +138,62 @@
             />
           </el-form-item>
           <el-form-item label="还款账户" required>
-            <el-select 
-              v-model="form.parentAccountId" 
-              placeholder="选择还款账户（父账户）" 
-              style="width: 100%"
-              @change="handleRepaymentAccountChange"
-            >
-              <el-option
-                v-for="acc in parentAccounts"
-                :key="acc.id"
-                :label="acc.accountName"
-                :value="acc.id"
-              />
-            </el-select>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择还款账户（父账户）" 
+                style="flex: 1"
+                @change="handleRepaymentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="子账户" required>
-            <el-select 
-              v-model="form.accountId" 
-              placeholder="选择子账户" 
-              style="width: 100%"
-              :disabled="!form.parentAccountId"
-            >
-              <el-option
-                v-for="acc in availableChildAccounts"
-                :key="acc.id"
-                :label="acc.accountName"
-                :value="acc.id"
-              />
-            </el-select>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="信贷账户" required>
             <el-select v-model="form.creditAccountId" placeholder="选择要还款的信贷账户" style="width: 100%">
@@ -166,25 +225,127 @@
               value-format="YYYY-MM-DD HH:mm:ss"
             />
           </el-form-item>
-          <el-form-item label="转出账户" required>
-            <el-select v-model="form.fromAccountId" placeholder="选择转出账户" style="width: 100%">
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="getAccountDisplayName(acc)"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="转出父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.fromParentAccountId" 
+                placeholder="选择转出账户的父账户" 
+                style="flex: 1"
+                @change="handleFromParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.fromParentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedFromParentAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
-          <el-form-item label="转入账户" required>
-            <el-select v-model="form.toAccountId" placeholder="选择转入账户" style="width: 100%">
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="getAccountDisplayName(acc)"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="转出子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.fromAccountId" 
+                placeholder="选择转出账户的子账户" 
+                style="flex: 1"
+                :disabled="!form.fromParentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableFromChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.fromParentAccountId && form.fromAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedFromChildAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="转入父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.toParentAccountId" 
+                placeholder="选择转入账户的父账户" 
+                style="flex: 1"
+                @change="handleToParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.toParentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedToParentAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="转入子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.toAccountId" 
+                placeholder="选择转入账户的子账户" 
+                style="flex: 1"
+                :disabled="!form.toParentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableToChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.toParentAccountId && form.toAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedToChildAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="金额（元）" required>
             <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
@@ -277,20 +438,67 @@
               {{ ((form.amount - (form.fee || 0)) / form.nav).toFixed(4) }} 份
             </div>
           </el-form-item>
-          <el-form-item label="资金来源账户" required>
-            <el-select 
-              v-model="form.accountId" 
-              placeholder="选择账户" 
-              style="width: 100%"
-              @change="handleBuyAccountChange"
-            >
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="getAccountDisplayName(acc)"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="来源父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择资金来源的父账户" 
+                style="flex: 1"
+                @change="handleBuyParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="来源子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择资金来源的子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+                @change="handleBuyAccountChange"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
             <div v-if="selectedBuyAccount?.linkedProductId && buyChildAccounts.length > 0" class="form-help-text" style="color: #f59e0b; margin-top: 4px;">
               此账户已关联产品，可以按子账户分别设置买入金额
             </div>
@@ -454,20 +662,67 @@
               {{ (form.shares * form.nav - (form.fee || 0)).toFixed(2) }} 元
             </div>
           </el-form-item>
-          <el-form-item label="到账账户" required>
-            <el-select 
-              v-model="form.accountId" 
-              placeholder="选择账户" 
-              style="width: 100%"
-              @change="handleSellAccountChange"
-            >
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="getAccountDisplayName(acc)"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="到账父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择到账的父账户" 
+                style="flex: 1"
+                @change="handleSellParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="到账子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择到账的子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+                @change="handleSellAccountChange"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
             <div v-if="selectedSellAccount?.linkedProductId && sellChildAccounts.length > 0" class="form-help-text" style="color: #f59e0b; margin-top: 4px;">
               此账户已关联产品，可以按子账户分别设置卖出份额
             </div>
@@ -560,15 +815,66 @@
               value-format="YYYY-MM-DD HH:mm:ss"
             />
           </el-form-item>
-          <el-form-item label="账户" required>
-            <el-select v-model="form.accountId" placeholder="选择账户" style="width: 100%">
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="`${getAccountDisplayName(acc)} (${getFundUsageLabel(acc.fundUsage)})`"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="账户父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择账户的父账户" 
+                style="flex: 1"
+                @change="handleParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="账户子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择账户的子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="金额（元）" required>
             <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
@@ -642,15 +948,66 @@
           <el-form-item label="退款金额（元）" required>
             <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
           </el-form-item>
-          <el-form-item label="退款账户" required>
-            <el-select v-model="form.accountId" placeholder="选择账户" style="width: 100%">
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="getAccountDisplayName(acc)"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="退款账户父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择退款账户的父账户" 
+                style="flex: 1"
+                @change="handleParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="退款账户子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择退款账户的子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="备注">
             <el-input v-model="form.note" placeholder="退款说明" />
@@ -659,15 +1016,66 @@
 
         <!-- 调整 -->
         <template v-else-if="selectedType === 'ADJUST'">
-          <el-form-item label="账户" required>
-            <el-select v-model="form.accountId" placeholder="选择账户" style="width: 100%">
-              <el-option
-                v-for="acc in cashLeafAccounts"
-                :key="acc.id"
-                :label="getAccountDisplayName(acc)"
-                :value="acc.id"
-              />
-            </el-select>
+          <el-form-item label="账户父账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.parentAccountId" 
+                placeholder="选择账户的父账户" 
+                style="flex: 1"
+                @change="handleParentAccountChange"
+              >
+                <el-option
+                  v-for="acc in parentAccounts"
+                  :key="acc.id"
+                  :label="acc.accountName"
+                  :value="acc.id"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedParentAccountBalance) }}
+              </span>
+            </div>
+          </el-form-item>
+          <el-form-item label="账户子账户" required>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <el-select 
+                v-model="form.accountId" 
+                placeholder="选择账户的子账户" 
+                style="flex: 1"
+                :disabled="!form.parentAccountId"
+              >
+                <el-option
+                  v-for="acc in availableChildAccounts"
+                  :key="acc.id"
+                  :value="acc.id"
+                  :label="acc.accountName"
+                >
+                  <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="flex: 1; min-width: 0;">
+                      <span>{{ acc.accountName }}</span>
+                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                        ({{ getFundUsageLabel(acc.fundUsage) }})
+                      </span>
+                    </span>
+                    <span style="color: #4ea4ff; font-size: 12px; margin-left: 12px; white-space: nowrap;">
+                      {{ formatCurrency(acc.balance || 0) }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <span v-if="form.parentAccountId && form.accountId" style="color: #4ea4ff; font-size: 12px; white-space: nowrap; min-width: 80px; text-align: right;">
+                {{ formatCurrency(selectedChildAccountBalance) }}
+              </span>
+            </div>
           </el-form-item>
           <el-form-item label="调整后余额（元）" required>
             <el-input-number v-model="form.amount" :precision="2" style="width: 100%" />
@@ -694,7 +1102,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
-import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, navApi, productApi } from '@wealth-hub/shared'
+import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, navApi, productApi, formatCurrency, orderApi } from '@wealth-hub/shared'
 import type { Account } from '@wealth-hub/shared'
 
 const props = defineProps<{
@@ -724,7 +1132,9 @@ const form = ref({
   parentAccountId: undefined as number | undefined,
   accountId: undefined as number | undefined,
   creditAccountId: undefined as number | undefined,
+  fromParentAccountId: undefined as number | undefined,
   fromAccountId: undefined as number | undefined,
+  toParentAccountId: undefined as number | undefined,
   toAccountId: undefined as number | undefined,
   productId: undefined as number | undefined,
   orderType: 'BUY' as 'BUY' | 'SELL' | 'SUBSCRIPTION' | 'REDEMPTION',
@@ -772,7 +1182,7 @@ const txnTypeOptions: Record<string, { name: string; icon: string }> = {
   ADJUST: { name: '调整', icon: '⚙️' },
 }
 
-const cashLeafAccounts = computed(() => accountStore.cashLeafAccounts)
+// const cashLeafAccounts = computed(() => accountStore.cashLeafAccounts) // 未使用，已注释
 
 // 父账户列表（有子账户的账户）
 const parentAccounts = computed(() => {
@@ -794,25 +1204,47 @@ const parentAccounts = computed(() => {
   return parentList
 })
 
+// 从账户树中查找账户的辅助函数
+function findAccountById(accounts: Account[], id: number): Account | null {
+  for (const acc of accounts) {
+    if (acc.id === id) {
+      return acc
+    }
+    if (acc.children && acc.children.length > 0) {
+      const found = findAccountById(acc.children, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
 // 可用的子账户（根据选择的父账户）
 const availableChildAccounts = computed(() => {
   if (!form.value.parentAccountId) return []
   
-  // 从账户树中查找父账户，然后返回其子账户
-  function findAccountById(accounts: Account[], id: number): Account | null {
-    for (const acc of accounts) {
-      if (acc.id === id) {
-        return acc
-      }
-      if (acc.children && acc.children.length > 0) {
-        const found = findAccountById(acc.children, id)
-        if (found) return found
-      }
-    }
-    return null
-  }
-  
   const parentAccount = findAccountById(accountStore.accountTree, form.value.parentAccountId)
+  if (!parentAccount || !parentAccount.children) return []
+  
+  // 返回父账户的所有REAL类型的子账户
+  return parentAccount.children.filter(acc => acc.accountKind === 'REAL')
+})
+
+// 转出账户的可用于账户（根据选择的转出父账户）
+const availableFromChildAccounts = computed(() => {
+  if (!form.value.fromParentAccountId) return []
+  
+  const parentAccount = findAccountById(accountStore.accountTree, form.value.fromParentAccountId)
+  if (!parentAccount || !parentAccount.children) return []
+  
+  // 返回父账户的所有REAL类型的子账户
+  return parentAccount.children.filter(acc => acc.accountKind === 'REAL')
+})
+
+// 转入账户的可用于账户（根据选择的转入父账户）
+const availableToChildAccounts = computed(() => {
+  if (!form.value.toParentAccountId) return []
+  
+  const parentAccount = findAccountById(accountStore.accountTree, form.value.toParentAccountId)
   if (!parentAccount || !parentAccount.children) return []
   
   // 返回父账户的所有REAL类型的子账户
@@ -908,6 +1340,74 @@ const sellAllocationError = computed(() => {
   return null
 })
 
+// 余额计算属性
+// 父账户余额：计算所有子账户余额之和
+const selectedParentAccountBalance = computed(() => {
+  if (!form.value.parentAccountId) return 0
+  const account = findAccountInTree(accountStore.accountTree, form.value.parentAccountId)
+  if (!account) return 0
+  // 如果有子账户，计算所有子账户余额之和
+  if (account.children && account.children.length > 0) {
+    return account.children.reduce((sum: number, child: Account) => {
+      return sum + (child.balance || 0)
+    }, 0)
+  }
+  // 如果没有子账户，直接返回账户余额
+  return account.balance || 0
+})
+
+// 子账户余额：从账户树中获取
+const selectedChildAccountBalance = computed(() => {
+  if (!form.value.accountId) return 0
+  const account = findAccountInTree(accountStore.accountTree, form.value.accountId)
+  if (!account) return 0
+  return account.balance || 0
+})
+
+// 转出父账户余额
+const selectedFromParentAccountBalance = computed(() => {
+  if (!form.value.fromParentAccountId) return 0
+  const account = findAccountInTree(accountStore.accountTree, form.value.fromParentAccountId)
+  if (!account) return 0
+  // 如果有子账户，计算所有子账户余额之和
+  if (account.children && account.children.length > 0) {
+    return account.children.reduce((sum: number, child: Account) => {
+      return sum + (child.balance || 0)
+    }, 0)
+  }
+  return account.balance || 0
+})
+
+// 转出子账户余额
+const selectedFromChildAccountBalance = computed(() => {
+  if (!form.value.fromAccountId) return 0
+  const account = findAccountInTree(accountStore.accountTree, form.value.fromAccountId)
+  if (!account) return 0
+  return account.balance || 0
+})
+
+// 转入父账户余额
+const selectedToParentAccountBalance = computed(() => {
+  if (!form.value.toParentAccountId) return 0
+  const account = findAccountInTree(accountStore.accountTree, form.value.toParentAccountId)
+  if (!account) return 0
+  // 如果有子账户，计算所有子账户余额之和
+  if (account.children && account.children.length > 0) {
+    return account.children.reduce((sum: number, child: Account) => {
+      return sum + (child.balance || 0)
+    }, 0)
+  }
+  return account.balance || 0
+})
+
+// 转入子账户余额
+const selectedToChildAccountBalance = computed(() => {
+  if (!form.value.toAccountId) return 0
+  const account = findAccountInTree(accountStore.accountTree, form.value.toAccountId)
+  if (!account) return 0
+  return account.balance || 0
+})
+
 const filteredProducts = computed(() => {
   if (!form.value.channel) {
     return []
@@ -958,10 +1458,8 @@ onMounted(() => {
 
 watch(visible, async (val) => {
   if (val) {
-    // 打开对话框时，确保加载账户数据
-    if (accountStore.accounts.length === 0) {
-      await accountStore.fetchAccounts()
-    }
+    // 打开对话框时，刷新账户数据以获取最新余额
+    await accountStore.fetchAccounts()
     step.value = 1
     selectedType.value = ''
     form.value = {
@@ -970,7 +1468,9 @@ watch(visible, async (val) => {
       parentAccountId: undefined,
       accountId: undefined,
       creditAccountId: undefined,
+      fromParentAccountId: undefined,
       fromAccountId: undefined,
+      toParentAccountId: undefined,
       toAccountId: undefined,
       productId: undefined,
       orderType: 'BUY',
@@ -1026,8 +1526,30 @@ function handleRepaymentAccountChange() {
   form.value.accountId = undefined
 }
 
+function handleFromParentAccountChange() {
+  // 转出父账户改变时，清空转出子账户选择
+  form.value.fromAccountId = undefined
+}
+
+function handleToParentAccountChange() {
+  // 转入父账户改变时，清空转入子账户选择
+  form.value.toAccountId = undefined
+}
+
+function handleBuyParentAccountChange() {
+  // 买入父账户改变时，清空子账户选择和资金分配
+  form.value.accountId = undefined
+  buyFundingLines.value = []
+}
+
 function handleBuyAccountChange() {
   buyFundingLines.value = []
+}
+
+function handleSellParentAccountChange() {
+  // 卖出父账户改变时，清空子账户选择和份额分配
+  form.value.accountId = undefined
+  sellFundingLines.value = []
 }
 
 function handleSellAccountChange() {
@@ -1092,10 +1614,31 @@ watch(() => form.value.navDate, async (newNavDate) => {
   }
 })
 
-function getAccountDisplayName(acc: Account): string {
-  const parent = accountStore.accountTree.find((a) => a.id === acc.parentAccountId)
-  return parent ? `${parent.accountName} / ${acc.accountName}` : acc.accountName
+// 递归查找账户树中的账户
+function findAccountInTree(accounts: Account[], accountId: number): Account | null {
+  for (const acc of accounts) {
+    if (acc.id === accountId) {
+      return acc
+    }
+    if (acc.children && acc.children.length > 0) {
+      const found = findAccountInTree(acc.children, accountId)
+      if (found) return found
+    }
+  }
+  return null
 }
+
+// function getAccountDisplayName(acc: Account): string {
+//   // 如果账户有父账户ID，递归查找父账户
+//   if (acc.parentAccountId) {
+//     const parent = findAccountInTree(accountStore.accountTree, acc.parentAccountId)
+//     if (parent) {
+//       return `${parent.accountName} / ${acc.accountName}`
+//     }
+//   }
+//   return acc.accountName
+// }
+// 未使用，已注释
 
 function handleClose() {
   visible.value = false
@@ -1216,10 +1759,13 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'TRANSFER_OUT' || selectedType.value === 'TRANSFER_IN') {
-      if (!form.value.fromAccountId || !form.value.toAccountId || !form.value.amount || !form.value.occurredAt) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.fromParentAccountId || !form.value.fromAccountId || 
+          !form.value.toParentAccountId || !form.value.toAccountId || 
+          !form.value.amount || !form.value.occurredAt) {
+        ElMessage.error('请填写完整信息（包括转出和转入的父账户、子账户）')
         return
       }
+      
       // FROM CREDIT + TO DEBIT
       postings.push({
         postingType: 'CREDIT',
@@ -1246,8 +1792,8 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') {
-      if (!form.value.channel || !form.value.productId || !form.value.accountId || !form.value.amount || !form.value.orderType || !form.value.requestedAt) {
-        ElMessage.error('请填写完整信息（包括场内/场外）')
+      if (!form.value.channel || !form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.orderType || !form.value.requestedAt) {
+        ElMessage.error('请填写完整信息（包括场内/场外、资金来源父账户和子账户）')
         return
       }
 
@@ -1355,20 +1901,55 @@ async function handleSubmit() {
         })
       }
 
-      await ledgerApi.createTransaction({
-        txnType: form.value.orderType,
-        productId: form.value.productId,
-        postings,
-        note: form.value.note || undefined,
-        requestedAt: form.value.requestedAt,
-      })
-      ElMessage.success('买入/申购记录成功')
+      // 自动生成备注：交易类型+场内外+产品名称
+      const channelLabel = form.value.channel === 'OTC' ? '场外' : '场内'
+      const orderTypeLabel = form.value.orderType === 'BUY' ? '买入' : '申购'
+      const autoNote = `${orderTypeLabel}${channelLabel}${product.productName}`
+
+      // 对于场外（OTC）产品，需要同时创建订单和记账
+      if (form.value.channel === 'OTC') {
+        try {
+          // 先创建订单（占用资金）
+          await orderApi.createOrder({
+            productId: form.value.productId,
+            orderType: form.value.orderType,
+            amount: totalAmount,
+            fundingLines: finalFundingLines,
+            note: autoNote,
+          })
+          
+          // 然后进行记账（立即扣款）
+          await ledgerApi.createTransaction({
+            txnType: form.value.orderType,
+            productId: form.value.productId,
+            postings,
+            note: autoNote,
+            requestedAt: form.value.requestedAt,
+          })
+          
+          ElMessage.success('订单创建成功，已记账扣款')
+        } catch (error: any) {
+          ElMessage.error(error.message || '操作失败')
+          return
+        }
+      } else {
+        // 场内（EXCHANGE）产品，直接记账
+        await ledgerApi.createTransaction({
+          txnType: form.value.orderType,
+          productId: form.value.productId,
+          postings,
+          note: autoNote,
+          requestedAt: form.value.requestedAt,
+        })
+        ElMessage.success('买入/申购记录成功')
+      }
+      
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION') {
-      if (!form.value.channel || !form.value.productId || !form.value.accountId || !form.value.shares || !form.value.orderType || !form.value.requestedAt) {
-        ElMessage.error('请填写完整信息（包括场内/场外）')
+      if (!form.value.channel || !form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.orderType || !form.value.requestedAt) {
+        ElMessage.error('请填写完整信息（包括场内/场外、到账父账户和子账户）')
         return
       }
 
@@ -1480,11 +2061,16 @@ async function handleSubmit() {
         })
       }
 
+      // 自动生成备注：交易类型+场内外+产品名称
+      const channelLabel = form.value.channel === 'OTC' ? '场外' : '场内'
+      const orderTypeLabel = form.value.orderType === 'SELL' ? '卖出' : '赎回'
+      const autoNote = `${orderTypeLabel}${channelLabel}${product.productName}`
+
       await ledgerApi.createTransaction({
         txnType: form.value.orderType,
         productId: form.value.productId,
         postings,
-        note: form.value.note || undefined,
+        note: autoNote,
         requestedAt: form.value.requestedAt,
       })
       ElMessage.success('卖出/赎回记录成功')
@@ -1492,8 +2078,8 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'BOND_REPO') {
-      if (!form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.repoDays) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.repoDays) {
+        ElMessage.error('请填写完整信息（包括账户父账户和子账户）')
         return
       }
       // 逆回购：CASH CREDIT + CASH DEBIT（到期后）
@@ -1539,8 +2125,8 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'REFUND') {
-      if (!form.value.relatedTxnId || !form.value.accountId || !form.value.amount) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.relatedTxnId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount) {
+        ElMessage.error('请填写完整信息（包括退款账户父账户和子账户）')
         return
       }
       await ledgerApi.refund(form.value.relatedTxnId, {
@@ -1553,8 +2139,8 @@ async function handleSubmit() {
       handleClose()
       return
     } else if (selectedType.value === 'ADJUST') {
-      if (!form.value.accountId || form.value.amount === undefined) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.parentAccountId || !form.value.accountId || form.value.amount === undefined) {
+        ElMessage.error('请填写完整信息（包括账户父账户和子账户）')
         return
       }
       // 调整：需要计算差额，生成ADJUST分录

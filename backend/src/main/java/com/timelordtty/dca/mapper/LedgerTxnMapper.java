@@ -11,6 +11,7 @@ import java.util.List;
 public interface LedgerTxnMapper {
     LedgerTxn selectById(@Param("id") Long id);
     LedgerTxn selectByTxnId(@Param("txnId") String txnId);
+    List<LedgerTxn> selectByOrderId(@Param("orderId") String orderId);
     List<LedgerTxn> selectByBizGroupKey(@Param("bizGroupKey") String bizGroupKey);
     List<LedgerTxn> selectByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
                                        @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,

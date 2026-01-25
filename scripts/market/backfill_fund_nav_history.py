@@ -474,7 +474,7 @@ class FundHistoryBackfiller:
                 response = session.get(url, headers=headers, timeout=10)
                 
                 if response.status_code != 200:
-                    print(f"[fund_api] HTTP {response.status_code}")
+                    print(f"  [fund_api] HTTP {response.status_code}, URL: {url}")
                     break
                 
                 html_text = response.text
@@ -542,7 +542,7 @@ class FundHistoryBackfiller:
                             "dividend": None,
                         })
                     except Exception as e:  # noqa: BLE001
-                        print(f"[fund_api] 解析记录失败: {e}")
+                        print(f"  [fund_api] 解析记录失败: {e}")
                         continue
                 
                 # 检查是否还有更多页
@@ -552,7 +552,7 @@ class FundHistoryBackfiller:
                 page += 1
                 
             except Exception as e:  # noqa: BLE001
-                print(f"[fund_api] 获取历史净值失败 (page={page}): {e}")
+                print(f"  [fund_api] 获取历史净值失败 (page={page}): {e}")
                 break
         
         # 按日期升序排列
@@ -614,8 +614,7 @@ class FundHistoryBackfiller:
         """
         使用 akshare 获取基金历史净值数据（主要方案）。
         
-        使用 fund_etf_fund_info_em 接口，该接口支持更多基金代码（包括某些 LOF）。
-        优先使用此方法，因为 akshare 支持更多基金代码，数据更完整。
+        优先尝试 fund_etf_fund_info_em，如果失败则尝试 fund_open_fund_info_em。
         
         Args:
             product_code: 基金代码
@@ -625,77 +624,192 @@ class FundHistoryBackfiller:
         Returns:
             历史净值记录列表
         """
+        # 如果补齐区间很小（只有1-2天），放宽查询范围以避免因为单日无数据导致全部被过滤
+        # 查询最近30天的数据，然后再根据实际日期范围过滤
+        query_start_date = start_date
+        if (end_date - start_date).days <= 2:
+            query_start_date = max(start_date - timedelta(days=30), self.START_DATE)
+            print(f"  [akshare] 补齐区间较小（{start_date} ~ {end_date}），放宽查询范围到 {query_start_date} 以获取更多数据")
+        
+        # 方法1: 尝试 fund_etf_fund_info_em（适用于ETF和部分LOF）
         try:
-            # 使用 fund_etf_fund_info_em 获取基金历史净值
-            # 这个接口返回的是累计净值走势，需要转换
             df = ak.fund_etf_fund_info_em(fund=product_code)
             
-            if df is None or df.empty:
-                print(f"  [akshare] 基金 {product_code} 未获取到历史净值数据")
-                return []
+            if df is not None and not df.empty:
+                records = self._parse_akshare_fund_dataframe(df, product_code, query_start_date, end_date, start_date, end_date, "fund_etf_fund_info_em")
+                if records:
+                    print(f"  [akshare][fund_etf_fund_info_em] 成功获取 {len(records)} 条历史净值数据")
+                    return records
+                else:
+                    print(f"  [akshare][fund_etf_fund_info_em] 获取到数据但解析后为空（可能列名不匹配或日期范围问题）")
+            else:
+                print(f"  [akshare][fund_etf_fund_info_em] 基金 {product_code} 未获取到数据")
+        except Exception as e:
+            print(f"  [akshare][fund_etf_fund_info_em] 基金 {product_code} 获取失败: {e}")
+        
+        # 方法2: 尝试 fund_open_fund_info_em（适用于开放式基金）
+        try:
+            # 注意：fund_open_fund_info_em 的参数是 symbol 而不是 fund
+            df = ak.fund_open_fund_info_em(symbol=product_code, indicator="单位净值走势")
             
-            records: List[Dict] = []
-            
-            # fund_etf_fund_info_em 返回列：日期、累计净值、日增长率
-            for _, row in df.iterrows():
+            if df is not None and not df.empty:
+                records = self._parse_akshare_fund_dataframe(df, product_code, query_start_date, end_date, start_date, end_date, "fund_open_fund_info_em")
+                if records:
+                    print(f"  [akshare][fund_open_fund_info_em] 成功获取 {len(records)} 条历史净值数据")
+                    return records
+                else:
+                    print(f"  [akshare][fund_open_fund_info_em] 获取到数据但解析后为空")
+            else:
+                print(f"  [akshare][fund_open_fund_info_em] 基金 {product_code} 未获取到数据")
+        except Exception as e:
+            print(f"  [akshare][fund_open_fund_info_em] 基金 {product_code} 获取失败: {e}")
+        
+        return []
+    
+    def _parse_akshare_fund_dataframe(self, df, product_code: str, query_start_date: date, query_end_date: date, filter_start_date: date, filter_end_date: date, source: str) -> List[Dict]:
+        """
+        解析 akshare 返回的 DataFrame，提取历史净值数据
+        
+        Args:
+            df: DataFrame 数据
+            product_code: 基金代码
+            query_start_date: 查询的开始日期（用于初步过滤，范围较宽）
+            query_end_date: 查询的结束日期
+            filter_start_date: 实际过滤的开始日期（用于最终过滤，范围较窄）
+            filter_end_date: 实际过滤的结束日期
+            source: 数据源名称
+        """
+        records: List[Dict] = []
+        
+        # 输出调试信息：列名和数据行数
+        print(f"  [akshare][{source}] DataFrame 形状: {df.shape}, 列名: {list(df.columns)}")
+        
+        # 尝试多种可能的列名组合
+        date_columns = ['净值日期', '日期', 'date', '交易日期', '净值日期时间']
+        nav_columns = ['单位净值', '累计净值', '净值', 'nav', '单位净值(元)', '累计净值(元)']
+        return_columns = ['日增长率', '涨跌幅', '日涨跌幅', 'return', '日收益率']
+        
+        for _, row in df.iterrows():
+            try:
+                # 获取日期
+                date_val = None
+                for col in date_columns:
+                    if col in df.columns:
+                        date_val = row.get(col)
+                        if date_val is not None:
+                            break
+                
+                # 如果还是没找到，尝试使用索引
+                if date_val is None:
+                    date_val = row.name if hasattr(row, 'name') else None
+                
+                if date_val is None:
+                    continue
+                
+                # 解析日期
                 try:
-                    # 获取日期（可能是多种格式）
-                    date_val = row.get('净值日期') or row.get('日期')
-                    if date_val is None:
-                        # 尝试使用索引作为日期
-                        date_val = row.name if hasattr(row, 'name') else None
-                    
-                    if date_val is None:
-                        continue
+                    # 先检查是否为 pandas NaT
+                    try:
+                        import pandas as pd
+                        if pd.isna(date_val):
+                            continue
+                    except (ImportError, AttributeError, TypeError):
+                        pass
                     
                     nav_date = pd_to_date(date_val)
-                    if nav_date is None or not (start_date <= nav_date <= end_date):
+                    if nav_date is None:
                         continue
-                    
-                    # 获取净值（可能是单位净值或累计净值）
-                    nav = row.get('单位净值') or row.get('累计净值') or row.get('净值')
-                    if nav is None:
-                        continue
-                    
-                    try:
-                        nav_float = float(nav)
-                    except (ValueError, TypeError):
-                        continue
-                    
-                    # 检查是否为 NaN 或无效值
-                    if math.isnan(nav_float) or nav_float <= 0:
-                        continue
-                    
-                    # 日增长率
-                    daily_return = row.get('日增长率') or row.get('涨跌幅')
-                    daily_return_float = None
-                    if daily_return is not None:
-                        try:
-                            daily_return_val = float(daily_return)
-                            # 检查是否为 NaN
-                            if not math.isnan(daily_return_val):
-                                daily_return_float = daily_return_val
-                        except (ValueError, TypeError):
-                            pass
-                    
-                    records.append({
-                        "nav_date": nav_date,
-                        "nav": nav_float,
-                        "acc_nav": nav_float,  # 如果没有累计净值，使用单位净值
-                        "daily_return": daily_return_float
-                    })
-                    
                 except Exception as e:
+                    # 静默跳过解析失败的行，不输出太多日志
                     continue
-            
-            if records:
-                print(f"  [akshare] 成功获取 {len(records)} 条历史净值数据")
-            
-            return records
-            
-        except Exception as e:
-            print(f"  [akshare] 基金 {product_code} 历史净值获取失败: {e}")
-            return []
+                
+                # 安全地比较日期：先使用较宽的查询范围过滤
+                try:
+                    if not (query_start_date <= nav_date <= query_end_date):
+                        continue
+                except (TypeError, ValueError):
+                    # 如果比较失败（可能是 NaT），跳过
+                    continue
+                
+                # 获取净值
+                nav = None
+                for col in nav_columns:
+                    if col in df.columns:
+                        nav = row.get(col)
+                        if nav is not None:
+                            break
+                
+                if nav is None:
+                    continue
+                
+                try:
+                    nav_float = float(nav)
+                except (ValueError, TypeError):
+                    continue
+                
+                # 检查是否为 NaN 或无效值
+                if math.isnan(nav_float) or nav_float <= 0:
+                    continue
+                
+                # 获取累计净值（如果有）
+                acc_nav = nav_float
+                for col in ['累计净值', '累计净值(元)', 'acc_nav']:
+                    if col in df.columns:
+                        acc_val = row.get(col)
+                        if acc_val is not None:
+                            try:
+                                acc_nav = float(acc_val)
+                                if math.isnan(acc_nav):
+                                    acc_nav = nav_float
+                            except (ValueError, TypeError):
+                                pass
+                        break
+                
+                # 日增长率
+                daily_return_float = None
+                for col in return_columns:
+                    if col in df.columns:
+                        daily_return = row.get(col)
+                        if daily_return is not None:
+                            try:
+                                # 如果是百分比字符串，去掉百分号
+                                if isinstance(daily_return, str):
+                                    daily_return = daily_return.replace('%', '').strip()
+                                daily_return_val = float(daily_return)
+                                if not math.isnan(daily_return_val):
+                                    # 如果是百分比，转换为小数
+                                    if abs(daily_return_val) > 1:
+                                        daily_return_float = daily_return_val / 100.0
+                                    else:
+                                        daily_return_float = daily_return_val
+                            except (ValueError, TypeError):
+                                pass
+                        break
+                
+                records.append({
+                    "nav_date": nav_date,
+                    "nav": nav_float,
+                    "acc_nav": acc_nav,
+                    "daily_return": daily_return_float
+                })
+                
+            except Exception as e:
+                # 静默跳过解析失败的行，避免输出大量重复错误
+                # 只在第一次失败时输出一次提示
+                if not hasattr(self, '_parse_error_logged'):
+                    self._parse_error_logged = set()
+                if source not in self._parse_error_logged:
+                    print(f"  [akshare][{source}] 部分行数据解析失败（可能是日期格式问题），将跳过无效行")
+                    self._parse_error_logged.add(source)
+                continue
+        
+        # 最后根据实际需要的日期范围进行过滤
+        filtered_records = [r for r in records if filter_start_date <= r["nav_date"] <= filter_end_date]
+        
+        if len(filtered_records) < len(records):
+            print(f"  [akshare][{source}] 从 {len(records)} 条记录中过滤出 {len(filtered_records)} 条在目标日期范围内的记录")
+        
+        return filtered_records
 
     def fetch_history_by_akshare_stock(self, product_code: str, market: str, start_date: date, end_date: date) -> List[Dict]:
         """
@@ -892,12 +1006,15 @@ class FundHistoryBackfiller:
                 start_date = self.CMBC_START_DATE
                 print(f"  无历史数据，从 {start_date} 开始补齐（CMBC产品）")
         else:
-            # 普通产品：从 START_DATE 开始，确保能补齐中间缺失的数据
-            start_date = self.START_DATE
+            # 普通产品：如果已有数据，从已有数据的最大日期+1开始补齐
+            # 如果没有数据，从 START_DATE 开始补齐
             if existing and existing.get("max_date"):
+                start_date = existing["max_date"] + timedelta(days=1)
                 print(f"  已有数据: {existing.get('min_date')} ~ {existing.get('max_date')}")
+                print(f"  从 {start_date} 开始补齐（跳过已有数据，只补齐缺失日期）")
             else:
-                print(f"  无历史数据，从头开始补齐")
+                start_date = self.START_DATE
+                print(f"  无历史数据，从 {start_date} 开始补齐")
         
         # 如果起始日期已经超过今天，无需补齐
         if start_date > today:
@@ -924,13 +1041,20 @@ class FundHistoryBackfiller:
             source_flag = "AKSHARE"
             # 如果 akshare 没有返回数据，尝试使用东方财富 HTTP API 作为后备
             if not records:
-                print(f"  akshare 无数据，尝试使用东方财富 API 后备方案...")
-                records = self.fetch_history_by_fund_api(code, start_date, today)
-                if records:
-                    source_flag = "FUND"
+                print(f"  [akshare] 所有接口均无数据，尝试使用东方财富 HTTP API 后备方案...")
+                try:
+                    records = self.fetch_history_by_fund_api(code, start_date, today)
+                    if records:
+                        source_flag = "FUND"
+                        print(f"  [fund_api] 成功获取 {len(records)} 条历史净值数据")
+                    else:
+                        print(f"  [fund_api] 东方财富 API 也未返回数据")
+                except Exception as e:
+                    print(f"  [fund_api] 东方财富 API 调用失败: {e}")
 
         if not records:
-            print("  未获取到任何历史净值数据，跳过")
+            print(f"  [警告] 产品 {name} ({code}) 未获取到任何历史净值数据")
+            print(f"  [提示] 可能原因：1) 基金代码不正确 2) 数据源暂时不可用 3) 该产品确实没有历史数据")
             return
 
         # 只保留需要补齐区间内的数据
@@ -963,20 +1087,23 @@ class FundHistoryBackfiller:
 
         print(f"\n==== 开始补齐: {name} ({code}), 类型={asset_type}, 市场={market} ====")
 
-        # 确定起始日期：始终从 START_DATE 开始，确保能补齐中间缺失的数据
-        # UPSERT 会自动跳过已有的记录
+        # 确定起始日期：如果已有数据，从已有数据的最大日期+1开始补齐
+        # 如果没有数据，从 START_DATE 开始补齐
         existing = self.get_existing_bar_range(product_id)
-        start_date = self.START_DATE
-        
         today = date.today()
         
         if existing and existing.get("max_date"):
+            start_date = existing["max_date"] + timedelta(days=1)
             print(f"  已有数据: {existing.get('min_date')} ~ {existing.get('max_date')}")
-            # 如果已覆盖到今天，检查是否有中间缺失
-            if existing["max_date"] >= today:
-                print(f"  已覆盖到今天，检查是否有中间缺失数据...")
+            print(f"  从 {start_date} 开始补齐（跳过已有数据，只补齐缺失日期）")
         else:
-            print(f"  无历史数据，从头开始补齐")
+            start_date = self.START_DATE
+            print(f"  无历史数据，从 {start_date} 开始补齐")
+        
+        # 如果起始日期已经超过今天，无需补齐
+        if start_date > today:
+            print(f"  已覆盖到 {existing['max_date'] if existing else 'N/A'}，无需补齐")
+            return
 
         print(f"  补齐区间: {start_date} ~ {today}")
 
@@ -1027,21 +1154,65 @@ class FundHistoryBackfiller:
             self.close_db()
 
 
-def pd_to_date(val) -> date:
+def pd_to_date(val) -> Optional[date]:
     """将 pandas / 字符串 日期统一转换为 date 对象。"""
-    # 为避免额外依赖，这里不直接 import pandas，而是兼容常见类型
+    if val is None:
+        return None
+    
+    # 检查是否为 pandas NaT (Not a Time)
+    try:
+        import pandas as pd
+        if pd.isna(val) or val is pd.NaT:
+            return None
+    except (ImportError, AttributeError, TypeError):
+        pass
+    
+    # 处理 pandas Timestamp 类型（通过检查是否有 date() 方法）
+    if hasattr(val, 'date') and callable(getattr(val, 'date')):
+        try:
+            # 再次检查是否为 NaT
+            if str(val) == 'NaT' or str(val) == 'nat':
+                return None
+            return val.date()
+        except (ValueError, TypeError, AttributeError):
+            return None
+    
+    # 处理 date 类型
     if isinstance(val, date) and not isinstance(val, datetime):
         return val
+    
+    # 处理 datetime 类型
     if isinstance(val, datetime):
         return val.date()
-    # 字符串，如 '2025-01-01' / '20250101'
-    s = str(val)
-    if "-" in s:
-        return datetime.strptime(s[:10], "%Y-%m-%d").date()
-    if len(s) == 8:
-        return datetime.strptime(s, "%Y%m%d").date()
-    # 兜底：尝试直接用 pandas.to_datetime 风格
-    return datetime.fromisoformat(s).date()
+    
+    # 处理字符串
+    s = str(val).strip()
+    if not s or s == 'NaT' or s == 'nan' or s == 'nat' or s.lower() == 'nat':
+        return None
+    
+    # 尝试多种日期格式
+    date_formats = [
+        "%Y-%m-%d",
+        "%Y/%m/%d",
+        "%Y%m%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y/%m/%d %H:%M:%S",
+    ]
+    
+    for fmt in date_formats:
+        try:
+            if len(s) >= len(fmt.replace('%', '').replace(':', '').replace(' ', '').replace('-', '').replace('/', '')):
+                return datetime.strptime(s[:len(fmt)], fmt).date()
+        except (ValueError, TypeError):
+            continue
+    
+    # 兜底：尝试 fromisoformat
+    try:
+        return datetime.fromisoformat(s.replace('Z', '+00:00')[:19]).date()
+    except Exception:
+        pass
+    
+    return None
 
 
 if __name__ == "__main__":
