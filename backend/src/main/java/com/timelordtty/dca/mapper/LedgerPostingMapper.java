@@ -18,5 +18,15 @@ public interface LedgerPostingMapper {
     BigDecimal sumCreditByAccount(@Param("accountId") Long accountId);
     int insert(LedgerPosting posting);
     int batchInsert(@Param("postings") List<LedgerPosting> postings);
+    
+    /**
+     * 查询某账户的所有分录（按交易时间排序，用于重算历史余额）
+     */
+    List<LedgerPosting> selectByAccountIdOrderByTxnTime(@Param("accountId") Long accountId);
+    
+    /**
+     * 批量更新分录的历史余额
+     */
+    int batchUpdateBalanceAfter(@Param("updates") List<LedgerPosting> updates);
 }
 

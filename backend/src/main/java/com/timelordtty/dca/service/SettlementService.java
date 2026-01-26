@@ -389,13 +389,25 @@ public class SettlementService {
 
         // 生成真实分录（调用LedgerService.createTransaction）
         if (!postings.isEmpty()) {
+            // 自动生成备注：交易类型+产品名称+金额/份额
+            String orderTypeLabel;
+            String amountInfo;
+            switch (order.getOrderType()) {
+                case "BUY": orderTypeLabel = "买入"; amountInfo = String.format("金额%.2f元", confirmAmount); break;
+                case "SUBSCRIPTION": orderTypeLabel = "申购"; amountInfo = String.format("金额%.2f元", confirmAmount); break;
+                case "SELL": orderTypeLabel = "卖出"; amountInfo = String.format("%.4f份", confirmShares); break;
+                case "REDEMPTION": orderTypeLabel = "赎回"; amountInfo = String.format("%.4f份", confirmShares); break;
+                default: orderTypeLabel = order.getOrderType(); amountInfo = "";
+            }
+            String autoNote = String.format("订单结算: %s %s %s", orderTypeLabel, product.getProductName(), amountInfo);
+            
             ledgerService.createTransaction(
                 order.getUserId(), 
                 ownerFamilyId, 
                 order.getOrderType(), 
                 orderId, 
                 postings, 
-                "订单结算确认: " + orderId
+                autoNote
             );
         }
 

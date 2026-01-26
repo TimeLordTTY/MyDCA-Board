@@ -93,7 +93,7 @@ public class Account {
     
     /** 父账户ID，用于现实账户的资金分区/子账户，外键关联accounts表 */
     private Long parentAccountId;
-
+    
     /**
      * 关联产品ID（可选）
      *

@@ -51,26 +51,29 @@ public class MarketDataScheduler {
      */
     @Scheduled(cron = "0 * * * * ?")
     public void collectExchangeRealtime() {
-        if (!tryEnterExchangeRealtime("scheduled")) {
-            return;
-        }
         LocalDateTime now = LocalDateTime.now();
         LocalTime currentTime = now.toLocalTime();
         DayOfWeek dayOfWeek = now.getDayOfWeek();
 
-        // 只在交易时间内执行（周一到周五，上午 9:30-11:30 或下午 13:00-15:00）
+        // 先检查是否在交易时间内，避免不必要的锁获取
+        // 只在交易日执行（周一到周五）
         if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY) {
             return;
         }
 
         // 判断是否在交易时间内（排除中午休市时间 11:30-13:00）
+        // 上午 9:30-11:30，下午 13:00-15:00
         boolean inTradingHours = (currentTime.isAfter(MARKET_OPEN_MORNING) || currentTime.equals(MARKET_OPEN_MORNING))
                 && currentTime.isBefore(MARKET_CLOSE_MORNING)
                 || (currentTime.isAfter(MARKET_OPEN_AFTERNOON) || currentTime.equals(MARKET_OPEN_AFTERNOON))
                 && (currentTime.isBefore(MARKET_CLOSE_AFTERNOON) || currentTime.equals(MARKET_CLOSE_AFTERNOON));
         
         if (!inTradingHours) {
-            exitExchangeRealtime();
+            return;
+        }
+
+        // 交易时间内，尝试获取锁
+        if (!tryEnterExchangeRealtime("scheduled")) {
             return;
         }
 

@@ -112,6 +112,7 @@ import decimal
 from decimal import Decimal
 import time
 import logging
+import json
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -304,7 +305,7 @@ class ETFCollector:
                 SELECT id, product_code, product_name, market, asset_type
                 FROM product_master
                 WHERE is_active = 1
-                  AND channel = 'EXCHANGE'
+                AND channel = 'EXCHANGE'
             """
             cursor.execute(sql)
             return cursor.fetchall()
@@ -312,32 +313,18 @@ class ETFCollector:
     def fetch_realtime_quote(self, product_code: str, market: str) -> Optional[Dict]:
         """
         获取场内实时行情（使用东方财富接口）
-        完全按照 V1 版本 akshare_client.py 的实现
-        
-        Args:
-            product_code: 产品代码（如 513100, 163406）
-            market: 市场（SH/SZ）
-        
-        Returns:
-            行情字典，包含：price, prev_close, pct_chg, volume, amount, quote_time, 
-            iopv, premium_rate, open, high, low, amplitude, turnover_rate
-            如果失败返回 None
         """
         if not AKSHARE_AVAILABLE:
-            logger.error("akshare 未安装，无法获取实时行情")
             return None
         
         try:
-            # 使用东方财富 ETF 实时行情接口
             df = ak.fund_etf_spot_em()
             
             if df.empty:
-                logger.warning(f"未获取到 ETF 实时行情数据")
                 return None
             
             # 根据代码查找对应的产品
             product_row = None
-            
             for _, row in df.iterrows():
                 code = str(row.get('代码', '')).strip()
                 code_clean = code.replace('sh', '').replace('sz', '').replace('SH', '').replace('SZ', '')
@@ -346,23 +333,15 @@ class ETFCollector:
                     break
             
             if product_row is None:
-                logger.warning(f"未找到产品 {product_code} (market={market}) 的实时行情")
-                # 尝试使用其他接口：LOF 基金可能需要使用股票接口
-                logger.info(f"尝试使用股票接口获取 {product_code} (market={market}) 的实时行情...")
                 return self._fetch_realtime_quote_by_stock(product_code, market)
             
-            logger.info(f"[AKShare][ETF][{product_code}] 获取成功")
-            
-            # 解析中文字段名
             def safe_get(key, default=None):
-                """安全获取字段值，处理 None 和空值"""
                 val = product_row.get(key, default)
                 if val is None or (isinstance(val, float) and (val != val or val == float('inf') or val == float('-inf'))):
                     return default
                 return val
             
             def safe_decimal(key, default=None):
-                """安全转换为 Decimal"""
                 val = safe_get(key, default)
                 if val is None:
                     return None
@@ -372,7 +351,6 @@ class ETFCollector:
                     return default
             
             def safe_float(key, default=None):
-                """安全转换为 float"""
                 val = safe_get(key, default)
                 if val is None:
                     return default
@@ -401,8 +379,7 @@ class ETFCollector:
                         if '+' in update_time_str:
                             update_time_str = update_time_str.split('+')[0].strip()
                         quote_time = datetime.strptime(update_time_str, '%Y-%m-%d %H:%M:%S')
-                except Exception as e:
-                    logger.warning(f"解析更新时间失败: {update_time_val}, 错误: {e}")
+                except Exception:
                     quote_time = None
             
             if quote_time is None:
@@ -444,7 +421,7 @@ class ETFCollector:
                 if discount_rate is not None:
                     premium_rate = -discount_rate / 100.0
             
-            result = {
+            return {
                 'price': price,
                 'prev_close': prev_close,
                 'pct_chg': pct_chg,
@@ -460,10 +437,7 @@ class ETFCollector:
                 'amplitude': Decimal(str(amplitude)) if amplitude is not None else None,
             }
             
-            return result
-            
-        except Exception as e:
-            logger.error(f"获取 {product_code} 实时行情失败: {e}", exc_info=True)
+        except Exception:
             return None
     
     def _fetch_realtime_quote_by_stock(self, product_code: str, market: str) -> Optional[Dict]:
@@ -494,7 +468,7 @@ class ETFCollector:
                     logger.info(f"使用 stock_zh_a_spot_em 接口获取 {product_code} 的实时行情")
             except Exception as e:
                 logger.warning(f"尝试使用 LOF 接口失败，使用股票接口: {e}")
-                df = ak.stock_zh_a_spot_em()
+            df = ak.stock_zh_a_spot_em()
             
             if df.empty:
                 logger.warning(f"未获取到股票实时行情数据")
@@ -726,7 +700,7 @@ class ETFCollector:
             product_code: 产品代码
             market: 市场（SH/SZ）
             trade_date: 交易日期
-        
+            
         Returns:
             日K线字典，包含：trade_date, open, high, low, close, volume, amount, prev_close
         """
@@ -843,7 +817,7 @@ class ETFCollector:
             
             # 保存到 market_quote_realtime 表（DDL 定义的表名）
             insert_sql = """
-                INSERT INTO market_quote_realtime 
+                INSERT INTO market_quote_realtime
                 (product_id, quote_time, price, prev_close, pct_chg, volume, amount, 
                  iopv, premium_rate, open_price, high_price, low_price, source)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -904,42 +878,11 @@ class ETFCollector:
             ))
             self.conn.commit()
     
-    def _fetch_etf_iopv_map(self) -> Dict[str, Decimal]:
-        """
-        使用 akshare 批量获取 ETF 的 IOPV 数据
-        单品 API 不返回 IOPV，需要使用批量接口
-        
-        Returns:
-            代码到 IOPV 的映射字典
-        """
-        iopv_map = {}
-        
-        if not AKSHARE_AVAILABLE:
-            logger.warning("akshare 不可用，无法获取 IOPV")
-            return iopv_map
-        
-        try:
-            # 使用 akshare 的 ETF 实时行情接口获取 IOPV
-            df = ak.fund_etf_spot_em()
-            if df is not None and not df.empty:
-                for _, row in df.iterrows():
-                    code = str(row.get('代码', ''))
-                    iopv_val = row.get('IOPV实时估值')
-                    if code and iopv_val is not None:
-                        try:
-                            iopv_map[code] = Decimal(str(iopv_val))
-                        except:
-                            pass
-                logger.info(f"获取到 {len(iopv_map)} 个 ETF 的 IOPV 数据")
-        except Exception as e:
-            logger.warning(f"获取 ETF IOPV 批量数据失败: {e}")
-        
-        return iopv_map
-    
     def collect_realtime(self):
         """
         采集所有场内产品（ETF、股票、期货、期权）的实时行情
         使用精确查询 API，只获取数据库中存在的产品
+        注意：单品 API 已通过 f297 字段返回 IOPV，无需额外批量获取
         """
         products = self.get_active_etfs()
         print(f"开始采集 {len(products)} 个场内产品的实时行情...")
@@ -951,9 +894,6 @@ class ETFCollector:
         # 过滤出支持的产品类型
         supported_products = [p for p in products if p['asset_type'] in ('ETF', 'LOF', 'STOCK')]
         print(f"支持的产品: {len(supported_products)} 个")
-        
-        # 预先批量获取 ETF 的 IOPV 数据（单品 API 不返回 IOPV）
-        iopv_map = self._fetch_etf_iopv_map()
         
         success_count = 0
         fail_count = 0
@@ -968,17 +908,13 @@ class ETFCollector:
             
             print(f"采集: {product_name} ({product_code})...", end=" ")
             
-            # 直接调用单品 API 获取行情
+            # 直接调用单品 API 获取行情（已包含 IOPV 字段 f297）
             quote_dict = fetch_single_quote_direct(product_code, market)
             
             if quote_dict is None:
                 print("✗ 失败")
                 fail_count += 1
                 continue
-            
-            # 补充 IOPV 数据（如果有）
-            if product_code in iopv_map:
-                quote_dict['IOPV实时估值'] = iopv_map[product_code]
             
             # 解析并保存行情数据
             quote_data = self._parse_quote_row(quote_dict, product_code, asset_type)

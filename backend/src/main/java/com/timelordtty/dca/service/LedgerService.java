@@ -14,8 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 统一记账服务（LedgerService）
@@ -270,6 +273,14 @@ public class LedgerService {
 
         // 创建分录并更新账户余额，同时记录历史余额
         insertPostingsWithBalance(txnId, postings);
+
+        // 重算涉及账户的历史余额（确保按交易时间顺序正确）
+        Set<Long> accountIds = postings.stream()
+            .map(LedgerPosting::getAccountId)
+            .collect(Collectors.toSet());
+        for (Long accountId : accountIds) {
+            recalculateAccountBalanceHistory(accountId);
+        }
 
         return txn;
     }
@@ -875,6 +886,94 @@ public class LedgerService {
         insertPostingsWithBalance(txnId, postings);
         
         return transferTxn;
+    }
+
+    /**
+     * 重算账户的历史余额
+     * 当插入/修改交易时调用，确保历史余额按交易时间顺序正确
+     * 
+     * 算法说明：
+     * 1. 获取账户当前余额
+     * 2. 查询该账户所有分录（按交易的 requested_at 时间排序）
+     * 3. 计算起始余额 = 当前余额 - 所有分录的净变化量
+     * 4. 按时间顺序重新计算每条分录的 accountBalanceAfter
+     * 5. 批量更新有变化的分录
+     * 
+     * @param accountId 需要重算的账户ID
+     */
+    public void recalculateAccountBalanceHistory(Long accountId) {
+        // 1. 获取账户当前余额
+        Account account = accountMapper.selectById(accountId);
+        if (account == null) return;
+        
+        BigDecimal currentBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+        
+        // 2. 查询该账户所有分录（按交易时间排序）
+        List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountIdOrderByTxnTime(accountId);
+        if (postings.isEmpty()) return;
+        
+        // 3. 计算起始余额 = 当前余额 - 所有分录的净变化量
+        // 净变化量 = DEBIT总额 - CREDIT总额（对于资产类账户）
+        BigDecimal netChange = BigDecimal.ZERO;
+        for (LedgerPosting p : postings) {
+            if ("DEBIT".equals(p.getPostingType())) {
+                netChange = netChange.add(p.getAmount());
+            } else {
+                netChange = netChange.subtract(p.getAmount());
+            }
+        }
+        BigDecimal startBalance = currentBalance.subtract(netChange);
+        
+        // 4. 按时间顺序计算每条分录的余额
+        List<LedgerPosting> updates = new ArrayList<>();
+        BigDecimal runningBalance = startBalance;
+        
+        // 获取父账户ID（用于计算父账户余额）
+        Long parentAccountId = account.getParentAccountId();
+        
+        for (LedgerPosting p : postings) {
+            if ("DEBIT".equals(p.getPostingType())) {
+                runningBalance = runningBalance.add(p.getAmount());
+            } else {
+                runningBalance = runningBalance.subtract(p.getAmount());
+            }
+            
+            // 只有余额变化时才加入更新列表
+            boolean needUpdate = false;
+            if (p.getAccountBalanceAfter() == null || 
+                p.getAccountBalanceAfter().compareTo(runningBalance) != 0) {
+                p.setAccountBalanceAfter(runningBalance);
+                needUpdate = true;
+            }
+            
+            // 计算父账户余额（如果有父账户）
+            if (parentAccountId != null) {
+                List<Account> siblings = accountService.getAccountChildren(parentAccountId);
+                BigDecimal parentBalance = BigDecimal.ZERO;
+                for (Account sibling : siblings) {
+                    if (sibling.getId().equals(accountId)) {
+                        // 当前账户使用计算中的余额
+                        parentBalance = parentBalance.add(runningBalance);
+                    } else if (sibling.getBalance() != null) {
+                        parentBalance = parentBalance.add(sibling.getBalance());
+                    }
+                }
+                if (p.getParentAccountBalanceAfter() == null ||
+                    p.getParentAccountBalanceAfter().compareTo(parentBalance) != 0) {
+                    p.setParentAccountBalanceAfter(parentBalance);
+                    needUpdate = true;
+                }
+            }
+            
+            if (needUpdate) {
+                updates.add(p);
+            }
+        }
+        
+        // 5. 批量更新（如果有变化）
+        if (!updates.isEmpty()) {
+            ledgerPostingMapper.batchUpdateBalanceAfter(updates);
+        }
     }
 }
 

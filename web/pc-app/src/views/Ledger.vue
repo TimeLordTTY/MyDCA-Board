@@ -346,7 +346,9 @@ function handlePageSizeChange(pageSize: number) {
 
 async function handleViewDetail(txn: LedgerTxn) {
   try {
-    const detail = await ledgerApi.getTransactionDetail(txn.txnId)
+    // 对于转账交易，使用 originalTxnId（如果存在）
+    const txnId = (txn as any).originalTxnId || txn.txnId
+    const detail = await ledgerApi.getTransactionDetail(txnId)
     selectedTxn.value = detail
     postings.value = detail.postings || []
     detailVisible.value = true

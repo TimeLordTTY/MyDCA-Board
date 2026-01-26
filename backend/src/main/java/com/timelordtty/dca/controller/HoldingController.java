@@ -40,5 +40,21 @@ public class HoldingController {
         holdingService.importInitialHoldings(currentUser.getId(), currentUser.getFamilyId(), holdings);
         return ResponseEntity.ok().build();
     }
+
+    /**
+     * 获取指定产品在各账户的持仓明细
+     * 用于关联账户产品的赎回来源选择
+     * 
+     * @param productId 产品ID
+     * @return 账户持仓明细列表
+     */
+    @GetMapping("/product/{productId}/by-account")
+    public ResponseEntity<List<HoldingService.AccountHoldingInfo>> getProductHoldingsByAccount(
+            @PathVariable Long productId) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        List<HoldingService.AccountHoldingInfo> holdings = holdingService.getProductHoldingsByAccount(
+            productId, currentUser.getId(), currentUser.getFamilyId());
+        return ResponseEntity.ok(holdings);
+    }
 }
 

@@ -69,4 +69,31 @@
         </foreach>
     </insert>
 
+    <!-- 查询某账户的所有分录（按交易时间排序，用于重算余额） -->
+    <select id="selectByAccountIdOrderByTxnTime" resultMap="BaseResultMap">
+        SELECT lp.* FROM ledger_posting lp
+        INNER JOIN ledger_txn lt ON lp.txn_id = lt.txn_id
+        WHERE lp.account_id = #{accountId}
+        ORDER BY lt.requested_at ASC, lp.id ASC
+    </select>
+
+    <!-- 批量更新分录的历史余额 -->
+    <update id="batchUpdateBalanceAfter">
+        UPDATE ledger_posting
+        SET account_balance_after = CASE id
+            <foreach collection="updates" item="item">
+                WHEN #{item.id} THEN #{item.accountBalanceAfter}
+            </foreach>
+        END,
+        parent_account_balance_after = CASE id
+            <foreach collection="updates" item="item">
+                WHEN #{item.id} THEN #{item.parentAccountBalanceAfter}
+            </foreach>
+        END
+        WHERE id IN
+        <foreach collection="updates" item="item" open="(" separator="," close=")">
+            #{item.id}
+        </foreach>
+    </update>
+
 </mapper>

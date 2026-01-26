@@ -69,7 +69,7 @@
                 AND lp.account_id = #{accountId}
             )
         </if>
-        ORDER BY lt.trade_date DESC, lt.created_at DESC
+        ORDER BY lt.requested_at DESC
         <if test="limit != null and limit > 0">
             LIMIT #{limit}
             <if test="offset != null and offset > 0">

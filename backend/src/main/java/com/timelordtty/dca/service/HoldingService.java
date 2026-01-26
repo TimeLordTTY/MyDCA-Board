@@ -2,16 +2,24 @@ package com.timelordtty.dca.service;
 
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
+import com.timelordtty.dca.mapper.OrderFundingLineMapper;
+import com.timelordtty.dca.mapper.OrderMapper;
 import com.timelordtty.dca.mapper.ProductMasterMapper;
+import com.timelordtty.dca.mapper.SettlementConfirmMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.LedgerTxn;
+import com.timelordtty.dca.model.Order;
+import com.timelordtty.dca.model.OrderFundingLine;
 import com.timelordtty.dca.model.ProductMaster;
+import com.timelordtty.dca.model.SettlementConfirm;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,16 +57,24 @@ public class HoldingService {
     private final ProductService productService;
     private final AccountService accountService;
     private final LedgerService ledgerService;
+    private final OrderMapper orderMapper;
+    private final OrderFundingLineMapper orderFundingLineMapper;
+    private final SettlementConfirmMapper settlementConfirmMapper;
 
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
                           ProductMasterMapper productMasterMapper,
-                          ProductService productService, @Lazy AccountService accountService, LedgerService ledgerService) {
+                          ProductService productService, @Lazy AccountService accountService, LedgerService ledgerService,
+                          OrderMapper orderMapper, OrderFundingLineMapper orderFundingLineMapper,
+                          SettlementConfirmMapper settlementConfirmMapper) {
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.productMasterMapper = productMasterMapper;
         this.productService = productService;
         this.accountService = accountService;
         this.ledgerService = ledgerService;
+        this.orderMapper = orderMapper;
+        this.orderFundingLineMapper = orderFundingLineMapper;
+        this.settlementConfirmMapper = settlementConfirmMapper;
     }
 
     /**
@@ -374,6 +390,146 @@ public class HoldingService {
         
         productService.createProduct(product);
         return product;
+    }
+
+    /**
+     * 账户持仓信息 DTO
+     */
+    public static class AccountHoldingInfo {
+        private Long accountId;
+        private String accountName;
+        private String parentAccountName;
+        private BigDecimal shares;
+        private BigDecimal marketValue;
+
+        // Getters and setters
+        public Long getAccountId() { return accountId; }
+        public void setAccountId(Long accountId) { this.accountId = accountId; }
+        public String getAccountName() { return accountName; }
+        public void setAccountName(String accountName) { this.accountName = accountName; }
+        public String getParentAccountName() { return parentAccountName; }
+        public void setParentAccountName(String parentAccountName) { this.parentAccountName = parentAccountName; }
+        public BigDecimal getShares() { return shares; }
+        public void setShares(BigDecimal shares) { this.shares = shares; }
+        public BigDecimal getMarketValue() { return marketValue; }
+        public void setMarketValue(BigDecimal marketValue) { this.marketValue = marketValue; }
+    }
+
+    /**
+     * 获取指定产品在各账户的持仓明细
+     * 
+     * 用于关联账户产品的赎回来源选择
+     * 通过分析已确认订单的资金来源，计算每个账户的持仓份额
+     * 
+     * @param productId 产品ID
+     * @param userId 用户ID
+     * @param familyId 家庭ID，可为空
+     * @return 账户持仓明细列表
+     */
+    public List<AccountHoldingInfo> getProductHoldingsByAccount(Long productId, Long userId, Long familyId) {
+        // 查询该产品的所有已确认订单
+        List<Order> confirmedOrders = orderMapper.selectConfirmedByProductId(productId, userId);
+        
+        // 按账户聚合持仓份额
+        Map<Long, BigDecimal> accountShares = new HashMap<>();
+        
+        for (Order order : confirmedOrders) {
+            // 获取订单的资金来源明细
+            List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(order.getOrderId());
+            // 获取结算确认信息
+            SettlementConfirm settlement = settlementConfirmMapper.selectByOrderId(order.getOrderId());
+            
+            if (fundingLines.isEmpty() || settlement == null) {
+                continue;
+            }
+            
+            if ("BUY".equals(order.getOrderType()) || "SUBSCRIPTION".equals(order.getOrderType())) {
+                // 买入/申购：按出资比例分配份额
+                BigDecimal totalAmount = fundingLines.stream()
+                    .map(OrderFundingLine::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal totalShares = settlement.getConfirmShares();
+                
+                if (totalAmount.compareTo(BigDecimal.ZERO) > 0 && totalShares != null && totalShares.compareTo(BigDecimal.ZERO) > 0) {
+                    for (OrderFundingLine fl : fundingLines) {
+                        // 份额 = 出资金额 / 总金额 × 总份额
+                        BigDecimal accountSharesAlloc = fl.getAmount()
+                            .divide(totalAmount, 10, RoundingMode.HALF_UP)
+                            .multiply(totalShares);
+                        
+                        accountShares.merge(fl.getAccountId(), accountSharesAlloc, BigDecimal::add);
+                    }
+                }
+            } else if ("SELL".equals(order.getOrderType()) || "REDEMPTION".equals(order.getOrderType())) {
+                // 卖出/赎回：直接使用 OrderFundingLine.shares 或按金额比例分配
+                BigDecimal totalShares = settlement.getConfirmShares();
+                boolean hasExplicitShares = fundingLines.stream().anyMatch(fl -> fl.getShares() != null && fl.getShares().compareTo(BigDecimal.ZERO) > 0);
+                
+                if (hasExplicitShares) {
+                    // 有明确的份额分配
+                    for (OrderFundingLine fl : fundingLines) {
+                        if (fl.getShares() != null && fl.getShares().compareTo(BigDecimal.ZERO) > 0) {
+                            accountShares.merge(fl.getAccountId(), fl.getShares().negate(), BigDecimal::add);
+                        }
+                    }
+                } else if (totalShares != null && totalShares.compareTo(BigDecimal.ZERO) > 0) {
+                    // 没有明确份额，按金额比例分配
+                    BigDecimal totalAmount = fundingLines.stream()
+                        .map(OrderFundingLine::getAmount)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    
+                    if (totalAmount.compareTo(BigDecimal.ZERO) > 0) {
+                        for (OrderFundingLine fl : fundingLines) {
+                            BigDecimal accountSharesDeduct = fl.getAmount()
+                                .divide(totalAmount, 10, RoundingMode.HALF_UP)
+                                .multiply(totalShares)
+                                .negate();
+                            
+                            accountShares.merge(fl.getAccountId(), accountSharesDeduct, BigDecimal::add);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 获取产品最新净值用于计算市值
+        BigDecimal latestNav = BigDecimal.ONE; // 默认净值为1
+        ProductMaster product = productMasterMapper.selectById(productId);
+        // TODO: 从 nav 表获取最新净值
+        
+        // 转换为结果列表
+        List<AccountHoldingInfo> result = new ArrayList<>();
+        for (Map.Entry<Long, BigDecimal> entry : accountShares.entrySet()) {
+            BigDecimal shares = entry.getValue();
+            // 过滤掉份额为0或负数的账户
+            if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            
+            Account account = accountService.getAccount(entry.getKey());
+            if (account == null) {
+                continue;
+            }
+            
+            AccountHoldingInfo info = new AccountHoldingInfo();
+            info.setAccountId(entry.getKey());
+            info.setAccountName(account.getAccountName());
+            
+            // 获取父账户名称
+            if (account.getParentAccountId() != null) {
+                Account parent = accountService.getAccount(account.getParentAccountId());
+                if (parent != null) {
+                    info.setParentAccountName(parent.getAccountName());
+                }
+            }
+            
+            info.setShares(shares.setScale(4, RoundingMode.HALF_UP));
+            info.setMarketValue(shares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
+            
+            result.add(info);
+        }
+        
+        return result;
     }
 }
 

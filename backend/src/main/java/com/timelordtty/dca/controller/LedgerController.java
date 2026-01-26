@@ -71,163 +71,122 @@ public class LedgerController {
         // 为每个交易计算摘要信息（金额、主要账户等）
         List<Map<String, Object>> result = new ArrayList<>();
         for (LedgerTxn txn : txns) {
-            Map<String, Object> txnMap = new HashMap<>();
-            txnMap.put("id", txn.getId());
-            txnMap.put("txnId", txn.getTxnId());
-            txnMap.put("userId", txn.getUserId());
-            txnMap.put("familyId", txn.getFamilyId());
-            txnMap.put("txnType", txn.getTxnType());
-            txnMap.put("bizGroupKey", txn.getBizGroupKey());
-            txnMap.put("productId", txn.getProductId());
-            txnMap.put("orderId", txn.getOrderId());
-            txnMap.put("relatedTxnId", txn.getRelatedTxnId());
-            txnMap.put("relatedOrderId", txn.getRelatedOrderId());
-            txnMap.put("relationType", txn.getRelationType());
-            txnMap.put("requestedAt", txn.getRequestedAt());
-            txnMap.put("tradeDate", txn.getTradeDate());
-            txnMap.put("navDate", txn.getNavDate());
-            txnMap.put("confirmDate", txn.getConfirmDate());
-            txnMap.put("fetchDate", txn.getFetchDate());
-            txnMap.put("status", txn.getStatus());
-            txnMap.put("note", txn.getNote());
-            txnMap.put("categoryId", txn.getCategoryId());
-            txnMap.put("isReimbursable", txn.getIsReimbursable());
-            txnMap.put("isReimbursed", txn.getIsReimbursed());
-            txnMap.put("isReversed", txn.getIsReversed());
-            txnMap.put("reversedByTxnId", txn.getReversedByTxnId());
-            txnMap.put("createdAt", txn.getCreatedAt());
-            txnMap.put("updatedAt", txn.getUpdatedAt());
-            
-            // 获取 postings 并计算摘要金额、账户信息
+            // 获取 postings
             List<LedgerPosting> postings = ledgerService.getPostingsByTxnId(txn.getTxnId());
-            if (!postings.isEmpty()) {
-                // 计算主要金额（对于收入/支出，取 CASH 账户的金额；对于转账，取转出金额）
-                BigDecimal summaryAmount = BigDecimal.ZERO;
-                Long mainAccountId = null;
+            
+            // 对于转账交易，生成两条记录（转出和转入）
+            if (("TRANSFER_OUT".equals(txn.getTxnType()) || "TRANSFER_IN".equals(txn.getTxnType())) && postings.size() >= 2) {
+                // 找到转出（CREDIT）和转入（DEBIT）的 REAL 账户分录
+                LedgerPosting creditPosting = null;  // 转出
+                LedgerPosting debitPosting = null;   // 转入
                 
-                // 优先查找 CASH 账户（真实账户）
                 for (LedgerPosting posting : postings) {
-                    if ("CASH".equals(posting.getAccountType())) {
-                        Account acc = accountService.getAccount(posting.getAccountId());
-                        if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                            // 对于BUY/SUBSCRIPTION交易，CASH CREDIT表示现金减少，应该显示为负数
-                            if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) 
-                                && "CREDIT".equals(posting.getPostingType())) {
-                                summaryAmount = posting.getAmount().negate();
-                            } else {
-                                summaryAmount = posting.getAmount();
-                            }
-                            mainAccountId = posting.getAccountId();
-                            break;
+                    Account acc = accountService.getAccount(posting.getAccountId());
+                    if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                        if ("CREDIT".equals(posting.getPostingType()) && creditPosting == null) {
+                            creditPosting = posting;
+                        } else if ("DEBIT".equals(posting.getPostingType()) && debitPosting == null) {
+                            debitPosting = posting;
                         }
                     }
                 }
                 
-                // 如果没有找到 CASH 账户，查找其他 REAL 账户
-                if (mainAccountId == null) {
+                // 生成转出记录
+                if (creditPosting != null) {
+                    Map<String, Object> outMap = buildTxnMap(txn, creditPosting, "TRANSFER_OUT", true);
+                    result.add(outMap);
+                }
+                
+                // 生成转入记录
+                if (debitPosting != null) {
+                    Map<String, Object> inMap = buildTxnMap(txn, debitPosting, "TRANSFER_IN", false);
+                    result.add(inMap);
+                }
+            } else {
+                // 非转账交易，正常处理
+                Map<String, Object> txnMap = new HashMap<>();
+                txnMap.put("id", txn.getId());
+                txnMap.put("txnId", txn.getTxnId());
+                txnMap.put("userId", txn.getUserId());
+                txnMap.put("familyId", txn.getFamilyId());
+                txnMap.put("txnType", txn.getTxnType());
+                txnMap.put("bizGroupKey", txn.getBizGroupKey());
+                txnMap.put("productId", txn.getProductId());
+                txnMap.put("orderId", txn.getOrderId());
+                txnMap.put("relatedTxnId", txn.getRelatedTxnId());
+                txnMap.put("relatedOrderId", txn.getRelatedOrderId());
+                txnMap.put("relationType", txn.getRelationType());
+                txnMap.put("requestedAt", txn.getRequestedAt());
+                txnMap.put("tradeDate", txn.getTradeDate());
+                txnMap.put("navDate", txn.getNavDate());
+                txnMap.put("confirmDate", txn.getConfirmDate());
+                txnMap.put("fetchDate", txn.getFetchDate());
+                txnMap.put("status", txn.getStatus());
+                txnMap.put("note", txn.getNote());
+                txnMap.put("categoryId", txn.getCategoryId());
+                txnMap.put("isReimbursable", txn.getIsReimbursable());
+                txnMap.put("isReimbursed", txn.getIsReimbursed());
+                txnMap.put("isReversed", txn.getIsReversed());
+                txnMap.put("reversedByTxnId", txn.getReversedByTxnId());
+                txnMap.put("createdAt", txn.getCreatedAt());
+                txnMap.put("updatedAt", txn.getUpdatedAt());
+                
+                if (!postings.isEmpty()) {
+                    // 计算主要金额（对于收入/支出，取 CASH 账户的金额）
+                    BigDecimal summaryAmount = BigDecimal.ZERO;
+                    Long mainAccountId = null;
+                    
+                    // 优先查找 CASH 账户（真实账户）
                     for (LedgerPosting posting : postings) {
-                        Account acc = accountService.getAccount(posting.getAccountId());
-                        if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                            summaryAmount = posting.getAmount();
-                            mainAccountId = posting.getAccountId();
-                            break;
-                        }
-                    }
-                }
-                
-                // 如果还是没有找到，取第一个 postings 的金额（可能是虚拟账户）
-                if (mainAccountId == null && !postings.isEmpty()) {
-                    summaryAmount = postings.get(0).getAmount();
-                    mainAccountId = postings.get(0).getAccountId();
-                }
-                
-                txnMap.put("summaryAmount", summaryAmount);
-                txnMap.put("mainAccountId", mainAccountId);
-                
-                // 获取账户信息（叶子账户名称、余额，父账户余额）
-                // 使用分录中记录的历史余额，而不是当前账户余额
-                // 只对 REAL 账户显示余额信息，虚拟账户不显示
-                if (mainAccountId != null) {
-                    Account account = accountService.getAccount(mainAccountId);
-                    if (account != null) {
-                        // 显示规则：父账户名称-叶子账户名称
-                        String leafAccountName = account.getAccountName();
-                        if (account.getParentAccountId() != null) {
-                            Account parentAccount = accountService.getAccount(account.getParentAccountId());
-                            if (parentAccount != null) {
-                                leafAccountName = parentAccount.getAccountName() + "-" + account.getAccountName();
-                            }
-                        }
-                        txnMap.put("leafAccountName", leafAccountName);
-                        
-                        if ("REAL".equals(account.getAccountKind())) {
-                            // 从分录中获取该交易发生时的历史余额
-                            // 查找该交易中涉及该账户的分录，使用其记录的历史余额
-                            BigDecimal leafBalance = null;
-                            BigDecimal parentBalance = null;
-                            for (LedgerPosting posting : postings) {
-                                if (posting.getAccountId().equals(mainAccountId) && posting.getAccountBalanceAfter() != null) {
-                                    leafBalance = posting.getAccountBalanceAfter();
-                                    parentBalance = posting.getParentAccountBalanceAfter();
-                                    break;
-                                }
-                            }
-                            
-                            // 如果分录中没有记录历史余额，使用当前余额（兼容旧数据）
-                            if (leafBalance == null) {
-                                leafBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
-                            }
-                            txnMap.put("leafAccountBalance", leafBalance);
-                            
-                            // 获取父账户余额
-                            if (account.getParentAccountId() != null) {
-                                Account parentAccount = accountService.getAccount(account.getParentAccountId());
-                                if (parentAccount != null) {
-                                    // 如果分录中记录了父账户余额，使用历史余额；否则计算当前余额
-                                    if (parentBalance != null) {
-                                        txnMap.put("parentAccountBalance", parentBalance);
-                                    } else {
-                                        // 计算父账户余额（所有子账户余额之和）
-                                        List<Account> children = accountService.getAccountChildren(account.getParentAccountId());
-                                        BigDecimal calculatedParentBalance = children.stream()
-                                            .map(Account::getBalance)
-                                            .filter(b -> b != null)
-                                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-                                        txnMap.put("parentAccountBalance", calculatedParentBalance);
-                                    }
-                                    txnMap.put("parentAccountName", parentAccount.getAccountName());
+                        if ("CASH".equals(posting.getAccountType())) {
+                            Account acc = accountService.getAccount(posting.getAccountId());
+                            if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                                // 对于BUY/SUBSCRIPTION交易，CASH CREDIT表示现金减少，应该显示为负数
+                                if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) 
+                                    && "CREDIT".equals(posting.getPostingType())) {
+                                    summaryAmount = posting.getAmount().negate();
                                 } else {
-                                    txnMap.put("parentAccountBalance", BigDecimal.ZERO);
-                                    txnMap.put("parentAccountName", null);
+                                    summaryAmount = posting.getAmount();
                                 }
-                            } else {
-                                txnMap.put("parentAccountBalance", null);
-                                txnMap.put("parentAccountName", null);
+                                mainAccountId = posting.getAccountId();
+                                break;
                             }
-                        } else {
-                            // 虚拟账户，不显示余额信息
-                            txnMap.put("leafAccountBalance", null);
-                            txnMap.put("parentAccountBalance", null);
                         }
-                    } else {
-                        txnMap.put("leafAccountName", null);
-                        txnMap.put("leafAccountBalance", null);
-                        txnMap.put("parentAccountBalance", null);
                     }
+                    
+                    // 如果没有找到 CASH 账户，查找其他 REAL 账户
+                    if (mainAccountId == null) {
+                        for (LedgerPosting posting : postings) {
+                            Account acc = accountService.getAccount(posting.getAccountId());
+                            if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                                summaryAmount = posting.getAmount();
+                                mainAccountId = posting.getAccountId();
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 如果还是没有找到，取第一个 postings 的金额（可能是虚拟账户）
+                    if (mainAccountId == null && !postings.isEmpty()) {
+                        summaryAmount = postings.get(0).getAmount();
+                        mainAccountId = postings.get(0).getAccountId();
+                    }
+                    
+                    txnMap.put("summaryAmount", summaryAmount);
+                    txnMap.put("mainAccountId", mainAccountId);
+                    
+                    // 获取账户信息
+                    populateAccountInfo(txnMap, mainAccountId, postings);
                 } else {
+                    txnMap.put("summaryAmount", BigDecimal.ZERO);
+                    txnMap.put("mainAccountId", null);
                     txnMap.put("leafAccountName", null);
                     txnMap.put("leafAccountBalance", null);
                     txnMap.put("parentAccountBalance", null);
                 }
-            } else {
-                txnMap.put("summaryAmount", BigDecimal.ZERO);
-                txnMap.put("mainAccountId", null);
-                txnMap.put("leafAccountName", null);
-                txnMap.put("leafAccountBalance", null);
-                txnMap.put("parentAccountBalance", null);
+                
+                result.add(txnMap);
             }
-            
-            result.add(txnMap);
         }
         
         Map<String, Object> response = new HashMap<>();
@@ -524,6 +483,171 @@ public class LedgerController {
         LedgerTxn transferTxn = ledgerService.createCustodyTransfer(
             currentUser.getId(), currentUser.getFamilyId(), productId, transferShares, transferPrice, transferDate, note);
         return ResponseEntity.ok(transferTxn);
+    }
+    
+    /**
+     * 为转账交易构建显示记录
+     * @param txn 原始交易
+     * @param posting 分录（转出或转入）
+     * @param displayTxnType 显示的交易类型（TRANSFER_OUT 或 TRANSFER_IN）
+     * @param isOut 是否为转出（用于金额正负号）
+     * @return 构建的Map
+     */
+    private Map<String, Object> buildTxnMap(LedgerTxn txn, LedgerPosting posting, String displayTxnType, boolean isOut) {
+        Map<String, Object> txnMap = new HashMap<>();
+        // 使用 txnId + 后缀来区分转出和转入记录
+        txnMap.put("id", txn.getId());
+        txnMap.put("txnId", txn.getTxnId() + (isOut ? "_OUT" : "_IN"));
+        txnMap.put("originalTxnId", txn.getTxnId());  // 保留原始txnId用于查看详情
+        txnMap.put("userId", txn.getUserId());
+        txnMap.put("familyId", txn.getFamilyId());
+        txnMap.put("txnType", displayTxnType);
+        txnMap.put("bizGroupKey", txn.getBizGroupKey());
+        txnMap.put("productId", txn.getProductId());
+        txnMap.put("orderId", txn.getOrderId());
+        txnMap.put("relatedTxnId", txn.getRelatedTxnId());
+        txnMap.put("relatedOrderId", txn.getRelatedOrderId());
+        txnMap.put("relationType", txn.getRelationType());
+        txnMap.put("requestedAt", txn.getRequestedAt());
+        txnMap.put("tradeDate", txn.getTradeDate());
+        txnMap.put("navDate", txn.getNavDate());
+        txnMap.put("confirmDate", txn.getConfirmDate());
+        txnMap.put("fetchDate", txn.getFetchDate());
+        txnMap.put("status", txn.getStatus());
+        txnMap.put("note", txn.getNote());
+        txnMap.put("categoryId", txn.getCategoryId());
+        txnMap.put("isReimbursable", txn.getIsReimbursable());
+        txnMap.put("isReimbursed", txn.getIsReimbursed());
+        txnMap.put("isReversed", txn.getIsReversed());
+        txnMap.put("reversedByTxnId", txn.getReversedByTxnId());
+        txnMap.put("createdAt", txn.getCreatedAt());
+        txnMap.put("updatedAt", txn.getUpdatedAt());
+        
+        // 金额：转出为正（显示时会加负号），转入为正
+        txnMap.put("summaryAmount", posting.getAmount());
+        txnMap.put("mainAccountId", posting.getAccountId());
+        
+        // 获取账户信息
+        Account account = accountService.getAccount(posting.getAccountId());
+        if (account != null) {
+            String leafAccountName = account.getAccountName();
+            if (account.getParentAccountId() != null) {
+                Account parentAccount = accountService.getAccount(account.getParentAccountId());
+                if (parentAccount != null) {
+                    leafAccountName = parentAccount.getAccountName() + "-" + account.getAccountName();
+                }
+            }
+            txnMap.put("leafAccountName", leafAccountName);
+            
+            if ("REAL".equals(account.getAccountKind())) {
+                BigDecimal leafBalance = posting.getAccountBalanceAfter();
+                if (leafBalance == null) {
+                    leafBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+                }
+                txnMap.put("leafAccountBalance", leafBalance);
+                
+                BigDecimal parentBalance = posting.getParentAccountBalanceAfter();
+                if (account.getParentAccountId() != null) {
+                    Account parentAccount = accountService.getAccount(account.getParentAccountId());
+                    if (parentAccount != null) {
+                        if (parentBalance == null) {
+                            List<Account> children = accountService.getAccountChildren(account.getParentAccountId());
+                            parentBalance = children.stream()
+                                .map(Account::getBalance)
+                                .filter(b -> b != null)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                        }
+                        txnMap.put("parentAccountBalance", parentBalance);
+                        txnMap.put("parentAccountName", parentAccount.getAccountName());
+                    } else {
+                        txnMap.put("parentAccountBalance", BigDecimal.ZERO);
+                        txnMap.put("parentAccountName", null);
+                    }
+                } else {
+                    txnMap.put("parentAccountBalance", null);
+                    txnMap.put("parentAccountName", null);
+                }
+            } else {
+                txnMap.put("leafAccountBalance", null);
+                txnMap.put("parentAccountBalance", null);
+            }
+        } else {
+            txnMap.put("leafAccountName", null);
+            txnMap.put("leafAccountBalance", null);
+            txnMap.put("parentAccountBalance", null);
+        }
+        
+        return txnMap;
+    }
+    
+    /**
+     * 填充账户信息到 txnMap
+     */
+    private void populateAccountInfo(Map<String, Object> txnMap, Long mainAccountId, List<LedgerPosting> postings) {
+        if (mainAccountId != null) {
+            Account account = accountService.getAccount(mainAccountId);
+            if (account != null) {
+                String leafAccountName = account.getAccountName();
+                if (account.getParentAccountId() != null) {
+                    Account parentAccount = accountService.getAccount(account.getParentAccountId());
+                    if (parentAccount != null) {
+                        leafAccountName = parentAccount.getAccountName() + "-" + account.getAccountName();
+                    }
+                }
+                txnMap.put("leafAccountName", leafAccountName);
+                
+                if ("REAL".equals(account.getAccountKind())) {
+                    BigDecimal leafBalance = null;
+                    BigDecimal parentBalance = null;
+                    for (LedgerPosting posting : postings) {
+                        if (posting.getAccountId().equals(mainAccountId) && posting.getAccountBalanceAfter() != null) {
+                            leafBalance = posting.getAccountBalanceAfter();
+                            parentBalance = posting.getParentAccountBalanceAfter();
+                            break;
+                        }
+                    }
+                    
+                    if (leafBalance == null) {
+                        leafBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+                    }
+                    txnMap.put("leafAccountBalance", leafBalance);
+                    
+                    if (account.getParentAccountId() != null) {
+                        Account parentAccount = accountService.getAccount(account.getParentAccountId());
+                        if (parentAccount != null) {
+                            if (parentBalance != null) {
+                                txnMap.put("parentAccountBalance", parentBalance);
+                            } else {
+                                List<Account> children = accountService.getAccountChildren(account.getParentAccountId());
+                                BigDecimal calculatedParentBalance = children.stream()
+                                    .map(Account::getBalance)
+                                    .filter(b -> b != null)
+                                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                txnMap.put("parentAccountBalance", calculatedParentBalance);
+                            }
+                            txnMap.put("parentAccountName", parentAccount.getAccountName());
+                        } else {
+                            txnMap.put("parentAccountBalance", BigDecimal.ZERO);
+                            txnMap.put("parentAccountName", null);
+                        }
+                    } else {
+                        txnMap.put("parentAccountBalance", null);
+                        txnMap.put("parentAccountName", null);
+                    }
+                } else {
+                    txnMap.put("leafAccountBalance", null);
+                    txnMap.put("parentAccountBalance", null);
+                }
+            } else {
+                txnMap.put("leafAccountName", null);
+                txnMap.put("leafAccountBalance", null);
+                txnMap.put("parentAccountBalance", null);
+            }
+        } else {
+            txnMap.put("leafAccountName", null);
+            txnMap.put("leafAccountBalance", null);
+            txnMap.put("parentAccountBalance", null);
+        }
     }
 }
 

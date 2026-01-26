@@ -37,6 +37,14 @@
         SELECT * FROM orders WHERE user_id = #{userId} ORDER BY created_at DESC
     </select>
 
+    <select id="selectConfirmedByProductId" resultMap="BaseResultMap">
+        SELECT * FROM orders 
+        WHERE product_id = #{productId} 
+        AND user_id = #{userId}
+        AND status = 'CONFIRMED'
+        ORDER BY requested_at ASC
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO orders (
             order_id, user_id, product_id, order_type, amount, shares,
@@ -59,4 +67,3 @@
     </update>
 
 </mapper>
-
