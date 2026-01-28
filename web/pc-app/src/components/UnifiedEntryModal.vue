@@ -52,70 +52,25 @@
               clearable
             />
           </el-form-item>
-          <el-form-item label="父账户" required>
+          <el-form-item label="账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.parentAccountId" 
-                placeholder="选择父账户" 
-                style="flex: 1; min-width: 200px;"
-                @change="handleParentAccountChange"
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
               >
-                <el-option
-                  v-for="acc in parentAccounts"
-                  :key="acc.id"
-                  :label="acc.accountName"
-                  :value="acc.id"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="font-size: 12px; margin-left: 12px;">
-                      <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                        {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                      </span>
-                      <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                        欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                      </span>
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.parentAccountId" style="font-size: 13px; white-space: nowrap;">
-                <span v-if="selectedParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedParentAccountBalance) }}</span>
-                <span v-if="selectedParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedParentAccountBalance > 0 ? '8px' : '0' }">
-                  欠{{ formatCurrency(selectedParentAccountCredit) }}
-                </span>
-              </span>
-            </div>
-          </el-form-item>
-          <el-form-item label="子账户" required>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.accountId" 
-                placeholder="选择子账户" 
-                style="flex: 1; min-width: 200px;"
-                :disabled="!form.parentAccountId"
-              >
-                <el-option
-                  v-for="acc in availableChildAccounts"
-                  :key="acc.id"
-                  :value="acc.id"
-                  :label="acc.accountName"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>
-                      {{ acc.accountName }}
-                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                        ({{ getFundUsageLabel(acc.fundUsage) }})
-                      </span>
-                    </span>
-                    <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                      {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.accountId" :style="{ color: isSelectedChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                {{ isSelectedChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedChildAccountBalance) }}
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
               </span>
             </div>
           </el-form-item>
@@ -145,63 +100,23 @@
           </el-form-item>
           <el-form-item label="还款账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.parentAccountId" 
-                placeholder="选择还款账户（父账户）" 
-                style="flex: 1; min-width: 200px;"
-                @change="handleRepaymentAccountChange"
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择还款账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
               >
-                <el-option
-                  v-for="acc in parentAccounts"
-                  :key="acc.id"
-                  :label="acc.accountName"
-                  :value="acc.id"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="font-size: 12px; margin-left: 12px;">
-                      <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                        {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                      </span>
-                      <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                        欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                      </span>
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.parentAccountId" style="font-size: 13px; white-space: nowrap;">
-                <span v-if="selectedParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedParentAccountBalance) }}</span>
-                <span v-if="selectedParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedParentAccountBalance > 0 ? '8px' : '0' }">
-                  欠{{ formatCurrency(selectedParentAccountCredit) }}
-                </span>
-              </span>
-            </div>
-          </el-form-item>
-          <el-form-item label="子账户" required>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.accountId" 
-                placeholder="选择子账户" 
-                style="flex: 1; min-width: 200px;"
-                :disabled="!form.parentAccountId"
-              >
-                <el-option
-                  v-for="acc in availableChildAccounts"
-                  :key="acc.id"
-                  :value="acc.id"
-                  :label="acc.accountName"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                      {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.accountId" :style="{ color: isSelectedChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                {{ isSelectedChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedChildAccountBalance) }}
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
               </span>
             </div>
           </el-form-item>
@@ -255,137 +170,47 @@
 
           <!-- 金额转账 -->
           <template v-if="transferType === 'AMOUNT'">
-            <el-form-item label="转出父账户" required>
+            <el-form-item label="转出账户" required>
               <div style="display: flex; align-items: center; gap: 12px;">
-                <el-select 
-                  v-model="form.fromParentAccountId" 
-                  placeholder="选择转出账户的父账户" 
-                  style="flex: 1; min-width: 200px;"
-                  @change="handleFromParentAccountChange"
+                <el-cascader
+                  v-model="selectedFromAccount"
+                  :options="accountCascaderOptions"
+                  :props="accountCascaderProps"
+                  placeholder="选择转出账户"
+                  style="flex: 1; min-width: 280px;"
+                  clearable
                 >
-                  <el-option
-                    v-for="acc in parentAccounts"
-                    :key="acc.id"
-                    :label="acc.accountName"
-                    :value="acc.id"
-                  >
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <span>{{ acc.accountName }}</span>
-                      <span style="font-size: 12px; margin-left: 12px;">
-                        <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                          {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                        </span>
-                        <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                          欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                        </span>
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <span v-if="form.fromParentAccountId" style="font-size: 13px; white-space: nowrap;">
-                  <span v-if="selectedFromParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedFromParentAccountBalance) }}</span>
-                  <span v-if="selectedFromParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedFromParentAccountBalance > 0 ? '8px' : '0' }">
-                    欠{{ formatCurrency(selectedFromParentAccountCredit) }}
-                  </span>
+                  <template #default="{ node, data }">
+                    <span>{{ data.label }}</span>
+                    <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                      {{ data.balanceText }}
+                    </span>
+                  </template>
+                </el-cascader>
+                <span v-if="form.fromAccountId" :style="{ color: getSelectedAccountBalance(form.fromParentAccountId, form.fromAccountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                  {{ getSelectedAccountBalance(form.fromParentAccountId, form.fromAccountId).text }}
                 </span>
               </div>
             </el-form-item>
-            <el-form-item label="转出子账户" required>
+            <el-form-item label="转入账户" required>
               <div style="display: flex; align-items: center; gap: 12px;">
-                <el-select 
-                  v-model="form.fromAccountId" 
-                  placeholder="选择转出账户的子账户" 
-                  style="flex: 1; min-width: 200px;"
-                  :disabled="!form.fromParentAccountId"
+                <el-cascader
+                  v-model="selectedToAccount"
+                  :options="accountCascaderOptions"
+                  :props="accountCascaderProps"
+                  placeholder="选择转入账户"
+                  style="flex: 1; min-width: 280px;"
+                  clearable
                 >
-                  <el-option
-                    v-for="acc in availableFromChildAccounts"
-                    :key="acc.id"
-                    :value="acc.id"
-                    :label="acc.accountName"
-                  >
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <span>
-                        {{ acc.accountName }}
-                        <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                          ({{ getFundUsageLabel(acc.fundUsage) }})
-                        </span>
-                      </span>
-                      <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                        {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <span v-if="form.fromAccountId" :style="{ color: isSelectedFromChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                  {{ isSelectedFromChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedFromChildAccountBalance) }}
-                </span>
-              </div>
-            </el-form-item>
-            <el-form-item label="转入父账户" required>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <el-select 
-                  v-model="form.toParentAccountId" 
-                  placeholder="选择转入账户的父账户" 
-                  style="flex: 1; min-width: 200px;"
-                  @change="handleToParentAccountChange"
-                >
-                  <el-option
-                    v-for="acc in parentAccounts"
-                    :key="acc.id"
-                    :label="acc.accountName"
-                    :value="acc.id"
-                  >
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <span>{{ acc.accountName }}</span>
-                      <span style="font-size: 12px; margin-left: 12px;">
-                        <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                          {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                        </span>
-                        <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                          欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                        </span>
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <span v-if="form.toParentAccountId" style="font-size: 13px; white-space: nowrap;">
-                  <span v-if="selectedToParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedToParentAccountBalance) }}</span>
-                  <span v-if="selectedToParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedToParentAccountBalance > 0 ? '8px' : '0' }">
-                    欠{{ formatCurrency(selectedToParentAccountCredit) }}
-                  </span>
-                </span>
-              </div>
-            </el-form-item>
-            <el-form-item label="转入子账户" required>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <el-select 
-                  v-model="form.toAccountId" 
-                  placeholder="选择转入账户的子账户" 
-                  style="flex: 1; min-width: 200px;"
-                  :disabled="!form.toParentAccountId"
-                >
-                  <el-option
-                    v-for="acc in availableToChildAccounts"
-                    :key="acc.id"
-                    :value="acc.id"
-                    :label="acc.accountName"
-                  >
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <span>
-                        {{ acc.accountName }}
-                        <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                          ({{ getFundUsageLabel(acc.fundUsage) }})
-                        </span>
-                      </span>
-                      <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                        {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <span v-if="form.toAccountId" :style="{ color: isSelectedToChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                  {{ isSelectedToChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedToChildAccountBalance) }}
+                  <template #default="{ node, data }">
+                    <span>{{ data.label }}</span>
+                    <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                      {{ data.balanceText }}
+                    </span>
+                  </template>
+                </el-cascader>
+                <span v-if="form.toAccountId" :style="{ color: getSelectedAccountBalance(form.toParentAccountId, form.toAccountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                  {{ getSelectedAccountBalance(form.toParentAccountId, form.toAccountId).text }}
                 </span>
               </div>
             </el-form-item>
@@ -594,71 +419,26 @@
               {{ ((form.amount - (form.fee || 0)) / form.nav).toFixed(4) }} 份
             </div>
           </el-form-item>
-          <el-form-item label="来源父账户" required>
+          <el-form-item label="资金来源账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.parentAccountId" 
-                placeholder="选择资金来源的父账户" 
-                style="flex: 1; min-width: 200px;"
-                @change="handleBuyParentAccountChange"
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择资金来源账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
+                @change="handleBuyAccountCascaderChange"
               >
-                <el-option
-                  v-for="acc in parentAccounts"
-                  :key="acc.id"
-                  :label="acc.accountName"
-                  :value="acc.id"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="font-size: 12px; margin-left: 12px;">
-                      <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                        {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                      </span>
-                      <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                        欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                      </span>
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.parentAccountId" style="font-size: 13px; white-space: nowrap;">
-                <span v-if="selectedParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedParentAccountBalance) }}</span>
-                <span v-if="selectedParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedParentAccountBalance > 0 ? '8px' : '0' }">
-                  欠{{ formatCurrency(selectedParentAccountCredit) }}
-                </span>
-              </span>
-            </div>
-          </el-form-item>
-          <el-form-item label="来源子账户" required>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.accountId" 
-                placeholder="选择资金来源的子账户" 
-                style="flex: 1; min-width: 200px;"
-                :disabled="!form.parentAccountId"
-                @change="handleBuyAccountChange"
-              >
-                <el-option
-                  v-for="acc in availableChildAccounts"
-                  :key="acc.id"
-                  :value="acc.id"
-                  :label="acc.accountName"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>
-                      {{ acc.accountName }}
-                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                        ({{ getFundUsageLabel(acc.fundUsage) }})
-                      </span>
-                    </span>
-                    <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                      {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.accountId" :style="{ color: isSelectedChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                {{ isSelectedChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedChildAccountBalance) }}
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
               </span>
             </div>
             <div v-if="selectedBuyAccount?.linkedProductId && buyChildAccounts.length > 0" class="form-help-text" style="color: #f59e0b; margin-top: 4px;">
@@ -870,56 +650,26 @@
           </el-form-item>
           
           <!-- 到账账户（收到赎回款的账户） -->
-          <el-form-item label="到账父账户" required>
+          <el-form-item label="到账账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.parentAccountId" 
-                placeholder="选择到账的父账户" 
-                style="flex: 1; min-width: 200px;"
-                @change="handleSellParentAccountChange"
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择到账账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
+                @change="handleSellAccountCascaderChange"
               >
-                <el-option
-                  v-for="acc in parentAccounts"
-                  :key="acc.id"
-                  :label="acc.accountName"
-                  :value="acc.id"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="font-size: 12px; margin-left: 12px;">
-                      <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                        {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                      </span>
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-            </div>
-          </el-form-item>
-          <el-form-item label="到账子账户" required>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.accountId" 
-                placeholder="选择到账的子账户" 
-                style="flex: 1; min-width: 200px;"
-                :disabled="!form.parentAccountId"
-              >
-                <el-option
-                  v-for="acc in availableChildAccounts"
-                  :key="acc.id"
-                  :value="acc.id"
-                  :label="acc.accountName"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="color: #4ea4ff; fontSize: '12px'; marginLeft: '12px';">
-                      {{ formatCurrency(acc.balance || 0) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.accountId" style="color: #4ea4ff; fontSize: '13px'; whiteSpace: 'nowrap';">
-                {{ formatCurrency(selectedChildAccountBalance) }}
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
               </span>
             </div>
           </el-form-item>
@@ -1043,70 +793,25 @@
               value-format="YYYY-MM-DD HH:mm:ss"
             />
           </el-form-item>
-          <el-form-item label="账户父账户" required>
+          <el-form-item label="账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.parentAccountId" 
-                placeholder="选择账户的父账户" 
-                style="flex: 1; min-width: 200px;"
-                @change="handleParentAccountChange"
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
               >
-                <el-option
-                  v-for="acc in parentAccounts"
-                  :key="acc.id"
-                  :label="acc.accountName"
-                  :value="acc.id"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="font-size: 12px; margin-left: 12px;">
-                      <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                        {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                      </span>
-                      <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                        欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                      </span>
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.parentAccountId" style="font-size: 13px; white-space: nowrap;">
-                <span v-if="selectedParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedParentAccountBalance) }}</span>
-                <span v-if="selectedParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedParentAccountBalance > 0 ? '8px' : '0' }">
-                  欠{{ formatCurrency(selectedParentAccountCredit) }}
-                </span>
-              </span>
-            </div>
-          </el-form-item>
-          <el-form-item label="账户子账户" required>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.accountId" 
-                placeholder="选择账户的子账户" 
-                style="flex: 1; min-width: 200px;"
-                :disabled="!form.parentAccountId"
-              >
-                <el-option
-                  v-for="acc in availableChildAccounts"
-                  :key="acc.id"
-                  :value="acc.id"
-                  :label="acc.accountName"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>
-                      {{ acc.accountName }}
-                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                        ({{ getFundUsageLabel(acc.fundUsage) }})
-                      </span>
-                    </span>
-                    <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                      {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.accountId" :style="{ color: isSelectedChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                {{ isSelectedChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedChildAccountBalance) }}
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
               </span>
             </div>
           </el-form-item>
@@ -1176,70 +881,25 @@
           <el-form-item label="退款金额（元）" required>
             <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
           </el-form-item>
-          <el-form-item label="退款账户父账户" required>
+          <el-form-item label="退款账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.parentAccountId" 
-                placeholder="选择退款账户的父账户" 
-                style="flex: 1; min-width: 200px;"
-                @change="handleParentAccountChange"
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择退款账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
               >
-                <el-option
-                  v-for="acc in parentAccounts"
-                  :key="acc.id"
-                  :label="acc.accountName"
-                  :value="acc.id"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>{{ acc.accountName }}</span>
-                    <span style="font-size: 12px; margin-left: 12px;">
-                      <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                        {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                      </span>
-                      <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                        欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                      </span>
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.parentAccountId" style="font-size: 13px; white-space: nowrap;">
-                <span v-if="selectedParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedParentAccountBalance) }}</span>
-                <span v-if="selectedParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedParentAccountBalance > 0 ? '8px' : '0' }">
-                  欠{{ formatCurrency(selectedParentAccountCredit) }}
-                </span>
-              </span>
-            </div>
-          </el-form-item>
-          <el-form-item label="退款账户子账户" required>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <el-select 
-                v-model="form.accountId" 
-                placeholder="选择退款账户的子账户" 
-                style="flex: 1; min-width: 200px;"
-                :disabled="!form.parentAccountId"
-              >
-                <el-option
-                  v-for="acc in availableChildAccounts"
-                  :key="acc.id"
-                  :value="acc.id"
-                  :label="acc.accountName"
-                >
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>
-                      {{ acc.accountName }}
-                      <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                        ({{ getFundUsageLabel(acc.fundUsage) }})
-                      </span>
-                    </span>
-                    <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                      {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                    </span>
-                  </div>
-                </el-option>
-              </el-select>
-              <span v-if="form.accountId" :style="{ color: isSelectedChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                {{ isSelectedChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedChildAccountBalance) }}
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
               </span>
             </div>
           </el-form-item>
@@ -1247,73 +907,28 @@
 
         <!-- 调整（仅余额调整） -->
         <template v-else-if="selectedType === 'ADJUST'">
-          <el-form-item label="账户父账户" required>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <el-select 
-                  v-model="form.parentAccountId" 
-                  placeholder="选择账户的父账户" 
-                  style="flex: 1; min-width: 200px;"
-                  @change="handleParentAccountChange"
-                >
-                  <el-option
-                    v-for="acc in parentAccounts"
-                    :key="acc.id"
-                    :label="acc.accountName"
-                    :value="acc.id"
-                  >
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <span>{{ acc.accountName }}</span>
-                      <span style="font-size: 12px; margin-left: 12px;">
-                        <span v-if="calculateParentBalances(acc).balance > 0" style="color: #4ea4ff;">
-                          {{ formatCurrency(calculateParentBalances(acc).balance) }}
-                        </span>
-                        <span v-if="calculateParentBalances(acc).credit > 0" :style="{ color: '#ef4444', marginLeft: calculateParentBalances(acc).balance > 0 ? '8px' : '0' }">
-                          欠{{ formatCurrency(calculateParentBalances(acc).credit) }}
-                        </span>
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <span v-if="form.parentAccountId" style="font-size: 13px; white-space: nowrap;">
-                  <span v-if="selectedParentAccountBalance > 0" style="color: #4ea4ff;">{{ formatCurrency(selectedParentAccountBalance) }}</span>
-                  <span v-if="selectedParentAccountCredit > 0" :style="{ color: '#ef4444', marginLeft: selectedParentAccountBalance > 0 ? '8px' : '0' }">
-                    欠{{ formatCurrency(selectedParentAccountCredit) }}
+          <el-form-item label="账户" required>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="选择账户"
+                style="flex: 1; min-width: 280px;"
+                clearable
+              >
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
                   </span>
-                </span>
-              </div>
-            </el-form-item>
-            <el-form-item label="账户子账户" required>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <el-select 
-                  v-model="form.accountId" 
-                  placeholder="选择账户的子账户" 
-                  style="flex: 1; min-width: 200px;"
-                  :disabled="!form.parentAccountId"
-                >
-                  <el-option
-                    v-for="acc in availableChildAccounts"
-                    :key="acc.id"
-                    :value="acc.id"
-                    :label="acc.accountName"
-                  >
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                      <span>
-                        {{ acc.accountName }}
-                        <span v-if="acc.fundUsage" style="color: #909399; font-size: 12px; margin-left: 8px;">
-                          ({{ getFundUsageLabel(acc.fundUsage) }})
-                        </span>
-                      </span>
-                      <span :style="{ color: isCreditAccountType(acc.accountType) ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
-                        {{ isCreditAccountType(acc.accountType) ? '欠' : '' }}{{ formatCurrency(acc.balance || 0) }}
-                      </span>
-                    </div>
-                  </el-option>
-                </el-select>
-                <span v-if="form.accountId" :style="{ color: isSelectedChildCreditAccount ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
-                  {{ isSelectedChildCreditAccount ? '欠' : '' }}{{ formatCurrency(selectedChildAccountBalance) }}
-                </span>
-              </div>
-            </el-form-item>
+                </template>
+              </el-cascader>
+              <span v-if="form.accountId" :style="{ color: getSelectedAccountBalance(form.parentAccountId, form.accountId).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '13px', whiteSpace: 'nowrap' }">
+                {{ getSelectedAccountBalance(form.parentAccountId, form.accountId).text }}
+              </span>
+            </div>
+          </el-form-item>
             <el-form-item label="调整后余额（元）" required>
               <el-input-number v-model="form.amount" :precision="2" style="width: 100%" />
             </el-form-item>
@@ -1954,6 +1569,124 @@ const cascaderProps = {
   expandTrigger: 'hover' as const,
 }
 
+// 账户级联选项（父账户 -> 子账户）
+const accountCascaderOptions = computed(() => {
+  const options: any[] = []
+  
+  function buildOptions(accounts: Account[]) {
+    accounts.forEach(acc => {
+      if (acc.children && acc.children.length > 0 && acc.accountKind === 'REAL') {
+        const parentBalances = calculateParentBalances(acc)
+        const balanceText = []
+        if (parentBalances.balance > 0) balanceText.push(formatCurrency(parentBalances.balance))
+        if (parentBalances.credit > 0) balanceText.push(`欠${formatCurrency(parentBalances.credit)}`)
+        
+        options.push({
+          value: acc.id,
+          label: acc.accountName,
+          balance: parentBalances.balance,
+          credit: parentBalances.credit,
+          balanceText: balanceText.join(' '),
+          children: acc.children.filter(child => child.isActive).map(child => {
+            const isCredit = isCreditAccountType(child.accountType)
+            return {
+              value: child.id,
+              label: child.accountName,
+              balance: child.balance || 0,
+              isCredit,
+              balanceText: `${isCredit ? '欠' : ''}${formatCurrency(child.balance || 0)}`,
+              fundUsage: child.fundUsage,
+            }
+          })
+        })
+      }
+    })
+  }
+  
+  buildOptions(accountStore.accountTree)
+  return options
+})
+
+// 账户级联选择器配置
+const accountCascaderProps = {
+  value: 'value',
+  label: 'label',
+  children: 'children',
+  emitPath: true,
+  checkStrictly: false,
+  expandTrigger: 'hover' as const,
+}
+
+// 获取账户选中值（用于cascader的v-model）
+const selectedAccount = computed({
+  get: () => {
+    if (form.value.parentAccountId && form.value.accountId) {
+      return [form.value.parentAccountId, form.value.accountId]
+    }
+    return []
+  },
+  set: (val: number[]) => {
+    if (val && val.length === 2) {
+      form.value.parentAccountId = val[0]
+      form.value.accountId = val[1]
+    } else {
+      form.value.parentAccountId = undefined
+      form.value.accountId = undefined
+    }
+  }
+})
+
+// 转出账户选中值
+const selectedFromAccount = computed({
+  get: () => {
+    if (form.value.fromParentAccountId && form.value.fromAccountId) {
+      return [form.value.fromParentAccountId, form.value.fromAccountId]
+    }
+    return []
+  },
+  set: (val: number[]) => {
+    if (val && val.length === 2) {
+      form.value.fromParentAccountId = val[0]
+      form.value.fromAccountId = val[1]
+    } else {
+      form.value.fromParentAccountId = undefined
+      form.value.fromAccountId = undefined
+    }
+  }
+})
+
+// 转入账户选中值
+const selectedToAccount = computed({
+  get: () => {
+    if (form.value.toParentAccountId && form.value.toAccountId) {
+      return [form.value.toParentAccountId, form.value.toAccountId]
+    }
+    return []
+  },
+  set: (val: number[]) => {
+    if (val && val.length === 2) {
+      form.value.toParentAccountId = val[0]
+      form.value.toAccountId = val[1]
+    } else {
+      form.value.toParentAccountId = undefined
+      form.value.toAccountId = undefined
+    }
+  }
+})
+
+// 获取选中账户的余额显示
+function getSelectedAccountBalance(parentId: number | undefined, childId: number | undefined) {
+  if (!childId) return { text: '', isCredit: false, balance: 0 }
+  const account = findAccountInTree(accountStore.accountTree, childId)
+  if (!account) return { text: '', isCredit: false, balance: 0 }
+  const isCredit = isCreditAccountType(account.accountType)
+  return {
+    text: `${isCredit ? '欠' : ''}${formatCurrency(account.balance || 0)}`,
+    isCredit,
+    balance: account.balance || 0
+  }
+}
+
 onMounted(() => {
   productStore.fetchProducts()
   accountStore.fetchAccounts()
@@ -2191,9 +1924,21 @@ function handleBuyAccountChange() {
   buyFundingLines.value = []
 }
 
+// 买入账户级联选择器变化处理
+function handleBuyAccountCascaderChange() {
+  // 清空资金分配
+  buyFundingLines.value = []
+}
+
 function handleSellParentAccountChange() {
   // 卖出父账户改变时，清空子账户选择和份额分配
   form.value.accountId = undefined
+  sellFundingLines.value = []
+}
+
+// 卖出到账账户级联选择器变化处理
+function handleSellAccountCascaderChange() {
+  // 清空份额分配
   sellFundingLines.value = []
 }
 
