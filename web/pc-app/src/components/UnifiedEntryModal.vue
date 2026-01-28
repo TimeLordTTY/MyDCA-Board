@@ -52,7 +52,18 @@
               clearable
             />
           </el-form-item>
-          <el-form-item label="账户" required>
+          <el-form-item label="金额（元）" required>
+            <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
+          </el-form-item>
+          
+          <!-- 组合支付开关（仅支出时显示） -->
+          <el-form-item v-if="selectedType === 'EXPENSE'" label="组合支付">
+            <el-switch v-model="useComboPayment" @change="handleComboPaymentChange" />
+            <span style="margin-left: 8px; color: #909399; font-size: 12px">从多个账户付款</span>
+          </el-form-item>
+
+          <!-- 单账户选择（非组合支付） -->
+          <el-form-item v-if="!useComboPayment" label="账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
               <el-cascader
                 v-model="selectedAccount"
@@ -74,9 +85,79 @@
               </span>
             </div>
           </el-form-item>
-          <el-form-item label="金额（元）" required>
-            <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
+
+          <!-- 组合支付账户配置 -->
+          <el-form-item v-if="useComboPayment && selectedType === 'EXPENSE'" label="付款账户" required>
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f9fafb;">
+              <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 13px; color: #6b7280;">
+                  总金额：{{ form.amount || 0 }} 元
+                  <span v-if="expenseRemainingAmount > 0.01 && expenseFundingLines.some(l => l.accountId)" style="color: #f59e0b; margin-left: 8px;">
+                    还需 {{ expenseRemainingAmount.toFixed(2) }} 元
+                  </span>
+                  <span v-else-if="form.amount && expenseTotalAllocatedAmount > 0 && expenseRemainingAmount <= 0.01" style="color: #16a34a; margin-left: 8px;">
+                    ✓ 已平衡
+                  </span>
+                </span>
+                <el-button 
+                  v-if="expenseRemainingAmount > 0.01 || expenseFundingLines.length === 0"
+                  size="small" 
+                  type="primary" 
+                  text 
+                  @click="handleAddExpenseFundingLine"
+                  :disabled="!form.amount || form.amount <= 0"
+                >
+                  + 添加账户
+                </el-button>
+              </div>
+              <div v-if="expenseFundingLines.length === 0" style="text-align: center; color: #9ca3af; padding: 20px;">
+                {{ form.amount && form.amount > 0 ? '点击"添加账户"开始选择付款来源' : '请先填写金额' }}
+              </div>
+              <div v-else>
+                <div 
+                  v-for="(line, index) in expenseFundingLines" 
+                  :key="index"
+                  style="display: flex; gap: 12px; margin-bottom: 8px; align-items: center;"
+                >
+                  <el-cascader
+                    :model-value="line.parentAccountId && line.accountId ? [line.parentAccountId, line.accountId] : []"
+                    :options="getExpenseAvailableAccountOptions(index)"
+                    :props="accountCascaderProps"
+                    placeholder="选择账户"
+                    style="flex: 1; min-width: 200px;"
+                    clearable
+                    @update:model-value="(val: any) => handleExpenseAccountChange(index, val)"
+                  >
+                    <template #default="{ node, data }">
+                      <span>{{ data.label }}</span>
+                      <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '11px', marginLeft: '8px' }">
+                        {{ data.balanceText }}
+                      </span>
+                    </template>
+                  </el-cascader>
+                  <!-- 支付金额（只读，自动计算） -->
+                  <div style="display: flex; align-items: center; gap: 4px; min-width: 100px;">
+                    <span style="color: #374151; font-weight: 500;">¥</span>
+                    <span style="color: #374151; font-size: 14px; font-weight: 500;">{{ (line.amount || 0).toFixed(2) }}</span>
+                  </div>
+                  <!-- 账户余额 -->
+                  <span v-if="line.accountId" :style="{ color: getExpenseLineAccountBalance(line).isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', whiteSpace: 'nowrap', minWidth: '80px' }">
+                    余额 {{ getExpenseLineAccountBalance(line).text }}
+                  </span>
+                  <el-button
+                    type="danger"
+                    text
+                    size="small"
+                    @click="handleRemoveExpenseFundingLine(index)"
+                    :disabled="expenseFundingLines.length <= 1"
+                  >
+                    删除
+                  </el-button>
+                </div>
+              </div>
+            </div>
           </el-form-item>
+
           <el-form-item v-if="selectedType === 'EXPENSE'" label="是否报销">
             <el-switch v-model="form.isReimbursable" />
             <span style="margin-left: 8px; color: #909399; font-size: 12px">标记为可报销</span>
@@ -1031,6 +1112,16 @@ const sellFundingLines = ref<Array<{
   shares?: number
 }>>([])
 
+// 支出时的组合支付配置（多账户付款）
+const expenseFundingLines = ref<Array<{
+  parentAccountId: number | undefined
+  accountId: number | undefined
+  amount?: number
+}>>([])
+
+// 是否启用组合支付
+const useComboPayment = ref(false)
+
 // 转账类型：AMOUNT（金额转账） | SHARE（份额转移）
 const transferType = ref<'AMOUNT' | 'SHARE'>('AMOUNT')
 
@@ -1332,6 +1423,29 @@ const buyAllocationError = computed(() => {
   return null
 })
 
+// 组合支付总金额
+const expenseTotalAllocatedAmount = computed(() => {
+  return expenseFundingLines.value
+    .filter((fl) => fl.amount != null)
+    .reduce((sum, fl) => sum + (fl.amount || 0), 0)
+})
+
+// 组合支付分配错误提示
+const expenseAllocationError = computed(() => {
+  if (!useComboPayment.value || form.value.amount == null) return null
+  const diff = Math.abs(expenseTotalAllocatedAmount.value - form.value.amount)
+  if (diff > 0.01) {
+    return `已分配金额 ${expenseTotalAllocatedAmount.value.toFixed(2)} 元，与总金额 ${form.value.amount.toFixed(2)} 元不一致（差额：${diff.toFixed(2)} 元）`
+  }
+  return null
+})
+
+// 组合支付 - 还需分配的金额
+const expenseRemainingAmount = computed(() => {
+  if (!form.value.amount) return 0
+  return Math.max(0, form.value.amount - expenseTotalAllocatedAmount.value)
+})
+
 // 卖出时的账户相关计算
 const selectedSellAccount = computed(() => {
   if (!form.value.accountId || (selectedType.value !== 'SELL' && selectedType.value !== 'REDEMPTION')) return null
@@ -1569,6 +1683,58 @@ const cascaderProps = {
   expandTrigger: 'hover' as const,
 }
 
+// 判断是否是"待分配"账户
+function isUnallocatedAccount(account: Account): boolean {
+  const name = account.accountName || ''
+  const code = (account as any).accountCode || ''
+  return name.includes('待分配') || code.includes('待分配')
+}
+
+// 获取 MMF 账户的净值（从持仓缓存中获取）
+function getMmfNavFromCache(linkedProductId: number): number {
+  const holding = allHoldingsCache.value.get(linkedProductId)
+  if (holding && (holding as any).currentPrice) {
+    return (holding as any).currentPrice
+  }
+  return 1 // 默认净值为1
+}
+
+// 计算 MMF 子账户的实际金额
+function calculateMmfChildAmount(parent: Account, child: Account): number {
+  if (!parent.linkedProductId || !parent.initialShares) {
+    return child.balance || 0
+  }
+  
+  const nav = getMmfNavFromCache(parent.linkedProductId)
+  
+  // 固定金额账户
+  if (child.isFixedAmount && child.fixedAmount) {
+    return child.fixedAmount
+  }
+  
+  // 有 balance 的普通账户
+  if (child.balance && child.balance > 0) {
+    return child.balance
+  }
+  
+  // "待分配"账户：计算未分配的金额
+  if (isUnallocatedAccount(child)) {
+    let allocatedShares = 0
+    for (const c of parent.children || []) {
+      if (isUnallocatedAccount(c)) continue
+      if (c.isFixedAmount && c.fixedAmount) {
+        allocatedShares += c.fixedAmount / nav
+      } else if (c.balance && c.balance > 0) {
+        allocatedShares += c.balance / nav
+      }
+    }
+    const unallocatedShares = Math.max(0, parent.initialShares - allocatedShares)
+    return unallocatedShares * nav
+  }
+  
+  return 0
+}
+
 // 账户级联选项（父账户 -> 子账户）
 const accountCascaderOptions = computed(() => {
   const options: any[] = []
@@ -1576,25 +1742,48 @@ const accountCascaderOptions = computed(() => {
   function buildOptions(accounts: Account[]) {
     accounts.forEach(acc => {
       if (acc.children && acc.children.length > 0 && acc.accountKind === 'REAL') {
+        // 对于 MMF 账户，计算总金额
+        let parentTotalBalance = 0
+        const isMmf = acc.accountType === 'MMF' && acc.linkedProductId && acc.initialShares
+        
+        if (isMmf) {
+          const nav = getMmfNavFromCache(acc.linkedProductId!)
+          parentTotalBalance = acc.initialShares! * nav
+        } else {
+          const parentBalances = calculateParentBalances(acc)
+          parentTotalBalance = parentBalances.balance
+        }
+        
         const parentBalances = calculateParentBalances(acc)
         const balanceText = []
-        if (parentBalances.balance > 0) balanceText.push(formatCurrency(parentBalances.balance))
-        if (parentBalances.credit > 0) balanceText.push(`欠${formatCurrency(parentBalances.credit)}`)
+        if (isMmf) {
+          balanceText.push(formatCurrency(parentTotalBalance))
+        } else {
+          if (parentBalances.balance > 0) balanceText.push(formatCurrency(parentBalances.balance))
+          if (parentBalances.credit > 0) balanceText.push(`欠${formatCurrency(parentBalances.credit)}`)
+        }
         
         options.push({
           value: acc.id,
           label: acc.accountName,
-          balance: parentBalances.balance,
+          balance: isMmf ? parentTotalBalance : parentBalances.balance,
           credit: parentBalances.credit,
           balanceText: balanceText.join(' '),
           children: acc.children.filter(child => child.isActive).map(child => {
             const isCredit = isCreditAccountType(child.accountType)
+            
+            // 对于 MMF 账户的子账户，计算实际金额
+            let childAmount = child.balance || 0
+            if (isMmf) {
+              childAmount = calculateMmfChildAmount(acc, child)
+            }
+            
             return {
               value: child.id,
               label: child.accountName,
-              balance: child.balance || 0,
+              balance: childAmount,
               isCredit,
-              balanceText: `${isCredit ? '欠' : ''}${formatCurrency(child.balance || 0)}`,
+              balanceText: `${isCredit ? '欠' : ''}${formatCurrency(childAmount)}`,
               fundUsage: child.fundUsage,
             }
           })
@@ -1679,11 +1868,22 @@ function getSelectedAccountBalance(parentId: number | undefined, childId: number
   if (!childId) return { text: '', isCredit: false, balance: 0 }
   const account = findAccountInTree(accountStore.accountTree, childId)
   if (!account) return { text: '', isCredit: false, balance: 0 }
+  
   const isCredit = isCreditAccountType(account.accountType)
+  
+  // 对于 MMF 子账户，需要计算实际金额
+  let actualBalance = account.balance || 0
+  if (parentId) {
+    const parent = findAccountInTree(accountStore.accountTree, parentId)
+    if (parent && parent.accountType === 'MMF' && parent.linkedProductId && parent.initialShares) {
+      actualBalance = calculateMmfChildAmount(parent, account)
+    }
+  }
+  
   return {
-    text: `${isCredit ? '欠' : ''}${formatCurrency(account.balance || 0)}`,
+    text: `${isCredit ? '欠' : ''}${formatCurrency(actualBalance)}`,
     isCredit,
-    balance: account.balance || 0
+    balance: actualBalance
   }
 }
 
@@ -1735,6 +1935,8 @@ watch(visible, async (val) => {
     }
     buyFundingLines.value = []
     sellFundingLines.value = []
+    expenseFundingLines.value = []
+    useComboPayment.value = false
     transferType.value = 'AMOUNT'
     adjustType.value = 'BALANCE'
     shareTransfer.value = {
@@ -1752,6 +1954,8 @@ watch(visible, async (val) => {
 watch(() => selectedType.value, () => {
   buyFundingLines.value = []
   sellFundingLines.value = []
+  expenseFundingLines.value = []
+  useComboPayment.value = false
   transferType.value = 'AMOUNT'
   adjustType.value = 'BALANCE'
   shareTransfer.value = {
@@ -1762,6 +1966,13 @@ watch(() => selectedType.value, () => {
     note: ''
   }
   shareTransferAccountShares.value.clear()
+})
+
+// 监听总金额变化，重新计算组合支付的分配金额
+watch(() => form.value.amount, () => {
+  if (useComboPayment.value && selectedType.value === 'EXPENSE') {
+    recalculateExpenseAmounts()
+  }
 })
 
 function selectType(type: string) {
@@ -1951,6 +2162,106 @@ function handleAddBuyFundingLine() {
 
 function handleRemoveBuyFundingLine(index: number) {
   buyFundingLines.value.splice(index, 1)
+}
+
+// 组合支付 - 添加付款账户
+function handleAddExpenseFundingLine() {
+  expenseFundingLines.value.push({
+    parentAccountId: undefined,
+    accountId: undefined,
+    amount: undefined,
+  })
+}
+
+// 组合支付 - 移除付款账户
+function handleRemoveExpenseFundingLine(index: number) {
+  expenseFundingLines.value.splice(index, 1)
+  // 删除后重新计算剩余账户的金额
+  recalculateExpenseAmounts()
+}
+
+// 组合支付 - 切换开关时清空数据
+function handleComboPaymentChange(enabled: boolean) {
+  if (enabled) {
+    // 启用组合支付时，清空单账户选择，初始化一个空的付款行
+    form.value.parentAccountId = undefined
+    form.value.accountId = undefined
+    expenseFundingLines.value = [{
+      parentAccountId: undefined,
+      accountId: undefined,
+      amount: undefined
+    }]
+  } else {
+    // 禁用组合支付时，清空付款行
+    expenseFundingLines.value = []
+  }
+}
+
+// 获取组合支付行的账户余额
+function getExpenseLineAccountBalance(line: { parentAccountId?: number, accountId?: number }) {
+  if (!line.accountId) return { text: '', isCredit: false, balance: 0 }
+  return getSelectedAccountBalance(line.parentAccountId, line.accountId)
+}
+
+// 获取组合支付可用的账户选项（排除已选的账户）
+function getExpenseAvailableAccountOptions(currentIndex: number) {
+  // 获取已选择的账户ID列表（排除当前行）
+  const selectedAccountIds = expenseFundingLines.value
+    .filter((_, i) => i !== currentIndex)
+    .filter(fl => fl.accountId)
+    .map(fl => fl.accountId)
+  
+  // 深拷贝并过滤已选择的账户
+  return accountCascaderOptions.value.map(parent => ({
+    ...parent,
+    children: parent.children?.filter((child: any) => !selectedAccountIds.includes(child.value))
+  })).filter(parent => parent.children && parent.children.length > 0)
+}
+
+// 组合支付 - 选择账户后自动计算金额
+function handleExpenseAccountChange(index: number, val: any) {
+  const line = expenseFundingLines.value[index]
+  line.parentAccountId = val?.[0]
+  line.accountId = val?.[1]
+  
+  // 重新计算所有行的金额
+  recalculateExpenseAmounts()
+}
+
+// 重新计算组合支付所有行的金额
+function recalculateExpenseAmounts() {
+  const totalAmount = form.value.amount || 0
+  if (totalAmount <= 0) {
+    expenseFundingLines.value.forEach(line => {
+      line.amount = 0
+    })
+    return
+  }
+  
+  let remaining = totalAmount
+  
+  // 按顺序分配金额：每个账户用完余额后，剩余的分配给下一个账户
+  for (const line of expenseFundingLines.value) {
+    if (!line.accountId) {
+      line.amount = 0
+      continue
+    }
+    
+    // 获取账户余额
+    const balanceInfo = getSelectedAccountBalance(line.parentAccountId, line.accountId)
+    const accountBalance = balanceInfo.balance || 0
+    
+    // 信用账户（负债）不能用于支付支出
+    if (balanceInfo.isCredit) {
+      line.amount = 0
+      continue
+    }
+    
+    // 当前账户使用的金额 = min(账户余额, 剩余需要的金额)
+    const useAmount = Math.min(accountBalance, remaining)
+    line.amount = Math.max(0, Number(useAmount.toFixed(2)))
+    remaining = Math.max(0, remaining - useAmount)
+  }
 }
 
 // 获取买入账户的固定金额（如果是固定金额账户）
@@ -2156,29 +2467,67 @@ async function handleSubmit() {
     const postings: any[] = []
 
     if (selectedType.value === 'EXPENSE') {
-      if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-        ElMessage.error('请填写完整信息（包括父账户和子账户）')
+      // 验证必填字段
+      if (!form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
+        ElMessage.error('请填写完整信息（金额、时间、分类）')
         return
       }
+      
+      // 组合支付验证
+      if (useComboPayment.value) {
+        const validLines = expenseFundingLines.value.filter(fl => fl.accountId && fl.amount)
+        if (validLines.length === 0) {
+          ElMessage.error('请至少添加一个付款账户')
+          return
+        }
+        // 验证分配金额
+        const totalAllocated = validLines.reduce((sum, fl) => sum + (fl.amount || 0), 0)
+        if (Math.abs(totalAllocated - (form.value.amount || 0)) > 0.01) {
+          ElMessage.error(`分配金额 ${totalAllocated.toFixed(2)} 元与总金额 ${form.value.amount?.toFixed(2)} 元不一致`)
+          return
+        }
+        
+        // 为每个付款账户生成分录
+        for (const line of validLines) {
+          postings.push({
+            postingType: 'CREDIT',
+            accountId: line.accountId,
+            accountType: 'CASH',
+            amount: line.amount,
+            currency: 'CNY',
+          })
+        }
+      } else {
+        // 单账户验证
+        if (!form.value.parentAccountId || !form.value.accountId) {
+          ElMessage.error('请选择付款账户')
+          return
+        }
+        postings.push({
+          postingType: 'CREDIT',
+          accountId: form.value.accountId,
+          accountType: 'CASH',
+          amount: form.value.amount,
+          currency: 'CNY',
+        })
+      }
+      
       const categoryId = Array.isArray(form.value.category) 
         ? (form.value.category[form.value.category.length - 1] as number)
         : (form.value.category as number)
-      // CASH CREDIT + EXPENSE DEBIT
-      postings.push({
-        postingType: 'CREDIT',
-        accountId: form.value.accountId,
-        accountType: 'CASH',
-        amount: form.value.amount,
-        currency: 'CNY',
-      })
-      // EXPENSE账户由后端自动创建
+      
+      // EXPENSE账户由后端自动创建（使用第一个账户作为参考）
+      const refAccountId = useComboPayment.value 
+        ? expenseFundingLines.value.find(fl => fl.accountId)?.accountId 
+        : form.value.accountId
       postings.push({
         postingType: 'DEBIT',
-        accountId: form.value.accountId, // 后端会替换为虚拟账户
+        accountId: refAccountId, // 后端会替换为虚拟账户
         accountType: 'EXPENSE',
         amount: form.value.amount,
         currency: 'CNY',
       })
+      
       await ledgerApi.createTransaction({
         txnType: selectedType.value,
         postings,

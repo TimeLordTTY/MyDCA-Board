@@ -137,8 +137,32 @@ public class LedgerController {
                     // 没有同时存在出金和入金，正常处理
                     addNormalTxnMap(result, txn, postings);
                 }
+            }
+            // 对于支出交易，如果有多个 CASH CREDIT 分录（组合支付），为每个分录生成一条记录
+            else if ("EXPENSE".equals(txn.getTxnType()) && postings.size() >= 2) {
+                // 收集所有 CASH CREDIT 的 REAL 账户分录
+                List<LedgerPosting> cashCreditPostings = new ArrayList<>();
+                for (LedgerPosting posting : postings) {
+                    if ("CASH".equals(posting.getAccountType()) && "CREDIT".equals(posting.getPostingType())) {
+                        Account acc = accountService.getAccount(posting.getAccountId());
+                        if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                            cashCreditPostings.add(posting);
+                        }
+                    }
+                }
+                
+                // 如果有多个付款账户（组合支付），为每个账户生成一条记录
+                if (cashCreditPostings.size() > 1) {
+                    for (LedgerPosting posting : cashCreditPostings) {
+                        Map<String, Object> expenseMap = buildTxnMap(txn, posting, "EXPENSE", true);
+                        result.add(expenseMap);
+                    }
+                } else {
+                    // 单账户支付，正常处理
+                    addNormalTxnMap(result, txn, postings);
+                }
             } else {
-                // 非转账交易，正常处理
+                // 非转账、非组合支付交易，正常处理
                 Map<String, Object> txnMap = new HashMap<>();
                 txnMap.put("id", txn.getId());
                 txnMap.put("txnId", txn.getTxnId());

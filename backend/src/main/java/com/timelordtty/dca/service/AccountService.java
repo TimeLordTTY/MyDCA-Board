@@ -211,6 +211,42 @@ public class AccountService {
             account.setFundUsage(null);
         }
         
+        // MMF 账户的初始份额同步到余额
+        // 当 MMF 账户设置 initialShares 时，需要计算并同步 balance = initialShares * NAV
+        if ("MMF".equals(account.getAccountType()) || "MMF".equals(existing.getAccountType())) {
+            BigDecimal initialShares = account.getInitialShares();
+            if (initialShares == null) {
+                initialShares = existing.getInitialShares();
+            }
+            Long linkedProductId = account.getLinkedProductId();
+            if (linkedProductId == null) {
+                linkedProductId = existing.getLinkedProductId();
+            }
+            
+            if (initialShares != null && initialShares.compareTo(BigDecimal.ZERO) > 0) {
+                // 获取 NAV，货币基金 NAV 通常为 1.0000 或略大
+                BigDecimal nav = BigDecimal.ONE;
+                if (linkedProductId != null) {
+                    // 尝试获取产品最新净值
+                    Nav latestNav = navService.getLatestNav(linkedProductId);
+                    if (latestNav != null && latestNav.getNav() != null) {
+                        nav = latestNav.getNav();
+                    }
+                }
+                
+                // 计算余额 = 份额 * 净值
+                BigDecimal calculatedBalance = initialShares.multiply(nav).setScale(2, java.math.RoundingMode.HALF_UP);
+                
+                // 只有当现有余额为0或null时才同步，避免覆盖已有交易后的余额
+                if (existing.getBalance() == null || existing.getBalance().compareTo(BigDecimal.ZERO) == 0) {
+                    account.setBalance(calculatedBalance);
+                    account.setInitialBalance(calculatedBalance);
+                    System.out.println(String.format("MMF账户[%d]同步余额: initialShares=%s, NAV=%s, balance=%s", 
+                        account.getId(), initialShares, nav, calculatedBalance));
+                }
+            }
+        }
+        
         // 如果账户关联了产品且设置了初始余额，自动生成初始持仓
         if (account.getLinkedProductId() != null && account.getInitialBalance() != null 
             && account.getInitialBalance().compareTo(BigDecimal.ZERO) > 0) {
