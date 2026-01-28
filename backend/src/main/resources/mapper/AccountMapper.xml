@@ -90,6 +90,15 @@
         ORDER BY account_name
     </select>
 
+    <select id="selectByLinkedProductId" resultMap="BaseResultMap">
+        SELECT * FROM accounts
+        WHERE is_active = 1
+        AND account_kind = 'REAL'
+        AND linked_product_id = #{productId}
+        AND parent_account_id IS NULL
+        LIMIT 1
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO accounts (
             account_code, account_name, account_kind, account_type, account_subtype,
@@ -134,6 +143,10 @@
 
     <update id="updateReservedAmount">
         UPDATE accounts SET reserved_amount = #{reservedAmount}, updated_at = NOW() WHERE id = #{id}
+    </update>
+
+    <update id="updateInitialShares">
+        UPDATE accounts SET initial_shares = #{initialShares}, updated_at = NOW() WHERE id = #{id}
     </update>
 
 </mapper>

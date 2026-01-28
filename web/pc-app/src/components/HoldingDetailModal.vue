@@ -61,6 +61,40 @@
           </div>
           <div id="indicatorChart" style="width: 100%; height: 400px"></div>
         </el-tab-pane>
+
+        <!-- 交易记录：显示该产品的持仓变化历史 -->
+        <el-tab-pane label="交易记录" name="transactions">
+          <div v-if="transactionLoading" style="text-align: center; padding: 40px">
+            <span class="td-muted">加载中...</span>
+          </div>
+          <div v-else-if="transactionHistory.length === 0" style="text-align: center; padding: 40px">
+            <span class="td-muted">暂无交易记录</span>
+          </div>
+          <table v-else class="txn-table">
+            <thead>
+              <tr>
+                <th>交易时间</th>
+                <th style="text-align: center">类型</th>
+                <th style="text-align: right">金额</th>
+                <th style="text-align: right">份额</th>
+                <th>备注</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(txn, index) in transactionHistory" :key="txn.txnId" :class="{ 'row-even': index % 2 === 0 }">
+                <td class="mono">{{ formatDate(txn.requestedAt) }}</td>
+                <td style="text-align: center">
+                  <span class="txn-type-tag" :class="getTxnTypeClass(txn.txnType)">
+                    {{ formatTxnType(txn.txnType) }}
+                  </span>
+                </td>
+                <td style="text-align: right" class="mono">{{ formatCurrency((txn as any).summaryAmount || 0) }}</td>
+                <td style="text-align: right" class="mono">{{ formatNumber((txn as any).summaryShares || 0, 2) }}</td>
+                <td class="note-cell">{{ txn.note || '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </el-tab-pane>
       </el-tabs>
     </div>
     <div v-else style="text-align: center; padding: 40px" class="td-muted">加载中...</div>
@@ -70,8 +104,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
-import { navApi, marketApi, indicatorApi, formatCurrency, formatNumber } from '@wealth-hub/shared'
-import type { Nav, MarketBarDaily, IndicatorDaily } from '@wealth-hub/shared'
+import { navApi, marketApi, indicatorApi, ledgerApi, formatCurrency, formatNumber } from '@wealth-hub/shared'
+import type { Nav, MarketBarDaily, IndicatorDaily, LedgerTxn } from '@wealth-hub/shared'
 
 interface HoldingWithQuote {
   productId: number
@@ -113,6 +147,8 @@ const navData = ref<Nav[]>([])
 const klineData = ref<MarketBarDaily[]>([])
 const indicatorData = ref<IndicatorDaily[]>([])
 const quoteHistory = ref<any[]>([])
+const transactionHistory = ref<LedgerTxn[]>([])
+const transactionLoading = ref(false)
 
 const isExchange = computed(() => props.holding?.channel === 'EXCHANGE')
 const isOtc = computed(() => props.holding?.channel === 'OTC')
@@ -132,6 +168,8 @@ watch([visible, activeTab], async ([newVisible, newTab]) => {
     } else if (newTab === 'indicator') {
       await loadIndicators()
       renderIndicatorChart()
+    } else if (newTab === 'transactions') {
+      await loadTransactionHistory()
     }
   }
 }, { immediate: true })
@@ -202,6 +240,67 @@ async function loadIndicators() {
     console.error('加载指标数据失败:', error)
     indicatorData.value = []
   }
+}
+
+async function loadTransactionHistory() {
+  if (!props.holding) return
+  transactionLoading.value = true
+  try {
+    const response = await ledgerApi.getTransactions({
+      productId: props.holding.productId,
+      pageSize: 100,
+    })
+    transactionHistory.value = response.list || []
+  } catch (error: any) {
+    console.error('加载交易记录失败:', error)
+    transactionHistory.value = []
+  } finally {
+    transactionLoading.value = false
+  }
+}
+
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return '-'
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function formatTxnType(type: string): string {
+  const typeMap: Record<string, string> = {
+    BUY: '买入',
+    SELL: '卖出',
+    SUBSCRIPTION: '申购',
+    REDEMPTION: '赎回',
+    TRANSFER_OUT: '转出',
+    TRANSFER_IN: '转入',
+    INCOME: '收入',
+    EXPENSE: '支出',
+    BOND_REPO: '逆回购',
+    CUSTODY_TRANSFER: '转托管',
+    ADJUST: '调整',
+  }
+  return typeMap[type] || type
+}
+
+function getTxnTypeColor(type: string): string {
+  if (['BUY', 'SUBSCRIPTION', 'TRANSFER_IN', 'INCOME'].includes(type)) {
+    return '#ef4444' // 红色 - 买入/收入
+  } else if (['SELL', 'REDEMPTION', 'TRANSFER_OUT', 'EXPENSE'].includes(type)) {
+    return '#16a34a' // 绿色 - 卖出/支出
+  }
+  return '#64748b'
+}
+
+function getTxnTypeClass(type: string): string {
+  if (['BUY', 'SUBSCRIPTION'].includes(type)) return 'type-buy'
+  if (['SELL', 'REDEMPTION'].includes(type)) return 'type-sell'
+  if (['REDEMPTION_OUT'].includes(type)) return 'type-sell-out'
+  if (['REDEMPTION_IN'].includes(type)) return 'type-sell-in'
+  if (['TRANSFER_OUT'].includes(type)) return 'type-transfer-out'
+  if (['TRANSFER_IN'].includes(type)) return 'type-transfer-in'
+  if (['INCOME', 'DIVIDEND_CASH', 'DIVIDEND_REINVEST'].includes(type)) return 'type-income'
+  if (['EXPENSE'].includes(type)) return 'type-expense'
+  return 'type-default'
 }
 
 function renderNavChart() {
@@ -432,3 +531,116 @@ if (typeof window !== 'undefined') {
 }
 </script>
 
+<style scoped>
+/* 交易记录表格样式 */
+.txn-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+.txn-table thead th {
+  background: linear-gradient(135deg, rgba(78, 164, 255, 0.12), rgba(124, 199, 255, 0.08));
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 2px solid rgba(78, 164, 255, 0.2);
+  white-space: nowrap;
+}
+
+.txn-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(230, 238, 247, 0.6);
+  vertical-align: middle;
+}
+
+.txn-table tbody tr.row-even {
+  background: rgba(78, 164, 255, 0.04);
+}
+
+.txn-table tbody tr:hover {
+  background: rgba(78, 164, 255, 0.1);
+}
+
+.txn-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.note-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #909399;
+}
+
+/* 交易类型标签样式 */
+.txn-type-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.type-buy {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.type-sell {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.type-sell-out {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.type-sell-in {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.type-transfer-out {
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+}
+
+.type-transfer-in {
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+}
+
+.type-income {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.type-expense {
+  background: rgba(22, 163, 74, 0.15);
+  color: #16a34a;
+}
+
+.type-default {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+}
+
+.mono {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+}
+
+.text-red {
+  color: #ef4444;
+}
+
+.text-green {
+  color: #16a34a;
+}
+</style>

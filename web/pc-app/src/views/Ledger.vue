@@ -502,37 +502,46 @@ function getCategoryDisplayText(txn: LedgerTxn): string {
 
 /**
  * 根据交易类型获取金额显示的颜色类
+ * 颜色约定：
+ * - 收入/报销入/赎回入金：红色（钱进来）
+ * - 支出/报销出：绿色（钱出去）
+ * - 买入/申购：蓝色（投资行为）
+ * - 卖出/赎回/赎回出金：橙色（变现行为）
+ * - 转账：黑色/灰色（中性）
+ * - 逆回购：青色（短期理财）
+ * - 转托管：紫色（调仓行为）
+ * - 调整：黄色（修正行为）
  */
 function getAmountClass(txnType: string): string {
   switch (txnType) {
     case 'INCOME':
     case 'REIMBURSE_IN':
-      return 'amount-income' // 收入：绿色
+    case 'REDEMPTION_IN':  // 赎回入金
+    case 'DIVIDEND_CASH':
+    case 'DIVIDEND_REINVEST':
+      return 'amount-income' // 收入/分红：红色（钱进来）
     case 'EXPENSE':
     case 'REIMBURSE_OUT':
-      return 'amount-expense' // 支出：红色
+    case 'FEE':
+    case 'TAX':
+      return 'amount-expense' // 支出/费用：绿色（钱出去）
     case 'BUY':
     case 'SUBSCRIPTION':
       return 'amount-buy' // 买入/申购：蓝色
     case 'SELL':
     case 'REDEMPTION':
+    case 'REDEMPTION_OUT':  // 赎回出金
       return 'amount-sell' // 卖出/赎回：橙色
     case 'TRANSFER_OUT':
     case 'TRANSFER_IN':
-      return 'amount-transfer' // 转账：灰色
+      return 'amount-transfer' // 转账：黑色/灰色
     case 'CUSTODY_TRANSFER':
     case 'CUSTODY_TRANSFER_OF':
       return 'amount-custody' // 转托管：紫色
-    case 'DIVIDEND_CASH':
-    case 'DIVIDEND_REINVEST':
-      return 'amount-dividend' // 分红：青色
-    case 'FEE':
-    case 'TAX':
-      return 'amount-fee' // 费用/税费：红色
+    case 'BOND_REPO':
+      return 'amount-repo' // 逆回购：青色
     case 'ADJUST':
       return 'amount-adjust' // 调整：黄色
-    case 'BOND_REPO':
-      return 'amount-repo' // 逆回购：蓝色
     default:
       return ''
   }
@@ -550,7 +559,7 @@ function formatAmountWithSign(txnType: string, amount: number): string {
   switch (txnType) {
     case 'INCOME':
     case 'REIMBURSE_IN':
-    case 'BUY':
+    case 'REDEMPTION_IN':  // 赎回入金    case 'BUY':
     case 'SUBSCRIPTION':
     case 'TRANSFER_IN':
     case 'DIVIDEND_CASH':
@@ -562,6 +571,7 @@ function formatAmountWithSign(txnType: string, amount: number): string {
     case 'REIMBURSE_OUT':
     case 'SELL':
     case 'REDEMPTION':
+    case 'REDEMPTION_OUT':  // 赎回出金
     case 'TRANSFER_OUT':
     case 'FEE':
     case 'TAX':
@@ -651,17 +661,24 @@ onMounted(() => {
   background: linear-gradient(135deg, rgba(78, 164, 255, 0.12), rgba(124, 199, 255, 0.08));
   color: var(--text);
   font-weight: 600;
-  padding: 16px 18px;
+  padding: 12px 12px;
   font-size: 13px;
   border-bottom: 2px solid rgba(78, 164, 255, 0.2);
   white-space: nowrap;
 }
 
 .ledger-table tbody td {
-  padding: 18px;
+  padding: 14px 12px;
   border-bottom: 1px solid rgba(230, 238, 247, 0.6);
   font-size: 14px;
   vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* 备注列允许换行 */
+.ledger-table tbody td:nth-child(7) {
+  white-space: normal;
+  max-width: 200px;
 }
 
 .ledger-table tbody tr.row-even {
@@ -737,19 +754,19 @@ onMounted(() => {
   background: rgba(78, 164, 255, 0.08);
 }
 
-/* 金额颜色样式 */
+/* 金额颜色样式 - 中国习惯：红涨绿跌 */
 .amount-income {
-  color: #16a34a; /* 绿色 - 收入 */
+  color: #ef4444; /* 红色 - 收入（钱进来） */
   font-weight: 600;
 }
 
 .amount-expense {
-  color: #ef4444; /* 红色 - 支出 */
+  color: #16a34a; /* 绿色 - 支出（钱出去） */
   font-weight: 600;
 }
 
 .amount-buy {
-  color: #4ea4ff; /* 蓝色 - 买入/申购 */
+  color: #3b82f6; /* 蓝色 - 买入/申购 */
   font-weight: 600;
 }
 
@@ -774,7 +791,7 @@ onMounted(() => {
 }
 
 .amount-fee {
-  color: #ef4444; /* 红色 - 费用/税费 */
+  color: #16a34a; /* 绿色 - 费用/税费（钱出去） */
   font-weight: 500;
 }
 
@@ -784,7 +801,7 @@ onMounted(() => {
 }
 
 .amount-repo {
-  color: #3b82f6; /* 蓝色 - 逆回购 */
+  color: #06b6d4; /* 青色 - 逆回购 */
   font-weight: 500;
 }
 </style>

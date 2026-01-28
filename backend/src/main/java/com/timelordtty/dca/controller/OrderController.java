@@ -140,11 +140,21 @@ public class OrderController {
                 if (fl.containsKey("shares") && fl.get("shares") != null) {
                     fundingLine.setShares(new BigDecimal(fl.get("shares").toString()));
                 }
+                // 解析 lineType：SOURCE（出金来源）或 TARGET（到账目标）
+                if (fl.containsKey("lineType") && fl.get("lineType") != null) {
+                    fundingLine.setLineType(fl.get("lineType").toString());
+                }
                 fundingLines.add(fundingLine);
             }
         }
 
-        Order order = orderService.createOrder(currentUser.getId(), productId, orderType, amount, shares, accountId, fundingLines);
+        // 解析预期日期
+        LocalDate expectedNavDate = request.containsKey("expectedNavDate") && request.get("expectedNavDate") != null
+            ? LocalDate.parse(request.get("expectedNavDate").toString()) : null;
+        LocalDate expectedConfirmDate = request.containsKey("expectedConfirmDate") && request.get("expectedConfirmDate") != null
+            ? LocalDate.parse(request.get("expectedConfirmDate").toString()) : null;
+
+        Order order = orderService.createOrder(currentUser.getId(), productId, orderType, amount, shares, accountId, fundingLines, expectedNavDate, expectedConfirmDate);
         return ResponseEntity.ok(order);
     }
 

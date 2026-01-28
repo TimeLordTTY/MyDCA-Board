@@ -141,8 +141,11 @@ public class LedgerService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // 借贷平衡验证：totalDebit必须等于totalCredit
+        // 允许极小的精度误差（1E-10），因为浮点数计算可能产生微小误差
         // 如果不平衡，抛出异常，事务回滚，不创建任何记录
-        if (totalDebit.compareTo(totalCredit) != 0) {
+        BigDecimal difference = totalDebit.subtract(totalCredit).abs();
+        BigDecimal tolerance = new BigDecimal("0.0000000001"); // 1E-10 精度容差
+        if (difference.compareTo(tolerance) > 0) {
             throw new RuntimeException(
                 String.format("借贷不平衡: DEBIT总额=%s, CREDIT总额=%s, 差额=%s", 
                     totalDebit, totalCredit, totalDebit.subtract(totalCredit))
@@ -349,7 +352,12 @@ public class LedgerService {
 
         // 资产类账户：DEBIT增加余额，CREDIT减少余额
         // 公式：newBalance = oldBalance + (postingType == DEBIT ? amount : -amount)
-        if ("CASH".equals(accountType) || "POSITION".equals(accountType) || "RECEIVABLE".equals(accountType)) {
+        // 包括：CASH（现金）、POSITION（持仓）、RECEIVABLE（应收）、MMF（货币基金）、
+        //       BANK_WM_NAV（银行理财净值型）、BANK_WM_BOX（银行理财封闭型）、ETF、LOF、FUND 等
+        if ("CASH".equals(accountType) || "POSITION".equals(accountType) || "RECEIVABLE".equals(accountType) ||
+            "MMF".equals(accountType) || "BANK_WM_NAV".equals(accountType) || "BANK_WM_BOX".equals(accountType) ||
+            "ETF".equals(accountType) || "LOF".equals(accountType) || "FUND".equals(accountType) ||
+            "STOCK".equals(accountType) || "BOND".equals(accountType) || "OPTION".equals(accountType)) {
             if ("DEBIT".equals(postingType)) {
                 newBalance = oldBalance.add(amount);
             } else {

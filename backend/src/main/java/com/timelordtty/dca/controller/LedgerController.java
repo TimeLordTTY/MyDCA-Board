@@ -102,6 +102,41 @@ public class LedgerController {
                     Map<String, Object> inMap = buildTxnMap(txn, debitPosting, "TRANSFER_IN", false);
                     result.add(inMap);
                 }
+            } 
+            // 对于赎回/卖出交易，如果同时有出金（CREDIT）和入金（DEBIT）的 REAL CASH 账户，也生成两条记录
+            else if (("SELL".equals(txn.getTxnType()) || "REDEMPTION".equals(txn.getTxnType())) && postings.size() >= 2) {
+                // 找到出金（CREDIT）和入金（DEBIT）的 REAL CASH 账户分录
+                LedgerPosting creditPosting = null;  // 出金（产品关联账户减少）
+                LedgerPosting debitPosting = null;   // 入金（赎回款到账）
+                
+                for (LedgerPosting posting : postings) {
+                    if ("CASH".equals(posting.getAccountType())) {
+                        Account acc = accountService.getAccount(posting.getAccountId());
+                        if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                            if ("CREDIT".equals(posting.getPostingType()) && creditPosting == null) {
+                                creditPosting = posting;
+                            } else if ("DEBIT".equals(posting.getPostingType()) && debitPosting == null) {
+                                debitPosting = posting;
+                            }
+                        }
+                    }
+                }
+                
+                // 如果同时有出金和入金账户（说明是有关联账户的赎回），生成两条记录
+                if (creditPosting != null && debitPosting != null) {
+                    // 生成出金记录（产品账户减少）
+                    Map<String, Object> outMap = buildTxnMap(txn, creditPosting, "REDEMPTION_OUT", true);
+                    outMap.put("note", txn.getNote() + " [出金]");
+                    result.add(outMap);
+                    
+                    // 生成入金记录（赎回款到账）
+                    Map<String, Object> inMap = buildTxnMap(txn, debitPosting, "REDEMPTION_IN", false);
+                    inMap.put("note", txn.getNote() + " [入金]");
+                    result.add(inMap);
+                } else {
+                    // 没有同时存在出金和入金，正常处理
+                    addNormalTxnMap(result, txn, postings);
+                }
             } else {
                 // 非转账交易，正常处理
                 Map<String, Object> txnMap = new HashMap<>();
@@ -175,10 +210,30 @@ public class LedgerController {
                     txnMap.put("summaryAmount", summaryAmount);
                     txnMap.put("mainAccountId", mainAccountId);
                     
+                    // 计算 summaryShares（优先从 POSITION 账户获取，否则从任何有 shares 字段的分录获取）
+                    BigDecimal summaryShares = BigDecimal.ZERO;
+                    for (LedgerPosting posting : postings) {
+                        if ("POSITION".equals(posting.getAccountType()) && posting.getShares() != null) {
+                            summaryShares = posting.getShares();
+                            break;
+                        }
+                    }
+                    // 如果 POSITION 账户没有 shares，尝试从其他分录获取
+                    if (summaryShares.compareTo(BigDecimal.ZERO) == 0) {
+                        for (LedgerPosting posting : postings) {
+                            if (posting.getShares() != null && posting.getShares().compareTo(BigDecimal.ZERO) > 0) {
+                                summaryShares = posting.getShares();
+                                break;
+                            }
+                        }
+                    }
+                    txnMap.put("summaryShares", summaryShares);
+                    
                     // 获取账户信息
                     populateAccountInfo(txnMap, mainAccountId, postings);
                 } else {
                     txnMap.put("summaryAmount", BigDecimal.ZERO);
+                    txnMap.put("summaryShares", BigDecimal.ZERO);
                     txnMap.put("mainAccountId", null);
                     txnMap.put("leafAccountName", null);
                     txnMap.put("leafAccountBalance", null);
@@ -275,8 +330,28 @@ public class LedgerController {
             
             result.put("summaryAmount", summaryAmount);
             result.put("mainAccountId", mainAccountId);
+            
+            // 计算 summaryShares（优先从 POSITION 账户获取，否则从任何有 shares 字段的分录获取）
+            BigDecimal summaryShares = BigDecimal.ZERO;
+            for (LedgerPosting posting : postings) {
+                if ("POSITION".equals(posting.getAccountType()) && posting.getShares() != null) {
+                    summaryShares = posting.getShares();
+                    break;
+                }
+            }
+            // 如果 POSITION 账户没有 shares，尝试从其他分录获取
+            if (summaryShares.compareTo(BigDecimal.ZERO) == 0) {
+                for (LedgerPosting posting : postings) {
+                    if (posting.getShares() != null && posting.getShares().compareTo(BigDecimal.ZERO) > 0) {
+                        summaryShares = posting.getShares();
+                        break;
+                    }
+                }
+            }
+            result.put("summaryShares", summaryShares);
         } else {
             result.put("summaryAmount", BigDecimal.ZERO);
+            result.put("summaryShares", BigDecimal.ZERO);
             result.put("mainAccountId", null);
         }
         
@@ -527,6 +602,9 @@ public class LedgerController {
         txnMap.put("summaryAmount", posting.getAmount());
         txnMap.put("mainAccountId", posting.getAccountId());
         
+        // 份额：从分录中获取
+        txnMap.put("summaryShares", posting.getShares() != null ? posting.getShares() : BigDecimal.ZERO);
+        
         // 获取账户信息
         Account account = accountService.getAccount(posting.getAccountId());
         if (account != null) {
@@ -648,6 +726,114 @@ public class LedgerController {
             txnMap.put("leafAccountBalance", null);
             txnMap.put("parentAccountBalance", null);
         }
+    }
+    
+    /**
+     * 添加普通交易记录到结果列表（用于非转账、非赎回的交易）
+     */
+    private void addNormalTxnMap(List<Map<String, Object>> result, LedgerTxn txn, List<LedgerPosting> postings) {
+        Map<String, Object> txnMap = new HashMap<>();
+        txnMap.put("id", txn.getId());
+        txnMap.put("txnId", txn.getTxnId());
+        txnMap.put("userId", txn.getUserId());
+        txnMap.put("familyId", txn.getFamilyId());
+        txnMap.put("txnType", txn.getTxnType());
+        txnMap.put("bizGroupKey", txn.getBizGroupKey());
+        txnMap.put("productId", txn.getProductId());
+        txnMap.put("orderId", txn.getOrderId());
+        txnMap.put("relatedTxnId", txn.getRelatedTxnId());
+        txnMap.put("relatedOrderId", txn.getRelatedOrderId());
+        txnMap.put("relationType", txn.getRelationType());
+        txnMap.put("requestedAt", txn.getRequestedAt());
+        txnMap.put("tradeDate", txn.getTradeDate());
+        txnMap.put("navDate", txn.getNavDate());
+        txnMap.put("confirmDate", txn.getConfirmDate());
+        txnMap.put("fetchDate", txn.getFetchDate());
+        txnMap.put("status", txn.getStatus());
+        txnMap.put("note", txn.getNote());
+        txnMap.put("categoryId", txn.getCategoryId());
+        txnMap.put("isReimbursable", txn.getIsReimbursable());
+        txnMap.put("isReimbursed", txn.getIsReimbursed());
+        txnMap.put("isReversed", txn.getIsReversed());
+        txnMap.put("reversedByTxnId", txn.getReversedByTxnId());
+        txnMap.put("createdAt", txn.getCreatedAt());
+        txnMap.put("updatedAt", txn.getUpdatedAt());
+        
+        if (!postings.isEmpty()) {
+            // 计算主要金额（对于收入/支出，取 CASH 账户的金额）
+            BigDecimal summaryAmount = BigDecimal.ZERO;
+            Long mainAccountId = null;
+            
+            // 优先查找 CASH 账户（真实账户）
+            for (LedgerPosting posting : postings) {
+                if ("CASH".equals(posting.getAccountType())) {
+                    Account acc = accountService.getAccount(posting.getAccountId());
+                    if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                        // 对于BUY/SUBSCRIPTION交易，CASH CREDIT表示现金减少，应该显示为负数
+                        if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) 
+                            && "CREDIT".equals(posting.getPostingType())) {
+                            summaryAmount = posting.getAmount().negate();
+                        } else {
+                            summaryAmount = posting.getAmount();
+                        }
+                        mainAccountId = posting.getAccountId();
+                        break;
+                    }
+                }
+            }
+            
+            // 如果没有找到 CASH 账户，查找其他 REAL 账户
+            if (mainAccountId == null) {
+                for (LedgerPosting posting : postings) {
+                    Account acc = accountService.getAccount(posting.getAccountId());
+                    if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                        summaryAmount = posting.getAmount();
+                        mainAccountId = posting.getAccountId();
+                        break;
+                    }
+                }
+            }
+            
+            // 如果还是没有找到，取第一个 postings 的金额（可能是虚拟账户）
+            if (mainAccountId == null && !postings.isEmpty()) {
+                summaryAmount = postings.get(0).getAmount();
+                mainAccountId = postings.get(0).getAccountId();
+            }
+            
+            txnMap.put("summaryAmount", summaryAmount);
+            txnMap.put("mainAccountId", mainAccountId);
+            
+            // 计算 summaryShares（优先从 POSITION 账户获取，否则从任何有 shares 字段的分录获取）
+            BigDecimal summaryShares = BigDecimal.ZERO;
+            for (LedgerPosting posting : postings) {
+                if ("POSITION".equals(posting.getAccountType()) && posting.getShares() != null) {
+                    summaryShares = posting.getShares();
+                    break;
+                }
+            }
+            // 如果 POSITION 账户没有 shares，尝试从其他分录获取
+            if (summaryShares.compareTo(BigDecimal.ZERO) == 0) {
+                for (LedgerPosting posting : postings) {
+                    if (posting.getShares() != null && posting.getShares().compareTo(BigDecimal.ZERO) > 0) {
+                        summaryShares = posting.getShares();
+                        break;
+                    }
+                }
+            }
+            txnMap.put("summaryShares", summaryShares);
+            
+            // 获取账户信息
+            populateAccountInfo(txnMap, mainAccountId, postings);
+        } else {
+            txnMap.put("summaryAmount", BigDecimal.ZERO);
+            txnMap.put("summaryShares", BigDecimal.ZERO);
+            txnMap.put("mainAccountId", null);
+            txnMap.put("leafAccountName", null);
+            txnMap.put("leafAccountBalance", null);
+            txnMap.put("parentAccountBalance", null);
+        }
+        
+        result.add(txnMap);
     }
 }
 

@@ -88,11 +88,14 @@ public class OrderService {
      * @param shares 下单份额（可为空，买入/申购时为空）
      * @param accountId 使用的账户ID（单个账户，兼容旧接口，如果fundingLines不为空则忽略此参数）
      * @param fundingLines 资金来源列表（组合支付，每个元素包含accountId和amount），可为空
+     * @param expectedNavDate 预期净值日期（可为空）
+     * @param expectedConfirmDate 预期确认日期（可为空）
      * @return 创建的 Order 实体
      */
     @Transactional
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
-                             BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines) {
+                             BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines,
+                             LocalDate expectedNavDate, LocalDate expectedConfirmDate) {
         // 生成订单ID
         String orderId = "ORD-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + 
                         "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
@@ -107,6 +110,8 @@ public class OrderService {
         order.setShares(shares);
         order.setRequestedAt(LocalDateTime.now());
         order.setTradeDate(LocalDate.now());
+        order.setExpectedNavDate(expectedNavDate);
+        order.setExpectedConfirmDate(expectedConfirmDate);
         order.setStatus("PENDING");
 
         orderMapper.insert(order);
@@ -169,37 +174,67 @@ public class OrderService {
                     }
                 }
             } else if (isSellOrder) {
-                // 卖出/赎回：使用shares字段，不需要占用资金，只需要记录卖出份额
-                BigDecimal totalShares = fundingLines.stream()
-                        .filter(fl -> fl.getShares() != null)
+                // 卖出/赎回：分离 SOURCE（出金账户）和 TARGET（到账账户）
+                List<OrderFundingLine> sourceLines = fundingLines.stream()
+                        .filter(fl -> "SOURCE".equals(fl.getLineType()) || fl.getLineType() == null)
+                        .filter(fl -> fl.getShares() != null && fl.getShares().compareTo(BigDecimal.ZERO) > 0)
+                        .collect(java.util.stream.Collectors.toList());
+                List<OrderFundingLine> targetLines = fundingLines.stream()
+                        .filter(fl -> "TARGET".equals(fl.getLineType()))
+                        .collect(java.util.stream.Collectors.toList());
+
+                // 计算出金账户总份额
+                BigDecimal totalShares = sourceLines.stream()
                         .map(OrderFundingLine::getShares)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-                // 校验总份额：Σ(fundingLines.shares) = shares
+                // 校验总份额：Σ(sourceLines.shares) = shares
                 if (shares != null && totalShares.compareTo(shares) != 0) {
                     throw new RuntimeException(
                         String.format("组合卖出总份额(%s)必须等于订单份额(%s)", totalShares, shares)
                     );
                 }
 
-                // 校验每个账户并记录卖出份额
+                // 校验并记录出金账户（SOURCE）
                 int lineNo = 1;
-                for (OrderFundingLine fundingLine : fundingLines) {
+                for (OrderFundingLine fundingLine : sourceLines) {
                     Long fundingAccountId = fundingLine.getAccountId();
                     
                     // 校验账户存在且为叶子账户
                     Account fundingAccount = accountMapper.selectById(fundingAccountId);
                     if (fundingAccount == null) {
-                        throw new RuntimeException("卖出账户不存在: " + fundingAccountId);
+                        throw new RuntimeException("出金账户不存在: " + fundingAccountId);
                     }
                     if (!accountService.isLeafAccount(fundingAccountId)) {
-                        throw new RuntimeException("卖出账户必须是叶子账户: " + fundingAccountId);
+                        throw new RuntimeException("出金账户必须是叶子账户: " + fundingAccountId);
                     }
 
-                    // 写入order_funding_line（卖出时不需要占用资金，只记录份额）
+                    // 写入order_funding_line（出金账户）
                     fundingLine.setOrderId(orderId);
                     fundingLine.setLineNo(lineNo++);
                     fundingLine.setCurrency(fundingAccount.getCurrency() != null ? fundingAccount.getCurrency() : "CNY");
+                    fundingLine.setLineType("SOURCE");
+                    orderFundingLineMapper.insert(fundingLine);
+                }
+
+                // 校验并记录到账账户（TARGET）
+                for (OrderFundingLine fundingLine : targetLines) {
+                    Long targetAccountId = fundingLine.getAccountId();
+                    
+                    // 校验账户存在且为叶子账户
+                    Account targetAccount = accountMapper.selectById(targetAccountId);
+                    if (targetAccount == null) {
+                        throw new RuntimeException("到账账户不存在: " + targetAccountId);
+                    }
+                    if (!accountService.isLeafAccount(targetAccountId)) {
+                        throw new RuntimeException("到账账户必须是叶子账户: " + targetAccountId);
+                    }
+
+                    // 写入order_funding_line（到账账户）
+                    fundingLine.setOrderId(orderId);
+                    fundingLine.setLineNo(lineNo++);
+                    fundingLine.setCurrency(targetAccount.getCurrency() != null ? targetAccount.getCurrency() : "CNY");
+                    fundingLine.setLineType("TARGET");
                     orderFundingLineMapper.insert(fundingLine);
                 }
             }
@@ -242,6 +277,15 @@ public class OrderService {
     }
 
     /**
+     * 创建订单（兼容旧接口，带 fundingLines）
+     */
+    @Transactional
+    public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
+                             BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines) {
+        return createOrder(userId, productId, orderType, amount, shares, accountId, fundingLines, null, null);
+    }
+
+    /**
      * 创建订单（兼容旧接口，单个账户）
      * 
      * @param userId 发起用户ID
@@ -255,7 +299,7 @@ public class OrderService {
     @Transactional
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId) {
-        return createOrder(userId, productId, orderType, amount, shares, accountId, null);
+        return createOrder(userId, productId, orderType, amount, shares, accountId, null, null, null);
     }
 
     /**

@@ -854,8 +854,8 @@ class ETFCollector:
         """保存日K线到数据库"""
         with self.conn.cursor() as cursor:
             insert_sql = """
-                INSERT INTO daily_bar 
-                (product_id, trade_date, open_price, high_price, low_price, close_price, volume, amount, data_source, created_at)
+                INSERT INTO market_bar_daily 
+                (product_id, trade_date, open_price, high_price, low_price, close_price, volume, amount, source, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                 ON DUPLICATE KEY UPDATE
                     open_price = VALUES(open_price),

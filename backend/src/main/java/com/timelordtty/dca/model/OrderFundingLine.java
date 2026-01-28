@@ -66,6 +66,9 @@ public class OrderFundingLine {
     /** 货币，CNY/USD/HKD，默认CNY */
     private String currency;
     
+    /** 行类型：SOURCE=出金来源（买入扣款/卖出份额来源），TARGET=到账目标（卖出/赎回资金到账账户） */
+    private String lineType;
+    
     /** 创建时间 */
     private LocalDateTime createdAt;
     

@@ -1,7 +1,9 @@
 package com.timelordtty.dca.service;
 
+import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
+import com.timelordtty.dca.mapper.NavMapper;
 import com.timelordtty.dca.mapper.OrderFundingLineMapper;
 import com.timelordtty.dca.mapper.OrderMapper;
 import com.timelordtty.dca.mapper.ProductMasterMapper;
@@ -9,6 +11,7 @@ import com.timelordtty.dca.mapper.SettlementConfirmMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.LedgerTxn;
+import com.timelordtty.dca.model.Nav;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.OrderFundingLine;
 import com.timelordtty.dca.model.ProductMaster;
@@ -60,12 +63,15 @@ public class HoldingService {
     private final OrderMapper orderMapper;
     private final OrderFundingLineMapper orderFundingLineMapper;
     private final SettlementConfirmMapper settlementConfirmMapper;
+    private final AccountMapper accountMapper;
+    private final NavMapper navMapper;
 
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
                           ProductMasterMapper productMasterMapper,
                           ProductService productService, @Lazy AccountService accountService, LedgerService ledgerService,
                           OrderMapper orderMapper, OrderFundingLineMapper orderFundingLineMapper,
-                          SettlementConfirmMapper settlementConfirmMapper) {
+                          SettlementConfirmMapper settlementConfirmMapper, AccountMapper accountMapper,
+                          NavMapper navMapper) {
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.productMasterMapper = productMasterMapper;
@@ -75,6 +81,8 @@ public class HoldingService {
         this.orderMapper = orderMapper;
         this.orderFundingLineMapper = orderFundingLineMapper;
         this.settlementConfirmMapper = settlementConfirmMapper;
+        this.accountMapper = accountMapper;
+        this.navMapper = navMapper;
     }
 
     /**
@@ -146,20 +154,66 @@ public class HoldingService {
             holdings.put(productId, holding);
         }
 
-        // 计算平均成本
+        // 查询有关联产品的账户（通过 linked_product_id 和 initial_shares）
+        // 这些账户的 initial_shares 应该作为该产品的持仓
+        List<Account> allAccounts = accountMapper.selectByOwner(userId, familyId);
+        for (Account account : allAccounts) {
+            if (account.getLinkedProductId() != null && account.getInitialShares() != null 
+                && account.getInitialShares().compareTo(BigDecimal.ZERO) > 0) {
+                
+                Long productId = account.getLinkedProductId();
+                
+                // 创建或获取持仓信息
+                HoldingInfo holding = holdings.get(productId);
+                if (holding == null) {
+                    holding = new HoldingInfo();
+                    holding.setProductId(productId);
+                    holding.setTotalShares(BigDecimal.ZERO);
+                    holding.setTotalCost(BigDecimal.ZERO);
+                }
+                
+                // 将账户的 initial_shares 加入持仓
+                holding.setTotalShares(holding.getTotalShares().add(account.getInitialShares()));
+                
+                // 成本计算逻辑：
+                // 1. 优先使用 initialBalance（如果有且大于0）
+                // 2. 否则使用子账户的 balance 总和作为成本
+                BigDecimal cost = BigDecimal.ZERO;
+                if (account.getInitialBalance() != null && account.getInitialBalance().compareTo(BigDecimal.ZERO) > 0) {
+                    cost = account.getInitialBalance();
+                } else {
+                    // 计算子账户的 balance 总和作为成本
+                    List<Account> children = accountMapper.selectChildren(account.getId());
+                    for (Account child : children) {
+                        if (child.getBalance() != null) {
+                            cost = cost.add(child.getBalance());
+                        }
+                    }
+                }
+                holding.setTotalCost(holding.getTotalCost().add(cost));
+                
+                holdings.put(productId, holding);
+            }
+        }
+
+        // 计算平均成本、市值和未实现盈亏
         for (Map.Entry<Long, HoldingInfo> entry : holdings.entrySet()) {
             HoldingInfo holding = entry.getValue();
+            Long productId = entry.getKey();
+            
             // 回填产品信息，供前端展示/行情查询使用
             if (holding.getProductId() == null) {
-                holding.setProductId(entry.getKey());
+                holding.setProductId(productId);
             }
-            ProductMaster product = productMasterMapper.selectById(entry.getKey());
+            ProductMaster product = productMasterMapper.selectById(productId);
             if (product != null) {
                 holding.setProductCode(product.getProductCode());
                 holding.setProductName(product.getProductName());
                 holding.setChannel(product.getChannel());
                 holding.setAssetType(product.getAssetType());
             }
+            
+            // 计算平均成本
             if (holding.getTotalShares() != null && 
                 holding.getTotalShares().compareTo(BigDecimal.ZERO) > 0 &&
                 holding.getTotalCost() != null) {
@@ -169,9 +223,29 @@ public class HoldingService {
             } else {
                 holding.setAvgCost(BigDecimal.ZERO);
             }
-            // marketValue和unrealizedPnl需要外部行情数据，本服务不计算
-            holding.setMarketValue(BigDecimal.ZERO);
-            holding.setUnrealizedPnl(BigDecimal.ZERO);
+            
+            // 获取最新净值计算市值和未实现盈亏
+            Nav latestNav = navMapper.selectLatest(productId);
+            if (latestNav != null && latestNav.getNav() != null 
+                && holding.getTotalShares() != null 
+                && holding.getTotalShares().compareTo(BigDecimal.ZERO) > 0) {
+                
+                BigDecimal marketValue = holding.getTotalShares().multiply(latestNav.getNav())
+                    .setScale(2, RoundingMode.HALF_UP);
+                holding.setMarketValue(marketValue);
+                
+                // 未实现盈亏 = 市值 - 成本
+                if (holding.getTotalCost() != null) {
+                    BigDecimal unrealizedPnl = marketValue.subtract(holding.getTotalCost())
+                        .setScale(2, RoundingMode.HALF_UP);
+                    holding.setUnrealizedPnl(unrealizedPnl);
+                } else {
+                    holding.setUnrealizedPnl(BigDecimal.ZERO);
+                }
+            } else {
+                holding.setMarketValue(BigDecimal.ZERO);
+                holding.setUnrealizedPnl(BigDecimal.ZERO);
+            }
         }
 
         return holdings;
@@ -419,7 +493,11 @@ public class HoldingService {
      * 获取指定产品在各账户的持仓明细
      * 
      * 用于关联账户产品的赎回来源选择
-     * 通过分析已确认订单的资金来源，计算每个账户的持仓份额
+     * 
+     * 计算逻辑：
+     * 1. 首先检查是否有账户通过 linked_product_id 关联了该产品
+     * 2. 如果有关联账户，则根据子账户的金额按比例分配父账户的 initial_shares
+     * 3. 如果没有关联账户，则通过分析已确认订单的资金来源来计算
      * 
      * @param productId 产品ID
      * @param userId 用户ID
@@ -427,16 +505,82 @@ public class HoldingService {
      * @return 账户持仓明细列表
      */
     public List<AccountHoldingInfo> getProductHoldingsByAccount(Long productId, Long userId, Long familyId) {
-        // 查询该产品的所有已确认订单
-        List<Order> confirmedOrders = orderMapper.selectConfirmedByProductId(productId, userId);
+        List<AccountHoldingInfo> result = new ArrayList<>();
         
-        // 按账户聚合持仓份额
+        // 获取产品最新净值用于计算市值
+        BigDecimal latestNav = BigDecimal.ONE; // 默认净值为1
+        // TODO: 从 nav 表获取最新净值
+        
+        // 首先检查是否有账户关联了该产品
+        List<Account> linkedAccounts = accountMapper.selectByLinkedProduct(productId, userId, familyId);
+        
+        if (!linkedAccounts.isEmpty()) {
+            // 有关联账户，根据子账户金额按比例计算份额
+            for (Account linkedAccount : linkedAccounts) {
+                BigDecimal totalShares = linkedAccount.getInitialShares();
+                if (totalShares == null || totalShares.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                
+                // 获取子账户
+                List<Account> children = accountMapper.selectChildren(linkedAccount.getId());
+                
+                if (children.isEmpty()) {
+                    // 没有子账户，整个账户就是持仓
+                    AccountHoldingInfo info = new AccountHoldingInfo();
+                    info.setAccountId(linkedAccount.getId());
+                    info.setAccountName(linkedAccount.getAccountName());
+                    info.setShares(totalShares.setScale(4, RoundingMode.HALF_UP));
+                    info.setMarketValue(totalShares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
+                    result.add(info);
+                } else {
+                    // 有子账户，根据子账户金额分配份额
+                    // 计算所有子账户金额总和
+                    BigDecimal totalBalance = children.stream()
+                        .filter(c -> c.getBalance() != null && c.getBalance().compareTo(BigDecimal.ZERO) > 0)
+                        .map(Account::getBalance)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    
+                    for (Account child : children) {
+                        BigDecimal childBalance = child.getBalance();
+                        if (childBalance == null || childBalance.compareTo(BigDecimal.ZERO) <= 0) {
+                            continue; // 跳过余额为0的子账户
+                        }
+                        
+                        // 子账户份额 = 子账户金额 / 总金额 × 总份额
+                        BigDecimal childShares;
+                        if (totalBalance.compareTo(BigDecimal.ZERO) > 0) {
+                            childShares = childBalance
+                                .divide(totalBalance, 10, RoundingMode.HALF_UP)
+                                .multiply(totalShares);
+                        } else {
+                            childShares = BigDecimal.ZERO;
+                        }
+                        
+                        if (childShares.compareTo(BigDecimal.ZERO) <= 0) {
+                            continue;
+                        }
+                        
+                        AccountHoldingInfo info = new AccountHoldingInfo();
+                        info.setAccountId(child.getId());
+                        info.setAccountName(child.getAccountName());
+                        info.setParentAccountName(linkedAccount.getAccountName());
+                        info.setShares(childShares.setScale(4, RoundingMode.HALF_UP));
+                        info.setMarketValue(childShares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
+                        result.add(info);
+                    }
+                }
+            }
+            
+            return result;
+        }
+        
+        // 没有关联账户，通过订单计算
+        List<Order> confirmedOrders = orderMapper.selectConfirmedByProductId(productId, userId);
         Map<Long, BigDecimal> accountShares = new HashMap<>();
         
         for (Order order : confirmedOrders) {
-            // 获取订单的资金来源明细
             List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(order.getOrderId());
-            // 获取结算确认信息
             SettlementConfirm settlement = settlementConfirmMapper.selectByOrderId(order.getOrderId());
             
             if (fundingLines.isEmpty() || settlement == null) {
@@ -444,36 +588,30 @@ public class HoldingService {
             }
             
             if ("BUY".equals(order.getOrderType()) || "SUBSCRIPTION".equals(order.getOrderType())) {
-                // 买入/申购：按出资比例分配份额
                 BigDecimal totalAmount = fundingLines.stream()
                     .map(OrderFundingLine::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-                BigDecimal totalShares = settlement.getConfirmShares();
+                BigDecimal totalSharesFromOrder = settlement.getConfirmShares();
                 
-                if (totalAmount.compareTo(BigDecimal.ZERO) > 0 && totalShares != null && totalShares.compareTo(BigDecimal.ZERO) > 0) {
+                if (totalAmount.compareTo(BigDecimal.ZERO) > 0 && totalSharesFromOrder != null && totalSharesFromOrder.compareTo(BigDecimal.ZERO) > 0) {
                     for (OrderFundingLine fl : fundingLines) {
-                        // 份额 = 出资金额 / 总金额 × 总份额
                         BigDecimal accountSharesAlloc = fl.getAmount()
                             .divide(totalAmount, 10, RoundingMode.HALF_UP)
-                            .multiply(totalShares);
-                        
+                            .multiply(totalSharesFromOrder);
                         accountShares.merge(fl.getAccountId(), accountSharesAlloc, BigDecimal::add);
                     }
                 }
             } else if ("SELL".equals(order.getOrderType()) || "REDEMPTION".equals(order.getOrderType())) {
-                // 卖出/赎回：直接使用 OrderFundingLine.shares 或按金额比例分配
-                BigDecimal totalShares = settlement.getConfirmShares();
+                BigDecimal totalSharesFromOrder = settlement.getConfirmShares();
                 boolean hasExplicitShares = fundingLines.stream().anyMatch(fl -> fl.getShares() != null && fl.getShares().compareTo(BigDecimal.ZERO) > 0);
                 
                 if (hasExplicitShares) {
-                    // 有明确的份额分配
                     for (OrderFundingLine fl : fundingLines) {
                         if (fl.getShares() != null && fl.getShares().compareTo(BigDecimal.ZERO) > 0) {
                             accountShares.merge(fl.getAccountId(), fl.getShares().negate(), BigDecimal::add);
                         }
                     }
-                } else if (totalShares != null && totalShares.compareTo(BigDecimal.ZERO) > 0) {
-                    // 没有明确份额，按金额比例分配
+                } else if (totalSharesFromOrder != null && totalSharesFromOrder.compareTo(BigDecimal.ZERO) > 0) {
                     BigDecimal totalAmount = fundingLines.stream()
                         .map(OrderFundingLine::getAmount)
                         .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -482,9 +620,8 @@ public class HoldingService {
                         for (OrderFundingLine fl : fundingLines) {
                             BigDecimal accountSharesDeduct = fl.getAmount()
                                 .divide(totalAmount, 10, RoundingMode.HALF_UP)
-                                .multiply(totalShares)
+                                .multiply(totalSharesFromOrder)
                                 .negate();
-                            
                             accountShares.merge(fl.getAccountId(), accountSharesDeduct, BigDecimal::add);
                         }
                     }
@@ -492,16 +629,9 @@ public class HoldingService {
             }
         }
         
-        // 获取产品最新净值用于计算市值
-        BigDecimal latestNav = BigDecimal.ONE; // 默认净值为1
-        ProductMaster product = productMasterMapper.selectById(productId);
-        // TODO: 从 nav 表获取最新净值
-        
         // 转换为结果列表
-        List<AccountHoldingInfo> result = new ArrayList<>();
         for (Map.Entry<Long, BigDecimal> entry : accountShares.entrySet()) {
             BigDecimal shares = entry.getValue();
-            // 过滤掉份额为0或负数的账户
             if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
@@ -515,7 +645,6 @@ public class HoldingService {
             info.setAccountId(entry.getKey());
             info.setAccountName(account.getAccountName());
             
-            // 获取父账户名称
             if (account.getParentAccountId() != null) {
                 Account parent = accountService.getAccount(account.getParentAccountId());
                 if (parent != null) {
@@ -525,7 +654,6 @@ public class HoldingService {
             
             info.setShares(shares.setScale(4, RoundingMode.HALF_UP));
             info.setMarketValue(shares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
-            
             result.add(info);
         }
         

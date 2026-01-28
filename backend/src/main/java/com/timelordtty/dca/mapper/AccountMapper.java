@@ -20,9 +20,11 @@ public interface AccountMapper {
     List<Account> selectByLinkedProduct(@Param("productId") Long productId, 
                                        @Param("ownerUserId") Long ownerUserId, 
                                        @Param("ownerFamilyId") Long ownerFamilyId);
+    Account selectByLinkedProductId(@Param("productId") Long productId);
     int insert(Account account);
     int update(Account account);
     int updateBalance(@Param("id") Long id, @Param("balance") BigDecimal balance);
     int updateReservedAmount(@Param("id") Long id, @Param("reservedAmount") BigDecimal reservedAmount);
+    int updateInitialShares(@Param("id") Long id, @Param("initialShares") BigDecimal initialShares);
 }
 

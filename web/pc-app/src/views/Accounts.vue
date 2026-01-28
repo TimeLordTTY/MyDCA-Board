@@ -87,10 +87,15 @@
                       金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
                       折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
                     </template>
-                    <template v-else>
+                    <template v-else-if="isUnallocatedAccount(child)">
+                      <!-- 待分配账户：显示总份额减去其他子账户折算份额的差额 -->
                       <span class="tag gray tiny">待分配</span>
-                      预估份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>；
-                      预估金额：<span class="mono">{{ formatCurrency(getMmfChildAmount(platform, child)) }}</span>
+                      金额：<span class="mono">{{ formatCurrency(getMmfUnallocatedAmount(platform)) }}</span>；
+                      份额：<span class="mono">{{ formatNumber(getMmfUnallocatedShares(platform), 2) }}</span>
+                    </template>
+                    <template v-else>
+                      金额：<span class="mono">{{ formatCurrency(0) }}</span>；
+                      份额：<span class="mono">0</span>
                     </template>
                   </div>
                   <div v-else class="tiny muted">
@@ -198,10 +203,15 @@
                         金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
                         折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
                       </template>
-                      <template v-else>
+                      <template v-else-if="isUnallocatedAccount(child)">
+                        <!-- 待分配账户：显示总份额减去其他子账户折算份额的差额 -->
                         <span class="tag gray tiny">待分配</span>
-                        预估份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>；
-                        预估金额：<span class="mono">{{ formatCurrency(getMmfChildAmount(platform, child)) }}</span>
+                        金额：<span class="mono">{{ formatCurrency(getMmfUnallocatedAmount(platform)) }}</span>；
+                        份额：<span class="mono">{{ formatNumber(getMmfUnallocatedShares(platform), 2) }}</span>
+                      </template>
+                      <template v-else>
+                        金额：<span class="mono">{{ formatCurrency(0) }}</span>；
+                        份额：<span class="mono">0</span>
                       </template>
                     </div>
                     <div v-else class="tiny muted">
@@ -855,21 +865,21 @@ function getMmfTotalAmount(platform: Account): number {
 function getMmfChildShares(platform: Account, child: Account): number {
   if (!platform.initialShares) return 0
   
+  const nav = getMmfNav(platform)
+  
   // 如果是固定金额，计算其份额
   if (child.isFixedAmount && child.fixedAmount) {
-    const nav = getMmfNav(platform)
     return child.fixedAmount / nav
   }
   
   // 非固定金额子账户：使用其 balance 值作为已分配的金额，然后计算份额
-  // 如果 balance > 0，说明已经分配了金额
+  // balance 为 0 则份额为 0
   if (child.balance && child.balance > 0) {
-    const nav = getMmfNav(platform)
     return child.balance / nav
   }
   
-  // 如果还没分配（balance 为 0），计算待分配份额
-  return getMmfUnallocatedShares(platform) / getNonAllocatedChildrenCount(platform)
+  // balance 为 0，份额为 0
+  return 0
 }
 
 // 获取非固定且未分配金额的子账户数量
@@ -892,6 +902,9 @@ function getMmfUnallocatedShares(platform: Account): number {
   let allocatedShares = 0
   
   for (const c of platform.children) {
+    // 跳过"待分配"账户
+    if (isUnallocatedAccount(c)) continue
+    
     if (c.isFixedAmount && c.fixedAmount) {
       // 固定金额子账户
       allocatedShares += c.fixedAmount / nav
@@ -904,19 +917,28 @@ function getMmfUnallocatedShares(platform: Account): number {
   return Math.max(0, platform.initialShares - allocatedShares)
 }
 
+// 获取 MMF 平台未分配的金额
+function getMmfUnallocatedAmount(platform: Account): number {
+  const unallocatedShares = getMmfUnallocatedShares(platform)
+  const nav = getMmfNav(platform)
+  return unallocatedShares * nav
+}
+
+// 判断是否是"待分配"账户（用于累积净值波动收益/损失）
+function isUnallocatedAccount(account: Account): boolean {
+  // 识别方式：账户名称包含"待分配"，或账户代码包含"待分配"
+  const name = account.accountName || ''
+  const code = (account as any).accountCode || ''
+  return name.includes('待分配') || code.includes('待分配')
+}
+
 // 获取 MMF 子账户的金额
 function getMmfChildAmount(platform: Account, child: Account): number {
   if (child.isFixedAmount) {
     return child.fixedAmount || 0
   }
-  // 优先使用子账户自己的 balance 值
-  if (child.balance && child.balance > 0) {
-    return child.balance
-  }
-  // 否则使用计算的份额 × 净值
-  const shares = getMmfChildShares(platform, child)
-  const nav = getMmfNav(platform)
-  return shares * nav
+  // 使用子账户自己的 balance 值
+  return child.balance || 0
 }
 
 // 加载 MMF 平台关联产品的净值

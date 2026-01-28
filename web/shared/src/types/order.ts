@@ -30,6 +30,7 @@ export interface OrderFundingLine {
   amount: number
   shares?: number  // 卖出份额（卖出/赎回时使用，买入/申购时为undefined）
   currency: 'CNY' | 'USD' | 'HKD'
+  lineType?: 'SOURCE' | 'TARGET'  // SOURCE=出金来源, TARGET=到账目标
   createdAt: string
   updatedAt: string
 }
@@ -70,6 +71,7 @@ export interface CreateOrderRequest {
     accountId: number
     amount?: number  // 买入时使用
     shares?: number  // 卖出时使用
+    lineType?: 'SOURCE' | 'TARGET'  // SOURCE=出金来源, TARGET=到账目标
   }>
   tradeDate?: string
   expectedNavDate?: string
