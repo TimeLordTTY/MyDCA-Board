@@ -55,6 +55,10 @@
             <span class="detail-label">净值日期</span>
             <span class="detail-value">{{ selectedOrder.settlement.navDate }}</span>
           </div>
+          <div class="detail-row" v-if="selectedOrder.expectedConfirmDate && !selectedOrder.settlement?.confirmDate">
+            <span class="detail-label">预期确认日期</span>
+            <span class="detail-value">{{ selectedOrder.expectedConfirmDate }}</span>
+          </div>
           <div class="detail-row" v-if="selectedOrder.settlement?.confirmDate">
             <span class="detail-label">确认日期</span>
             <span class="detail-value">{{ selectedOrder.settlement.confirmDate }}</span>
@@ -93,6 +97,19 @@
           </div>
         </div>
       </div>
+
+      <template #footer>
+        <div style="text-align: right">
+          <el-button @click="detailVisible = false">关闭</el-button>
+          <el-button
+            v-if="selectedOrder && canSettle(selectedOrder)"
+            type="primary"
+            @click="handleSettleFromDetail"
+          >
+            结算
+          </el-button>
+        </div>
+      </template>
     </el-dialog>
 
     <!-- 结算确认模态框 -->
@@ -215,9 +232,14 @@
               <th>类型</th>
               <th>标的</th>
               <th>账户</th>
-              <th class="right">金额</th>
-              <th class="right">份额</th>
+              <th class="right">
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px;">
+                  <div>份额</div>
+                  <div style="font-size: 11px; color: #999; font-weight: normal;">金额</div>
+                </div>
+              </th>
               <th class="right">净值</th>
+              <th>确认日期</th>
               <th>状态</th>
               <th class="right">操作</th>
             </tr>
@@ -241,12 +263,17 @@
                 </div>
               </td>
               <td>{{ getFundingSourceDisplay(order) }}</td>
-              <td class="right mono">{{ formatCurrency(order.amount) }}</td>
-              <td class="right mono">{{ order.shares ? order.shares.toFixed(4) : '—' }}</td>
+              <td class="right">
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                  <div class="mono">{{ order.shares != null ? order.shares.toFixed(4) : '—' }}</div>
+                  <div class="mono td-muted">{{ order.amount != null ? formatCurrency(order.amount) : '—' }}</div>
+                </div>
+              </td>
               <td class="right mono">
                 {{ getOrderNav(order).nav }}
                 <span v-if="getOrderNav(order).navDate" class="nav-date">({{ getOrderNav(order).navDate }})</span>
               </td>
+              <td>{{ getOrderConfirmDate(order) }}</td>
               <td>
                 <span class="tag" :class="getOrderStatusTagClass(order.status)">
                   {{ getOrderStatusLabel(order.status) }}
@@ -279,7 +306,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { orderApi, navApi, formatCurrency, formatDateTime, getOrderTypeLabel, getOrderStatusLabel, useAccountStore, useProductStore } from '@wealth-hub/shared'
+import { orderApi, navApi, formatCurrency, formatDateTime, formatDate, getOrderTypeLabel, getOrderStatusLabel, useAccountStore, useProductStore } from '@wealth-hub/shared'
 import type { Order, OrderDetail, OrderFundingLine } from '@wealth-hub/shared'
 import NewOrderModal from '../components/NewOrderModal.vue'
 
@@ -395,6 +422,21 @@ async function handleViewDetail(order: Order) {
   }
 }
 
+async function handleSettleFromDetail() {
+  if (!selectedOrder.value) return
+  const baseOrder = orders.value.find(o => o.orderId === selectedOrder.value!.orderId)
+  if (!baseOrder) {
+    ElMessage.error('未找到该订单的列表数据，无法结算')
+    return
+  }
+  if (!canSettle(baseOrder)) {
+    ElMessage.warning('当前状态不允许结算')
+    return
+  }
+  detailVisible.value = false
+  await handleSettle(baseOrder)
+}
+
 function getAccountName(accountId: number): string {
   // 递归搜索账户树
   function findInTree(accounts: any[]): any | null {
@@ -473,6 +515,13 @@ function getOrderNav(order: Order & { settlement?: any, navData?: any }): { nav:
     return { nav: '待确认', navDate: order.expectedNavDate }
   }
   return { nav: '—' }
+}
+
+function getOrderConfirmDate(order: Order & { settlement?: any }): string {
+  const settledDate = order.settlement?.confirmDate
+  const expectedDate = order.expectedConfirmDate
+  const v = settledDate || expectedDate
+  return v ? formatDate(v) : '—'
 }
 
 function isBuyOrderType(orderType: string): boolean {

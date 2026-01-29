@@ -7,8 +7,10 @@ import com.timelordtty.dca.model.Order;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 看板服务（DashboardService）
@@ -50,6 +52,53 @@ public class DashboardService {
      */
     public List<Order> getPendingSettlements() {
         return orderService.getPendingOrders();
+    }
+
+    /**
+     * 获取今日建议（Phase 1：仅实现“待结算订单”建议）
+     *
+     * 规则：
+     * - 订单状态为 PENDING
+     * - expectedConfirmDate <= today（今天需要结算 + 逾期未结算）
+     */
+    public List<TodayAction> getTodayActions(Long userId) {
+        LocalDate today = LocalDate.now();
+        List<Order> userOrders = orderService.getOrdersByUserId(userId);
+
+        return userOrders.stream()
+                .filter(o -> "PENDING".equals(o.getStatus()))
+                .filter(o -> o.getExpectedConfirmDate() != null)
+                .filter(o -> !o.getExpectedConfirmDate().isAfter(today))
+                .sorted((a, b) -> {
+                    // 越早应确认的排越前
+                    int cmp = a.getExpectedConfirmDate().compareTo(b.getExpectedConfirmDate());
+                    if (cmp != 0) return cmp;
+                    return String.valueOf(a.getOrderId()).compareTo(String.valueOf(b.getOrderId()));
+                })
+                .map(o -> {
+                    TodayAction a = new TodayAction();
+                    a.setId(o.getOrderId());
+                    a.setType("SETTLE_ORDER");
+                    a.setTitle("结算订单 " + safeOrderShortId(o.getOrderId()));
+
+                    String amountText = o.getAmount() != null ? ("金额 " + o.getAmount()) : null;
+                    String sharesText = o.getShares() != null ? ("份额 " + o.getShares()) : null;
+                    String base = amountText != null ? amountText : (sharesText != null ? sharesText : "—");
+
+                    String due = o.getExpectedConfirmDate().toString();
+                    String dueLabel = o.getExpectedConfirmDate().isBefore(today) ? "已逾期" : "今日应结算";
+                    a.setDescription(dueLabel + " · 确认日期 " + due + " · " + base);
+
+                    a.setPriority(o.getExpectedConfirmDate().isBefore(today) ? "HIGH" : "MEDIUM");
+                    a.setActionUrl("/orders?settle=" + o.getOrderId());
+                    return a;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private String safeOrderShortId(String orderId) {
+        if (orderId == null) return "";
+        return orderId.length() <= 8 ? orderId : orderId.substring(orderId.length() - 8);
     }
 
     /**
@@ -203,23 +252,25 @@ public class DashboardService {
      * Phase 3阶段：会实现策略引擎和建议生成
      */
     public static class TodayAction {
-        private Long id;
+        private String id;
+        private String type;
         private String title;
         private String description;
-        private String actionType; // BUY/SELL/HOLD等
         private String priority; // HIGH/MEDIUM/LOW
+        private String actionUrl;
 
-        // Getters and setters
-        public Long getId() { return id; }
-        public void setId(Long id) { this.id = id; }
+        public String getId() { return id; }
+        public void setId(String id) { this.id = id; }
+        public String getType() { return type; }
+        public void setType(String type) { this.type = type; }
         public String getTitle() { return title; }
         public void setTitle(String title) { this.title = title; }
         public String getDescription() { return description; }
         public void setDescription(String description) { this.description = description; }
-        public String getActionType() { return actionType; }
-        public void setActionType(String actionType) { this.actionType = actionType; }
         public String getPriority() { return priority; }
         public void setPriority(String priority) { this.priority = priority; }
+        public String getActionUrl() { return actionUrl; }
+        public void setActionUrl(String actionUrl) { this.actionUrl = actionUrl; }
     }
 }
 

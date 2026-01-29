@@ -2874,7 +2874,10 @@ async function handleSubmit() {
             orderType: form.value.orderType,
             amount: totalAmount,
             fundingLines: finalFundingLines,
-            note: autoNote,
+          // 这里的订单主要用于“待结算/今日建议”提醒，份额以结算确认为准，因此不写shares
+          tradeDate: form.value.requestedAt?.split(' ')[0],
+          expectedNavDate: form.value.navDate,
+          note: autoNote,
           })
           
           // 然后进行记账（立即扣款）

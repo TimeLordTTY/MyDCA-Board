@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 看板控制器
@@ -26,7 +27,11 @@ public class DashboardController {
 
     @GetMapping("/pending-settlements")
     public ResponseEntity<List<Order>> getPendingSettlements() {
-        List<Order> orders = dashboardService.getPendingSettlements();
+        // 只返回当前用户的待结算订单
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        List<Order> orders = dashboardService.getPendingSettlements().stream()
+                .filter(o -> o != null && o.getUserId() != null && o.getUserId().equals(currentUser.getId()))
+                .collect(Collectors.toList());
         return ResponseEntity.ok(orders);
     }
 
@@ -50,10 +55,9 @@ public class DashboardController {
      */
     @GetMapping("/today-actions")
     public ResponseEntity<List<DashboardService.TodayAction>> getTodayActions() {
-        // Phase 1阶段，建议功能未实现，返回空列表
-        // Phase 3会实现策略引擎和建议生成
-        List<DashboardService.TodayAction> emptyList = new java.util.ArrayList<>();
-        return ResponseEntity.ok(emptyList);
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        List<DashboardService.TodayAction> actions = dashboardService.getTodayActions(currentUser.getId());
+        return ResponseEntity.ok(actions);
     }
 }
 
