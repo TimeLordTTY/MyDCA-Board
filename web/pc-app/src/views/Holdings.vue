@@ -343,6 +343,9 @@ function handleImportSuccess() {
 
 onMounted(() => {
   loadHoldings()
+  
+  // 监听全局数据刷新事件
+  window.addEventListener('data-refresh', loadHoldings)
 })
 </script>
 

@@ -84,11 +84,6 @@
           </h3>
           <div class="sub">展示所有记账操作流水。流水记录的是记账操作（入金、支出、转账、订单结算等），不包括行情波动。</div>
         </div>
-        <div>
-          <button class="btn primary" @click="handleUnifiedEntry">
-            📝 记一笔
-          </button>
-        </div>
       </div>
       <div class="divider"></div>
 
@@ -637,6 +632,9 @@ async function handleEntrySuccess() {
 onMounted(() => {
   accountStore.fetchAccounts()
   loadTransactions()
+  
+  // 监听全局数据刷新事件
+  window.addEventListener('data-refresh', loadTransactions)
 })
 </script>
 

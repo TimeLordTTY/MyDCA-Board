@@ -154,7 +154,27 @@ public class OrderController {
         LocalDate expectedConfirmDate = request.containsKey("expectedConfirmDate") && request.get("expectedConfirmDate") != null
             ? LocalDate.parse(request.get("expectedConfirmDate").toString()) : null;
 
-        Order order = orderService.createOrder(currentUser.getId(), productId, orderType, amount, shares, accountId, fundingLines, expectedNavDate, expectedConfirmDate);
+        // 解析发起时间（如果提供，使用用户指定的时间；否则使用系统当前时间）
+        java.time.LocalDateTime requestedAt = null;
+        if (request.containsKey("requestedAt") && request.get("requestedAt") != null) {
+            try {
+                // 解析格式：YYYY-MM-DD HH:mm:ss
+                String requestedAtStr = request.get("requestedAt").toString();
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                requestedAt = java.time.LocalDateTime.parse(requestedAtStr, formatter);
+            } catch (Exception e) {
+                // 解析失败，使用当前时间
+                requestedAt = java.time.LocalDateTime.now();
+            }
+        } else {
+            requestedAt = java.time.LocalDateTime.now();
+        }
+
+        // 解析手续费（如果提供）
+        BigDecimal feeEstimate = request.containsKey("feeEstimate") && request.get("feeEstimate") != null
+            ? new BigDecimal(request.get("feeEstimate").toString()) : null;
+
+        Order order = orderService.createOrder(currentUser.getId(), productId, orderType, amount, shares, accountId, fundingLines, expectedNavDate, expectedConfirmDate, requestedAt, feeEstimate);
         return ResponseEntity.ok(order);
     }
 
@@ -173,8 +193,9 @@ public class OrderController {
             ? new BigDecimal(request.get("confirmShares").toString()) : null;
         BigDecimal confirmAmount = request.containsKey("confirmAmount") && request.get("confirmAmount") != null
             ? new BigDecimal(request.get("confirmAmount").toString()) : null;
+        // 如果前端传递了confirmFee（包括0），使用传递的值；如果未传递，传递null让后端自动计算
         BigDecimal confirmFee = request.containsKey("confirmFee") && request.get("confirmFee") != null
-            ? new BigDecimal(request.get("confirmFee").toString()) : BigDecimal.ZERO;
+            ? new BigDecimal(request.get("confirmFee").toString()) : null;
 
         com.timelordtty.dca.model.SettlementConfirm settlement = settlementService.confirmSettlement(
             orderId, confirmDate, navDate, confirmNav, confirmShares, confirmAmount, confirmFee

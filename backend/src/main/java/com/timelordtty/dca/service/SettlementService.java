@@ -143,12 +143,6 @@ public class SettlementService {
         settlement.setConfirmNav(confirmNav);
         settlement.setConfirmShares(confirmShares);
         settlement.setConfirmAmount(confirmAmount);
-        settlement.setConfirmFee(confirmFee != null ? confirmFee : BigDecimal.ZERO);
-        settlement.setIsManualOverride(false);
-        settlement.setConfirmedAt(LocalDateTime.now());
-
-        settlementConfirmMapper.insert(settlement);
-
         // 查询order_funding_line，获取所有资金来源行（支持组合支付）
         List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(orderId);
         if (fundingLines.isEmpty()) {
@@ -161,8 +155,9 @@ public class SettlementService {
             throw new RuntimeException("产品不存在: " + order.getProductId());
         }
 
-        // 如果 confirmFee 为空，自动计算费率
-        if (confirmFee == null || confirmFee.compareTo(BigDecimal.ZERO) == 0) {
+        // 如果 confirmFee 为 null（用户未输入），自动计算费率
+        // 注意：如果用户明确输入了0，则使用0，不自动计算
+        if (confirmFee == null) {
             // 从资金来源账户中找到券商账户ID
             List<Long> fundingAccountIds = fundingLines.stream()
                     .map(OrderFundingLine::getAccountId)
@@ -186,6 +181,14 @@ public class SettlementService {
                 confirmFee = BigDecimal.ZERO;
             }
         }
+        
+        // 设置结算确认记录的手续费（使用计算后的值或用户输入的值）
+        settlement.setConfirmFee(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+
+        settlement.setIsManualOverride(false);
+        settlement.setConfirmedAt(LocalDateTime.now());
+
+        settlementConfirmMapper.insert(settlement);
 
         // 逐条释放各账户的reserved_amount（先释放，避免可用资金瞬间不一致）
         for (OrderFundingLine fundingLine : fundingLines) {

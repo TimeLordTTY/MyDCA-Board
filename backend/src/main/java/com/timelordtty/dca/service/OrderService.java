@@ -49,14 +49,23 @@ public class OrderService {
     private final AccountService accountService;
     private final OrderFundingLineMapper orderFundingLineMapper;
     private final SettlementConfirmMapper settlementConfirmMapper;
+    private final com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper;
+    private final com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper;
+    private final LedgerService ledgerService;
 
     public OrderService(OrderMapper orderMapper, AccountMapper accountMapper, AccountService accountService,
-                       OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper) {
+                       OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper,
+                       com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper,
+                       com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper,
+                       LedgerService ledgerService) {
         this.orderMapper = orderMapper;
         this.accountMapper = accountMapper;
         this.accountService = accountService;
         this.orderFundingLineMapper = orderFundingLineMapper;
         this.settlementConfirmMapper = settlementConfirmMapper;
+        this.ledgerTxnMapper = ledgerTxnMapper;
+        this.ledgerPostingMapper = ledgerPostingMapper;
+        this.ledgerService = ledgerService;
     }
 
     /**
@@ -95,7 +104,7 @@ public class OrderService {
     @Transactional
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines,
-                             LocalDate expectedNavDate, LocalDate expectedConfirmDate) {
+                             LocalDate expectedNavDate, LocalDate expectedConfirmDate, LocalDateTime requestedAt, BigDecimal feeEstimate) {
         // 生成订单ID
         String orderId = "ORD-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + 
                         "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
@@ -108,10 +117,12 @@ public class OrderService {
         order.setOrderType(orderType);
         order.setAmount(amount);
         order.setShares(shares);
-        order.setRequestedAt(LocalDateTime.now());
-        order.setTradeDate(LocalDate.now());
+        // 使用用户指定的发起时间，如果没有提供则使用系统当前时间
+        order.setRequestedAt(requestedAt != null ? requestedAt : LocalDateTime.now());
+        order.setTradeDate(order.getRequestedAt().toLocalDate()); // 使用requestedAt的日期部分
         order.setExpectedNavDate(expectedNavDate);
         order.setExpectedConfirmDate(expectedConfirmDate);
+        order.setFeeEstimate(feeEstimate); // 设置手续费
         order.setStatus("PENDING");
 
         orderMapper.insert(order);
@@ -282,7 +293,7 @@ public class OrderService {
     @Transactional
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines) {
-        return createOrder(userId, productId, orderType, amount, shares, accountId, fundingLines, null, null);
+        return createOrder(userId, productId, orderType, amount, shares, accountId, fundingLines, null, null, null, null);
     }
 
     /**
@@ -299,22 +310,36 @@ public class OrderService {
     @Transactional
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId) {
-        return createOrder(userId, productId, orderType, amount, shares, accountId, null, null, null);
+        return createOrder(userId, productId, orderType, amount, shares, accountId, null, null, null, null, null);
     }
 
     /**
-     * 取消订单：仅允许取消处于 PENDING 状态的订单，并释放相应占用资金
+     * 取消订单：仅允许取消处于 PENDING 状态的订单，并释放相应占用资金，同时删除相关流水记录
+     * 
+     * 重要说明：
+     * - 订单创建时：只增加 reserved_amount（占用金额），不扣减 balance，不创建流水，不创建持仓
+     * - 订单结算时：释放 reserved_amount，扣减/增加 balance（通过流水），创建流水，创建/更新持仓
+     * - 订单取消时（PENDING状态）：
+     *   1. 释放 reserved_amount（恢复可用余额）
+     *   2. 删除所有与订单相关的流水记录（如果有，直接删除，不是退款）
+     *   3. 反向操作恢复账户余额（如果有流水记录）
+     *   4. 持仓不会变化（因为未结算的订单不会创建持仓）
      * 
      * 流程说明：
      * 1. 校验订单状态为PENDING
-     * 2. 查询order_funding_line，获取所有资金来源行
-     * 3. 逐条释放各账户的reserved_amount
-     * 4. 删除order_funding_line记录（CASCADE自动删除，但显式删除更清晰）
-     * 5. 更新订单状态为CANCELLED
+     * 2. 查询并删除与订单相关的所有流水记录（ledger_txn和ledger_posting）
+     *    - 如果存在流水记录，反向操作恢复账户余额
+     *    - 如果不存在流水记录（正常情况，因为未结算），跳过此步骤
+     * 3. 查询order_funding_line，获取所有资金来源行
+     * 4. 逐条释放各账户的reserved_amount（恢复可用余额）
+     * 5. 删除order_funding_line记录
+     * 6. 更新订单状态为CANCELLED
      * 
      * 业务规则：
      * - 只能取消PENDING状态的订单
-     * - 取消时释放所有资金来源账户的reserved_amount
+     * - 取消时释放所有资金来源账户的reserved_amount（恢复可用余额）
+     * - 如果存在流水记录，删除流水记录并恢复账户余额
+     * - 持仓不会变化（未结算的订单不会创建持仓）
      * 
      * @param orderId 系统订单ID
      */
@@ -328,14 +353,56 @@ public class OrderService {
             throw new RuntimeException("只能取消PENDING状态的订单，当前状态: " + order.getStatus());
         }
 
+        // 查询与订单相关的所有流水记录
+        // 注意：正常情况下，PENDING状态的订单不应该有流水记录（流水是在结算时创建的）
+        // 但为了处理异常情况（比如订单状态异常），这里仍然检查并删除
+        List<com.timelordtty.dca.model.LedgerTxn> relatedTxns = ledgerTxnMapper.selectByOrderId(orderId);
+        
+        // 删除所有相关的流水记录（直接删除，不是退款）
+        for (com.timelordtty.dca.model.LedgerTxn txn : relatedTxns) {
+            // 查询所有分录
+            List<com.timelordtty.dca.model.LedgerPosting> postings = ledgerPostingMapper.selectByTxnId(txn.getTxnId());
+            
+            // 反向操作：恢复账户余额
+            // 注意：对于PENDING状态的订单，正常情况下不应该有流水，所以这个循环通常不会执行
+            for (com.timelordtty.dca.model.LedgerPosting posting : postings) {
+                Account account = accountMapper.selectById(posting.getAccountId());
+                if (account != null) {
+                    BigDecimal currentBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+                    BigDecimal newBalance;
+                    if ("DEBIT".equals(posting.getPostingType())) {
+                        // 原DEBIT增加余额，现在需要减少
+                        newBalance = currentBalance.subtract(posting.getAmount());
+                    } else {
+                        // 原CREDIT减少余额，现在需要增加
+                        newBalance = currentBalance.add(posting.getAmount());
+                    }
+                    // 确保余额不为负（对于资产类账户）
+                    if (newBalance.compareTo(BigDecimal.ZERO) < 0 && 
+                        ("CASH".equals(account.getAccountType()) || "POSITION".equals(account.getAccountType()))) {
+                        newBalance = BigDecimal.ZERO;
+                    }
+                    accountMapper.updateBalance(posting.getAccountId(), newBalance);
+                }
+            }
+            
+            // 删除所有分录
+            ledgerPostingMapper.deleteByTxnId(txn.getTxnId());
+            
+            // 删除交易记录
+            ledgerTxnMapper.deleteByTxnId(txn.getTxnId());
+        }
+
         // 查询order_funding_line，获取所有资金来源行
         List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(orderId);
         
-        // 逐条释放各账户的reserved_amount
+        // 逐条释放各账户的reserved_amount（恢复可用余额）
+        // 注意：这是取消订单的核心操作，因为订单创建时只增加了reserved_amount，没有扣减balance
         for (OrderFundingLine fundingLine : fundingLines) {
             Account account = accountMapper.selectById(fundingLine.getAccountId());
-            if (account != null) {
-                BigDecimal newReservedAmount = account.getReservedAmount().subtract(fundingLine.getAmount());
+            if (account != null && fundingLine.getAmount() != null) {
+                BigDecimal currentReserved = account.getReservedAmount() != null ? account.getReservedAmount() : BigDecimal.ZERO;
+                BigDecimal newReservedAmount = currentReserved.subtract(fundingLine.getAmount());
                 if (newReservedAmount.compareTo(BigDecimal.ZERO) < 0) {
                     newReservedAmount = BigDecimal.ZERO; // 防止负数
                 }

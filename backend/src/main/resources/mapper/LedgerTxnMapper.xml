@@ -133,4 +133,8 @@
         WHERE id = #{id}
     </update>
 
+    <delete id="deleteByTxnId">
+        DELETE FROM ledger_txn WHERE txn_id = #{txnId}
+    </delete>
+
 </mapper>

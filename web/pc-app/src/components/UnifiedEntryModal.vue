@@ -497,7 +497,7 @@
           </el-form-item>
           <el-form-item v-if="form.amount && form.nav" label="预计份额">
             <div style="color: #4ea4ff; font-weight: 600">
-              {{ ((form.amount - (form.fee || 0)) / form.nav).toFixed(4) }} 份
+              {{ ((form.amount - (form.fee || 0)) / form.nav).toFixed(2) }} 份
             </div>
           </el-form-item>
           <el-form-item label="资金来源账户" required>
@@ -2874,9 +2874,11 @@ async function handleSubmit() {
             orderType: form.value.orderType,
             amount: totalAmount,
             fundingLines: finalFundingLines,
-          // 这里的订单主要用于“待结算/今日建议”提醒，份额以结算确认为准，因此不写shares
-          tradeDate: form.value.requestedAt?.split(' ')[0],
+          // 这里的订单主要用于"待结算/今日建议"提醒，份额以结算确认为准，因此不写shares
+          requestedAt: form.value.requestedAt, // 传递用户指定的发起时间
           expectedNavDate: form.value.navDate,
+          expectedConfirmDate: form.value.confirmDate,
+          feeEstimate: form.value.fee || undefined, // 传递手续费
           note: autoNote,
           })
           
@@ -3026,9 +3028,10 @@ async function handleSubmit() {
           productId: form.value.productId!,
           shares: totalShares,
           amount: totalAmount,
-          tradeDate: form.value.requestedAt?.split(' ')[0], // 日期部分
+          requestedAt: form.value.requestedAt, // 传递用户指定的发起时间
           expectedNavDate: form.value.navDate,
           expectedConfirmDate: form.value.confirmDate,
+          feeEstimate: form.value.fee || undefined, // 传递手续费
           note: `赎回场外${product.productName}`,
           fundingLines: allFundingLines,
         }

@@ -22,5 +22,6 @@ public interface LedgerTxnMapper {
                          @Param("productId") Long productId, @Param("accountId") Long accountId);
     int insert(LedgerTxn txn);
     int update(LedgerTxn txn);
+    int deleteByTxnId(@Param("txnId") String txnId);
 }
 

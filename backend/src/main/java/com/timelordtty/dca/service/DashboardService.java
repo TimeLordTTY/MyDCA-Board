@@ -67,10 +67,14 @@ public class DashboardService {
 
         return userOrders.stream()
                 .filter(o -> "PENDING".equals(o.getStatus()))
-                .filter(o -> o.getExpectedConfirmDate() != null)
-                .filter(o -> !o.getExpectedConfirmDate().isAfter(today))
+                .filter(o -> o.getExpectedConfirmDate() == null || !o.getExpectedConfirmDate().isAfter(today))
                 .sorted((a, b) -> {
-                    // 越早应确认的排越前
+                    // 越早应确认的排越前，null的排最后
+                    if (a.getExpectedConfirmDate() == null && b.getExpectedConfirmDate() == null) {
+                        return String.valueOf(a.getOrderId()).compareTo(String.valueOf(b.getOrderId()));
+                    }
+                    if (a.getExpectedConfirmDate() == null) return 1; // null排后面
+                    if (b.getExpectedConfirmDate() == null) return -1; // null排后面
                     int cmp = a.getExpectedConfirmDate().compareTo(b.getExpectedConfirmDate());
                     if (cmp != 0) return cmp;
                     return String.valueOf(a.getOrderId()).compareTo(String.valueOf(b.getOrderId()));
@@ -85,11 +89,18 @@ public class DashboardService {
                     String sharesText = o.getShares() != null ? ("份额 " + o.getShares()) : null;
                     String base = amountText != null ? amountText : (sharesText != null ? sharesText : "—");
 
-                    String due = o.getExpectedConfirmDate().toString();
-                    String dueLabel = o.getExpectedConfirmDate().isBefore(today) ? "已逾期" : "今日应结算";
-                    a.setDescription(dueLabel + " · 确认日期 " + due + " · " + base);
+                    String dueLabel = "待结算";
+                    String priority = "MEDIUM";
+                    if (o.getExpectedConfirmDate() != null) {
+                        String due = o.getExpectedConfirmDate().toString();
+                        dueLabel = o.getExpectedConfirmDate().isBefore(today) ? "已逾期" : "今日应结算";
+                        a.setDescription(dueLabel + " · 确认日期 " + due + " · " + base);
+                        priority = o.getExpectedConfirmDate().isBefore(today) ? "HIGH" : "MEDIUM";
+                    } else {
+                        a.setDescription(dueLabel + " · " + base);
+                    }
 
-                    a.setPriority(o.getExpectedConfirmDate().isBefore(today) ? "HIGH" : "MEDIUM");
+                    a.setPriority(priority);
                     a.setActionUrl("/orders?settle=" + o.getOrderId());
                     return a;
                 })

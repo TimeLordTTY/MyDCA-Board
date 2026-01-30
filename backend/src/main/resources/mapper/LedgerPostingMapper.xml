@@ -96,4 +96,8 @@
         </foreach>
     </update>
 
+    <delete id="deleteByTxnId">
+        DELETE FROM ledger_posting WHERE txn_id = #{txnId}
+    </delete>
+
 </mapper>

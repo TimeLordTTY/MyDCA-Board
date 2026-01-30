@@ -28,5 +28,10 @@ public interface LedgerPostingMapper {
      * 批量更新分录的历史余额
      */
     int batchUpdateBalanceAfter(@Param("updates") List<LedgerPosting> updates);
+    
+    /**
+     * 根据交易ID删除所有分录
+     */
+    int deleteByTxnId(@Param("txnId") String txnId);
 }
 
