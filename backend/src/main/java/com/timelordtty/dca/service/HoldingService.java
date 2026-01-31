@@ -156,12 +156,19 @@ public class HoldingService {
 
         // 查询有关联产品的账户（通过 linked_product_id 和 initial_shares）
         // 这些账户的 initial_shares 应该作为该产品的持仓
+        // 注意：只有在没有 POSITION 分录时才使用账户的 initial_shares，避免重复计算
         List<Account> allAccounts = accountMapper.selectByOwner(userId, familyId);
         for (Account account : allAccounts) {
             if (account.getLinkedProductId() != null && account.getInitialShares() != null 
                 && account.getInitialShares().compareTo(BigDecimal.ZERO) > 0) {
                 
                 Long productId = account.getLinkedProductId();
+                
+                // 如果已经有 POSITION 分录的持仓数据，跳过账户的 initial_shares
+                // 避免重复计算（POSITION 分录已经是完整的持仓记录）
+                if (holdings.containsKey(productId) && holdings.get(productId).getTotalShares().compareTo(BigDecimal.ZERO) > 0) {
+                    continue;
+                }
                 
                 // 创建或获取持仓信息
                 HoldingInfo holding = holdings.get(productId);
@@ -511,7 +518,66 @@ public class HoldingService {
         BigDecimal latestNav = BigDecimal.ONE; // 默认净值为1
         // TODO: 从 nav 表获取最新净值
         
-        // 首先检查是否有账户关联了该产品
+        // 首先通过 POSITION 分录计算持仓（这是最准确的方式）
+        // 查询该产品的所有 POSITION 类型分录
+        List<LedgerPosting> positionPostings = ledgerPostingMapper.selectByAccountTypeAndOwner("POSITION", userId, familyId);
+        Map<Long, BigDecimal> positionAccountShares = new HashMap<>();
+        
+        for (LedgerPosting posting : positionPostings) {
+            // 通过 ledger_txn 获取 productId
+            LedgerTxn txn = ledgerTxnMapper.selectByTxnId(posting.getTxnId());
+            if (txn == null || txn.getProductId() == null || !txn.getProductId().equals(productId)) {
+                continue; // 跳过不属于该产品的交易
+            }
+            
+            Long accountId = posting.getAccountId();
+            BigDecimal shares = posting.getShares();
+            if (shares == null) {
+                shares = BigDecimal.ZERO;
+            }
+            
+            // 根据 DEBIT/CREDIT 计算份额变化
+            if ("DEBIT".equals(posting.getPostingType())) {
+                positionAccountShares.merge(accountId, shares, BigDecimal::add);
+            } else if ("CREDIT".equals(posting.getPostingType())) {
+                positionAccountShares.merge(accountId, shares.negate(), BigDecimal::add);
+            }
+        }
+        
+        // 转换 POSITION 账户持仓为结果
+        for (Map.Entry<Long, BigDecimal> entry : positionAccountShares.entrySet()) {
+            BigDecimal shares = entry.getValue();
+            if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            
+            Account account = accountMapper.selectById(entry.getKey());
+            if (account == null) {
+                continue;
+            }
+            
+            AccountHoldingInfo info = new AccountHoldingInfo();
+            info.setAccountId(entry.getKey());
+            info.setAccountName(account.getAccountName());
+            
+            if (account.getParentAccountId() != null) {
+                Account parent = accountMapper.selectById(account.getParentAccountId());
+                if (parent != null) {
+                    info.setParentAccountName(parent.getAccountName());
+                }
+            }
+            
+            info.setShares(shares.setScale(4, RoundingMode.HALF_UP));
+            info.setMarketValue(shares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
+            result.add(info);
+        }
+        
+        // 如果通过 POSITION 分录找到了持仓，直接返回
+        if (!result.isEmpty()) {
+            return result;
+        }
+        
+        // 如果没有 POSITION 分录，检查关联账户
         List<Account> linkedAccounts = accountMapper.selectByLinkedProduct(productId, userId, familyId);
         
         if (!linkedAccounts.isEmpty()) {

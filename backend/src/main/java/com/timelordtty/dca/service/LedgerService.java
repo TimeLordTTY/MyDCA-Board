@@ -1,5 +1,6 @@
 package com.timelordtty.dca.service;
 
+import com.timelordtty.dca.dto.AuthResponse;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
@@ -68,14 +69,17 @@ public class LedgerService {
     private final AccountMapper accountMapper;
     private final AccountService accountService;
     private final ProductMasterMapper productMasterMapper;
+    private final UserService userService;
 
     public LedgerService(LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
-                        AccountMapper accountMapper, AccountService accountService, ProductMasterMapper productMasterMapper) {
+                        AccountMapper accountMapper, AccountService accountService, ProductMasterMapper productMasterMapper,
+                        UserService userService) {
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.accountMapper = accountMapper;
         this.accountService = accountService;
         this.productMasterMapper = productMasterMapper;
+        this.userService = userService;
     }
 
     /**
@@ -330,10 +334,18 @@ public class LedgerService {
 
         BigDecimal oldBalance = account.getBalance();
         BigDecimal newBalance = oldBalance;
-        // 对于虚拟账户，使用 virtual_subtype 作为账户类型；对于 REAL 账户，使用 account_type
-        String accountType = "VIRTUAL".equals(account.getAccountKind()) 
-            ? account.getVirtualSubtype() 
-            : account.getAccountType();
+        // 对于虚拟账户，使用 virtual_subtype 作为账户类型
+        // 对于 REAL 账户，优先使用 account_type，如果为空则使用 fund_usage
+        String accountType;
+        if ("VIRTUAL".equals(account.getAccountKind())) {
+            accountType = account.getVirtualSubtype();
+        } else {
+            accountType = account.getAccountType();
+            // 如果 account_type 为空或不是预期的类型，使用 fund_usage 作为备选
+            if (accountType == null || accountType.isEmpty()) {
+                accountType = account.getFundUsage();
+            }
+        }
         
         // 调试日志：记录账户信息（安全地处理可能为 null 的值）
         System.out.println(String.format("更新账户余额: 账户ID=%d, 账户性质=%s, 账户类型=%s, 虚拟子类型=%s, 借贷方向=%s, 金额=%s, 当前余额=%s", 
@@ -354,10 +366,14 @@ public class LedgerService {
         // 公式：newBalance = oldBalance + (postingType == DEBIT ? amount : -amount)
         // 包括：CASH（现金）、POSITION（持仓）、RECEIVABLE（应收）、MMF（货币基金）、
         //       BANK_WM_NAV（银行理财净值型）、BANK_WM_BOX（银行理财封闭型）、ETF、LOF、FUND 等
+        //       BROKER（券商账户）、INVESTABLE（可投资）、SPENDABLE（可支出）- 这些是券商子账户的资金用途类型
+        //       PAYMENT（支付账户，如支付宝余额宝）、BANK（银行账户）、OTHER（其他现金类账户）
         if ("CASH".equals(accountType) || "POSITION".equals(accountType) || "RECEIVABLE".equals(accountType) ||
             "MMF".equals(accountType) || "BANK_WM_NAV".equals(accountType) || "BANK_WM_BOX".equals(accountType) ||
             "ETF".equals(accountType) || "LOF".equals(accountType) || "FUND".equals(accountType) ||
-            "STOCK".equals(accountType) || "BOND".equals(accountType) || "OPTION".equals(accountType)) {
+            "STOCK".equals(accountType) || "BOND".equals(accountType) || "OPTION".equals(accountType) ||
+            "BROKER".equals(accountType) || "INVESTABLE".equals(accountType) || "SPENDABLE".equals(accountType) || "RESERVED".equals(accountType) ||
+            "PAYMENT".equals(accountType) || "BANK".equals(accountType) || "OTHER".equals(accountType)) {
             if ("DEBIT".equals(postingType)) {
                 newBalance = oldBalance.add(amount);
             } else {
@@ -486,6 +502,47 @@ public class LedgerService {
                     .filter(b -> b != null)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
                 posting.setParentAccountBalanceAfter(parentBalance);
+                
+                // 如果父账户关联了产品，需要同步更新父账户的余额和份额
+                Account parentAccount = accountMapper.selectById(accountAfter.getParentAccountId());
+                if (parentAccount != null && parentAccount.getLinkedProductId() != null) {
+                    // 父账户是关联产品的账户（如货币基金账户）
+                    // 当子账户有现金流出（CREDIT）时，需要减少父账户的余额和份额
+                    if ("CASH".equals(posting.getAccountType()) && "CREDIT".equals(posting.getPostingType())) {
+                        // 减少父账户余额
+                        BigDecimal parentOldBalance = parentAccount.getBalance() != null ? parentAccount.getBalance() : BigDecimal.ZERO;
+                        BigDecimal parentNewBalance = parentOldBalance.subtract(posting.getAmount());
+                        if (parentNewBalance.compareTo(BigDecimal.ZERO) < 0) {
+                            parentNewBalance = BigDecimal.ZERO;
+                        }
+                        accountMapper.updateBalance(parentAccount.getId(), parentNewBalance);
+                        
+                        // 减少父账户份额
+                        // 对于关联产品的账户，份额应该等于余额（货币基金净值通常是1.0）
+                        // 如果账户类型是MMF（货币基金），直接使用余额作为份额
+                        BigDecimal parentNewShares = parentNewBalance;
+                        
+                        // 如果不是MMF类型，尝试获取产品净值来计算份额
+                        if (!"MMF".equals(parentAccount.getAccountType())) {
+                            try {
+                                com.timelordtty.dca.model.ProductMaster product = productMasterMapper.selectById(parentAccount.getLinkedProductId());
+                                if (product != null) {
+                                    // 通过AccountService获取最新净值（如果有的话）
+                                    // 这里简化处理：对于非MMF类型，也使用余额作为份额（净值通常接近1.0）
+                                    // 如果需要精确计算，可以通过AccountService或NavService获取净值
+                                    parentNewShares = parentNewBalance;
+                                }
+                            } catch (Exception e) {
+                                // 如果获取产品信息失败，使用余额作为份额
+                                parentNewShares = parentNewBalance;
+                            }
+                        }
+                        accountMapper.updateInitialShares(parentAccount.getId(), parentNewShares);
+                        
+                        System.out.println(String.format("同步更新关联产品账户: 账户ID=%d, 余额 %s -> %s, 份额 -> %s", 
+                            parentAccount.getId(), parentOldBalance, parentNewBalance, parentNewShares));
+                    }
+                }
             } else {
                 posting.setParentAccountBalanceAfter(null);
             }
@@ -804,12 +861,20 @@ public class LedgerService {
             .findFirst()
             .orElseThrow(() -> new RuntimeException("找不到场内产品: " + product.getProductCode()));
         
-        // 获取场外和场内持仓账户（通过产品名称+渠道区分）
-        String ownerType = "PERSONAL"; // 简化处理，实际应该从用户信息获取
+        // 获取场外和场内持仓账户
+        // 注意：持仓账户通过 accountCode 匹配（基于 productId），而不是账户名称
+        // accountCode 格式：VIRTUAL-POSITION-{ownerType}-{ownerKey}-{productId}
+        // 所以场外和场内产品如果 productId 不同，会有不同的持仓账户
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        String ownerType = currentUser.getFamilyId() != null ? "FAMILY" : "PERSONAL";
+        Long ownerUserId = currentUser.getId();
+        Long ownerFamilyId = currentUser.getFamilyId();
+        
+        // 使用实际的产品名称（不带渠道后缀），因为持仓账户名称格式是"持仓账户-{产品名称}"
         Account otcPositionAccount = accountService.getOrCreatePositionAccount(
-            otcProduct.getId(), otcProduct.getProductName() + "(场外)", ownerType, userId, familyId);
+            otcProduct.getId(), otcProduct.getProductName(), ownerType, ownerUserId, ownerFamilyId);
         Account exchangePositionAccount = accountService.getOrCreatePositionAccount(
-            exchangeProduct.getId(), exchangeProduct.getProductName() + "(场内)", ownerType, userId, familyId);
+            exchangeProduct.getId(), exchangeProduct.getProductName(), ownerType, ownerUserId, ownerFamilyId);
         
         // 验证场外持仓有足够份额并计算平均成本
         // 查询场外持仓账户的所有分录，计算当前持仓
@@ -837,18 +902,21 @@ public class LedgerService {
             throw new RuntimeException("场外持仓份额不足，当前持仓: " + totalShares + "，转出份额: " + transferShares);
         }
         
-        // 计算转出成本（按平均成本法）
+        // 摊薄成本法（同花顺方式）：
+        // - 场外转出成本 = 场外平均成本 × 转出份额（按平均成本法）
+        // - 场内转入成本 = 场内价格 × 转入份额（按实际转入金额）
+        // 这样场内的成本计算与直接购买一致，便于用户理解
+        
+        // 计算场外转出成本（按平均成本法）
         BigDecimal avgCost = totalShares.compareTo(BigDecimal.ZERO) > 0 
             ? totalCost.divide(totalShares, 6, java.math.RoundingMode.HALF_UP)
             : BigDecimal.ZERO;
         BigDecimal outCost = avgCost.multiply(transferShares);
         
-        // 场内成本按转出价格计算（通常为0费用，但可以指定价格）
+        // 场内转入成本 = 场内价格 × 份额（与同花顺一致）
         BigDecimal inCost = transferPrice.multiply(transferShares);
         
         // 生成转托管分录
-        List<LedgerPosting> postings = new java.util.ArrayList<>();
-        
         // 场外POSITION CREDIT（减少份额和成本）
         LedgerPosting otcPosting = new LedgerPosting();
         otcPosting.setPostingType("CREDIT");
@@ -857,9 +925,10 @@ public class LedgerService {
         otcPosting.setAmount(outCost);
         otcPosting.setShares(transferShares);
         otcPosting.setCurrency("CNY");
-        postings.add(otcPosting);
+        otcPosting.setNote(note != null ? note + String.format(" [转出，场内价格%s]", transferPrice) : 
+            String.format("转托管转出：%s份，场内价格%s", transferShares, transferPrice));
         
-        // 场内POSITION DEBIT（增加份额，成本按转出价格计算）
+        // 场内POSITION DEBIT（增加份额，成本等于场外转出成本）
         LedgerPosting exchangePosting = new LedgerPosting();
         exchangePosting.setPostingType("DEBIT");
         exchangePosting.setAccountId(exchangePositionAccount.getId());
@@ -867,33 +936,62 @@ public class LedgerService {
         exchangePosting.setAmount(inCost);
         exchangePosting.setShares(transferShares);
         exchangePosting.setCurrency("CNY");
-        postings.add(exchangePosting);
+        exchangePosting.setNote(note != null ? note + String.format(" [转入，场内价格%s]", transferPrice) : 
+            String.format("转托管转入：%s份，场内价格%s", transferShares, transferPrice));
         
-        // 创建转托管交易
-        String txnId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
-        LedgerTxn transferTxn = new LedgerTxn();
-        transferTxn.setTxnId(txnId);
-        transferTxn.setUserId(userId);
-        transferTxn.setFamilyId(familyId);
-        transferTxn.setTxnType("CUSTODY_TRANSFER");
-        transferTxn.setBizGroupKey(txnId);
-        transferTxn.setProductId(productId);
-        transferTxn.setRelationType("CUSTODY_TRANSFER_OF");
-        transferTxn.setRequestedAt(transferDate.atStartOfDay());
-        transferTxn.setTradeDate(transferDate);
-        transferTxn.setStatus("CONFIRMED");
-        transferTxn.setNote(note != null ? note : "转托管：" + transferShares + "份");
-        transferTxn.setCategoryId(null); // 转托管交易不需要分类
-        transferTxn.setIsReimbursable(false); // 转托管交易不可报销
-        transferTxn.setIsReimbursed(false); // 转托管交易不可报销
-        transferTxn.setIsReversed(false);
+        // 创建转托管交易记录
+        // 转托管涉及两个产品（场外和场内），需要创建两条交易记录，以便在两个产品的交易记录中都能看到
+        String baseTxnId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+        String bizGroupKey = baseTxnId; // 使用同一个 bizGroupKey 关联两条交易记录
         
-        ledgerTxnMapper.insert(transferTxn);
+        // 创建场外产品的转托管交易记录
+        LedgerTxn otcTransferTxn = new LedgerTxn();
+        otcTransferTxn.setTxnId(baseTxnId + "-OTC");
+        otcTransferTxn.setUserId(userId);
+        otcTransferTxn.setFamilyId(familyId);
+        otcTransferTxn.setTxnType("CUSTODY_TRANSFER");
+        otcTransferTxn.setBizGroupKey(bizGroupKey);
+        otcTransferTxn.setProductId(otcProduct.getId()); // 关联场外产品
+        otcTransferTxn.setRelationType("CUSTODY_TRANSFER_OF");
+        otcTransferTxn.setRequestedAt(transferDate.atStartOfDay());
+        otcTransferTxn.setTradeDate(transferDate);
+        otcTransferTxn.setStatus("CONFIRMED");
+        otcTransferTxn.setNote(note != null ? note + String.format(" [转出，场内价格%s]", transferPrice) : 
+            String.format("转托管转出：%s份，场内价格%s", transferShares, transferPrice));
+        otcTransferTxn.setCategoryId(null);
+        otcTransferTxn.setIsReimbursable(false);
+        otcTransferTxn.setIsReimbursed(false);
+        otcTransferTxn.setIsReversed(false);
+        ledgerTxnMapper.insert(otcTransferTxn);
+        
+        // 创建场内产品的转托管交易记录
+        LedgerTxn exchangeTransferTxn = new LedgerTxn();
+        exchangeTransferTxn.setTxnId(baseTxnId + "-EXCHANGE");
+        exchangeTransferTxn.setUserId(userId);
+        exchangeTransferTxn.setFamilyId(familyId);
+        exchangeTransferTxn.setTxnType("CUSTODY_TRANSFER");
+        exchangeTransferTxn.setBizGroupKey(bizGroupKey);
+        exchangeTransferTxn.setProductId(exchangeProduct.getId()); // 关联场内产品
+        exchangeTransferTxn.setRelationType("CUSTODY_TRANSFER_OF");
+        exchangeTransferTxn.setRequestedAt(transferDate.atStartOfDay());
+        exchangeTransferTxn.setTradeDate(transferDate);
+        exchangeTransferTxn.setStatus("CONFIRMED");
+        exchangeTransferTxn.setNote(note != null ? note + String.format(" [转入，场内价格%s]", transferPrice) : 
+            String.format("转托管转入：%s份，场内价格%s", transferShares, transferPrice));
+        exchangeTransferTxn.setCategoryId(null);
+        exchangeTransferTxn.setIsReimbursable(false);
+        exchangeTransferTxn.setIsReimbursed(false);
+        exchangeTransferTxn.setIsReversed(false);
+        ledgerTxnMapper.insert(exchangeTransferTxn);
         
         // 创建分录并更新账户余额，同时记录历史余额
-        insertPostingsWithBalance(txnId, postings);
+        // 场外分录关联场外交易记录
+        insertPostingsWithBalance(otcTransferTxn.getTxnId(), List.of(otcPosting));
+        // 场内分录关联场内交易记录
+        insertPostingsWithBalance(exchangeTransferTxn.getTxnId(), List.of(exchangePosting));
         
-        return transferTxn;
+        // 返回场内交易记录（作为主记录）
+        return exchangeTransferTxn;
     }
 
     /**

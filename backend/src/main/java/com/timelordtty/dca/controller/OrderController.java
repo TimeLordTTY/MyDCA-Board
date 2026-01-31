@@ -4,11 +4,14 @@ import com.timelordtty.dca.dto.AuthResponse;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.LedgerTxn;
 import com.timelordtty.dca.model.LedgerPosting;
+import com.timelordtty.dca.model.ProductMaster;
 import com.timelordtty.dca.service.OrderService;
 import com.timelordtty.dca.service.SettlementService;
 import com.timelordtty.dca.service.UserService;
+import com.timelordtty.dca.service.BrokerFeeService;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,14 +32,19 @@ public class OrderController {
     private final SettlementService settlementService;
     private final LedgerTxnMapper ledgerTxnMapper;
     private final LedgerPostingMapper ledgerPostingMapper;
+    private final BrokerFeeService brokerFeeService;
+    private final ProductMasterMapper productMasterMapper;
 
     public OrderController(OrderService orderService, UserService userService, SettlementService settlementService,
-                          LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper) {
+                          LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
+                          BrokerFeeService brokerFeeService, ProductMasterMapper productMasterMapper) {
         this.orderService = orderService;
         this.userService = userService;
         this.settlementService = settlementService;
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.ledgerPostingMapper = ledgerPostingMapper;
+        this.brokerFeeService = brokerFeeService;
+        this.productMasterMapper = productMasterMapper;
     }
 
     @GetMapping
@@ -204,6 +212,44 @@ public class OrderController {
         Map<String, Object> result = new java.util.HashMap<>();
         result.put("success", true);
         result.put("settlement", settlement);
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 计算场内交易手续费
+     * 
+     * @param request 包含 productId, accountId, orderType, amount
+     * @return 计算后的手续费
+     */
+    @PostMapping("/calculate-fee")
+    public ResponseEntity<Map<String, Object>> calculateFee(@RequestBody Map<String, Object> request) {
+        Long productId = Long.valueOf(request.get("productId").toString());
+        Long accountId = request.containsKey("accountId") && request.get("accountId") != null 
+            ? Long.valueOf(request.get("accountId").toString()) 
+            : null;
+        String orderType = request.get("orderType").toString();
+        BigDecimal amount = new BigDecimal(request.get("amount").toString());
+
+        // 获取产品信息
+        ProductMaster product = productMasterMapper.selectById(productId);
+        if (product == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "产品不存在"));
+        }
+
+        // 从账户ID中查找券商账户ID
+        Long brokerAccountId = null;
+        if (accountId != null) {
+            brokerAccountId = brokerFeeService.findBrokerAccountId(List.of(accountId));
+        }
+
+        // 计算手续费
+        BigDecimal fee = brokerFeeService.calculateFee(brokerAccountId, product, orderType, amount);
+
+        Map<String, Object> result = new java.util.HashMap<>();
+        result.put("fee", fee);
+        result.put("productId", productId);
+        result.put("orderType", orderType);
+        result.put("amount", amount);
         return ResponseEntity.ok(result);
     }
 }

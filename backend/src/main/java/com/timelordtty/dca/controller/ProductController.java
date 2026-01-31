@@ -50,6 +50,41 @@ public class ProductController {
     }
     
     /**
+     * 刷新单个产品的行情数据
+     * POST /api/v2/products/{id}/refresh-market-data
+     * 
+     * @param id 产品ID
+     * @return 刷新结果
+     */
+    @PostMapping("/{id}/refresh-market-data")
+    public ResponseEntity<java.util.Map<String, Object>> refreshMarketData(@PathVariable Long id) {
+        ProductMaster product = productService.getProduct(id);
+        if (product == null) {
+            return ResponseEntity.notFound().build();
+        }
+        productService.refreshMarketData(product);
+        return ResponseEntity.ok(java.util.Map.of(
+            "message", "行情数据采集任务已启动，将在后台执行",
+            "productId", id,
+            "productCode", product.getProductCode()
+        ));
+    }
+    
+    /**
+     * 刷新所有产品的行情数据
+     * POST /api/v2/products/refresh-all-market-data
+     * 
+     * @return 刷新结果
+     */
+    @PostMapping("/refresh-all-market-data")
+    public ResponseEntity<java.util.Map<String, Object>> refreshAllMarketData() {
+        productService.refreshAllMarketData();
+        return ResponseEntity.ok(java.util.Map.of(
+            "message", "全量行情数据采集任务已启动，将在后台执行"
+        ));
+    }
+    
+    /**
      * 批量更新产品排序
      * POST /api/v2/products/sort-order
      * 请求体：[{"id": 1, "sortOrder": 1}, {"id": 2, "sortOrder": 2}, ...]

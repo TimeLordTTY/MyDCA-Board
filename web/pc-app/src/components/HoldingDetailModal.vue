@@ -88,7 +88,9 @@
                     {{ formatTxnType(txn.txnType) }}
                   </span>
                 </td>
-                <td style="text-align: right" class="mono">{{ formatCurrency((txn as any).summaryAmount || 0) }}</td>
+                <td style="text-align: right" class="mono">
+                  {{ formatAmountWithSign(txn.txnType, (txn as any).summaryAmount || 0) }}
+                </td>
                 <td style="text-align: right" class="mono">{{ formatNumber((txn as any).summaryShares || 0, 2) }}</td>
                 <td class="note-cell">{{ txn.note || '-' }}</td>
               </tr>
@@ -283,12 +285,35 @@ function formatTxnType(type: string): string {
 }
 
 function getTxnTypeColor(type: string): string {
-  if (['BUY', 'SUBSCRIPTION', 'TRANSFER_IN', 'INCOME'].includes(type)) {
-    return '#ef4444' // 红色 - 买入/收入
+  if (['BUY', 'SUBSCRIPTION', 'TRANSFER_IN', 'INCOME', 'ADJUST'].includes(type)) {
+    return '#ef4444' // 红色 - 买入/收入/调整
   } else if (['SELL', 'REDEMPTION', 'TRANSFER_OUT', 'EXPENSE'].includes(type)) {
     return '#16a34a' // 绿色 - 卖出/支出
   }
   return '#64748b'
+}
+
+/**
+ * 格式化金额，根据交易类型添加正负号
+ * 买入/申购应该显示为正数（表示投入的金额）
+ */
+function formatAmountWithSign(txnType: string, amount: number): string {
+  if (amount === 0) {
+    return formatCurrency(0)
+  }
+  
+  // 买入/申购/调整（初始持仓）：显示为正数（投入金额）
+  if (['BUY', 'SUBSCRIPTION', 'ADJUST'].includes(txnType)) {
+    return formatCurrency(Math.abs(amount))
+  }
+  
+  // 卖出/赎回：显示为正数（到账金额）
+  if (['SELL', 'REDEMPTION'].includes(txnType)) {
+    return formatCurrency(Math.abs(amount))
+  }
+  
+  // 其他类型：保持原样
+  return formatCurrency(amount)
 }
 
 function getTxnTypeClass(type: string): string {

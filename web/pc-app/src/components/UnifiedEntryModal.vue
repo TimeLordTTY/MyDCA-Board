@@ -452,7 +452,49 @@
               />
             </el-select>
           </el-form-item>
-          <!-- 交易类型根据场内/场外自动确定：场内=买入，场外=申购 -->
+          <!-- 场内买入：简化表单 -->
+          <template v-if="form.channel === 'EXCHANGE'">
+            <el-form-item label="交易时间" required>
+              <el-date-picker
+                v-model="form.requestedAt"
+                type="datetime"
+                placeholder="选择交易时间"
+                style="width: 100%"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+              />
+            </el-form-item>
+            <el-form-item label="成交价格" required>
+              <el-input-number 
+                v-model="form.nav" 
+                :min="0.001" 
+                :precision="4" 
+                style="width: 100%"
+                placeholder="输入成交价格"
+              />
+            </el-form-item>
+            <el-form-item label="买入数量" required>
+              <el-input-number v-model="form.shares" :min="1" :precision="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="手续费">
+              <el-input-number v-model="form.fee" :min="0" :precision="2" style="width: 100%" />
+              <div style="color: #67c23a; font-size: 12px; margin-top: 4px">
+                <span v-if="isCalculatingFee">计算中...</span>
+                <span v-else>根据券商费率自动计算（可手动修改）</span>
+              </div>
+            </el-form-item>
+            <el-form-item v-if="form.shares && form.nav" label="成交金额">
+              <div style="color: #4ea4ff; font-weight: 600; font-size: 16px;">
+                {{ (form.shares * form.nav).toFixed(2) }} 元
+                <span v-if="form.fee" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                  (含手续费共: {{ (form.shares * form.nav + form.fee).toFixed(2) }} 元)
+                </span>
+              </div>
+            </el-form-item>
+          </template>
+          
+          <!-- 场外申购：完整表单 -->
+          <template v-else>
           <el-form-item label="发起时间" required>
             <el-date-picker
               v-model="form.requestedAt"
@@ -492,7 +534,7 @@
               placeholder="自动获取或手动输入"
             />
             <div style="color: #909399; font-size: 12px; margin-top: 4px">
-              选择产品后自动获取，也可手动输入。买入时将根据金额和净值计算份额。
+                选择产品后自动获取，也可手动输入。申购时将根据金额和净值计算份额。
             </div>
           </el-form-item>
           <el-form-item v-if="form.amount && form.nav" label="预计份额">
@@ -500,6 +542,8 @@
               {{ ((form.amount - (form.fee || 0)) / form.nav).toFixed(2) }} 份
             </div>
           </el-form-item>
+          </template>
+          
           <el-form-item label="资金来源账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
               <el-cascader
@@ -615,12 +659,18 @@
             </div>
           </el-form-item>
 
-          <el-form-item label="总金额（元）" required>
+          <!-- 场外申购需要填金额 -->
+          <template v-if="form.channel !== 'EXCHANGE'">
+            <el-form-item label="申购金额（元）" required>
             <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
           </el-form-item>
-          <el-form-item label="费用（元）">
+            <el-form-item label="手续费（元）">
             <el-input-number v-model="form.fee" :min="0" :precision="2" style="width: 100%" />
+            <div style="color: #67c23a; font-size: 12px; margin-top: 4px">
+              根据产品买入费率自动计算（可手动修改）
+            </div>
           </el-form-item>
+          </template>
         </template>
         
         <!-- 卖出/赎回 -->
@@ -677,7 +727,49 @@
           <el-form-item v-else-if="form.productId && !productHolding && !loadingProductHolding" label="当前持仓">
             <span style="color: #909399;">暂无持仓</span>
           </el-form-item>
-          <!-- 交易类型根据场内/场外自动确定：场内=卖出，场外=赎回 -->
+          <!-- 场内卖出：简化表单 -->
+          <template v-if="form.channel === 'EXCHANGE'">
+            <el-form-item label="交易时间" required>
+              <el-date-picker
+                v-model="form.requestedAt"
+                type="datetime"
+                placeholder="选择交易时间"
+                style="width: 100%"
+                format="YYYY-MM-DD HH:mm:ss"
+                value-format="YYYY-MM-DD HH:mm:ss"
+              />
+            </el-form-item>
+            <el-form-item label="成交价格" required>
+              <el-input-number 
+                v-model="form.nav" 
+                :min="0.001" 
+                :precision="4" 
+                style="width: 100%"
+                placeholder="输入成交价格"
+              />
+            </el-form-item>
+            <el-form-item label="卖出数量" required>
+              <el-input-number v-model="form.shares" :min="1" :precision="0" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="手续费">
+              <el-input-number v-model="form.fee" :min="0" :precision="2" style="width: 100%" />
+              <div style="color: #67c23a; font-size: 12px; margin-top: 4px">
+                <span v-if="isCalculatingFee">计算中...</span>
+                <span v-else>根据券商费率自动计算（可手动修改）</span>
+              </div>
+            </el-form-item>
+            <el-form-item v-if="form.shares && form.nav" label="成交金额">
+              <div style="color: #f59e0b; font-weight: 600; font-size: 16px;">
+                {{ (form.shares * form.nav).toFixed(2) }} 元
+                <span v-if="form.fee" style="color: #909399; font-size: 12px; margin-left: 8px;">
+                  (扣除手续费后到账: {{ (form.shares * form.nav - form.fee).toFixed(2) }} 元)
+                </span>
+              </div>
+            </el-form-item>
+          </template>
+          
+          <!-- 场外赎回：完整表单 -->
+          <template v-else>
           <el-form-item label="发起时间" required>
             <el-date-picker
               v-model="form.requestedAt"
@@ -717,18 +809,21 @@
               placeholder="自动获取或手动输入"
             />
             <div style="color: #909399; font-size: 12px; margin-top: 4px">
-              选择产品后自动获取，也可手动输入。卖出时将根据份额和净值计算金额。
+                选择产品后自动获取，也可手动输入。赎回时将根据份额和净值计算金额。
             </div>
           </el-form-item>
-          <!-- 总份额（上移到预计到账金额之前） -->
-          <el-form-item label="总份额" required>
+            <el-form-item label="赎回份额" required>
             <el-input-number v-model="form.shares" :min="0.01" :precision="4" style="width: 100%" />
           </el-form-item>
+            <el-form-item label="手续费">
+              <el-input-number v-model="form.fee" :min="0" :precision="2" style="width: 100%" />
+            </el-form-item>
           <el-form-item v-if="form.shares && form.nav" label="预计到账金额">
             <div style="color: #f59e0b; font-weight: 600; font-size: 16px;">
               {{ (form.shares * form.nav - (form.fee || 0)).toFixed(2) }} 元
             </div>
           </el-form-item>
+          </template>
           
           <!-- 到账账户（收到赎回款的账户） -->
           <el-form-item label="到账账户" required>
@@ -908,49 +1003,56 @@
           </el-form-item>
         </template>
 
-        <!-- 转托管 -->
+        <!-- 转托管（场外转场内） -->
         <template v-else-if="selectedType === 'CUSTODY_TRANSFER'">
           <el-form-item label="产品" required>
-            <el-select v-model="form.productId" placeholder="选择产品" style="width: 100%" filterable>
+            <el-select v-model="form.productId" placeholder="选择场外产品" style="width: 100%" filterable>
               <el-option
-                v-for="prod in products"
+                v-for="prod in otcProducts"
                 :key="prod.id"
                 :label="`${prod.productName} (${prod.productCode})`"
                 :value="prod.id"
               />
             </el-select>
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">场外 → 场内</div>
           </el-form-item>
-          <el-form-item label="转出类型" required>
-            <el-select v-model="form.fromChannel" placeholder="选择转出类型" style="width: 100%">
-              <el-option label="场外" value="OTC" />
-              <el-option label="场内" value="EXCHANGE" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="转入类型" required>
-            <el-select v-model="form.toChannel" placeholder="选择转入类型" style="width: 100%">
-              <el-option label="场内" value="EXCHANGE" />
-              <el-option label="场外" value="OTC" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="转出日期" required>
+          <el-form-item label="到账日期" required>
             <el-date-picker
               v-model="form.transferDate"
               type="date"
-              placeholder="选择转出日期"
+              placeholder="选择场内到账日期"
               style="width: 100%"
               format="YYYY-MM-DD"
               value-format="YYYY-MM-DD"
             />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">填写场内显示的转入成功日期</div>
           </el-form-item>
-          <el-form-item label="转出价格" required>
-            <el-input-number v-model="form.transferOutPrice" :min="0" :precision="4" style="width: 100%" />
-            <div style="color: #909399; font-size: 12px; margin-top: 4px">转托管价格，通常为0费用</div>
-          </el-form-item>
-          <el-form-item label="转入价格" required>
+          <el-form-item label="场内价格" required>
             <el-input-number v-model="form.transferInPrice" :min="0" :precision="4" style="width: 100%" />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">场内到账时的价格（同花顺显示的转入价格）</div>
           </el-form-item>
           <el-form-item label="份额" required>
-            <el-input-number v-model="form.shares" :min="0.01" :precision="4" style="width: 100%" />
+            <el-input-number v-model="form.shares" :min="1" :precision="0" :step="1" style="width: 100%" />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px">转托管只能转整数份额，至少保留1份在原账户</div>
+          </el-form-item>
+          <!-- 转托管时显示场外持仓信息 -->
+          <el-form-item v-if="form.productId && otcHoldingForTransfer" label="场外可转出持仓">
+            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 4px; padding: 12px;">
+              <div style="display: flex; gap: 24px; align-items: center;">
+                <span style="color: #0369a1; font-weight: 600;">
+                  {{ otcHoldingForTransfer.parentAccountName ? `${otcHoldingForTransfer.parentAccountName}-` : '' }}{{ otcHoldingForTransfer.accountName }}
+                </span>
+                <span>
+                  当前持仓: <strong style="color: #409eff; font-size: 16px;">{{ otcHoldingForTransfer.shares.toFixed(4) }}</strong> 份
+                </span>
+              </div>
+              <div style="margin-top: 8px; font-size: 12px; color: #0369a1;">
+                最大可转出: {{ Math.max(0, Math.floor(otcHoldingForTransfer.shares) - 1) }} 份（保留1份）
+              </div>
+            </div>
+          </el-form-item>
+          <el-form-item v-else-if="form.productId && !loadingProductHolding" label="场外持仓">
+            <span style="color: #ef4444;">该产品暂无场外持仓，无法转托管</span>
           </el-form-item>
         </template>
         
@@ -1033,9 +1135,9 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
-import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, navApi, productApi, formatCurrency, orderApi, holdingApi } from '@wealth-hub/shared'
+import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi, holdingApi } from '@wealth-hub/shared'
 import type { Account } from '@wealth-hub/shared'
 
 // 账户持仓信息类型
@@ -1285,6 +1387,23 @@ const creditAccounts = computed(() => {
 
 const products = computed(() => productStore.products.filter((p) => p.isActive))
 
+// 场外产品（用于转托管）
+const otcProducts = computed(() => productStore.products.filter((p) => p.isActive && p.channel === 'OTC'))
+
+// 转托管时获取场外持仓（只取场外的持仓账户）
+const otcHoldingForTransfer = computed(() => {
+  if (selectedType.value !== 'CUSTODY_TRANSFER' || !form.value.productId) {
+    return null
+  }
+  // 从产品持仓明细中找场外持仓（账户名包含"场外"或"OTC"，或账户类型为POSITION且不是场内）
+  const holding = productAccountHoldings.value.find(h => 
+    h.accountName?.includes('场外') || 
+    h.accountName?.includes('OTC') ||
+    (h.accountName && !h.accountName.includes('场内') && !h.accountName.includes('EXCHANGE') && h.shares > 0)
+  )
+  return holding || null
+})
+
 // 产品持仓信息（用于卖出/赎回时显示）
 const productHolding = ref<{ totalShares: number; marketValue: number } | null>(null)
 const productAccountHoldings = ref<AccountHoldingInfo[]>([])
@@ -1363,13 +1482,25 @@ async function fetchProductAccountHoldings(productId: number) {
   }
 }
 
-// 监听产品选择变化，从缓存获取持仓信息（仅在卖出/赎回时）
+// 监听产品选择变化，从缓存获取持仓信息（在卖出/赎回/转托管时）
 watch(() => form.value.productId, async (productId) => {
-  if (productId && (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION')) {
+  if (productId && (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION' || selectedType.value === 'CUSTODY_TRANSFER')) {
     // 从缓存获取总持仓
     getProductHoldingFromCache(productId)
     // 异步获取各账户持仓明细
     await fetchProductAccountHoldings(productId)
+    
+    // 如果只有一个账户有持仓，自动选择并填充份额（场外赎回时）
+    if ((selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION') && 
+        productAccountHoldings.value.length === 1) {
+      const singleHolding = productAccountHoldings.value[0]
+      sellFundingLines.value = [{
+        accountId: singleHolding.accountId,
+        shares: singleHolding.shares
+      }]
+      // 同时设置赎回份额
+      form.value.shares = singleHolding.shares
+    }
   } else {
     productHolding.value = null
     productAccountHoldings.value = []
@@ -2149,8 +2280,8 @@ function handleSellParentAccountChange() {
 
 // 卖出到账账户级联选择器变化处理
 function handleSellAccountCascaderChange() {
-  // 清空份额分配
-  sellFundingLines.value = []
+  // 选择到账账户时，不清空出金来源分配（sellFundingLines）
+  // 因为出金来源和到账账户是两个不同的概念
 }
 
 function handleAddBuyFundingLine() {
@@ -2412,17 +2543,183 @@ watch(() => form.value.navDate, async (newNavDate) => {
         form.value.nav = nav.nav
         // 显示净值变化提示
         if (oldNav && oldNav !== nav.nav) {
-          ElMessage.info(`净值已更新为 ${nav.nav.toFixed(6)}（日期：${newNavDate}）`)
+          ElNotification.info({ title: '提示', message: `净值已更新为 ${nav.nav.toFixed(6)}（日期：${newNavDate}）`, position: 'bottom-right' })
         }
       } else {
-        ElMessage.warning(`未找到 ${newNavDate} 的净值数据，请手动输入`)
+        ElNotification.warning({ title: '警告', message: `未找到 ${newNavDate} 的净值数据，请手动输入`, position: 'bottom-right' })
       }
     } catch (error) {
       console.error('获取净值失败:', error)
-      ElMessage.warning('获取净值失败，请手动输入')
+      ElNotification.warning({ title: '警告', message: '获取净值失败，请手动输入', position: 'bottom-right' })
     }
   }
 })
+
+// 场内交易自动计算手续费
+const isCalculatingFee = ref(false)
+
+// 计算场内交易手续费的函数
+async function calculateExchangeFee() {
+  // 只有场内交易才自动计算手续费
+  if (form.value.channel !== 'EXCHANGE' || !form.value.productId || !form.value.shares || !form.value.nav) {
+    return
+  }
+  
+  // 只对买入/卖出类型计算
+  if (selectedType.value !== 'BUY' && selectedType.value !== 'SUBSCRIPTION' && 
+      selectedType.value !== 'SELL' && selectedType.value !== 'REDEMPTION') {
+    return
+  }
+  
+  if (isCalculatingFee.value) return
+  
+  try {
+    isCalculatingFee.value = true
+    const amount = form.value.shares * form.value.nav
+    const orderType = (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') ? 'BUY' : 'SELL'
+    
+    // 尝试从选中的账户找到券商账户
+    let brokerAccountId: number | undefined
+    if (form.value.accountId) {
+      // 查找父账户是否为券商账户
+      const account = accountStore.accounts.find(a => a.id === form.value.accountId)
+      if (account?.parentAccountId) {
+        const parent = accountStore.accounts.find(a => a.id === account.parentAccountId)
+        if (parent?.accountType === 'BROKER') {
+          brokerAccountId = parent.id
+        }
+      } else if (account?.accountType === 'BROKER') {
+        brokerAccountId = account.id
+      }
+    }
+    
+    // 如果没找到，尝试在账户列表中找华宝证券
+    if (!brokerAccountId) {
+      const huabao = accountStore.accounts.find(a => 
+        a.accountType === 'BROKER' && (a.accountName?.includes('华宝') || a.accountCode?.includes('huabao'))
+      )
+      brokerAccountId = huabao?.id
+    }
+    
+    console.log('计算手续费参数:', { productId: form.value.productId, accountId: brokerAccountId, orderType, amount })
+    
+    const result = await orderApi.calculateFee({
+      productId: form.value.productId,
+      accountId: brokerAccountId,
+      orderType,
+      amount
+    })
+    
+    console.log('手续费计算结果:', result)
+    
+    // 自动填充手续费
+    form.value.fee = result.fee
+  } catch (error) {
+    console.error('计算手续费失败:', error)
+    // 计算失败时不影响用户操作，手续费保持原值或默认值
+  } finally {
+    isCalculatingFee.value = false
+  }
+}
+
+// 计算场外申购手续费的函数
+function calculateOTCFee() {
+  // 只有场外申购才自动计算手续费
+  if (form.value.channel !== 'OTC' || !form.value.productId || !form.value.amount) {
+    return
+  }
+  
+  // 只对申购类型计算
+  if (selectedType.value !== 'BUY' && selectedType.value !== 'SUBSCRIPTION') {
+    return
+  }
+  
+  // 获取产品的买入费率
+  const product = productStore.products.find(p => p.id === form.value.productId)
+  if (!product || product.buyFeeRate == null) {
+    return
+  }
+  
+  // 计算手续费：金额 × 买入费率（费率是百分比，如 0.1 表示 0.1%）
+  const fee = form.value.amount * product.buyFeeRate / 100
+  form.value.fee = Math.round(fee * 100) / 100  // 保留2位小数
+}
+
+// 计算场外赎回手续费的函数（根据产品费率分段和赎回金额）
+async function calculateOTCRedemptionFee() {
+  // 只有场外赎回才自动计算手续费
+  if (form.value.channel !== 'OTC' || !form.value.productId || !form.value.shares) {
+    return
+  }
+  
+  // 只对赎回类型计算
+  if (selectedType.value !== 'SELL' && selectedType.value !== 'REDEMPTION') {
+    return
+  }
+  
+  try {
+    // 获取净值来计算金额
+    let nav = form.value.nav
+    if (!nav && form.value.navDate) {
+      const navData = await navApi.getNavByDate(form.value.productId, form.value.navDate)
+      nav = navData?.nav
+    }
+    if (!nav) {
+      const navData = await navApi.getLatestNav(form.value.productId)
+      nav = navData?.nav
+    }
+    if (!nav || nav <= 0) return
+    
+    const amount = form.value.shares * nav
+    
+    // 获取产品的卖出费率分段
+    const tiers = await productApi.getSellFeeTiers(form.value.productId)
+    if (!tiers || tiers.length === 0) {
+      form.value.fee = 0
+      return
+    }
+    
+    // 使用最高档费率（持有0天），用户可手动修改
+    // 费率分段按 minDays 升序排列，第一个通常是持有天数最少的（费率最高）
+    const firstTier = tiers[0]
+    const feeRate = firstTier.sellFeeRate || 0
+    const fee = amount * feeRate
+    form.value.fee = Math.round(fee * 100) / 100  // 保留2位小数
+  } catch (error) {
+    console.error('计算场外赎回手续费失败:', error)
+    // 计算失败时默认为0
+    form.value.fee = 0
+  }
+}
+
+// 监听数量和价格变化，自动计算场内手续费
+watch(
+  () => [form.value.channel, form.value.productId, form.value.shares, form.value.nav],
+  () => {
+    calculateExchangeFee()
+  },
+  { immediate: false }
+)
+
+// 监听场外申购金额变化，自动计算手续费
+watch(
+  () => [form.value.channel, form.value.productId, form.value.amount],
+  () => {
+    calculateOTCFee()
+  },
+  { immediate: false }
+)
+
+// 监听场外赎回份额和净值变化，自动计算手续费
+watch(
+  () => [form.value.channel, form.value.productId, form.value.shares, form.value.nav, form.value.navDate],
+  () => {
+    if (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION') {
+      calculateOTCRedemptionFee()
+    }
+  },
+  { immediate: false }
+)
 
 // 递归查找账户树中的账户
 function findAccountInTree(accounts: Account[], accountId: number): Account | null {
@@ -2456,7 +2753,7 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!selectedType.value) {
-    ElMessage.error('请选择业务类型')
+    ElNotification.error({ title: '错误', message: '请选择业务类型', position: 'bottom-right' })
     return
   }
 
@@ -2469,7 +2766,7 @@ async function handleSubmit() {
     if (selectedType.value === 'EXPENSE') {
       // 验证必填字段
       if (!form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-        ElMessage.error('请填写完整信息（金额、时间、分类）')
+        ElNotification.error({ title: '错误', message: '请填写完整信息（金额、时间、分类）', position: 'bottom-right' })
         return
       }
       
@@ -2477,13 +2774,13 @@ async function handleSubmit() {
       if (useComboPayment.value) {
         const validLines = expenseFundingLines.value.filter(fl => fl.accountId && fl.amount)
         if (validLines.length === 0) {
-          ElMessage.error('请至少添加一个付款账户')
+          ElNotification.error({ title: '错误', message: '请至少添加一个付款账户', position: 'bottom-right' })
           return
         }
         // 验证分配金额
         const totalAllocated = validLines.reduce((sum, fl) => sum + (fl.amount || 0), 0)
         if (Math.abs(totalAllocated - (form.value.amount || 0)) > 0.01) {
-          ElMessage.error(`分配金额 ${totalAllocated.toFixed(2)} 元与总金额 ${form.value.amount?.toFixed(2)} 元不一致`)
+          ElNotification.error({ title: '错误', message: `分配金额 ${totalAllocated.toFixed(2)} 元与总金额 ${form.value.amount?.toFixed(2)} 元不一致`, position: 'bottom-right' })
           return
         }
         
@@ -2500,7 +2797,7 @@ async function handleSubmit() {
       } else {
         // 单账户验证
         if (!form.value.parentAccountId || !form.value.accountId) {
-          ElMessage.error('请选择付款账户')
+          ElNotification.error({ title: '错误', message: '请选择付款账户', position: 'bottom-right' })
           return
         }
         postings.push({
@@ -2528,21 +2825,32 @@ async function handleSubmit() {
         currency: 'CNY',
       })
       
+      // 如果没有备注，自动生成：分类 - 账户名
+      let autoNote = form.value.note
+      if (!autoNote) {
+        const category = findCategoryById(expenseCategories, categoryId)
+        const categoryName = category ? getCategoryDisplayName(category) : ''
+        const accountName = useComboPayment.value 
+          ? '组合支付'
+          : (findAccountInTree(accountStore.accountTree, form.value.accountId!)?.accountName || '')
+        autoNote = categoryName + (accountName ? ` - ${accountName}` : '')
+      }
+      
       await ledgerApi.createTransaction({
         txnType: selectedType.value,
         postings,
-        note: form.value.note || undefined,
+        note: autoNote || undefined,
         requestedAt: form.value.occurredAt,
         categoryId: categoryId,
         isReimbursable: form.value.isReimbursable,
       })
-      ElMessage.success('提交成功')
+      ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'INCOME') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-        ElMessage.error('请填写完整信息（包括父账户和子账户）')
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括父账户和子账户）', position: 'bottom-right' })
         return
       }
       const categoryId = Array.isArray(form.value.category) 
@@ -2563,20 +2871,30 @@ async function handleSubmit() {
         amount: form.value.amount,
         currency: 'CNY',
       })
+      
+      // 如果没有备注，自动生成：分类 - 账户名
+      let incomeAutoNote = form.value.note
+      if (!incomeAutoNote) {
+        const category = findCategoryById(incomeCategories, categoryId)
+        const categoryName = category ? getCategoryDisplayName(category) : ''
+        const accountName = findAccountInTree(accountStore.accountTree, form.value.accountId!)?.accountName || ''
+        incomeAutoNote = categoryName + (accountName ? ` - ${accountName}` : '')
+      }
+      
       await ledgerApi.createTransaction({
         txnType: selectedType.value,
         postings,
-        note: form.value.note || undefined,
+        note: incomeAutoNote || undefined,
         requestedAt: form.value.occurredAt,
         categoryId: categoryId,
       })
-      ElMessage.success('提交成功')
+      ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'REPAYMENT') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.creditAccountId || !form.value.amount || !form.value.occurredAt) {
-        ElMessage.error('请填写完整信息（包括还款账户、子账户和信贷账户）')
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括还款账户、子账户和信贷账户）', position: 'bottom-right' })
         return
       }
       // 还款：从还款账户（子账户）扣款，还到信贷账户
@@ -2618,7 +2936,7 @@ async function handleSubmit() {
         note: repayNote,
         requestedAt: form.value.occurredAt,
       })
-      ElMessage.success('提交成功')
+      ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
@@ -2629,7 +2947,7 @@ async function handleSubmit() {
         if (!form.value.fromParentAccountId || !form.value.fromAccountId || 
             !form.value.toParentAccountId || !form.value.toAccountId || 
             !form.value.amount || !form.value.occurredAt) {
-          ElMessage.error('请填写完整信息（包括转出和转入的父账户、子账户）')
+          ElNotification.error({ title: '错误', message: '请填写完整信息（包括转出和转入的父账户、子账户）', position: 'bottom-right' })
           return
         }
         
@@ -2668,7 +2986,7 @@ async function handleSubmit() {
           note: autoNote,
           requestedAt: form.value.occurredAt,
         })
-        ElMessage.success('转账成功')
+        ElNotification.success({ title: '成功', message: '转账成功', position: 'bottom-right' })
         emit('success')
         handleClose()
         return
@@ -2679,20 +2997,20 @@ async function handleSubmit() {
             !shareTransfer.value.toAccountId ||
             !shareTransfer.value.shares || shareTransfer.value.shares <= 0 ||
             !form.value.occurredAt) {
-          ElMessage.error('请填写完整信息（父账户、源账户、目标账户、转移份额和发生时间）')
+          ElNotification.error({ title: '错误', message: '请填写完整信息（父账户、源账户、目标账户、转移份额和发生时间）', position: 'bottom-right' })
           return
         }
         
         const fromShares = getChildAccountShares(shareTransfer.value.fromAccountId)
         if (shareTransfer.value.shares > fromShares) {
-          ElMessage.error(`转移份额不能超过源账户可用份额（${formatNumber(fromShares, 4)}份）`)
+          ElNotification.error({ title: '错误', message: `转移份额不能超过源账户可用份额（${formatNumber(fromShares, 4)}份）`, position: 'bottom-right' })
           return
         }
         
         // 获取净值计算金额
         const parentAccount = findAccountById(accountStore.accountTree, shareTransfer.value.parentAccountId)
         if (!parentAccount || !(parentAccount as any).linkedProductId) {
-          ElMessage.error('父账户未关联产品')
+          ElNotification.error({ title: '错误', message: '父账户未关联产品', position: 'bottom-right' })
           return
         }
         
@@ -2741,15 +3059,25 @@ async function handleSubmit() {
           note: autoNote,
         })
         
-        ElMessage.success('份额转移成功')
+        ElNotification.success({ title: '成功', message: '份额转移成功', position: 'bottom-right' })
         emit('success')
         handleClose()
         return
       }
     } else if (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') {
-      if (!form.value.channel || !form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.requestedAt) {
-        ElMessage.error('请填写完整信息（包括场内/场外、资金来源父账户和子账户）')
+      // 场内买入：需要数量和价格；场外申购：需要金额
+      if (form.value.channel === 'EXCHANGE') {
+        if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.nav || !form.value.requestedAt) {
+          ElNotification.error({ title: '错误', message: '请填写完整信息（产品、数量、价格、资金来源账户）', position: 'bottom-right' })
+          return
+        }
+        // 场内买入：自动计算金额
+        form.value.amount = form.value.shares * form.value.nav
+      } else {
+        if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.requestedAt) {
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括场内/场外、资金来源父账户和子账户）', position: 'bottom-right' })
         return
+        }
       }
       // 确保 orderType 已自动设置
       if (!form.value.orderType) {
@@ -2759,24 +3087,24 @@ async function handleSubmit() {
       // 如果选择了关联产品的账户且有子账户，必须配置fundingLines
       if (selectedBuyAccount.value?.linkedProductId && buyChildAccounts.value.length > 0) {
         if (buyFundingLines.value.length === 0) {
-          ElMessage.error('请至少添加一个子账户并分配金额')
+          ElNotification.error({ title: '错误', message: '请至少添加一个子账户并分配金额', position: 'bottom-right' })
           return
         }
         // 校验所有行都填写完整
         for (let i = 0; i < buyFundingLines.value.length; i++) {
           const line = buyFundingLines.value[i]
           if (!line.accountId) {
-            ElMessage.error(`第 ${i + 1} 行请选择子账户`)
+            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right' })
             return
           }
           if (line.amount == null || line.amount <= 0) {
-            ElMessage.error(`第 ${i + 1} 行请填写买入金额`)
+            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请填写买入金额`, position: 'bottom-right' })
             return
           }
         }
         // 校验总金额是否匹配
         if (buyAllocationError.value) {
-          ElMessage.error(buyAllocationError.value)
+          ElNotification.error({ title: '错误', message: buyAllocationError.value, position: 'bottom-right' })
           return
         }
       }
@@ -2784,12 +3112,20 @@ async function handleSubmit() {
       // 获取产品信息
       const product = await productApi.getProduct(form.value.productId)
       if (!product) {
-        ElMessage.error('产品不存在')
+        ElNotification.error({ title: '错误', message: '产品不存在', position: 'bottom-right' })
         return
       }
 
-      // 获取净值（用于计算份额）
+      // 获取价格/净值（用于计算份额）
       let nav = form.value.nav
+      if (form.value.channel === 'EXCHANGE') {
+        // 场内买入：使用用户输入的成交价格
+        if (!nav || nav <= 0) {
+          ElNotification.error({ title: '错误', message: '请输入成交价格', position: 'bottom-right' })
+          return
+        }
+      } else {
+        // 场外申购：获取净值
       if (!nav) {
         if (form.value.navDate) {
           const navData = await navApi.getNavByDate(form.value.productId, form.value.navDate)
@@ -2800,12 +3136,29 @@ async function handleSubmit() {
         }
       }
       if (!nav || nav <= 0) {
-        ElMessage.error('无法获取产品净值，请手动输入净值日期')
+        ElNotification.error({ title: '错误', message: '无法获取产品净值，请手动输入净值日期', position: 'bottom-right' })
         return
+        }
       }
 
-      // 构建fundingLines（多子账户或单账户）
+      // 计算金额和份额
+      let totalAmount: number
+      let totalShares: number
+      let cost: number
       let finalFundingLines: Array<{ accountId: number; amount: number }> = []
+      
+      if (form.value.channel === 'EXCHANGE') {
+        // 场内买入：金额 = 份额 × 价格
+        totalShares = form.value.shares!
+        totalAmount = totalShares * nav
+        cost = totalShares * nav  // 场内买入成本 = 份额 × 价格
+        
+        finalFundingLines = [{
+          accountId: form.value.accountId!,
+          amount: totalAmount + (form.value.fee || 0),  // 支出 = 成交金额 + 手续费
+        }]
+      } else {
+        // 场外申购：构建fundingLines（多子账户或单账户）
       if (selectedBuyAccount.value?.linkedProductId && buyChildAccounts.value.length > 0 && buyFundingLines.value.length > 0) {
         finalFundingLines = buyFundingLines.value
           .filter((fl) => fl.accountId != null && fl.amount != null)
@@ -2818,12 +3171,11 @@ async function handleSubmit() {
           accountId: form.value.accountId!,
           amount: form.value.amount!,
         }]
+        }
+        totalAmount = finalFundingLines.reduce((sum, fl) => sum + fl.amount, 0)
+        totalShares = (totalAmount - (form.value.fee || 0)) / nav  // 场外申购：(金额-手续费)/净值
+        cost = totalAmount - (form.value.fee || 0)  // 成本 = 总金额 - 手续费
       }
-
-      // 计算总金额和份额
-      const totalAmount = finalFundingLines.reduce((sum, fl) => sum + fl.amount, 0)
-      const totalShares = totalAmount / nav
-      const cost = totalAmount - (form.value.fee || 0)  // 成本 = 总金额 - 手续费
 
       // 生成分录
       const postings: any[] = []
@@ -2865,10 +3217,11 @@ async function handleSubmit() {
       const orderTypeLabel = form.value.orderType === 'BUY' ? '买入' : '申购'
       const autoNote = `${orderTypeLabel}${channelLabel}${product.productName}`
 
-      // 对于场外（OTC）产品，需要同时创建订单和记账
+      // 对于场外（OTC）产品，只创建订单，不立即记账（等结算时再记账）
       if (form.value.channel === 'OTC') {
         try {
-          // 先创建订单（占用资金）
+          // 创建订单（占用资金），不立即记账
+          // 场外产品需要等待结算确认，份额以结算确认为准
           await orderApi.createOrder({
             productId: form.value.productId,
             orderType: form.value.orderType,
@@ -2882,18 +3235,15 @@ async function handleSubmit() {
           note: autoNote,
           })
           
-          // 然后进行记账（立即扣款）
-          await ledgerApi.createTransaction({
-            txnType: form.value.orderType,
-            productId: form.value.productId,
-            postings,
-            note: autoNote,
-            requestedAt: form.value.requestedAt,
+          ElNotification({
+            title: '订单创建成功',
+            message: '请在"订单&结算"中确认结算',
+            type: 'success',
+            position: 'bottom-right',
+            duration: 3000,
           })
-          
-          ElMessage.success('订单创建成功，已记账扣款')
         } catch (error: any) {
-          ElMessage.error(error.message || '操作失败')
+          ElNotification.error({ title: '错误', message: error.message || '操作失败', position: 'bottom-right' })
           return
         }
       } else {
@@ -2905,16 +3255,24 @@ async function handleSubmit() {
           note: autoNote,
           requestedAt: form.value.requestedAt,
         })
-        ElMessage.success('买入/申购记录成功')
+        ElNotification.success({ title: '成功', message: '买入/申购记录成功', position: 'bottom-right' })
       }
       
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION') {
-      if (!form.value.channel || !form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.requestedAt) {
-        ElMessage.error('请填写完整信息（包括场内/场外、到账父账户和子账户）')
+      // 场内卖出：需要数量和价格；场外赎回：需要份额
+      if (form.value.channel === 'EXCHANGE') {
+        if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.nav || !form.value.requestedAt) {
+          ElNotification.error({ title: '错误', message: '请填写完整信息（产品、数量、价格、到账账户）', position: 'bottom-right' })
+          return
+        }
+      } else {
+        if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.requestedAt) {
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括场内/场外、到账父账户和子账户）', position: 'bottom-right' })
         return
+        }
       }
       // 确保 orderType 已自动设置
       if (!form.value.orderType) {
@@ -2926,24 +3284,24 @@ async function handleSubmit() {
         (selectedSellAccount.value?.linkedProductId && sellChildAccounts.value.length > 0)
       if (needMultiAccountRedeem) {
         if (sellFundingLines.value.length === 0) {
-          ElMessage.error('请至少添加一个账户并分配赎回份额')
+          ElNotification.error({ title: '错误', message: '请至少添加一个账户并分配赎回份额', position: 'bottom-right' })
           return
         }
         // 校验所有行都填写完整
         for (let i = 0; i < sellFundingLines.value.length; i++) {
           const line = sellFundingLines.value[i]
           if (!line.accountId) {
-            ElMessage.error(`第 ${i + 1} 行请选择子账户`)
+            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right' })
             return
           }
           if (line.shares == null || line.shares <= 0) {
-            ElMessage.error(`第 ${i + 1} 行请填写卖出份额`)
+            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请填写卖出份额`, position: 'bottom-right' })
             return
           }
         }
         // 校验总份额是否匹配
         if (sellAllocationError.value) {
-          ElMessage.error(sellAllocationError.value)
+          ElNotification.error({ title: '错误', message: sellAllocationError.value, position: 'bottom-right' })
           return
         }
       }
@@ -2951,12 +3309,20 @@ async function handleSubmit() {
       // 获取产品信息
       const product = await productApi.getProduct(form.value.productId)
       if (!product) {
-        ElMessage.error('产品不存在')
+        ElNotification.error({ title: '错误', message: '产品不存在', position: 'bottom-right' })
         return
       }
 
-      // 获取净值（用于计算金额）
+      // 获取价格/净值（用于计算金额）
       let nav = form.value.nav
+      if (form.value.channel === 'EXCHANGE') {
+        // 场内卖出：使用用户输入的成交价格
+        if (!nav || nav <= 0) {
+          ElNotification.error({ title: '错误', message: '请输入成交价格', position: 'bottom-right' })
+          return
+        }
+      } else {
+        // 场外赎回：获取净值
       if (!nav) {
         if (form.value.navDate) {
           const navData = await navApi.getNavByDate(form.value.productId, form.value.navDate)
@@ -2967,8 +3333,9 @@ async function handleSubmit() {
         }
       }
       if (!nav || nav <= 0) {
-        ElMessage.error('无法获取产品净值，请手动输入净值日期')
+        ElNotification.error({ title: '错误', message: '无法获取产品净值，请手动输入净值日期', position: 'bottom-right' })
         return
+        }
       }
 
       // 构建fundingLines（统一按份额）
@@ -2985,7 +3352,7 @@ async function handleSubmit() {
       }
       
       if (finalFundingLines.length === 0) {
-        ElMessage.error('请选择赎回来源账户并分配份额')
+        ElNotification.error({ title: '错误', message: '请选择赎回来源账户并分配份额', position: 'bottom-right' })
         return
       }
 
@@ -2998,7 +3365,7 @@ async function handleSubmit() {
       if (form.value.channel === 'OTC') {
         // 验证到账账户
         if (!form.value.accountId) {
-          ElMessage.error('请选择到账账户')
+          ElNotification.error({ title: '错误', message: '请选择到账账户', position: 'bottom-right' })
           return
         }
 
@@ -3037,10 +3404,9 @@ async function handleSubmit() {
         }
         console.log('创建赎回订单 payload:', JSON.stringify(orderPayload, null, 2))
         await orderApi.createOrder(orderPayload)
-        ElMessage({
-          type: 'success',
+        ElNotification.success({
           message: '赎回订单已创建，请在"订单&结算"中确认结算',
-          duration: 2000  // 2秒后自动关闭
+          position: 'bottom-right'
         })
         emit('success')
         handleClose()
@@ -3051,36 +3417,34 @@ async function handleSubmit() {
       // 生成分录
       const postings: any[] = []
 
-      // CASH DEBIT（现金增加，按fundingLines拆分）
-      // 按份额比例分配金额到各个子账户
-      for (const fundingLine of finalFundingLines) {
-        const accountAmount = (fundingLine.shares / totalShares) * netAmount
+      // CASH DEBIT（现金增加）- 到账账户收到卖出款（扣除手续费后）
         postings.push({
           postingType: 'DEBIT',
-          accountId: fundingLine.accountId,
+        accountId: form.value.accountId!,  // 到账账户（华宝证券/交易资金）
           accountType: 'CASH',
-          amount: accountAmount,
+        amount: netAmount,  // 净到账金额
           currency: 'CNY',
         })
-      }
 
-      // POSITION CREDIT（持仓减少，按平均成本法计算成本扣减）
-      // 简化处理：使用净到账金额作为成本扣减（实际应该从持仓快照计算平均成本）
-      const costDeduction = netAmount
+      // POSITION CREDIT（持仓减少）- 从各持仓账户扣减份额
+      // 按摊薄成本法：卖出收入直接减少持仓成本
+      for (const fundingLine of finalFundingLines) {
+        const lineAmount = (fundingLine.shares / totalShares) * totalAmount  // 按份额比例分摊成交金额
       postings.push({
         postingType: 'CREDIT',
-        accountId: form.value.accountId!,  // 后端会自动替换为持仓账户
+          accountId: fundingLine.accountId,  // 持仓账户
         accountType: 'POSITION',
-        amount: costDeduction,
-        shares: totalShares,
+          amount: lineAmount,
+          shares: fundingLine.shares,
         currency: product.currency || 'CNY',
       })
+      }
 
       // FEE DEBIT（手续费）
       if (form.value.fee && form.value.fee > 0) {
         postings.push({
           postingType: 'DEBIT',
-          accountId: form.value.accountId!,  // 后端会自动替换为FEE账户
+          accountId: form.value.accountId!,  // 到账账户（手续费从这里扣）
           accountType: 'FEE',
           amount: form.value.fee,
           currency: product.currency || 'CNY',
@@ -3099,13 +3463,13 @@ async function handleSubmit() {
         note: autoNote,
         requestedAt: form.value.requestedAt,
       })
-      ElMessage.success('卖出记录成功')
+      ElNotification.success({ title: '成功', message: '卖出记录成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'BOND_REPO') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.repoDays) {
-        ElMessage.error('请填写完整信息（包括账户父账户和子账户）')
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括账户父账户和子账户）', position: 'bottom-right' })
         return
       }
       // 逆回购：CASH CREDIT + CASH DEBIT（到期后）
@@ -3131,36 +3495,56 @@ async function handleSubmit() {
         note: repoNote,
         requestedAt: form.value.occurredAt,
       })
-      ElMessage.success('逆回购记录成功')
+      ElNotification.success({ title: '成功', message: '逆回购记录成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'CUSTODY_TRANSFER') {
-      if (!form.value.productId || !form.value.shares || !form.value.transferDate || form.value.transferOutPrice === undefined || form.value.transferInPrice === undefined) {
-        ElMessage.error('请填写完整信息')
+      if (!form.value.productId || !form.value.shares || !form.value.transferDate || form.value.transferInPrice === undefined) {
+        ElNotification.error({ title: '错误', message: '请填写完整信息', position: 'bottom-right' })
         return
       }
+      
+      // 验证：转托管份额必须是整数
+      if (!Number.isInteger(form.value.shares)) {
+        ElNotification.error({ title: '错误', message: '转托管份额必须是整数', position: 'bottom-right' })
+        return
+      }
+      
+      // 验证：转托管后场外必须至少保留1份
+      if (!otcHoldingForTransfer.value) {
+        ElNotification.error({ title: '错误', message: '该产品暂无场外持仓，无法转托管', position: 'bottom-right' })
+        return
+      }
+      
+      const currentShares = Math.floor(otcHoldingForTransfer.value.shares) // 取整数部分
+      const minKeep = 1 // 最少保留1份
+      const maxTransfer = currentShares - minKeep
+      if (form.value.shares > maxTransfer) {
+        ElNotification.error({ title: '错误', message: `转出份额不能超过 ${maxTransfer} 份（当前持仓 ${currentShares} 份，最少保留 ${minKeep} 份）`, position: 'bottom-right' })
+        return
+      }
+      
       // 获取产品名称用于自动备注
       const product = productStore.products.find(p => p.id === form.value.productId)
       const productName = product?.productName || '产品'
-      const custodyNote = `转托管: ${productName} ${form.value.shares}份`
+      const custodyNote = `转托管: ${productName} ${form.value.shares}份，场内价格${form.value.transferInPrice}`
       
-      // 调用转托管API（后端使用 transferPrice，这里使用 transferOutPrice）
+      // 调用转托管API（只传场内价格，后端用于计算场内成本）
       await ledgerApi.createCustodyTransfer({
         productId: form.value.productId,
         shares: form.value.shares,
-        transferOutPrice: form.value.transferOutPrice,
-        transferInPrice: form.value.transferInPrice,
+        transferPrice: form.value.transferInPrice, // 场内价格作为 transferPrice
         transferDate: form.value.transferDate,
         note: custodyNote,
       })
-      ElMessage.success('转托管成功')
+      ElNotification.success({ title: '成功', message: '转托管成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'REFUND') {
       if (!form.value.relatedTxnId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount) {
-        ElMessage.error('请填写完整信息（包括退款账户父账户和子账户）')
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括退款账户父账户和子账户）', position: 'bottom-right' })
         return
       }
       // 自动生成备注
@@ -3171,26 +3555,26 @@ async function handleSubmit() {
         accountId: form.value.accountId,
         note: refundNote,
       })
-      ElMessage.success('退款成功')
+      ElNotification.success({ title: '成功', message: '退款成功', position: 'bottom-right' })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'ADJUST') {
       // 余额调整
       if (!form.value.parentAccountId || !form.value.accountId || form.value.amount === undefined) {
-        ElMessage.error('请填写完整信息（包括账户父账户和子账户）')
+        ElNotification.error({ title: '错误', message: '请填写完整信息（包括账户父账户和子账户）', position: 'bottom-right' })
         return
       }
       // 调整：需要计算差额，生成ADJUST分录
-      ElMessage.warning('余额调整功能建议使用账户管理页面的余额调整功能')
+      ElNotification.warning({ title: '警告', message: '余额调整功能建议使用账户管理页面的余额调整功能', position: 'bottom-right' })
       return
     }
 
     // 其他类型暂不支持
-    ElMessage.error('不支持的业务类型')
+    ElNotification.error({ title: '错误', message: '不支持的业务类型', position: 'bottom-right' })
     return
   } catch (error: any) {
-    ElMessage.error(error.message || '提交失败')
+    ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right' })
   } finally {
     submitting.value = false
   }

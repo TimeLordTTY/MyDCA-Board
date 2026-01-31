@@ -156,7 +156,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
 import { orderApi, orderTypeMap } from '@wealth-hub/shared'
 import type { Account } from '@wealth-hub/shared'
@@ -303,7 +303,7 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!form.value.productId) {
-    ElMessage.error('请选择产品')
+    ElNotification.error({ title: '错误', message: '请选择产品', position: 'bottom-right' })
     return
   }
 
@@ -311,19 +311,19 @@ async function handleSubmit() {
   const isSellOrder = form.value.orderType === 'SELL' || form.value.orderType === 'REDEMPTION'
 
   if (isBuyOrder && !form.value.amount) {
-    ElMessage.error('请填写总金额')
+    ElNotification.error({ title: '错误', message: '请填写总金额', position: 'bottom-right' })
     return
   }
 
   if (isSellOrder && !form.value.shares) {
-    ElMessage.error('请填写总份额')
+    ElNotification.error({ title: '错误', message: '请填写总份额', position: 'bottom-right' })
     return
   }
 
   // 如果选择了关联产品的账户且有子账户，必须配置fundingLines
   if (selectedAccount.value?.linkedProductId && childAccounts.value.length > 0) {
     if (fundingLines.value.length === 0) {
-      ElMessage.error('请至少添加一个子账户并分配金额/份额')
+      ElNotification.error({ title: '错误', message: '请至少添加一个子账户并分配金额/份额', position: 'bottom-right' })
       return
     }
 
@@ -331,22 +331,22 @@ async function handleSubmit() {
     for (let i = 0; i < fundingLines.value.length; i++) {
       const line = fundingLines.value[i]
       if (!line.accountId) {
-        ElMessage.error(`第 ${i + 1} 行请选择子账户`)
+        ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right' })
         return
       }
       if (isBuyOrder && (line.amount == null || line.amount <= 0)) {
-        ElMessage.error(`第 ${i + 1} 行请填写买入金额`)
+        ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请填写买入金额`, position: 'bottom-right' })
         return
       }
       if (isSellOrder && (line.shares == null || line.shares <= 0)) {
-        ElMessage.error(`第 ${i + 1} 行请填写卖出份额`)
+        ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请填写卖出份额`, position: 'bottom-right' })
         return
       }
     }
 
     // 校验总金额/总份额是否匹配
     if (allocationError.value) {
-      ElMessage.error(allocationError.value)
+      ElNotification.error({ title: '错误', message: allocationError.value, position: 'bottom-right' })
       return
     }
   }
@@ -369,7 +369,7 @@ async function handleSubmit() {
     } else {
       // 使用单个账户（兼容旧逻辑）
       if (!form.value.accountId) {
-        ElMessage.error('请选择资金来源账户')
+        ElNotification.error({ title: '错误', message: '请选择资金来源账户', position: 'bottom-right' })
         return
       }
       finalFundingLines = [
@@ -388,11 +388,14 @@ async function handleSubmit() {
       shares: form.value.shares,
       fundingLines: finalFundingLines,
     })
-    ElMessage.success('订单创建成功')
+    ElNotification.success({
+      message: '订单创建成功',
+      position: 'bottom-right'
+    })
     emit('success')
     handleClose()
   } catch (error: any) {
-    ElMessage.error(error.message || '创建失败')
+    ElNotification.error({ title: '错误', message: error.message || '创建失败', position: 'bottom-right' })
   } finally {
     submitting.value = false
   }

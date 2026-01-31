@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { settlementApi, formatCurrency, getOrderTypeLabel } from '@wealth-hub/shared'
 import type { Order } from '@wealth-hub/shared'
 
@@ -100,12 +100,12 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!props.order) {
-    ElMessage.error('订单信息缺失')
+    ElNotification.error({ title: '错误', message: '订单信息缺失', position: 'bottom-right' })
     return
   }
 
   if (!form.value.confirmDate || !form.value.navDate || !form.value.confirmNav) {
-    ElMessage.error('请填写必填项')
+    ElNotification.error({ title: '错误', message: '请填写必填项', position: 'bottom-right' })
     return
   }
 
@@ -122,11 +122,17 @@ async function handleSubmit() {
       isManualOverride: form.value.isManualOverride,
       note: form.value.note || undefined,
     })
-    ElMessage.success('结算确认成功')
+    ElNotification({
+      title: '结算成功',
+      message: '订单已确认结算',
+      type: 'success',
+      position: 'bottom-right',
+      duration: 3000,
+    })
     emit('success')
     handleClose()
   } catch (error: any) {
-    ElMessage.error(error.message || '确认失败')
+    ElNotification.error({ title: '错误', message: error.message || '确认失败', position: 'bottom-right' })
   } finally {
     submitting.value = false
   }

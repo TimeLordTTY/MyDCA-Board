@@ -204,7 +204,9 @@ def fetch_single_quote_direct(product_code: str, market: str) -> Optional[Dict]:
         data = response.json()
         
         if data.get('rc') != 0 or data.get('data') is None:
-            logger.debug(f"东方财富单品 API 返回空: {product_code}, rc={data.get('rc')}")
+            error_msg = f"东方财富单品 API 返回空: {product_code}, rc={data.get('rc')}, msg={data.get('msg', 'N/A')}"
+            logger.debug(error_msg)
+            print(f" [API错误: rc={data.get('rc')}]", end="")
             return None
         
         item = data['data']
@@ -212,34 +214,63 @@ def fetch_single_quote_direct(product_code: str, market: str) -> Optional[Dict]:
         # 调试：打印原始 API 返回数据（使用 DEBUG 级别，避免日志过多）
         logger.debug(f"API 返回 {product_code}: f43(价格)={item.get('f43')}, f60(昨收)={item.get('f60')}, f58(名称)={item.get('f58')}")
         
-        # 检查是否有有效数据（价格不为 '-'）
+        # 检查是否有有效数据
+        # 优先使用最新价(f43)，如果最新价为'-'（非交易时间），则使用昨收价(f60)
         price = item.get('f43')
         if price == '-' or price is None:
-            logger.debug(f"产品 {product_code} 无有效价格数据")
-            return None
+            # 非交易时间，尝试使用昨收价
+            prev_close = item.get('f60')
+            if prev_close and prev_close != '-' and prev_close is not None:
+                try:
+                    # 验证昨收价是有效数字
+                    float(prev_close)
+                    price = prev_close
+                    logger.debug(f"产品 {product_code} 非交易时间，使用昨收价: {price}")
+                except (ValueError, TypeError):
+                    error_msg = f"产品 {product_code} 无有效价格数据 (f43={item.get('f43')}, f60={prev_close})"
+                    logger.debug(error_msg)
+                    print(f" [无价格数据]", end="")
+                    return None
+            else:
+                error_msg = f"产品 {product_code} 无有效价格数据 (f43={item.get('f43')}, f60={prev_close})"
+                logger.debug(error_msg)
+                print(f" [无价格数据]", end="")
+                return None
         
         # 构建行情字典
+        # 如果使用的是昨收价（非交易时间），标记一下
+        is_prev_close = (item.get('f43') == '-' or item.get('f43') is None) and price == item.get('f60')
+        
         result = {
             '代码': item.get('f57', product_code),
             '名称': item.get('f58', ''),
             '最新价': price,
-            '最高价': item.get('f44'),
-            '最低价': item.get('f45'),
-            '开盘价': item.get('f46'),
-            '成交量': item.get('f47'),
-            '成交额': item.get('f48'),
+            '最高价': item.get('f44') if item.get('f44') != '-' else None,
+            '最低价': item.get('f45') if item.get('f45') != '-' else None,
+            '开盘价': item.get('f46') if item.get('f46') != '-' else None,
+            '成交量': item.get('f47') if item.get('f47') != '-' else None,
+            '成交额': item.get('f48') if item.get('f48') != '-' else None,
             '昨收': item.get('f60'),
-            '涨跌额': item.get('f55'),
-            'IOPV实时估值': item.get('f297'),
+            '涨跌额': item.get('f55') if item.get('f55') != '-' else None,
+            'IOPV实时估值': item.get('f297') if item.get('f297') != '-' else None,
         }
         
         # 计算涨跌幅
         prev_close = item.get('f60')
-        if price and prev_close and prev_close != '-' and float(prev_close) > 0:
+        if price and prev_close and prev_close != '-' and prev_close is not None:
             try:
-                pct_chg = (float(price) - float(prev_close)) / float(prev_close) * 100
-                result['涨跌幅'] = round(pct_chg, 2)
-            except:
+                price_float = float(price)
+                prev_close_float = float(prev_close)
+                if prev_close_float > 0:
+                    # 如果使用的是昨收价，涨跌幅为0
+                    if is_prev_close:
+                        result['涨跌幅'] = 0.0
+                    else:
+                        pct_chg = (price_float - prev_close_float) / prev_close_float * 100
+                        result['涨跌幅'] = round(pct_chg, 2)
+                else:
+                    result['涨跌幅'] = None
+            except (ValueError, TypeError):
                 result['涨跌幅'] = None
         else:
             result['涨跌幅'] = None
@@ -742,27 +773,52 @@ class ETFCollector:
             df_renamed = df.rename(columns=column_map)
             
             # 查找指定日期的数据
+            # 注意：fund_etf_hist_em 返回的数据可能不包含指定日期（非交易日）
+            # 所以我们需要查找最接近的交易日数据
+            target_date = None
+            min_diff = None
+            
             for _, row in df_renamed.iterrows():
                 date_str = str(row.get('date', ''))
                 if not date_str:
                     continue
                 
-                row_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                if row_date == trade_date:
-                    bar = {
-                        'trade_date': row_date,
-                        'open': Decimal(str(row.get('open', 0))) if row.get('open') is not None else None,
-                        'high': Decimal(str(row.get('high', 0))) if row.get('high') is not None else None,
-                        'low': Decimal(str(row.get('low', 0))) if row.get('low') is not None else None,
-                        'close': Decimal(str(row.get('close', 0))) if row.get('close') is not None else None,
-                        'volume': Decimal(str(row.get('volume', 0))) if row.get('volume') is not None else None,
-                        'amount': Decimal(str(row.get('amount', 0))) if row.get('amount') is not None else None,
-                        'prev_close': None
-                    }
-                    logger.info(f"获取 {product_code} 日K线成功: {trade_date}")
-                    return bar
+                try:
+                    row_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    # 如果找到精确匹配的日期
+                    if row_date == trade_date:
+                        target_date = row_date
+                        target_row = row
+                        break
+                    # 否则找最接近的日期（在指定日期之前或当天）
+                    elif row_date <= trade_date:
+                        diff = (trade_date - row_date).days
+                        if min_diff is None or diff < min_diff:
+                            min_diff = diff
+                            target_date = row_date
+                            target_row = row
+                except (ValueError, TypeError):
+                    continue
             
-            logger.warning(f"未找到 {product_code} 在 {trade_date} 的日K线数据")
+            # 如果找到了数据（精确匹配或最接近的日期）
+            if target_date is not None:
+                bar = {
+                    'trade_date': target_date,  # 使用实际找到的日期
+                    'open': Decimal(str(target_row.get('open', 0))) if target_row.get('open') is not None else None,
+                    'high': Decimal(str(target_row.get('high', 0))) if target_row.get('high') is not None else None,
+                    'low': Decimal(str(target_row.get('low', 0))) if target_row.get('low') is not None else None,
+                    'close': Decimal(str(target_row.get('close', 0))) if target_row.get('close') is not None else None,
+                    'volume': Decimal(str(target_row.get('volume', 0))) if target_row.get('volume') is not None else None,
+                    'amount': Decimal(str(target_row.get('amount', 0))) if target_row.get('amount') is not None else None,
+                    'prev_close': None
+                }
+                if target_date == trade_date:
+                    logger.info(f"获取 {product_code} 日K线成功: {trade_date}")
+                else:
+                    logger.info(f"获取 {product_code} 日K线成功: {target_date} (请求日期: {trade_date})")
+                return bar
+            
+            logger.warning(f"未找到 {product_code} 在 {trade_date} 附近的日K线数据")
             return None
             
         except Exception as e:
@@ -909,10 +965,15 @@ class ETFCollector:
             print(f"采集: {product_name} ({product_code})...", end=" ")
             
             # 直接调用单品 API 获取行情（已包含 IOPV 字段 f297）
-            quote_dict = fetch_single_quote_direct(product_code, market)
+            try:
+                quote_dict = fetch_single_quote_direct(product_code, market)
+            except Exception as e:
+                print(f"✗ 失败: API请求异常 - {e}")
+                fail_count += 1
+                continue
             
             if quote_dict is None:
-                print("✗ 失败")
+                print("✗ 失败: API返回空数据")
                 fail_count += 1
                 continue
             

@@ -23,12 +23,12 @@
         <table>
           <thead>
             <tr>
-              <th>订单ID</th>
-              <th>类型</th>
-              <th>标的</th>
-              <th class="right">金额</th>
-              <th>预期确认日期</th>
-              <th class="right">操作</th>
+              <th style="width: 100px;">订单ID</th>
+              <th style="width: 60px;">类型</th>
+              <th style="width: 200px;">标的</th>
+              <th class="right" style="width: 100px;">金额</th>
+              <th style="width: 120px;">预期确认日期</th>
+              <th class="right" style="width: 100px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -59,7 +59,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { settlementApi, getOrderTypeLabel, formatCurrency, formatDate } from '@wealth-hub/shared'
 import type { Order } from '@wealth-hub/shared'
 import SettlementConfirmModal from '../components/SettlementConfirmModal.vue'
@@ -72,7 +72,7 @@ async function loadSettlements() {
   try {
     pendingSettlements.value = await settlementApi.getPendingSettlements()
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
   } finally {
     loading.value = false
   }

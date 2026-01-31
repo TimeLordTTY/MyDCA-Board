@@ -373,12 +373,12 @@
         <table>
           <thead>
             <tr>
-              <th>订单ID</th>
-              <th>类型</th>
-              <th>标的</th>
-              <th class="right">金额</th>
-              <th>预期确认日期</th>
-              <th class="right">操作</th>
+              <th style="width: 100px;">订单ID</th>
+              <th style="width: 60px;">类型</th>
+              <th style="width: 200px;">标的</th>
+              <th class="right" style="width: 100px;">金额</th>
+              <th style="width: 120px;">预期确认日期</th>
+              <th class="right" style="width: 100px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -406,7 +406,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import * as echarts from 'echarts'
 import { dashboardApi, holdingApi, marketApi, navApi, orderApi, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
 import { formatCurrency, formatNumber, formatDate, formatDateTime, getOrderTypeLabel } from '@wealth-hub/shared'
@@ -662,7 +662,7 @@ async function loadData() {
     // 更新图表
     updateAllocationChart()
   } catch (error: any) {
-    ElMessage.error(error.message || '加载数据失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载数据失败', position: 'bottom-right' })
   }
 }
 
@@ -763,8 +763,10 @@ async function openOrderSettlement(orderId: string) {
     // 根据净值自动计算份额或金额
     if (navValue && navValue > 0) {
       if (isBuy && settlementForm.value.amount) {
-        // 买入：按金额和净值计算份额
-        settlementForm.value.confirmShares = Number((settlementForm.value.amount / navValue).toFixed(2))
+        // 买入：按金额和净值计算份额（需要扣除手续费）
+        const fee = settlementForm.value.confirmFee || 0
+        const netAmount = settlementForm.value.amount - fee
+        settlementForm.value.confirmShares = Number((netAmount / navValue).toFixed(2))
       } else if (!isBuy && settlementForm.value.shares) {
         // 赎回：按份额和净值计算金额
         settlementForm.value.confirmAmount = Number((settlementForm.value.shares * navValue).toFixed(2))
@@ -773,7 +775,7 @@ async function openOrderSettlement(orderId: string) {
     
     settlementVisible.value = true
   } catch (error: any) {
-    ElMessage.error(error.message || '加载订单失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载订单失败', position: 'bottom-right' })
   }
 }
 
@@ -781,7 +783,10 @@ async function openOrderSettlement(orderId: string) {
 function handleDashboardAmountChange() {
   if (!settlementOrder.value || !isBuyOrderType(settlementOrder.value.orderType)) return
   if (settlementForm.value.amount && settlementForm.value.confirmNav && settlementForm.value.confirmNav > 0) {
-    settlementForm.value.confirmShares = Number((settlementForm.value.amount / settlementForm.value.confirmNav).toFixed(2))
+    // 买入：份额 = (金额 - 手续费) / 净值
+    const fee = settlementForm.value.confirmFee || 0
+    const netAmount = settlementForm.value.amount - fee
+    settlementForm.value.confirmShares = Number((netAmount / settlementForm.value.confirmNav).toFixed(2))
   }
 }
 
@@ -800,8 +805,10 @@ function handleDashboardNavChange() {
   
   if (settlementForm.value.confirmNav && settlementForm.value.confirmNav > 0) {
     if (isBuy && settlementForm.value.amount) {
-      // 买入：按金额和净值计算份额
-      settlementForm.value.confirmShares = Number((settlementForm.value.amount / settlementForm.value.confirmNav).toFixed(2))
+      // 买入：按金额和净值计算份额（需要扣除手续费）
+      const fee = settlementForm.value.confirmFee || 0
+      const netAmount = settlementForm.value.amount - fee
+      settlementForm.value.confirmShares = Number((netAmount / settlementForm.value.confirmNav).toFixed(2))
     } else if (!isBuy && settlementForm.value.shares) {
       // 赎回：按份额和净值计算金额
       settlementForm.value.confirmAmount = Number((settlementForm.value.shares * settlementForm.value.confirmNav).toFixed(2))
@@ -817,16 +824,17 @@ async function handleSettlementNavDateChange() {
       settlementForm.value.confirmNav = navData.nav
       handleDashboardNavChange() // 重新计算份额或金额
     } else {
-      ElMessage.warning('未找到该日期的净值数据，请手动输入')
+      ElNotification.warning({ title: '警告', message: '未找到该日期的净值数据，请手动输入', position: 'bottom-right' })
     }
   } catch (error: any) {
-    ElMessage.warning('获取净值失败，请手动输入')
+    ElNotification.warning({ title: '警告', message: '获取净值失败，请手动输入', position: 'bottom-right' })
   }
 }
 
-function calculateShares(amount: number, nav: number): number {
+function calculateShares(amount: number, nav: number, fee: number = 0): number {
   if (!nav || nav <= 0) return 0
-  return amount / nav
+  const netAmount = amount - fee
+  return netAmount / nav
 }
 
 function calculateAmount(shares: number, nav: number): number {
@@ -836,7 +844,8 @@ function calculateAmount(shares: number, nav: number): number {
 function calculateSettlementFromForm() {
   if (!settlementForm.value.confirmNav || !settlementOrder.value) return
   if (isBuyType.value && settlementOrder.value.amount) {
-    settlementForm.value.confirmShares = calculateShares(settlementOrder.value.amount, settlementForm.value.confirmNav)
+    const fee = settlementForm.value.confirmFee || 0
+    settlementForm.value.confirmShares = calculateShares(settlementOrder.value.amount, settlementForm.value.confirmNav, fee)
   } else if (!isBuyType.value && settlementOrder.value.shares) {
     settlementForm.value.confirmAmount = calculateAmount(settlementOrder.value.shares, settlementForm.value.confirmNav)
   }
@@ -847,7 +856,7 @@ async function handleConfirmSettlementFromDashboard() {
 
   // 验证必填字段
   if (!settlementForm.value.confirmDate || !settlementForm.value.navDate || !settlementForm.value.confirmNav) {
-    ElMessage.error('请填写确认日期、净值日期和净值')
+    ElNotification.error({ title: '错误', message: '请填写确认日期、净值日期和净值', position: 'bottom-right' })
     return
   }
   
@@ -855,20 +864,20 @@ async function handleConfirmSettlementFromDashboard() {
   
   if (isBuy) {
     if (!settlementForm.value.amount || settlementForm.value.amount <= 0) {
-      ElMessage.error('请填写金额')
+      ElNotification.error({ title: '错误', message: '请填写金额', position: 'bottom-right' })
       return
     }
     if (!settlementForm.value.confirmShares || settlementForm.value.confirmShares <= 0) {
-      ElMessage.error('请填写确认份额')
+      ElNotification.error({ title: '错误', message: '请填写确认份额', position: 'bottom-right' })
       return
     }
   } else {
     if (!settlementForm.value.shares || settlementForm.value.shares <= 0) {
-      ElMessage.error('请填写份额')
+      ElNotification.error({ title: '错误', message: '请填写份额', position: 'bottom-right' })
       return
     }
     if (!settlementForm.value.confirmAmount || settlementForm.value.confirmAmount <= 0) {
-      ElMessage.error('请填写确认金额')
+      ElNotification.error({ title: '错误', message: '请填写确认金额', position: 'bottom-right' })
       return
     }
   }
@@ -884,12 +893,12 @@ async function handleConfirmSettlementFromDashboard() {
       confirmFee: settlementForm.value.confirmFee || 0,
       note: settlementForm.value.note || '',
     })
-    ElMessage.success('结算成功')
+    ElNotification.success({ title: '成功', message: '结算成功', position: 'bottom-right' })
     settlementVisible.value = false
     // 重新加载数据，刷新今日建议/待结算清单等
     await loadData()
   } catch (error: any) {
-    ElMessage.error(error.message || '结算失败')
+    ElNotification.error({ title: '错误', message: error.message || '结算失败', position: 'bottom-right' })
   }
 }
 
@@ -1098,12 +1107,14 @@ function getOrderDetailShares(order: any): string {
   const isBuy = isBuyOrderType(order.orderType)
   
   if (isBuy) {
-    // 买入：按净值计算份额
+    // 买入：按净值计算份额（需要扣除手续费）
     const nav = order.settlement?.confirmNav || order.navData?.nav
     const amount = order.amount || 0
+    const fee = order.settlement?.confirmFee ?? order.feeEstimate ?? 0
     
     if (nav && nav > 0 && amount > 0) {
-      const shares = amount / nav
+      const netAmount = amount - fee
+      const shares = netAmount / nav
       return shares.toFixed(2) + ' 份'
     }
     

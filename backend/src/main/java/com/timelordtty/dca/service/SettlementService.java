@@ -185,6 +185,23 @@ public class SettlementService {
         // 设置结算确认记录的手续费（使用计算后的值或用户输入的值）
         settlement.setConfirmFee(confirmFee != null ? confirmFee : BigDecimal.ZERO);
 
+        // 对于买入/申购订单，验证并重新计算份额（确保份额 = (总金额 - 手续费) / 净值）
+        if (("BUY".equals(order.getOrderType()) || "SUBSCRIPTION".equals(order.getOrderType())) 
+            && confirmNav != null && confirmNav.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal totalAmount = fundingLines.stream()
+                    .map(OrderFundingLine::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal netAmount = totalAmount.subtract(settlement.getConfirmFee());
+            BigDecimal calculatedShares = netAmount.divide(confirmNav, 6, RoundingMode.HALF_UP);
+            
+            // 如果前端传入的份额与计算值差异较大（超过0.01），使用计算值
+            if (confirmShares == null || 
+                confirmShares.subtract(calculatedShares).abs().compareTo(new BigDecimal("0.01")) > 0) {
+                confirmShares = calculatedShares;
+                settlement.setConfirmShares(confirmShares);
+            }
+        }
+
         settlement.setIsManualOverride(false);
         settlement.setConfirmedAt(LocalDateTime.now());
 
@@ -215,11 +232,19 @@ public class SettlementService {
         if ("BUY".equals(order.getOrderType()) || "SUBSCRIPTION".equals(order.getOrderType())) {
             // 买入/申购：POSITION DEBIT + 多条CASH CREDIT（按funding_line拆分）+ FEE DEBIT
             
-            // 计算成本（不含手续费）
+            // 计算成本：使用份额 × 净值（而不是金额 - 手续费）
+            // 因为份额已经考虑了手续费，所以成本 = 份额 × 净值
+            BigDecimal cost;
+            if (confirmShares != null && confirmNav != null && confirmNav.compareTo(BigDecimal.ZERO) > 0) {
+                // 使用份额 × 净值计算成本（更准确）
+                cost = confirmShares.multiply(confirmNav).setScale(2, RoundingMode.HALF_UP);
+            } else {
+                // 如果没有份额和净值，使用金额 - 手续费（兜底逻辑）
             BigDecimal totalAmount = fundingLines.stream()
                     .map(OrderFundingLine::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal cost = totalAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+                cost = totalAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+            }
 
             // 检查产品是否有关联账户
             Account linkedAccount = accountMapper.selectByLinkedProductId(order.getProductId());
@@ -312,15 +337,10 @@ public class SettlementService {
                     order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
             }
 
-            // 获取当前持仓信息（用于计算平均成本）
-            HoldingService.HoldingInfo holdingInfo = holdingService.getHolding(order.getProductId(), ownerUserId, ownerFamilyId);
-            BigDecimal avgCost = BigDecimal.ZERO;
-            if (holdingInfo != null && holdingInfo.getTotalShares() != null && 
-                holdingInfo.getTotalShares().compareTo(BigDecimal.ZERO) > 0 &&
-                holdingInfo.getTotalCost() != null) {
-                avgCost = holdingInfo.getTotalCost().divide(
-                    holdingInfo.getTotalShares(), 6, RoundingMode.HALF_UP);
-            }
+            // 注意：使用"摊薄成本法"（同花顺方式）
+            // 卖出时 POSITION CREDIT 金额 = 卖出收入（而不是平均成本 × 份额）
+            // 这样持仓成本 = 总买入金额 - 总卖出收入
+            // 平均成本 = (总买入金额 - 总卖出收入) / 剩余份额
 
             // 分离出金账户（SOURCE）和到账账户（TARGET）
             List<OrderFundingLine> sourceLines = fundingLines.stream()
@@ -336,10 +356,11 @@ public class SettlementService {
                 (confirmShares != null ? confirmShares : BigDecimal.ZERO) :
                 sourceLines.stream().map(OrderFundingLine::getShares).reduce(BigDecimal.ZERO, BigDecimal::add);
 
-            // 计算总成本（按平均成本法）
-            BigDecimal totalCostDeduction = totalShares.multiply(avgCost);
-
             BigDecimal totalConfirmAmount = confirmAmount != null ? confirmAmount : BigDecimal.ZERO;
+            
+            // 摊薄成本法：POSITION CREDIT 金额 = 卖出收入（totalConfirmAmount）
+            // 注意：手续费已在后面单独处理，不从卖出收入中扣除
+            BigDecimal totalCostDeduction = totalConfirmAmount;
 
             // 判断出金账户是否是关联账户的子账户
             boolean sourceIsLinkedChild = false;
@@ -359,8 +380,9 @@ public class SettlementService {
                 // CASH DEBIT（入金账户增加）+ CASH CREDIT（出金账户减少）
                 // 同时需要更新关联账户的 initial_shares（持仓份额）
                 
-                // 1. CASH DEBIT：入金到 TARGET 账户
-                BigDecimal remainingAmount = totalConfirmAmount;
+                // 1. CASH DEBIT：入金到 TARGET 账户（净到账金额 = 卖出收入 - 手续费）
+                BigDecimal netAmount = totalConfirmAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+                BigDecimal remainingAmount = netAmount;
                 for (int i = 0; i < targetLines.size(); i++) {
                     OrderFundingLine targetLine = targetLines.get(i);
                     BigDecimal accountAmount = targetLine.getAmount() != null ? targetLine.getAmount() : remainingAmount;
@@ -525,9 +547,12 @@ public class SettlementService {
                 // 普通模式：CASH DEBIT + POSITION CREDIT
                 
                 // 1. CASH DEBIT：到账到 TARGET 账户（如果有），否则到 SOURCE 账户
+                // 计算净到账金额（卖出收入 - 手续费）
+                BigDecimal netAmountForCash = totalConfirmAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+                
                 if (!targetLines.isEmpty()) {
-                    // 有明确的到账账户
-                    BigDecimal remainingAmount = totalConfirmAmount;
+                    // 有明确的到账账户（使用净到账金额）
+                    BigDecimal remainingAmount = netAmountForCash;
                     for (int i = 0; i < targetLines.size(); i++) {
                         OrderFundingLine targetLine = targetLines.get(i);
                         BigDecimal accountAmount = targetLine.getAmount() != null ? targetLine.getAmount() : remainingAmount;
@@ -546,11 +571,11 @@ public class SettlementService {
                         postings.add(cashPosting);
                     }
                 } else if (!sourceLines.isEmpty()) {
-                    // 没有明确的到账账户，按SOURCE账户份额比例分配（兼容旧逻辑）
-                    BigDecimal remainingAmount = totalConfirmAmount;
+                    // 没有明确的到账账户，按SOURCE账户份额比例分配（兼容旧逻辑，使用净到账金额）
+                    BigDecimal remainingAmount = netAmountForCash;
                     for (int i = 0; i < sourceLines.size(); i++) {
                         OrderFundingLine sourceLine = sourceLines.get(i);
-                        BigDecimal accountAmount = totalConfirmAmount.multiply(sourceLine.getShares())
+                        BigDecimal accountAmount = netAmountForCash.multiply(sourceLine.getShares())
                             .divide(totalShares, 2, RoundingMode.HALF_UP);
                         if (i == sourceLines.size() - 1) {
                             accountAmount = remainingAmount;
@@ -567,22 +592,28 @@ public class SettlementService {
                         postings.add(cashPosting);
                     }
                 } else if (!fundingLines.isEmpty()) {
-                    // 兜底：使用第一个fundingLine
+                    // 兜底：使用第一个fundingLine（使用净到账金额）
                     LedgerPosting cashPosting = new LedgerPosting();
                     cashPosting.setPostingType("DEBIT");
                     cashPosting.setAccountId(fundingLines.get(0).getAccountId());
                     cashPosting.setAccountType("CASH");
-                    cashPosting.setAmount(totalConfirmAmount);
+                    cashPosting.setAmount(netAmountForCash);
                     cashPosting.setCurrency(fundingLines.get(0).getCurrency() != null ? fundingLines.get(0).getCurrency() : "CNY");
                     postings.add(cashPosting);
                 }
 
-                // 2. POSITION CREDIT：从持仓账户扣除份额（按SOURCE账户的份额，或总份额）
+                // 2. POSITION CREDIT：从持仓账户扣除份额
+                // 摊薄成本法：CREDIT金额 = 卖出收入（按份额比例分配）
                 if (positionAccount != null) {
-                    if (!sourceLines.isEmpty()) {
-                        // 按SOURCE账户分别扣减
+                    if (!sourceLines.isEmpty() && sourceLines.size() > 1) {
+                        // 多账户卖出：按份额比例分配卖出收入
                         for (OrderFundingLine sourceLine : sourceLines) {
-                            BigDecimal accountCostDeduction = sourceLine.getShares().multiply(avgCost);
+                            // 按份额比例计算该账户对应的卖出收入
+                            BigDecimal shareRatio = totalShares.compareTo(BigDecimal.ZERO) > 0 
+                                ? sourceLine.getShares().divide(totalShares, 6, RoundingMode.HALF_UP)
+                                : BigDecimal.ZERO;
+                            BigDecimal accountCostDeduction = totalConfirmAmount.multiply(shareRatio)
+                                .setScale(2, RoundingMode.HALF_UP);
                             
                             LedgerPosting positionCreditPosting = new LedgerPosting();
                             positionCreditPosting.setPostingType("CREDIT");
@@ -594,7 +625,7 @@ public class SettlementService {
                             postings.add(positionCreditPosting);
                         }
                     } else {
-                        // 单账户卖出
+                        // 单账户卖出：CREDIT金额 = 全部卖出收入
                         LedgerPosting positionCreditPosting = new LedgerPosting();
                         positionCreditPosting.setPostingType("CREDIT");
                         positionCreditPosting.setAccountId(positionAccount.getId());
@@ -640,11 +671,33 @@ public class SettlementService {
             String orderTypeLabel;
             String amountInfo;
             switch (order.getOrderType()) {
-                case "BUY": orderTypeLabel = "买入"; amountInfo = String.format("金额%.2f元", confirmAmount != null ? confirmAmount : BigDecimal.ZERO); break;
-                case "SUBSCRIPTION": orderTypeLabel = "申购"; amountInfo = String.format("金额%.2f元", confirmAmount != null ? confirmAmount : BigDecimal.ZERO); break;
-                case "SELL": orderTypeLabel = "卖出"; amountInfo = String.format("%.4f份", totalSharesForNote); break;
-                case "REDEMPTION": orderTypeLabel = "赎回"; amountInfo = String.format("%.4f份", totalSharesForNote); break;
-                default: orderTypeLabel = order.getOrderType(); amountInfo = "";
+                case "BUY": 
+                    orderTypeLabel = "买入"; 
+                    // 买入：显示金额和份额
+                    BigDecimal buyAmount = fundingLines.stream()
+                            .map(OrderFundingLine::getAmount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    amountInfo = String.format("金额%.2f元，份额%.2f份", buyAmount, confirmShares != null ? confirmShares : BigDecimal.ZERO); 
+                    break;
+                case "SUBSCRIPTION": 
+                    orderTypeLabel = "申购"; 
+                    // 申购：显示金额和份额
+                    BigDecimal subAmount = fundingLines.stream()
+                            .map(OrderFundingLine::getAmount)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    amountInfo = String.format("金额%.2f元，份额%.2f份", subAmount, confirmShares != null ? confirmShares : BigDecimal.ZERO); 
+                    break;
+                case "SELL": 
+                    orderTypeLabel = "卖出"; 
+                    amountInfo = String.format("份额%.2f份，金额%.2f元", totalSharesForNote, confirmAmount != null ? confirmAmount : BigDecimal.ZERO); 
+                    break;
+                case "REDEMPTION": 
+                    orderTypeLabel = "赎回"; 
+                    amountInfo = String.format("份额%.2f份，金额%.2f元", totalSharesForNote, confirmAmount != null ? confirmAmount : BigDecimal.ZERO); 
+                    break;
+                default: 
+                    orderTypeLabel = order.getOrderType(); 
+                    amountInfo = "";
             }
             String autoNote = String.format("订单结算: %s %s %s", orderTypeLabel, product.getProductName(), amountInfo);
             

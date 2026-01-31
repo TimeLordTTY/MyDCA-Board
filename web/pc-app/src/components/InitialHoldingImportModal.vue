@@ -163,7 +163,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElNotification } from 'element-plus'
 import { formatCurrency } from '@wealth-hub/shared'
 import { holdingApi, productApi } from '@wealth-hub/shared'
 import type { ProductMaster } from '@wealth-hub/shared'
@@ -258,7 +258,7 @@ async function loadAllProducts() {
     refreshAllFilteredProducts()
   } catch (error: any) {
     console.error('加载产品列表失败:', error)
-    ElMessage.error('加载产品列表失败')
+    ElNotification.error({ title: '错误', message: '加载产品列表失败', position: 'bottom-right' })
   }
 }
 
@@ -319,7 +319,7 @@ function handleImportFromCSV() {
 
 function handleParseCSV() {
   if (!csvContent.value.trim()) {
-    ElMessage.warning('请输入CSV内容')
+    ElNotification.warning({ title: '警告', message: '请输入CSV内容', position: 'bottom-right' })
     return
   }
 
@@ -332,14 +332,14 @@ function handleParseCSV() {
 
     const parts = line.split(',').map(p => p.trim())
     if (parts.length < 4) {
-      ElMessage.warning(`第${i + 1}行格式不正确，已跳过`)
+      ElNotification.warning({ title: '警告', message: `第${i + 1}行格式不正确，已跳过`, position: 'bottom-right' })
       continue
     }
 
     const [productCode, productName, channel, sharesStr, costPriceStr, note] = parts
 
     if (!productCode || !productName || !channel || !sharesStr || !costPriceStr) {
-      ElMessage.warning(`第${i + 1}行数据不完整，已跳过`)
+      ElNotification.warning({ title: '警告', message: `第${i + 1}行数据不完整，已跳过`, position: 'bottom-right' })
       continue
     }
 
@@ -347,12 +347,12 @@ function handleParseCSV() {
     const costPrice = parseFloat(costPriceStr)
 
     if (isNaN(shares) || isNaN(costPrice) || shares <= 0 || costPrice <= 0) {
-      ElMessage.warning(`第${i + 1}行份额或成本价无效，已跳过`)
+      ElNotification.warning({ title: '警告', message: `第${i + 1}行份额或成本价无效，已跳过`, position: 'bottom-right' })
       continue
     }
 
     if (channel !== 'EXCHANGE' && channel !== 'OTC') {
-      ElMessage.warning(`第${i + 1}行渠道必须是EXCHANGE或OTC，已跳过`)
+      ElNotification.warning({ title: '警告', message: `第${i + 1}行渠道必须是EXCHANGE或OTC，已跳过`, position: 'bottom-right' })
       continue
     }
 
@@ -367,7 +367,7 @@ function handleParseCSV() {
   }
 
   if (newHoldings.length === 0) {
-    ElMessage.warning('没有解析到有效数据')
+    ElNotification.warning({ title: '警告', message: '没有解析到有效数据', position: 'bottom-right' })
     return
   }
 
@@ -376,7 +376,7 @@ function handleParseCSV() {
   refreshAllFilteredProducts()
   csvDialogVisible.value = false
   csvContent.value = ''
-  ElMessage.success(`成功导入${newHoldings.length}条持仓记录`)
+  ElNotification.success({ title: '成功', message: `成功导入${newHoldings.length}条持仓记录`, position: 'bottom-right' })
 }
 
 function refreshAllFilteredProducts() {
@@ -397,7 +397,7 @@ async function handleSave() {
   )
 
   if (validHoldings.length === 0) {
-    ElMessage.warning('请至少填写一条有效的持仓记录')
+    ElNotification.warning({ title: '警告', message: '请至少填写一条有效的持仓记录', position: 'bottom-right' })
     return
   }
 
@@ -425,12 +425,12 @@ async function handleSave() {
       note: h.note,
     }))
     await holdingApi.importInitialHoldings(importData)
-    ElMessage.success(`成功导入${validHoldings.length}条持仓记录`)
+    ElNotification.success({ title: '成功', message: `成功导入${validHoldings.length}条持仓记录`, position: 'bottom-right' })
     emit('success')
     visible.value = false
     holdings.value = []
   } catch (error: any) {
-    ElMessage.error(error.message || '导入失败')
+    ElNotification.error({ title: '错误', message: error.message || '导入失败', position: 'bottom-right' })
   } finally {
     saving.value = false
   }

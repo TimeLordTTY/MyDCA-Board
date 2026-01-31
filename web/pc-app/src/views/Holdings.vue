@@ -32,11 +32,11 @@
             <table>
               <thead>
                 <tr>
-                  <th>名称</th>
-                  <th class="right">份额 / 市值</th>
-                  <th class="right">成本价 / 最新价</th>
-                  <th class="right">盈亏率 / 浮盈亏</th>
-                  <th class="right" style="min-width: 80px; white-space: nowrap;">操作</th>
+                  <th style="width: 160px;">名称</th>
+                  <th class="right" style="width: 100px;">份额 / 市值</th>
+                  <th class="right" style="width: 100px;">成本价 / 最新价</th>
+                  <th class="right" style="width: 90px;">盈亏率 / 浮盈亏</th>
+                  <th class="right" style="width: 60px;">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,11 +106,11 @@
             <table>
               <thead>
                 <tr>
-                  <th>名称</th>
-                  <th class="right">份额 / 市值</th>
-                  <th class="right">成本价 / 最新价</th>
-                  <th class="right">盈亏率 / 浮盈亏</th>
-                  <th class="right" style="min-width: 80px; white-space: nowrap;">操作</th>
+                  <th style="width: 160px;">名称</th>
+                  <th class="right" style="width: 100px;">份额 / 市值</th>
+                  <th class="right" style="width: 100px;">成本价 / 最新价</th>
+                  <th class="right" style="width: 90px;">盈亏率 / 浮盈亏</th>
+                  <th class="right" style="width: 60px;">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -173,7 +173,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { holdingApi, marketApi, navApi, formatCurrency, formatNumber } from '@wealth-hub/shared'
 import type { HoldingInfo, MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
 import HoldingDetailModal from '../components/HoldingDetailModal.vue'
@@ -321,7 +321,7 @@ async function loadHoldings() {
       }
     }
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
   } finally {
     loading.value = false
   }

@@ -705,7 +705,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessageBox, ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import {
   useAccountStore,
   formatCurrency,
@@ -1171,11 +1171,11 @@ async function handleAccountSave() {
       let savedAccountId: number | null = null
       if (accountForm.id) {
         await accountStore.updateAccount(accountForm.id, accountForm)
-        ElMessage.success(accountForm.isActive ? '更新成功' : '已停用')
+        ElNotification.success({ title: '成功', message: accountForm.isActive ? '更新成功' : '已停用', position: 'bottom-right' })
         savedAccountId = accountForm.id
       } else {
         const newAccount = await accountStore.createAccount(accountForm)
-        ElMessage.success('创建成功')
+        ElNotification.success({ title: '成功', message: '创建成功', position: 'bottom-right' })
         savedAccountId = newAccount.id
       }
       
@@ -1190,7 +1190,7 @@ async function handleAccountSave() {
       
       accountDialogVisible.value = false
     } catch (error: any) {
-      ElMessage.error(error.message || '保存失败')
+      ElNotification.error({ title: '错误', message: error.message || '保存失败', position: 'bottom-right' })
     } finally {
       accountSaving.value = false
     }
@@ -1208,7 +1208,7 @@ async function handleBalanceSave() {
       if (!currentAccount.value) return
       const accountId = currentAccount.value.id
       await accountStore.adjustBalance(accountId, balanceForm.balance, balanceForm.note)
-      ElMessage.success('余额调整成功')
+      ElNotification.success({ title: '成功', message: '余额调整成功', position: 'bottom-right' })
       balanceDialogVisible.value = false
       // 等待数据刷新完成
       await loadAccounts()
@@ -1216,7 +1216,7 @@ async function handleBalanceSave() {
       expandPlatformForAccount(accountId)
       lastEditedAccountId.value = accountId
     } catch (error: any) {
-      ElMessage.error(error.message || '调整失败')
+      ElNotification.error({ title: '错误', message: error.message || '调整失败', position: 'bottom-right' })
     } finally {
       balanceSaving.value = false
     }
@@ -1240,7 +1240,7 @@ async function loadAccounts() {
 // 费率配置管理函数
 async function handleManageFeeConfig(account: Account) {
   if (account.accountType !== 'BROKER') {
-    ElMessage.warning('只有券商账户才能配置费率')
+    ElNotification.warning({ title: '警告', message: '只有券商账户才能配置费率', position: 'bottom-right' })
     return
   }
   
@@ -1259,7 +1259,7 @@ async function loadFeeConfigs(accountId: number) {
     }))
   } catch (error: any) {
     console.error('加载费率配置失败:', error)
-    ElMessage.error('加载费率配置失败')
+    ElNotification.error({ title: '错误', message: '加载费率配置失败', position: 'bottom-right' })
     feeConfigs.value = []
   }
 }
@@ -1295,12 +1295,12 @@ async function handleDeleteFeeConfig(id: number | undefined, index: number) {
     })
     
     await brokerFeeApi.deleteFeeConfig(currentBrokerAccount.value.id, id)
-    ElMessage.success('删除成功')
+    ElNotification.success({ title: '成功', message: '删除成功', position: 'bottom-right' })
     await loadFeeConfigs(currentBrokerAccount.value.id)
   } catch (error: any) {
     if (error !== 'cancel') {
       console.error('删除费率配置失败:', error)
-      ElMessage.error('删除失败')
+      ElNotification.error({ title: '错误', message: '删除失败', position: 'bottom-right' })
     }
   }
 }
@@ -1347,18 +1347,18 @@ async function handleSaveFeeConfig() {
         feeConfigs.value[editingFeeConfigIndex.value].id!,
         configToSave
       )
-      ElMessage.success('更新成功')
+      ElNotification.success({ title: '成功', message: '更新成功', position: 'bottom-right' })
     } else {
       // 创建
       await brokerFeeApi.createFeeConfig(currentBrokerAccount.value.id, configToSave)
-      ElMessage.success('创建成功')
+      ElNotification.success({ title: '成功', message: '创建成功', position: 'bottom-right' })
     }
     
     feeConfigEditDialogVisible.value = false
     await loadFeeConfigs(currentBrokerAccount.value.id)
   } catch (error: any) {
     console.error('保存费率配置失败:', error)
-    ElMessage.error(error.message || '保存失败')
+    ElNotification.error({ title: '错误', message: error.message || '保存失败', position: 'bottom-right' })
   } finally {
     feeConfigSaving.value = false
   }

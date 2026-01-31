@@ -378,8 +378,14 @@ public class OrderService {
                         newBalance = currentBalance.add(posting.getAmount());
                     }
                     // 确保余额不为负（对于资产类账户）
+                    String accType = account.getAccountType();
                     if (newBalance.compareTo(BigDecimal.ZERO) < 0 && 
-                        ("CASH".equals(account.getAccountType()) || "POSITION".equals(account.getAccountType()))) {
+                        ("CASH".equals(accType) || "POSITION".equals(accType) || "BROKER".equals(accType) ||
+                         "MMF".equals(accType) || "ETF".equals(accType) || "LOF".equals(accType) || "FUND".equals(accType) ||
+                         "STOCK".equals(accType) || "BOND".equals(accType) || "RECEIVABLE".equals(accType) ||
+                         "BANK_WM_NAV".equals(accType) || "BANK_WM_BOX".equals(accType) || "OPTION".equals(accType) ||
+                         "INVESTABLE".equals(accType) || "SPENDABLE".equals(accType) || "RESERVED".equals(accType) ||
+                         "PAYMENT".equals(accType) || "BANK".equals(accType) || "OTHER".equals(accType))) {
                         newBalance = BigDecimal.ZERO;
                     }
                     accountMapper.updateBalance(posting.getAccountId(), newBalance);

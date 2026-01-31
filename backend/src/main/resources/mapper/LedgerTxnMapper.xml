@@ -49,7 +49,11 @@
     <select id="selectByCondition" resultMap="BaseResultMap">
         SELECT DISTINCT lt.* FROM ledger_txn lt
         WHERE lt.user_id = #{userId}
-        AND lt.txn_type != 'ADJUST'
+        <if test="productId == null">
+            <!-- 查询所有产品时，排除ADJUST类型（初始持仓） -->
+            AND lt.txn_type != 'ADJUST'
+        </if>
+        <!-- 查询特定产品时，包含ADJUST类型（初始持仓），以便在交易记录中显示 -->
         <if test="txnType != null and txnType != ''">
             AND lt.txn_type = #{txnType}
         </if>
@@ -81,7 +85,11 @@
     <select id="countByCondition" resultType="int">
         SELECT COUNT(DISTINCT lt.txn_id) FROM ledger_txn lt
         WHERE lt.user_id = #{userId}
-        AND lt.txn_type != 'ADJUST'
+        <if test="productId == null">
+            <!-- 查询所有产品时，排除ADJUST类型（初始持仓） -->
+            AND lt.txn_type != 'ADJUST'
+        </if>
+        <!-- 查询特定产品时，包含ADJUST类型（初始持仓），以便在交易记录中显示 -->
         <if test="txnType != null and txnType != ''">
             AND lt.txn_type = #{txnType}
         </if>

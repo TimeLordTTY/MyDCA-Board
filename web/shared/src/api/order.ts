@@ -43,4 +43,17 @@ export const orderApi = {
   confirmSettlement: async (data: ConfirmSettlementRequest): Promise<void> => {
     await apiClient.post(`/orders/${data.orderId}/settle`, data)
   },
+
+  /**
+   * 计算场内交易手续费
+   */
+  calculateFee: async (data: {
+    productId: number
+    accountId?: number
+    orderType: 'BUY' | 'SELL'
+    amount: number
+  }): Promise<{ fee: number; productId: number; orderType: string; amount: number }> => {
+    const response = await apiClient.post('/orders/calculate-fee', data)
+    return response.data
+  },
 }

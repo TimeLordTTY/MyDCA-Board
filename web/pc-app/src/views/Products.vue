@@ -422,7 +422,12 @@
         </el-form-item>
 
         <el-form-item label="数据来源">
-          <el-input v-model="form.dataSource" placeholder="如：AKSHARE、FUND" />
+          <el-select v-model="form.dataSource" placeholder="选择数据来源" style="width: 100%" clearable>
+            <el-option label="基金净值 (fund)" value="fund" />
+            <el-option label="AKShare (akshare)" value="akshare" />
+            <el-option label="招商银行 (cmbc)" value="cmbc" />
+            <el-option label="手动录入 (manual)" value="manual" />
+          </el-select>
         </el-form-item>
 
         <el-form-item label="是否启用">
@@ -445,7 +450,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import {
   useProductStore,
   assetTypeMap,
@@ -560,7 +565,7 @@ async function loadAllProducts() {
     loadExchangeProducts()
     loadOtcProducts()
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
     allProducts.value = []
     exchangeProducts.value = []
     otcProducts.value = []
@@ -776,10 +781,10 @@ async function saveProductOrder(orderedProducts: ProductMaster[], _channel: 'EXC
       }
     })
     
-    ElMessage.success('产品排序已保存')
+    ElNotification.success({ title: '成功', message: '产品排序已保存', position: 'bottom-right' })
   } catch (error: any) {
     console.error('Failed to save product order:', error)
-    ElMessage.error(error.message || '保存排序失败')
+    ElNotification.error({ title: '错误', message: error.message || '保存排序失败', position: 'bottom-right' })
   }
 }
 
@@ -811,6 +816,11 @@ function handleAddProduct() {
 async function handleEdit(product: ProductMaster) {
   editingProduct.value = product
   Object.assign(form, product)
+  
+  // 数据来源转成小写（兼容旧数据）
+  if (form.dataSource) {
+    form.dataSource = form.dataSource.toLowerCase()
+  }
   
   // 如果是场外产品，加载费率分段配置
   if (product.channel === 'OTC' && product.assetType !== 'BANK_WM_NAV' && product.assetType !== 'MMF') {
@@ -905,13 +915,13 @@ async function handleSave() {
     // 如果是场外产品，验证分段费率配置
     if (form.channel === 'OTC' && form.assetType !== 'BANK_WM_NAV' && form.assetType !== 'MMF') {
       if (!sellFeeTiers.value || sellFeeTiers.value.length === 0) {
-        ElMessage.warning('请至少配置一个卖出费率分段')
+        ElNotification.warning({ title: '警告', message: '请至少配置一个卖出费率分段', position: 'bottom-right' })
         return
       }
       // 验证分段配置是否完整
       for (const tier of sellFeeTiers.value) {
         if (tier.minDays == null || tier.sellFeeRatePercent == null) {
-          ElMessage.warning('请完善卖出费率分段配置（最小持有天数和费率必填）')
+          ElNotification.warning({ title: '警告', message: '请完善卖出费率分段配置（最小持有天数和费率必填）', position: 'bottom-right' })
           return
         }
       }
@@ -924,11 +934,11 @@ async function handleSave() {
       if (editingProduct.value) {
         const updated = await productStore.updateProduct(editingProduct.value.id, form)
         productId = updated.id
-        ElMessage.success('更新成功')
+        ElNotification.success({ title: '成功', message: '更新成功', position: 'bottom-right' })
       } else {
         const created = await productStore.createProduct(form)
         productId = created.id
-        ElMessage.success('创建成功')
+        ElNotification.success({ title: '成功', message: '创建成功', position: 'bottom-right' })
       }
       
       // 如果是场外产品，保存费率分段配置
@@ -939,7 +949,7 @@ async function handleSave() {
       dialogVisible.value = false
       await loadAllProducts()
     } catch (error: any) {
-      ElMessage.error(error.message || '保存失败')
+      ElNotification.error({ title: '错误', message: error.message || '保存失败', position: 'bottom-right' })
     } finally {
       saving.value = false
     }
@@ -972,7 +982,7 @@ async function saveFeeTiers(productId: number) {
     await productApi.saveSellFeeTiers(productId, tiersToSave)
   } catch (error: any) {
     console.error('保存费率分段失败:', error)
-    ElMessage.warning('产品已保存，但费率分段保存失败')
+    ElNotification.warning({ title: '警告', message: '产品已保存，但费率分段保存失败', position: 'bottom-right' })
   }
 }
 

@@ -83,9 +83,8 @@ export const ledgerApi = {
   createCustodyTransfer: async (data: {
     productId: number
     shares: number
-    transferOutPrice: number
-    transferInPrice: number
-    transferDate: string
+    transferPrice: number  // 场内价格（用于计算场内成本）
+    transferDate: string   // 到账日期
     note?: string
   }): Promise<LedgerTxn> => {
     const response = await apiClient.post<LedgerTxn>('/ledger/txns/custody-transfer', data)

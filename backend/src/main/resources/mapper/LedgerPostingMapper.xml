@@ -31,8 +31,8 @@
         WHERE lp.account_type = #{accountType}
         AND a.is_active = 1
         AND (
-            (a.owner_type = 'PERSONAL' AND a.owner_user_id = #{ownerUserId})
-            OR (a.owner_type = 'FAMILY' AND a.owner_family_id = #{ownerFamilyId})
+            a.owner_user_id = #{ownerUserId}
+            OR (a.owner_family_id IS NOT NULL AND a.owner_family_id = #{ownerFamilyId})
         )
         ORDER BY lp.created_at DESC
     </select>

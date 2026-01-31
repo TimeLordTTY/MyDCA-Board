@@ -683,17 +683,29 @@ public class AccountService {
         // 获取该账户的所有分录
         List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountId(accountId);
         
-        // 确定账户类型（虚拟账户使用 virtual_subtype，REAL账户使用 account_type）
-        String accountType = "VIRTUAL".equals(account.getAccountKind()) 
-            ? account.getVirtualSubtype() 
-            : account.getAccountType();
+        // 确定账户类型
+        // 虚拟账户使用 virtual_subtype，REAL账户优先使用 account_type，为空则使用 fund_usage
+        String accountType;
+        if ("VIRTUAL".equals(account.getAccountKind())) {
+            accountType = account.getVirtualSubtype();
+        } else {
+            accountType = account.getAccountType();
+            if (accountType == null || accountType.isEmpty()) {
+                accountType = account.getFundUsage();
+            }
+        }
         
         // 从初始余额开始计算
         BigDecimal balance = account.getInitialBalance() != null ? account.getInitialBalance() : BigDecimal.ZERO;
         
         // 根据账户类型和借贷方向计算余额
         for (LedgerPosting posting : postings) {
-            if ("CASH".equals(accountType) || "POSITION".equals(accountType) || "RECEIVABLE".equals(accountType)) {
+            if ("CASH".equals(accountType) || "POSITION".equals(accountType) || "RECEIVABLE".equals(accountType) ||
+                "MMF".equals(accountType) || "BANK_WM_NAV".equals(accountType) || "BANK_WM_BOX".equals(accountType) ||
+                "ETF".equals(accountType) || "LOF".equals(accountType) || "FUND".equals(accountType) ||
+                "STOCK".equals(accountType) || "BOND".equals(accountType) || "OPTION".equals(accountType) ||
+                "BROKER".equals(accountType) || "INVESTABLE".equals(accountType) || "SPENDABLE".equals(accountType) || "RESERVED".equals(accountType) ||
+                "PAYMENT".equals(accountType) || "BANK".equals(accountType) || "OTHER".equals(accountType)) {
                 // 资产类账户：DEBIT增加，CREDIT减少
                 if ("DEBIT".equals(posting.getPostingType())) {
                     balance = balance.add(posting.getAmount());

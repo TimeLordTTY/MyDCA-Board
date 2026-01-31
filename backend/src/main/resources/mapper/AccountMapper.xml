@@ -42,8 +42,8 @@
         WHERE is_active = 1
         AND account_kind = 'REAL'
         AND (
-            (owner_type = 'PERSONAL' AND owner_user_id = #{ownerUserId})
-            OR (owner_type = 'FAMILY' AND owner_family_id = #{ownerFamilyId})
+            owner_user_id = #{ownerUserId}
+            OR (owner_family_id IS NOT NULL AND owner_family_id = #{ownerFamilyId})
         )
         ORDER BY account_name
     </select>
@@ -53,8 +53,8 @@
         WHERE is_active = 1
         AND account_kind = 'VIRTUAL'
         AND (
-            (owner_type = 'PERSONAL' AND owner_user_id = #{ownerUserId})
-            OR (owner_type = 'FAMILY' AND owner_family_id = #{ownerFamilyId})
+            owner_user_id = #{ownerUserId}
+            OR (owner_family_id IS NOT NULL AND owner_family_id = #{ownerFamilyId})
         )
         <if test="virtualSubtype != null and virtualSubtype != ''">
             AND virtual_subtype = #{virtualSubtype}
@@ -73,8 +73,8 @@
         AND a.account_kind = 'REAL'
         AND b.id IS NULL
         AND (
-            (a.owner_type = 'PERSONAL' AND a.owner_user_id = #{ownerUserId})
-            OR (a.owner_type = 'FAMILY' AND a.owner_family_id = #{ownerFamilyId})
+            a.owner_user_id = #{ownerUserId}
+            OR (a.owner_family_id IS NOT NULL AND a.owner_family_id = #{ownerFamilyId})
         )
     </select>
 
@@ -84,8 +84,8 @@
         AND account_kind = 'REAL'
         AND linked_product_id = #{productId}
         AND (
-            (owner_type = 'PERSONAL' AND owner_user_id = #{ownerUserId})
-            OR (owner_type = 'FAMILY' AND owner_family_id = #{ownerFamilyId})
+            owner_user_id = #{ownerUserId}
+            OR (owner_family_id IS NOT NULL AND owner_family_id = #{ownerFamilyId})
         )
         ORDER BY account_name
     </select>

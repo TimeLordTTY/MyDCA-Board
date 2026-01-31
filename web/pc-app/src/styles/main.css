@@ -439,6 +439,7 @@ a {
 /* ============ Tables ============ */
 table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
   overflow: hidden;

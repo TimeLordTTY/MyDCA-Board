@@ -53,7 +53,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { useAccountStore } from '@wealth-hub/shared'
 import { ledgerApi, getFundUsageLabel, formatCurrency } from '@wealth-hub/shared'
 import type { Account, LedgerTxn } from '@wealth-hub/shared'
@@ -166,22 +166,22 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!props.expenseTxn) {
-    ElMessage.error('缺少原支出信息')
+    ElNotification.error({ title: '错误', message: '缺少原支出信息', position: 'bottom-right' })
     return
   }
   
   if (!form.value.occurredAt || !form.value.accountId || !form.value.amount) {
-    ElMessage.error('请填写完整信息')
+    ElNotification.error({ title: '错误', message: '请填写完整信息', position: 'bottom-right' })
     return
   }
 
   if (form.value.amount < 0.01) {
-    ElMessage.error('退款金额不能小于 0.01 元')
+    ElNotification.error({ title: '错误', message: '退款金额不能小于 0.01 元', position: 'bottom-right' })
     return
   }
 
   if (maxRefundAmount.value > 0 && form.value.amount > maxRefundAmount.value) {
-    ElMessage.error(`退款金额不能超过原交易金额 ${formatCurrency(maxRefundAmount.value)}`)
+    ElNotification.error({ title: '错误', message: `退款金额不能超过原交易金额 ${formatCurrency(maxRefundAmount.value)}`, position: 'bottom-right' })
     return
   }
 
@@ -193,11 +193,11 @@ async function handleSubmit() {
       occurredAt: form.value.occurredAt,
       note: form.value.note || undefined,
     })
-    ElMessage.success('退款成功')
+    ElNotification.success({ title: '成功', message: '退款成功', position: 'bottom-right' })
     emit('success')
     handleClose()
   } catch (error: any) {
-    ElMessage.error(error.message || '退款失败')
+    ElNotification.error({ title: '错误', message: error.message || '退款失败', position: 'bottom-right' })
   } finally {
     submitting.value = false
   }

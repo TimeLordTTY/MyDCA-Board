@@ -53,7 +53,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElNotification } from 'element-plus'
 import { useAccountStore } from '@wealth-hub/shared'
 import { ledgerApi, getFundUsageLabel, incomeCategories, getCategoryGroups } from '@wealth-hub/shared'
 import type { Account, LedgerTxn } from '@wealth-hub/shared'
@@ -175,12 +175,12 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!props.expenseTxn) {
-    ElMessage.error('缺少原支出信息')
+    ElNotification.error({ title: '错误', message: '缺少原支出信息', position: 'bottom-right' })
     return
   }
   
   if (!form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-    ElMessage.error('请填写完整信息')
+    ElNotification.error({ title: '错误', message: '请填写完整信息', position: 'bottom-right' })
     return
   }
 
@@ -196,11 +196,11 @@ async function handleSubmit() {
       occurredAt: form.value.occurredAt,
       note: form.value.note || undefined,
     })
-    ElMessage.success('报销成功')
+    ElNotification.success({ title: '成功', message: '报销成功', position: 'bottom-right' })
     emit('success')
     handleClose()
   } catch (error: any) {
-    ElMessage.error(error.message || '报销失败')
+    ElNotification.error({ title: '错误', message: error.message || '报销失败', position: 'bottom-right' })
   } finally {
     submitting.value = false
   }

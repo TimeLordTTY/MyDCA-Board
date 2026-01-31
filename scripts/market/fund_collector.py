@@ -178,11 +178,29 @@ class FundCollector:
         try:
             # 使用akshare采集基金净值
             if asset_type == 'MMF':
-                # 货币基金使用不同的接口
-                df = ak.fund_em_money_fund_info(fund=product_code)
+                # 货币基金使用货币基金接口
+                # 注意：akshare的货币基金接口返回的是每日收益数据，净值固定为1.0
+                # 参数名是 symbol，不是 fund
+                try:
+                    df = ak.fund_money_fund_info_em(symbol=product_code)
+                except (AttributeError, TypeError) as e:
+                    # 如果函数不存在或参数错误，尝试使用普通基金接口
+                    try:
+                        df = ak.fund_open_fund_info_em(symbol=product_code, indicator="单位净值走势")
+                    except Exception:
+                        raise e
             else:
                 # 普通基金使用基金净值接口
-                df = ak.fund_em_open_fund_info(fund=product_code)
+                # 参数名是 symbol，不是 fund
+                try:
+                    df = ak.fund_open_fund_info_em(symbol=product_code, indicator="单位净值走势")
+                except (AttributeError, TypeError):
+                    # 兼容旧版本akshare（如果有的话）
+                    try:
+                        df = ak.fund_em_open_fund_info(fund=product_code)
+                    except (AttributeError, TypeError):
+                        # 最后尝试ETF接口
+                        df = ak.fund_etf_fund_info_em(fund=product_code)
             
             if df is None or df.empty:
                 print(f"未获取到产品 {product_code} 的净值数据")

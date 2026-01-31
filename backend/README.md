@@ -3,7 +3,7 @@
 ## 项目信息
 
 - **包名**: `com.timelordtty.dca`
-- **服务端口**: 8765
+- **服务端口**: 8766
 - **接口版本**: `/api/v2/`
 - **Java版本**: 17
 - **Spring Boot版本**: 3.2.0
@@ -57,7 +57,7 @@ java -jar target/wealth-hub-1.0.0.jar --spring.profiles.active=prod
 
 ## 健康检查
 
-启动后访问：`http://localhost:8765/actuator/health`
+启动后访问：`http://localhost:8766/actuator/health`
 
 ## 项目结构
 

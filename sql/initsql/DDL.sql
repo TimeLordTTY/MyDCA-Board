@@ -328,7 +328,7 @@ CREATE TABLE `ledger_posting` (
   `posting_type` ENUM('DEBIT', 'CREDIT') NOT NULL COMMENT '借贷方向（amount永远为正数，方向由posting_type决定）',
   `account_id` BIGINT NOT NULL COMMENT '账户ID（外键accounts.id）',
   `account_type` ENUM('CASH', 'POSITION', 'FEE', 'INCOME', 'EXPENSE', 'LIABILITY', 'RECEIVABLE') NOT NULL COMMENT '账户类型',
-  `amount` DECIMAL(18, 2) NOT NULL COMMENT '金额（永远为正数，方向由posting_type决定）',
+  `amount` DECIMAL(18, 4) NOT NULL COMMENT '金额（永远为正数，方向由posting_type决定，4位小数用于精确计算成本价）',
   `account_balance_after` DECIMAL(18, 2) NULL COMMENT '该分录发生后的账户余额（用于显示历史余额）',
   `parent_account_balance_after` DECIMAL(18, 2) NULL COMMENT '该分录发生后的父账户余额（用于显示历史余额）',
   `shares` DECIMAL(20, 6) NULL COMMENT '份额（持仓类分录，永远为正数，方向由posting_type决定）',

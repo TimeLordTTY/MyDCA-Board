@@ -43,7 +43,7 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@wealth-hub/shared'
 
 const router = useRouter()
@@ -75,7 +75,7 @@ async function handleLogin() {
       const redirect = (route.query.redirect as string) || '/dashboard'
       router.push(redirect)
     } catch (error: any) {
-      ElMessage.error(error.message || '登录失败')
+      ElNotification.error({ title: '错误', message: error.message || '登录失败', position: 'bottom-right' })
     } finally {
       loading.value = false
     }
@@ -91,11 +91,11 @@ async function handleRegister() {
     loading.value = true
     try {
       await userStore.register(form)
-      ElMessage.success('注册成功')
+      ElNotification.success({ title: '成功', message: '注册成功', position: 'bottom-right' })
       const redirect = (route.query.redirect as string) || '/dashboard'
       router.push(redirect)
     } catch (error: any) {
-      ElMessage.error(error.message || '注册失败')
+      ElNotification.error({ title: '错误', message: error.message || '注册失败', position: 'bottom-right' })
     } finally {
       loading.value = false
     }

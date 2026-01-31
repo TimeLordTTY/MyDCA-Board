@@ -135,14 +135,14 @@
         <table class="ledger-table">
           <thead>
             <tr>
-              <th>时间</th>
-              <th class="right">金额</th>
-              <th>分类</th>
-              <th>叶子账户</th>
-              <th class="right">叶子账户余额</th>
-              <th class="right">父账户余额</th>
-              <th>备注</th>
-              <th class="right">操作</th>
+              <th style="width: 150px;">时间</th>
+              <th class="right" style="width: 100px;">金额</th>
+              <th style="width: 140px;">分类</th>
+              <th style="width: 200px;">叶子账户</th>
+              <th class="right" style="width: 110px;">叶子账户余额</th>
+              <th class="right" style="width: 110px;">父账户余额</th>
+              <th style="width: 180px;">备注</th>
+              <th class="right" style="width: 130px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -163,24 +163,22 @@
               <td class="right mono">{{ formatCurrency((txn as any).parentAccountBalance || 0) }}</td>
               <td class="td-muted">{{ txn.note || '' }}</td>
               <td class="right">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                  <div style="display: flex; gap: 8px;">
-                    <button
-                      v-if="txn.txnType === 'EXPENSE'"
-                      class="btn-small"
-                      @click="handleRefund(txn)"
-                    >
-                      退款
-                    </button>
-                    <button
-                      v-if="txn.txnType === 'EXPENSE' && (txn as any).isReimbursable"
-                      class="btn-small"
-                      @click="handleReimburse(txn)"
-                    >
-                      报销
-                    </button>
-                  </div>
-                  <button class="btn-small" style="margin-left: auto;" @click="handleViewDetail(txn)">详情</button>
+                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: nowrap;">
+                  <button
+                    v-if="txn.txnType === 'EXPENSE'"
+                    class="btn-small"
+                    @click="handleRefund(txn)"
+                  >
+                    退款
+                  </button>
+                  <button
+                    v-if="txn.txnType === 'EXPENSE' && (txn as any).isReimbursable"
+                    class="btn-small"
+                    @click="handleReimburse(txn)"
+                  >
+                    报销
+                  </button>
+                  <button class="btn-small" @click="handleViewDetail(txn)">详情</button>
                 </div>
               </td>
             </tr>
@@ -206,7 +204,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElPagination } from 'element-plus'
+import { ElNotification, ElPagination } from 'element-plus'
 import { ledgerApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
 import type { LedgerTxn, LedgerTxnDetail, LedgerPosting } from '@wealth-hub/shared'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
@@ -321,7 +319,7 @@ async function loadTransactions() {
     })) as LedgerTxn[]
     pagination.total = response.total
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
   } finally {
     loading.value = false
   }
@@ -348,7 +346,7 @@ async function handleViewDetail(txn: LedgerTxn) {
     postings.value = detail.postings || []
     detailVisible.value = true
   } catch (error: any) {
-    ElMessage.error(error.message || '加载详情失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载详情失败', position: 'bottom-right' })
   }
 }
 
@@ -544,6 +542,11 @@ function getAmountClass(txnType: string): string {
 
 /**
  * 格式化金额，根据交易类型添加正负号
+ * 注意：流水是从"到账账户"的角度展示的
+ * - 卖出/赎回：现金增加（DEBIT），显示正号
+ * - 买入/申购：现金减少（CREDIT），显示负号
+ * - 支出：现金减少（CREDIT），显示负号
+ * - 收入：现金增加（DEBIT），显示正号
  */
 function formatAmountWithSign(txnType: string, amount: number): string {
   if (amount === 0) {
@@ -554,23 +557,24 @@ function formatAmountWithSign(txnType: string, amount: number): string {
   switch (txnType) {
     case 'INCOME':
     case 'REIMBURSE_IN':
-    case 'REDEMPTION_IN':  // 赎回入金    case 'BUY':
-    case 'SUBSCRIPTION':
+    case 'REDEMPTION_IN':  // 赎回入金
+    case 'SELL':           // 卖出：现金入账
+    case 'REDEMPTION':     // 赎回：现金入账
     case 'TRANSFER_IN':
     case 'DIVIDEND_CASH':
     case 'DIVIDEND_REINVEST':
     case 'BOND_REPO':
-      sign = '+' // 收入、买入、申购、转入、分红、逆回购：正号
+      sign = '+' // 收入、卖出、赎回、转入、分红、逆回购：正号（现金增加）
       break
     case 'EXPENSE':
     case 'REIMBURSE_OUT':
-    case 'SELL':
-    case 'REDEMPTION':
-    case 'REDEMPTION_OUT':  // 赎回出金
+    case 'BUY':            // 买入：现金支出
+    case 'SUBSCRIPTION':   // 申购：现金支出
+    case 'REDEMPTION_OUT':  // 赎回出金（子账户减少）
     case 'TRANSFER_OUT':
     case 'FEE':
     case 'TAX':
-      sign = '-' // 支出、卖出、赎回、转出、费用：负号
+      sign = '-' // 支出、买入、申购、转出、费用：负号（现金减少）
       break
     case 'CUSTODY_TRANSFER':
     case 'CUSTODY_TRANSFER_OF':
@@ -598,7 +602,7 @@ async function handleRefund(txn: LedgerTxn) {
     selectedExpenseTxn.value = detail as any
     refundVisible.value = true
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
   }
 }
 
@@ -609,7 +613,7 @@ async function handleReimburse(txn: LedgerTxn) {
     selectedExpenseTxn.value = detail as any
     reimburseVisible.value = true
   } catch (error: any) {
-    ElMessage.error(error.message || '加载失败')
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
   }
 }
 

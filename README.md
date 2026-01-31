@@ -86,7 +86,7 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-后端服务将在 `http://localhost:8765` 启动。
+后端服务将在 `http://localhost:8766` 启动。
 
 ### 前端启动
 
