@@ -567,40 +567,30 @@ public class LedgerService {
                 Account parentAccount = accountMapper.selectById(accountAfter.getParentAccountId());
                 if (parentAccount != null && parentAccount.getLinkedProductId() != null) {
                     // 父账户是关联产品的账户（如货币基金账户）
-                    // 当子账户有现金流出（CREDIT）时，需要减少父账户的余额和份额
-                    if ("CASH".equals(posting.getAccountType()) && "CREDIT".equals(posting.getPostingType())) {
-                        // 减少父账户余额
-                        BigDecimal parentOldBalance = parentAccount.getBalance() != null ? parentAccount.getBalance() : BigDecimal.ZERO;
-                        BigDecimal parentNewBalance = parentOldBalance.subtract(posting.getAmount());
+                    // 当子账户有现金流变化时，需要同步更新父账户的余额和份额
+                    // 注意：使用已计算的 parentBalance（子账户余额之和），而不是数据库中可能过时的值
+                    if ("CASH".equals(posting.getAccountType())) {
+                        // 获取父账户在数据库中记录的旧份额（用于日志）
+                        BigDecimal parentOldShares = parentAccount.getInitialShares() != null ? parentAccount.getInitialShares() : BigDecimal.ZERO;
+                        
+                        // 父账户的新余额 = 子账户余额之和（已在上面计算为 parentBalance）
+                        // 注意：parentBalance 已经是更新后的子账户余额之和
+                        BigDecimal parentNewBalance = parentBalance;
                         if (parentNewBalance.compareTo(BigDecimal.ZERO) < 0) {
                             parentNewBalance = BigDecimal.ZERO;
                         }
+                        
+                        // 更新父账户余额
                         accountMapper.updateBalance(parentAccount.getId(), parentNewBalance);
                         
-                        // 减少父账户份额
-                        // 对于关联产品的账户，份额应该等于余额（货币基金净值通常是1.0）
-                        // 如果账户类型是MMF（货币基金），直接使用余额作为份额
+                        // 更新父账户份额
+                        // 对于货币基金账户，份额 ≈ 余额（净值通常接近1.0）
                         BigDecimal parentNewShares = parentNewBalance;
-                        
-                        // 如果不是MMF类型，尝试获取产品净值来计算份额
-                        if (!"MMF".equals(parentAccount.getAccountType())) {
-                            try {
-                                com.timelordtty.dca.model.ProductMaster product = productMasterMapper.selectById(parentAccount.getLinkedProductId());
-                                if (product != null) {
-                                    // 通过AccountService获取最新净值（如果有的话）
-                                    // 这里简化处理：对于非MMF类型，也使用余额作为份额（净值通常接近1.0）
-                                    // 如果需要精确计算，可以通过AccountService或NavService获取净值
-                                    parentNewShares = parentNewBalance;
-                                }
-                            } catch (Exception e) {
-                                // 如果获取产品信息失败，使用余额作为份额
-                                parentNewShares = parentNewBalance;
-                            }
-                        }
                         accountMapper.updateInitialShares(parentAccount.getId(), parentNewShares);
                         
-                        System.out.println(String.format("同步更新关联产品账户: 账户ID=%d, 余额 %s -> %s, 份额 -> %s", 
-                            parentAccount.getId(), parentOldBalance, parentNewBalance, parentNewShares));
+                        log.info("同步更新关联产品账户: 账户ID={}, 账户名={}, 旧份额={}, 新余额={}, 新份额={}", 
+                            parentAccount.getId(), parentAccount.getAccountName(), 
+                            parentOldShares, parentNewBalance, parentNewShares);
                     }
                 }
             } else {

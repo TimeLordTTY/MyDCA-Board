@@ -5,7 +5,10 @@
 
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
-const API_BASE_URL = '/api/v2'
+// API 基础路径：本地开发和生产环境使用相同的路径
+// 生产环境：nginx 代理 /wealth-hub/api/ -> 后端
+// 本地开发：vite proxy 代理 /wealth-hub/api/ -> 后端
+const API_BASE_URL = '/wealth-hub/api/v2'
 
 // 创建axios实例
 export const apiClient: AxiosInstance = axios.create({
@@ -45,13 +48,17 @@ apiClient.interceptors.response.use(
         // 清除token
         localStorage.removeItem('token')
         // 直接跳转到登录页
+        // 动态获取应用 base 路径（从当前 URL 推断，兼容 /wealth-hub/ 部署）
+        const basePath = window.location.pathname.startsWith('/wealth-hub') ? '/wealth-hub' : ''
+        const loginPath = `${basePath}/login`
         console.log('Session expired, redirecting to login...', {
           currentPath: window.location.pathname,
+          loginPath,
           status
         })
-        if (window.location.pathname !== '/login') {
+        if (!window.location.pathname.endsWith('/login')) {
           // 使用replace而不是href，避免在历史记录中留下记录
-          window.location.replace('/login')
+          window.location.replace(loginPath)
         }
       }
 
