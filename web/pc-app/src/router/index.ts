@@ -3,10 +3,10 @@
  */
 
 import { createRouter, createWebHistory } from 'vue-router'
-import { useUserStore } from '@wealth-hub/shared'
 
 const router = createRouter({
-  history: createWebHistory(),
+  // 使用 Vite 的 BASE_URL 作为 history 的 base，保证部署在 /wealth-hub/ 下时路由正常工作
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/login',
@@ -65,13 +65,13 @@ const router = createRouter({
   ],
 })
 
-// 路由守卫：检查认证
+// 路由守卫：检查认证（只依赖本地 token，避免在 Pinia 激活前调用 useUserStore）
 router.beforeEach((to, from, next) => {
-  const userStore = useUserStore()
-  
-  if (to.meta.requiresAuth && !userStore.isAuthenticated()) {
+  const token = localStorage.getItem('token')
+
+  if (to.meta.requiresAuth && !token) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
-  } else if (to.name === 'Login' && userStore.isAuthenticated()) {
+  } else if (to.name === 'Login' && token) {
     next({ name: 'Dashboard' })
   } else {
     next()
