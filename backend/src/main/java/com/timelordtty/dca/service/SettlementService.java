@@ -409,6 +409,9 @@ public class SettlementService {
                 // 用于存储各账户的分配信息
                 List<Object[]> accountAllocations = new ArrayList<>(); // [accountId, amount, shares, currency]
                 
+                // 用于标记哪些账户已经被处理
+                java.util.Set<Long> processedAccountIds = new java.util.HashSet<>();
+                
                 // 检查是否有非固定金额账户
                 boolean hasNonFixedAccount = false;
                 for (OrderFundingLine sourceLine : sourceLines) {
@@ -448,13 +451,18 @@ public class SettlementService {
                             sourceLine.getCurrency()
                         });
                         
+                        processedAccountIds.add(sourceLine.getAccountId());
                         remainingCreditAmount = remainingCreditAmount.subtract(accountAmount);
                     }
                 }
                 
-                // 计算非固定金额账户的原始份额总和（用于按比例分配）
+                // 计算非固定金额账户的原始份额总和（用于按比例分配，只计算未处理的账户）
                 BigDecimal nonFixedTotalShares = BigDecimal.ZERO;
                 for (OrderFundingLine sourceLine : sourceLines) {
+                    // 跳过已经处理的账户
+                    if (processedAccountIds.contains(sourceLine.getAccountId())) {
+                        continue;
+                    }
                     Account sourceAccount = accountMapper.selectById(sourceLine.getAccountId());
                     if (sourceAccount == null || !Boolean.TRUE.equals(sourceAccount.getIsFixedAmount())) {
                         nonFixedTotalShares = nonFixedTotalShares.add(
@@ -468,6 +476,10 @@ public class SettlementService {
                 int nonFixedCount = 0;
                 int currentNonFixed = 0;
                 for (OrderFundingLine sourceLine : sourceLines) {
+                    // 跳过已经处理的账户
+                    if (processedAccountIds.contains(sourceLine.getAccountId())) {
+                        continue;
+                    }
                     Account sourceAccount = accountMapper.selectById(sourceLine.getAccountId());
                     if (sourceAccount == null || !Boolean.TRUE.equals(sourceAccount.getIsFixedAmount())) {
                         nonFixedCount++;
@@ -475,6 +487,11 @@ public class SettlementService {
                 }
                 
                 for (OrderFundingLine sourceLine : sourceLines) {
+                    // 跳过已经处理的账户
+                    if (processedAccountIds.contains(sourceLine.getAccountId())) {
+                        continue;
+                    }
+                    
                     Account sourceAccount = accountMapper.selectById(sourceLine.getAccountId());
                     if (sourceAccount == null || !Boolean.TRUE.equals(sourceAccount.getIsFixedAmount())) {
                         currentNonFixed++;
@@ -502,7 +519,75 @@ public class SettlementService {
                             accountShares, 
                             sourceLine.getCurrency()
                         });
+                        
+                        processedAccountIds.add(sourceLine.getAccountId());
                     }
+                }
+                
+                // 第三轮：处理未被处理的 SOURCE 账户（按份额比例分配剩余金额）
+                // 这确保所有 SOURCE 账户都会生成分录
+                if (processedAccountIds.size() < sourceLines.size()) {
+                    // 计算未处理账户的份额总和
+                    BigDecimal unprocessedTotalShares = BigDecimal.ZERO;
+                    int unprocessedCount = 0;
+                    for (OrderFundingLine sourceLine : sourceLines) {
+                        if (!processedAccountIds.contains(sourceLine.getAccountId())) {
+                            unprocessedCount++;
+                            if (sourceLine.getShares() != null) {
+                                unprocessedTotalShares = unprocessedTotalShares.add(sourceLine.getShares());
+                            }
+                        }
+                    }
+                    
+                    // 按份额比例分配剩余金额
+                    BigDecimal unprocessedRemainingAmount = remainingCreditAmount;
+                    int currentUnprocessed = 0;
+                    for (OrderFundingLine sourceLine : sourceLines) {
+                        if (!processedAccountIds.contains(sourceLine.getAccountId())) {
+                            currentUnprocessed++;
+                            BigDecimal accountAmount;
+                            BigDecimal accountShares;
+                            
+                            if (currentUnprocessed == unprocessedCount) {
+                                // 最后一个未处理账户：分配所有剩余金额（确保借贷平衡）
+                                accountAmount = unprocessedRemainingAmount;
+                            } else if (unprocessedTotalShares.compareTo(BigDecimal.ZERO) > 0 && sourceLine.getShares() != null) {
+                                // 按份额比例分配剩余金额（使用 remainingCreditAmount 作为基准）
+                                BigDecimal ratio = sourceLine.getShares().divide(unprocessedTotalShares, 10, RoundingMode.HALF_UP);
+                                accountAmount = remainingCreditAmount.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
+                            } else {
+                                // 如果没有份额信息，平均分配剩余金额（使用 remainingCreditAmount 作为基准）
+                                accountAmount = remainingCreditAmount.divide(new BigDecimal(unprocessedCount - currentUnprocessed + 1), 2, RoundingMode.HALF_UP);
+                            }
+                            
+                            // 从 unprocessedRemainingAmount 中扣减（用于最后一个账户的精确分配）
+                            if (currentUnprocessed < unprocessedCount) {
+                                unprocessedRemainingAmount = unprocessedRemainingAmount.subtract(accountAmount);
+                            }
+                            
+                            accountShares = accountAmount.divide(confirmNav, 6, RoundingMode.HALF_UP);
+                            
+                            accountAllocations.add(new Object[]{
+                                sourceLine.getAccountId(), 
+                                accountAmount, 
+                                accountShares, 
+                                sourceLine.getCurrency()
+                            });
+                            
+                            processedAccountIds.add(sourceLine.getAccountId());
+                        }
+                    }
+                    
+                    // 更新剩余金额
+                    remainingCreditAmount = unprocessedRemainingAmount;
+                }
+                
+                // 如果还有剩余金额（由于四舍五入），调整最后一个账户
+                if (remainingCreditAmount.abs().compareTo(new BigDecimal("0.01")) > 0 && !accountAllocations.isEmpty()) {
+                    Object[] lastAllocation = accountAllocations.get(accountAllocations.size() - 1);
+                    BigDecimal currentAmount = (BigDecimal) lastAllocation[1];
+                    lastAllocation[1] = currentAmount.add(remainingCreditAmount).setScale(2, RoundingMode.HALF_UP);
+                    lastAllocation[2] = ((BigDecimal) lastAllocation[1]).divide(confirmNav, 6, RoundingMode.HALF_UP);
                 }
                 
                 // 如果全是固定金额账户，需要调整最后一个账户以确保借贷平衡
@@ -519,6 +604,21 @@ public class SettlementService {
                         lastAllocation[1] = currentAmount.add(diff).setScale(2, RoundingMode.HALF_UP);
                         lastAllocation[2] = ((BigDecimal) lastAllocation[1]).divide(confirmNav, 6, RoundingMode.HALF_UP);
                     }
+                }
+                
+                // 验证总金额：确保所有账户的分配金额总和等于 totalConfirmAmount
+                BigDecimal totalAllocatedAmount = BigDecimal.ZERO;
+                for (Object[] allocation : accountAllocations) {
+                    totalAllocatedAmount = totalAllocatedAmount.add((BigDecimal) allocation[1]);
+                }
+                
+                // 如果总分配金额与 totalConfirmAmount 不一致，调整最后一个账户
+                BigDecimal diff = totalConfirmAmount.subtract(totalAllocatedAmount);
+                if (diff.abs().compareTo(new BigDecimal("0.01")) > 0 && !accountAllocations.isEmpty()) {
+                    Object[] lastAllocation = accountAllocations.get(accountAllocations.size() - 1);
+                    BigDecimal currentAmount = (BigDecimal) lastAllocation[1];
+                    lastAllocation[1] = currentAmount.add(diff).setScale(2, RoundingMode.HALF_UP);
+                    lastAllocation[2] = ((BigDecimal) lastAllocation[1]).divide(confirmNav, 6, RoundingMode.HALF_UP);
                 }
                 
                 // 生成 CASH CREDIT 分录

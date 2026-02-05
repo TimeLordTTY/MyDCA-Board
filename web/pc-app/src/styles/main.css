@@ -36,7 +36,7 @@
   --fs24: 24px;
 
   --gap: 14px;
-  --max: 1180px;
+  --max: 1500px;
 }
 
 * {
@@ -255,6 +255,18 @@ a {
   border-color: rgba(78, 164, 255, 0.35);
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(78, 164, 255, 0.15);
+}
+
+.btn-small.btn-danger {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+
+.btn-small.btn-danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.15);
 }
 
 .avatar {

@@ -78,18 +78,18 @@ public class OrderController {
         if (settlement != null && settlement.getConfirmFee() != null) {
             actualFee = settlement.getConfirmFee();
         } else {
-            // 如果没有结算确认，尝试从ledger_posting中查询
+            // 如果没有结算确认，尝试从ledger_posting中查询（使用批量查询优化）
             List<LedgerTxn> txns = ledgerTxnMapper.selectByOrderId(orderId);
-            for (LedgerTxn txn : txns) {
-                List<LedgerPosting> postings = ledgerPostingMapper.selectByTxnId(txn.getTxnId());
-                for (LedgerPosting posting : postings) {
+            if (!txns.isEmpty()) {
+                // 批量查询所有交易的postings
+                List<String> txnIds = txns.stream().map(LedgerTxn::getTxnId).collect(java.util.stream.Collectors.toList());
+                List<LedgerPosting> allPostings = ledgerPostingMapper.selectByTxnIds(txnIds);
+                // 查找FEE类型的posting
+                for (LedgerPosting posting : allPostings) {
                     if ("FEE".equals(posting.getAccountType()) && posting.getAmount() != null) {
                         actualFee = posting.getAmount();
                         break;
                     }
-                }
-                if (actualFee != null && actualFee.compareTo(BigDecimal.ZERO) > 0) {
-                    break;
                 }
             }
         }

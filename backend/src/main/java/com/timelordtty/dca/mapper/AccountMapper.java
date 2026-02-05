@@ -10,6 +10,7 @@ import java.util.List;
 @Mapper
 public interface AccountMapper {
     Account selectById(@Param("id") Long id);
+    List<Account> selectByIds(@Param("ids") List<Long> ids);
     Account selectByCode(@Param("accountCode") String accountCode);
     List<Account> selectByOwner(@Param("ownerUserId") Long ownerUserId, @Param("ownerFamilyId") Long ownerFamilyId);
     List<Account> selectVirtualAccountsByOwner(@Param("ownerUserId") Long ownerUserId,

@@ -43,6 +43,9 @@
 
         <div class="actions">
           <button class="btn ghost" @click="handleRefresh">⟳ 刷新数据</button>
+          <button class="btn ghost" @click="handleRefreshMarketData" :disabled="refreshingMarket">
+            {{ refreshingMarket ? '⏳ 采集中...' : '📈 刷新行情' }}
+          </button>
           <button class="btn primary" @click="handleUnifiedEntry">📝 记一笔</button>
           <div class="avatar" @click="handleProfile">👤</div>
         </div>
@@ -63,8 +66,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
 import QuickEntryModal from '../components/QuickEntryModal.vue'
+import { productApi, apiClient } from '@wealth-hub/shared'
 
 const router = useRouter()
 const route = useRoute()
@@ -72,6 +77,7 @@ const route = useRoute()
 const unifiedEntryVisible = ref(false)
 const quickExpenseVisible = ref(false)
 const quickIncomeVisible = ref(false)
+const refreshingMarket = ref(false)
 
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', label: '总览' },
@@ -86,6 +92,39 @@ const navItems = [
 function handleRefresh() {
   // TODO: 刷新当前页面数据
   window.location.reload()
+}
+
+async function handleRefreshMarketData() {
+  if (refreshingMarket.value) return
+  
+  try {
+    refreshingMarket.value = true
+
+    // 优先使用 shared 中封装好的 API 方法；
+    // 如果旧版本 shared 中还没有该方法，则直接调用底层 HTTP 接口，避免报错。
+    if ((productApi as any).refreshAllMarketData) {
+      await (productApi as any).refreshAllMarketData()
+    } else {
+      await apiClient.post('/products/refresh-all-market-data')
+    }
+    ElNotification.success({
+      title: '成功',
+      message: '行情数据采集任务已启动，将在后台执行',
+      position: 'bottom-right',
+      duration: 3000
+    })
+  } catch (error: any) {
+    ElNotification.error({
+      title: '错误',
+      message: error.message || '刷新行情失败',
+      position: 'bottom-right'
+    })
+  } finally {
+    // 3秒后恢复按钮状态（实际采集在后台执行）
+    setTimeout(() => {
+      refreshingMarket.value = false
+    }, 3000)
+  }
 }
 
 function handleUnifiedEntry() {

@@ -16,10 +16,14 @@ public interface LedgerTxnMapper {
     List<LedgerTxn> selectByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
                                        @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,
                                        @Param("productId") Long productId, @Param("accountId") Long accountId,
+                                       @Param("childAccountIds") List<Long> childAccountIds,
+                                       @Param("note") String note,
                                        @Param("offset") Integer offset, @Param("limit") Integer limit);
     int countByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
                          @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,
-                         @Param("productId") Long productId, @Param("accountId") Long accountId);
+                         @Param("productId") Long productId, @Param("accountId") Long accountId,
+                         @Param("childAccountIds") List<Long> childAccountIds,
+                         @Param("note") String note);
     int insert(LedgerTxn txn);
     int update(LedgerTxn txn);
     int deleteByTxnId(@Param("txnId") String txnId);

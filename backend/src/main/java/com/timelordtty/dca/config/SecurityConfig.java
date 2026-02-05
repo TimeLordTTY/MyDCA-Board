@@ -38,6 +38,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v2/auth/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/accounts/recalculate-all-balances").permitAll()  // 临时公开：重新计算余额
+                        .requestMatchers("/api/v2/ledger/recalculate-all-balance-history").permitAll()  // 临时公开：重算历史余额
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

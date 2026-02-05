@@ -948,6 +948,9 @@ async function handleSave() {
       
       dialogVisible.value = false
       await loadAllProducts()
+      
+      // 通知其他页面（例如“记一笔”中的产品列表）刷新数据
+      window.dispatchEvent(new CustomEvent('data-refresh'))
     } catch (error: any) {
       ElNotification.error({ title: '错误', message: error.message || '保存失败', position: 'bottom-right' })
     } finally {

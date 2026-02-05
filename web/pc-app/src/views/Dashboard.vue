@@ -572,10 +572,8 @@ let allocationChart: echarts.ECharts | null = null
 
 async function loadData() {
   try {
-    // 确保账户数据已加载
-    if (accountStore.accounts.length === 0) {
-      await accountStore.fetchAccounts()
-    }
+    // 确保账户数据已加载（必须在最前面，因为可用资金等计算依赖账户数据）
+    await accountStore.fetchAccounts()
     
     // 加载资产概览
     const overviewData = await dashboardApi.getAssetOverview()
@@ -655,9 +653,6 @@ async function loadData() {
       console.error('Failed to load holdings:', error)
       holdings.value = []
     }
-
-    // 加载账户数据
-    await accountStore.fetchAccounts()
 
     // 更新图表
     updateAllocationChart()

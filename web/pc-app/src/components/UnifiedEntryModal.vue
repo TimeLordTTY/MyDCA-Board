@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     v-model="visible"
-    title="记一笔"
+    :title="props.editingTxn ? '编辑流水' : '记一笔'"
     width="800px"
     :close-on-click-modal="false"
     @close="handleClose"
@@ -38,6 +38,7 @@
               type="datetime"
               placeholder="选择发生时间"
               style="width: 100%"
+              size="small"
               format="YYYY-MM-DD HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
             />
@@ -175,6 +176,7 @@
               type="datetime"
               placeholder="选择发生时间"
               style="width: 100%"
+              size="small"
               format="YYYY-MM-DD HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
             />
@@ -244,6 +246,7 @@
               type="datetime"
               placeholder="选择发生时间"
               style="width: 100%"
+              size="small"
               format="YYYY-MM-DD HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
             />
@@ -297,6 +300,9 @@
             </el-form-item>
             <el-form-item label="金额（元）" required>
               <el-input-number v-model="form.amount" :min="0.01" :precision="2" style="width: 100%" />
+            </el-form-item>
+            <el-form-item label="备注">
+              <el-input v-model="form.note" placeholder="留空则自动生成（转账: 转出账户 → 转入账户）" />
             </el-form-item>
           </template>
 
@@ -817,7 +823,7 @@
           </el-form-item>
             <el-form-item label="手续费">
               <el-input-number v-model="form.fee" :min="0" :precision="2" style="width: 100%" />
-            </el-form-item>
+          </el-form-item>
           <el-form-item v-if="form.shares && form.nav" label="预计到账金额">
             <div style="color: #f59e0b; font-weight: 600; font-size: 16px;">
               {{ (form.shares * form.nav - (form.fee || 0)).toFixed(2) }} 元
@@ -965,6 +971,7 @@
               type="datetime"
               placeholder="选择发生时间"
               style="width: 100%"
+              size="small"
               format="YYYY-MM-DD HH:mm:ss"
               value-format="YYYY-MM-DD HH:mm:ss"
             />
@@ -1138,7 +1145,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { ElNotification } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
 import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi, holdingApi } from '@wealth-hub/shared'
-import type { Account } from '@wealth-hub/shared'
+import type { Account, LedgerTxnDetail } from '@wealth-hub/shared'
 
 // 账户持仓信息类型
 interface AccountHoldingInfo {
@@ -1151,6 +1158,7 @@ interface AccountHoldingInfo {
 
 const props = defineProps<{
   modelValue: boolean
+  editingTxn?: LedgerTxnDetail | null  // 编辑模式：传入要编辑的交易
 }>()
 
 const emit = defineEmits<{
@@ -2031,53 +2039,252 @@ watch(visible, async (val) => {
       productStore.fetchProducts(),
       preloadAllHoldings()
     ])
-    step.value = 1
-    selectedType.value = ''
+    
+    // 编辑模式：回填数据
+    if (props.editingTxn) {
+      // 先重置表单，确保没有缓存数据
+      const now = new Date()
+      const pad = (n: number) => n.toString().padStart(2, '0')
+      const localNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+      form.value = {
+        occurredAt: localNow,
+        category: [],
+        parentAccountId: undefined,
+        accountId: undefined,
+        creditAccountId: undefined,
+        fromParentAccountId: undefined,
+        fromAccountId: undefined,
+        toParentAccountId: undefined,
+        toAccountId: undefined,
+        productId: undefined,
+        orderType: 'BUY',
+        amount: undefined,
+        shares: undefined,
+        fee: 0,
+        requestedAt: localNow,
+        confirmDate: undefined,
+        navDate: undefined,
+        nav: undefined,
+        transferDate: undefined,
+        transferOutPrice: 0,
+        transferInPrice: 0,
+        fromChannel: 'OTC',
+        toChannel: 'EXCHANGE',
+        channel: undefined,
+        relatedTxnId: undefined,
+        isReimbursable: false,
+        repoDays: 1,
+        repoRate: undefined,
+        note: '',
+      }
+      buyFundingLines.value = []
+      sellFundingLines.value = []
+      expenseFundingLines.value = []
+      useComboPayment.value = false
+      transferType.value = 'AMOUNT'
+      adjustType.value = 'BALANCE'
+      shareTransfer.value = {
+        parentAccountId: undefined,
+        fromAccountId: undefined,
+        toAccountId: undefined,
+        shares: undefined,
+        note: ''
+      }
+      shareTransferAccountShares.value.clear()
+      
+      // 然后回填数据
+      selectedType.value = props.editingTxn.txnType
+      step.value = 2  // 直接进入第二步
+      
+      // 回填基本信息（直接使用后端时间字符串，避免时区偏移）
+      if (props.editingTxn.requestedAt) {
+        form.value.occurredAt = props.editingTxn.requestedAt
+      }
+      form.value.note = props.editingTxn.note || ''
+      form.value.isReimbursable = props.editingTxn.isReimbursable || false
+      
+      // 回填分类（级联选择器需要完整的路径）
+      if (props.editingTxn.categoryId) {
+        const categories = (props.editingTxn.txnType === 'EXPENSE' ? expenseCategories : incomeCategories)
+        const category = findCategoryById(categories, props.editingTxn.categoryId)
+        if (category) {
+          // 级联选择器的路径格式：
+          // - 如果有二级分类：[categoryL1, categoryId]
+          // - 如果只有一级分类：直接使用 [categoryId]（但需要找到对应的group）
+          if (category.categoryL2) {
+            // 有二级分类，路径是 [categoryL1, categoryId]
+            form.value.category = [category.categoryL1, props.editingTxn.categoryId]
+          } else {
+            // 只有一级分类，需要找到对应的group
+            const groups = getCategoryGroups(categories)
+            const group = groups.find((g: any) => g.categoryL1 === category.categoryL1)
+            if (group && group.categories.length === 1) {
+              // 如果group只有一个分类且没有二级分类，路径就是 [categoryId]
+              form.value.category = [props.editingTxn.categoryId]
+            } else {
+              // 如果有多个分类，路径是 [categoryL1, categoryId]
+              form.value.category = [category.categoryL1, props.editingTxn.categoryId]
+            }
+          }
+        }
+      }
+      
+      // 对于支出和收入，从postings中提取账户和金额信息
+      if ((props.editingTxn.txnType === 'EXPENSE' || props.editingTxn.txnType === 'INCOME') && props.editingTxn.postings) {
+        const postings = props.editingTxn.postings
+        
+        // 支出：找到CREDIT的CASH账户（付款账户）和金额
+        if (props.editingTxn.txnType === 'EXPENSE') {
+          const cashCreditPosting = postings.find(p => p.postingType === 'CREDIT' && p.accountType === 'CASH')
+          if (cashCreditPosting) {
+            form.value.amount = Number(cashCreditPosting.amount)
+            const account = findAccountInTree(accountStore.accountTree, cashCreditPosting.accountId)
+            if (account) {
+              form.value.accountId = account.id
+              form.value.parentAccountId = account.parentAccountId
+            }
+            
+            // 检查是否有多个付款账户（组合支付）
+            const cashCreditPostings = postings.filter(p => p.postingType === 'CREDIT' && p.accountType === 'CASH')
+            if (cashCreditPostings.length > 1) {
+              useComboPayment.value = true
+              expenseFundingLines.value = cashCreditPostings.map(p => {
+                const acc = findAccountInTree(accountStore.accountTree, p.accountId)
+                return {
+                  parentAccountId: acc?.parentAccountId,
+                  accountId: p.accountId,
+                  amount: Number(p.amount)
+                }
+              })
+            }
+          }
+        }
+        
+        // 收入：找到DEBIT的CASH账户（收款账户）和金额
+        if (props.editingTxn.txnType === 'INCOME') {
+          const cashDebitPosting = postings.find(p => p.postingType === 'DEBIT' && p.accountType === 'CASH')
+          if (cashDebitPosting) {
+            form.value.amount = Number(cashDebitPosting.amount)
+            const account = findAccountInTree(accountStore.accountTree, cashDebitPosting.accountId)
+            if (account) {
+              form.value.accountId = account.id
+              form.value.parentAccountId = account.parentAccountId
+            }
+          }
+        }
+      }
+      
+      // 转账：从postings中提取转出和转入账户信息
+      if ((props.editingTxn.txnType === 'TRANSFER_OUT' || props.editingTxn.txnType === 'TRANSFER_IN') && props.editingTxn.postings) {
+        const postings = props.editingTxn.postings
+        transferType.value = 'AMOUNT'  // 默认金额转账模式
+        
+        // 找到 CREDIT（转出）的账户
+        const creditPosting = postings.find(p => p.postingType === 'CREDIT')
+        if (creditPosting) {
+          form.value.amount = Number(creditPosting.amount)
+          const fromAccount = findAccountInTree(accountStore.accountTree, creditPosting.accountId)
+          if (fromAccount) {
+            form.value.fromAccountId = fromAccount.id
+            form.value.fromParentAccountId = fromAccount.parentAccountId
+          }
+        }
+        
+        // 找到 DEBIT（转入）的账户
+        const debitPosting = postings.find(p => p.postingType === 'DEBIT')
+        if (debitPosting) {
+          const toAccount = findAccountInTree(accountStore.accountTree, debitPosting.accountId)
+          if (toAccount) {
+            form.value.toAccountId = toAccount.id
+            form.value.toParentAccountId = toAccount.parentAccountId
+          }
+        }
+
+        // 根据原交易账户信息，判断备注是否为系统自动生成的"转账: A → B"
+        const fromParentAccount = form.value.fromParentAccountId
+          ? findAccountInTree(accountStore.accountTree, form.value.fromParentAccountId)
+          : null
+        const fromLeafAccount = form.value.fromAccountId
+          ? findAccountInTree(accountStore.accountTree, form.value.fromAccountId)
+          : null
+        const toParentAccount = form.value.toParentAccountId
+          ? findAccountInTree(accountStore.accountTree, form.value.toParentAccountId)
+          : null
+        const toLeafAccount = form.value.toAccountId
+          ? findAccountInTree(accountStore.accountTree, form.value.toAccountId)
+          : null
+
+        const fromParentName = fromParentAccount?.accountName || ''
+        const fromName = fromLeafAccount?.accountName || '账户'
+        const toParentName = toParentAccount?.accountName || ''
+        const toName = toLeafAccount?.accountName || '账户'
+        const fromFullName = fromParentName ? `${fromParentName}-${fromName}` : fromName
+        const toFullName = toParentName ? `${toParentName}-${toName}` : toName
+        const generatedAutoNote = `转账: ${fromFullName} → ${toFullName}`
+
+        // 如果现有备注与自动生成的完全一致，认为是系统备注，编辑时清空，方便根据新账户重新生成
+        if (props.editingTxn.note && props.editingTxn.note === generatedAutoNote) {
+          form.value.note = ''
+        } else {
+          // 否则认为是用户自定义备注，保留原备注供手动修改
+          form.value.note = props.editingTxn.note || ''
+        }
+      }
+    } else {
+      // 新建模式：重置表单
+      step.value = 1
+      selectedType.value = ''
+    // 默认使用本地时间，避免少8小时的问题
+    const now = new Date()
+    const pad = (n: number) => n.toString().padStart(2, '0')
+    const localNow = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+
     form.value = {
-      occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      category: [],
-      parentAccountId: undefined,
-      accountId: undefined,
-      creditAccountId: undefined,
-      fromParentAccountId: undefined,
-      fromAccountId: undefined,
-      toParentAccountId: undefined,
-      toAccountId: undefined,
-      productId: undefined,
-      orderType: 'BUY',
-      amount: undefined,
-      shares: undefined,
-      fee: 0,
-      requestedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      confirmDate: undefined,
-      navDate: undefined,
-      nav: undefined,
-      transferDate: undefined,
-      transferOutPrice: 0,
-      transferInPrice: 0,
-      fromChannel: 'OTC',
-      toChannel: 'EXCHANGE',
-      channel: undefined,
-      relatedTxnId: undefined,
-      isReimbursable: false,
-      repoDays: 1,
-      repoRate: undefined,
-      note: '',
+      occurredAt: localNow,
+        category: [],
+        parentAccountId: undefined,
+        accountId: undefined,
+        creditAccountId: undefined,
+        fromParentAccountId: undefined,
+        fromAccountId: undefined,
+        toParentAccountId: undefined,
+        toAccountId: undefined,
+        productId: undefined,
+        orderType: 'BUY',
+        amount: undefined,
+        shares: undefined,
+        fee: 0,
+      requestedAt: localNow,
+        confirmDate: undefined,
+        navDate: undefined,
+        nav: undefined,
+        transferDate: undefined,
+        transferOutPrice: 0,
+        transferInPrice: 0,
+        fromChannel: 'OTC',
+        toChannel: 'EXCHANGE',
+        channel: undefined,
+        relatedTxnId: undefined,
+        isReimbursable: false,
+        repoDays: 1,
+        repoRate: undefined,
+        note: '',
+      }
+      buyFundingLines.value = []
+      sellFundingLines.value = []
+      expenseFundingLines.value = []
+      useComboPayment.value = false
+      transferType.value = 'AMOUNT'
+      adjustType.value = 'BALANCE'
+      shareTransfer.value = {
+        parentAccountId: undefined,
+        fromAccountId: undefined,
+        toAccountId: undefined,
+        shares: undefined,
+        note: ''
+      }
+      shareTransferAccountShares.value.clear()
     }
-    buyFundingLines.value = []
-    sellFundingLines.value = []
-    expenseFundingLines.value = []
-    useComboPayment.value = false
-    transferType.value = 'AMOUNT'
-    adjustType.value = 'BALANCE'
-    shareTransfer.value = {
-      parentAccountId: undefined,
-      fromAccountId: undefined,
-      toAccountId: undefined,
-      shares: undefined,
-      note: ''
-    }
-    shareTransferAccountShares.value.clear()
   }
 })
 
@@ -2543,14 +2750,14 @@ watch(() => form.value.navDate, async (newNavDate) => {
         form.value.nav = nav.nav
         // 显示净值变化提示
         if (oldNav && oldNav !== nav.nav) {
-          ElNotification.info({ title: '提示', message: `净值已更新为 ${nav.nav.toFixed(6)}（日期：${newNavDate}）`, position: 'bottom-right' })
+          ElNotification.info({ title: '提示', message: `净值已更新为 ${nav.nav.toFixed(6)}（日期：${newNavDate}）`, position: 'bottom-right', duration: 3000 })
         }
       } else {
-        ElNotification.warning({ title: '警告', message: `未找到 ${newNavDate} 的净值数据，请手动输入`, position: 'bottom-right' })
+        ElNotification.warning({ title: '警告', message: `未找到 ${newNavDate} 的净值数据，请手动输入`, position: 'bottom-right', duration: 3000 })
       }
     } catch (error) {
       console.error('获取净值失败:', error)
-      ElNotification.warning({ title: '警告', message: '获取净值失败，请手动输入', position: 'bottom-right' })
+      ElNotification.warning({ title: '警告', message: '获取净值失败，请手动输入', position: 'bottom-right', duration: 3000 })
     }
   }
 })
@@ -2753,7 +2960,7 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!selectedType.value) {
-    ElNotification.error({ title: '错误', message: '请选择业务类型', position: 'bottom-right' })
+    ElNotification.error({ title: '错误', message: '请选择业务类型', position: 'bottom-right', duration: 3000 })
     return
   }
 
@@ -2766,7 +2973,9 @@ async function handleSubmit() {
     if (selectedType.value === 'EXPENSE') {
       // 验证必填字段
       if (!form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（金额、时间、分类）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（金额、时间、分类）', position: 'bottom-right', duration: 3000 })
         return
       }
       
@@ -2774,13 +2983,17 @@ async function handleSubmit() {
       if (useComboPayment.value) {
         const validLines = expenseFundingLines.value.filter(fl => fl.accountId && fl.amount)
         if (validLines.length === 0) {
-          ElNotification.error({ title: '错误', message: '请至少添加一个付款账户', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请至少添加一个付款账户', position: 'bottom-right', duration: 3000 })
           return
         }
         // 验证分配金额
         const totalAllocated = validLines.reduce((sum, fl) => sum + (fl.amount || 0), 0)
         if (Math.abs(totalAllocated - (form.value.amount || 0)) > 0.01) {
-          ElNotification.error({ title: '错误', message: `分配金额 ${totalAllocated.toFixed(2)} 元与总金额 ${form.value.amount?.toFixed(2)} 元不一致`, position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: `分配金额 ${totalAllocated.toFixed(2)} 元与总金额 ${form.value.amount?.toFixed(2)} 元不一致`, position: 'bottom-right', duration: 3000 })
           return
         }
         
@@ -2797,7 +3010,9 @@ async function handleSubmit() {
       } else {
         // 单账户验证
         if (!form.value.parentAccountId || !form.value.accountId) {
-          ElNotification.error({ title: '错误', message: '请选择付款账户', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请选择付款账户', position: 'bottom-right', duration: 3000 })
           return
         }
         postings.push({
@@ -2836,21 +3051,50 @@ async function handleSubmit() {
         autoNote = categoryName + (accountName ? ` - ${accountName}` : '')
       }
       
-      await ledgerApi.createTransaction({
-        txnType: selectedType.value,
-        postings,
-        note: autoNote || undefined,
-        requestedAt: form.value.occurredAt,
-        categoryId: categoryId,
-        isReimbursable: form.value.isReimbursable,
-      })
-      ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
+      // 编辑模式：更新交易
+      if (props.editingTxn) {
+        await ledgerApi.updateTransaction(props.editingTxn.txnId, {
+          txnType: selectedType.value,
+          postings,
+          note: autoNote || undefined,
+          requestedAt: form.value.occurredAt,
+          categoryId: categoryId,
+          isReimbursable: form.value.isReimbursable,
+        })
+        ElNotification.success({
+          title: '成功',
+          message: '支出记录已更新',
+          position: 'bottom-right',
+          duration: 3000,
+        })
+      } else {
+        // 新建模式：创建交易
+        await ledgerApi.createTransaction({
+          txnType: selectedType.value,
+          postings,
+          note: autoNote || undefined,
+          requestedAt: form.value.occurredAt,
+          categoryId: categoryId,
+          isReimbursable: form.value.isReimbursable,
+        })
+        const expenseMessage = autoNote 
+          ? `支出记录已提交：${autoNote}`
+          : '支出记录已提交'
+        ElNotification.success({
+          title: '成功',
+          message: expenseMessage,
+          position: 'bottom-right',
+          duration: 3000,
+        })
+      }
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'INCOME') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括父账户和子账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括父账户和子账户）', position: 'bottom-right', duration: 3000 })
         return
       }
       const categoryId = Array.isArray(form.value.category) 
@@ -2881,20 +3125,48 @@ async function handleSubmit() {
         incomeAutoNote = categoryName + (accountName ? ` - ${accountName}` : '')
       }
       
-      await ledgerApi.createTransaction({
-        txnType: selectedType.value,
-        postings,
-        note: incomeAutoNote || undefined,
-        requestedAt: form.value.occurredAt,
-        categoryId: categoryId,
-      })
-      ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
+      // 编辑模式：更新交易
+      if (props.editingTxn) {
+        await ledgerApi.updateTransaction(props.editingTxn.txnId, {
+          txnType: selectedType.value,
+          postings,
+          note: incomeAutoNote || undefined,
+          requestedAt: form.value.occurredAt,
+          categoryId: categoryId,
+        })
+        ElNotification.success({
+          title: '成功',
+          message: '收入记录已更新',
+          position: 'bottom-right',
+          duration: 3000,
+        })
+      } else {
+        // 新建模式：创建交易
+        await ledgerApi.createTransaction({
+          txnType: selectedType.value,
+          postings,
+          note: incomeAutoNote || undefined,
+          requestedAt: form.value.occurredAt,
+          categoryId: categoryId,
+        })
+        const notificationMessage = incomeAutoNote 
+          ? `收入记录已提交：${incomeAutoNote}`
+          : '收入记录已提交'
+        ElNotification.success({
+          title: '成功',
+          message: notificationMessage,
+          position: 'bottom-right',
+          duration: 3000,
+        })
+      }
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'REPAYMENT') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.creditAccountId || !form.value.amount || !form.value.occurredAt) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括还款账户、子账户和信贷账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括还款账户、子账户和信贷账户）', position: 'bottom-right', duration: 3000 })
         return
       }
       // 还款：从还款账户（子账户）扣款，还到信贷账户
@@ -2936,7 +3208,15 @@ async function handleSubmit() {
         note: repayNote,
         requestedAt: form.value.occurredAt,
       })
-      ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
+      const repayMessage = repayNote 
+        ? `还款记录已提交：${repayNote}`
+        : '还款记录已提交'
+      ElNotification.success({
+        title: '成功',
+        message: repayMessage,
+        position: 'bottom-right',
+        duration: 3000,
+      })
       emit('success')
       handleClose()
       return
@@ -2947,7 +3227,9 @@ async function handleSubmit() {
         if (!form.value.fromParentAccountId || !form.value.fromAccountId || 
             !form.value.toParentAccountId || !form.value.toAccountId || 
             !form.value.amount || !form.value.occurredAt) {
-          ElNotification.error({ title: '错误', message: '请填写完整信息（包括转出和转入的父账户、子账户）', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括转出和转入的父账户、子账户）', position: 'bottom-right', duration: 3000 })
           return
         }
         
@@ -2980,13 +3262,36 @@ async function handleSubmit() {
         const toFullName = toParentName ? `${toParentName}-${toName}` : toName
         const autoNote = `转账: ${fromFullName} → ${toFullName}`
         
-        await ledgerApi.createTransaction({
-          txnType: selectedType.value,
-          postings,
-          note: autoNote,
-          requestedAt: form.value.occurredAt,
-        })
-        ElNotification.success({ title: '成功', message: '转账成功', position: 'bottom-right' })
+        // 备注处理：如果用户手动输入了备注，使用用户的；否则使用自动生成的
+        const finalNote = form.value.note || autoNote
+        
+        // 编辑模式：更新交易
+        if (props.editingTxn) {
+          await ledgerApi.updateTransaction(props.editingTxn.txnId, {
+            txnType: selectedType.value,
+            postings,
+            note: finalNote,
+            requestedAt: form.value.occurredAt,
+          })
+          ElNotification.success({
+            title: '成功',
+            message: '转账记录已更新',
+            position: 'bottom-right',
+            duration: 3000
+          })
+        } else {
+          // 新建模式：创建交易
+          await ledgerApi.createTransaction({
+            txnType: selectedType.value,
+            postings,
+            note: finalNote,
+            requestedAt: form.value.occurredAt,
+          })
+          const transferMessage = finalNote 
+            ? `转账成功：${finalNote}`
+            : '转账成功'
+          ElNotification.success({ title: '成功', message: transferMessage, position: 'bottom-right', duration: 3000 })
+        }
         emit('success')
         handleClose()
         return
@@ -2997,20 +3302,26 @@ async function handleSubmit() {
             !shareTransfer.value.toAccountId ||
             !shareTransfer.value.shares || shareTransfer.value.shares <= 0 ||
             !form.value.occurredAt) {
-          ElNotification.error({ title: '错误', message: '请填写完整信息（父账户、源账户、目标账户、转移份额和发生时间）', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（父账户、源账户、目标账户、转移份额和发生时间）', position: 'bottom-right', duration: 3000 })
           return
         }
         
         const fromShares = getChildAccountShares(shareTransfer.value.fromAccountId)
         if (shareTransfer.value.shares > fromShares) {
-          ElNotification.error({ title: '错误', message: `转移份额不能超过源账户可用份额（${formatNumber(fromShares, 4)}份）`, position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: `转移份额不能超过源账户可用份额（${formatNumber(fromShares, 4)}份）`, position: 'bottom-right', duration: 3000 })
           return
         }
         
         // 获取净值计算金额
         const parentAccount = findAccountById(accountStore.accountTree, shareTransfer.value.parentAccountId)
         if (!parentAccount || !(parentAccount as any).linkedProductId) {
-          ElNotification.error({ title: '错误', message: '父账户未关联产品', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '父账户未关联产品', position: 'bottom-right', duration: 3000 })
           return
         }
         
@@ -3059,7 +3370,10 @@ async function handleSubmit() {
           note: autoNote,
         })
         
-        ElNotification.success({ title: '成功', message: '份额转移成功', position: 'bottom-right' })
+        const shareTransferMessage = form.value.note 
+          ? `份额转移成功：${form.value.note}`
+          : '份额转移成功'
+        ElNotification.success({ title: '成功', message: shareTransferMessage, position: 'bottom-right', duration: 3000 })
         emit('success')
         handleClose()
         return
@@ -3068,14 +3382,18 @@ async function handleSubmit() {
       // 场内买入：需要数量和价格；场外申购：需要金额
       if (form.value.channel === 'EXCHANGE') {
         if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.nav || !form.value.requestedAt) {
-          ElNotification.error({ title: '错误', message: '请填写完整信息（产品、数量、价格、资金来源账户）', position: 'bottom-right' })
-          return
+          ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（产品、数量、价格、资金来源账户）', position: 'bottom-right', duration: 3000 })
+        return
         }
         // 场内买入：自动计算金额
         form.value.amount = form.value.shares * form.value.nav
       } else {
         if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.requestedAt) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括场内/场外、资金来源父账户和子账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括场内/场外、资金来源父账户和子账户）', position: 'bottom-right', duration: 3000 })
         return
         }
       }
@@ -3087,24 +3405,32 @@ async function handleSubmit() {
       // 如果选择了关联产品的账户且有子账户，必须配置fundingLines
       if (selectedBuyAccount.value?.linkedProductId && buyChildAccounts.value.length > 0) {
         if (buyFundingLines.value.length === 0) {
-          ElNotification.error({ title: '错误', message: '请至少添加一个子账户并分配金额', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请至少添加一个子账户并分配金额', position: 'bottom-right', duration: 3000 })
           return
         }
         // 校验所有行都填写完整
         for (let i = 0; i < buyFundingLines.value.length; i++) {
           const line = buyFundingLines.value[i]
           if (!line.accountId) {
-            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right' })
+            ElNotification.error({
+        title: '错误',
+        message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right', duration: 3000 })
             return
           }
           if (line.amount == null || line.amount <= 0) {
-            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请填写买入金额`, position: 'bottom-right' })
+            ElNotification.error({
+        title: '错误',
+        message: `第 ${i + 1} 行请填写买入金额`, position: 'bottom-right', duration: 3000 })
             return
           }
         }
         // 校验总金额是否匹配
         if (buyAllocationError.value) {
-          ElNotification.error({ title: '错误', message: buyAllocationError.value, position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: buyAllocationError.value, position: 'bottom-right', duration: 3000 })
           return
         }
       }
@@ -3112,7 +3438,9 @@ async function handleSubmit() {
       // 获取产品信息
       const product = await productApi.getProduct(form.value.productId)
       if (!product) {
-        ElNotification.error({ title: '错误', message: '产品不存在', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '产品不存在', position: 'bottom-right', duration: 3000 })
         return
       }
 
@@ -3121,7 +3449,9 @@ async function handleSubmit() {
       if (form.value.channel === 'EXCHANGE') {
         // 场内买入：使用用户输入的成交价格
         if (!nav || nav <= 0) {
-          ElNotification.error({ title: '错误', message: '请输入成交价格', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请输入成交价格', position: 'bottom-right', duration: 3000 })
           return
         }
       } else {
@@ -3136,7 +3466,9 @@ async function handleSubmit() {
         }
       }
       if (!nav || nav <= 0) {
-        ElNotification.error({ title: '错误', message: '无法获取产品净值，请手动输入净值日期', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '无法获取产品净值，请手动输入净值日期', position: 'bottom-right', duration: 3000 })
         return
         }
       }
@@ -3232,18 +3564,19 @@ async function handleSubmit() {
           expectedNavDate: form.value.navDate,
           expectedConfirmDate: form.value.confirmDate,
           feeEstimate: form.value.fee || undefined, // 传递手续费
-          note: autoNote,
+            note: autoNote,
           })
           
-          ElNotification({
+          ElNotification.success({
             title: '订单创建成功',
             message: '请在"订单&结算"中确认结算',
-            type: 'success',
             position: 'bottom-right',
             duration: 3000,
           })
         } catch (error: any) {
-          ElNotification.error({ title: '错误', message: error.message || '操作失败', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: error.message || '操作失败', position: 'bottom-right', duration: 3000 })
           return
         }
       } else {
@@ -3255,7 +3588,10 @@ async function handleSubmit() {
           note: autoNote,
           requestedAt: form.value.requestedAt,
         })
-        ElNotification.success({ title: '成功', message: '买入/申购记录成功', position: 'bottom-right' })
+        const buyMessage = autoNote 
+          ? `买入/申购记录成功：${autoNote}`
+          : '买入/申购记录成功'
+        ElNotification.success({ title: '成功', message: buyMessage, position: 'bottom-right', duration: 3000 })
       }
       
       emit('success')
@@ -3265,12 +3601,16 @@ async function handleSubmit() {
       // 场内卖出：需要数量和价格；场外赎回：需要份额
       if (form.value.channel === 'EXCHANGE') {
         if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.nav || !form.value.requestedAt) {
-          ElNotification.error({ title: '错误', message: '请填写完整信息（产品、数量、价格、到账账户）', position: 'bottom-right' })
-          return
+          ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（产品、数量、价格、到账账户）', position: 'bottom-right', duration: 3000 })
+        return
         }
       } else {
         if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.requestedAt) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括场内/场外、到账父账户和子账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括场内/场外、到账父账户和子账户）', position: 'bottom-right', duration: 3000 })
         return
         }
       }
@@ -3284,24 +3624,32 @@ async function handleSubmit() {
         (selectedSellAccount.value?.linkedProductId && sellChildAccounts.value.length > 0)
       if (needMultiAccountRedeem) {
         if (sellFundingLines.value.length === 0) {
-          ElNotification.error({ title: '错误', message: '请至少添加一个账户并分配赎回份额', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请至少添加一个账户并分配赎回份额', position: 'bottom-right', duration: 3000 })
           return
         }
         // 校验所有行都填写完整
         for (let i = 0; i < sellFundingLines.value.length; i++) {
           const line = sellFundingLines.value[i]
           if (!line.accountId) {
-            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right' })
+            ElNotification.error({
+        title: '错误',
+        message: `第 ${i + 1} 行请选择子账户`, position: 'bottom-right', duration: 3000 })
             return
           }
           if (line.shares == null || line.shares <= 0) {
-            ElNotification.error({ title: '错误', message: `第 ${i + 1} 行请填写卖出份额`, position: 'bottom-right' })
+            ElNotification.error({
+        title: '错误',
+        message: `第 ${i + 1} 行请填写卖出份额`, position: 'bottom-right', duration: 3000 })
             return
           }
         }
         // 校验总份额是否匹配
         if (sellAllocationError.value) {
-          ElNotification.error({ title: '错误', message: sellAllocationError.value, position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: sellAllocationError.value, position: 'bottom-right', duration: 3000 })
           return
         }
       }
@@ -3309,7 +3657,9 @@ async function handleSubmit() {
       // 获取产品信息
       const product = await productApi.getProduct(form.value.productId)
       if (!product) {
-        ElNotification.error({ title: '错误', message: '产品不存在', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '产品不存在', position: 'bottom-right', duration: 3000 })
         return
       }
 
@@ -3318,7 +3668,9 @@ async function handleSubmit() {
       if (form.value.channel === 'EXCHANGE') {
         // 场内卖出：使用用户输入的成交价格
         if (!nav || nav <= 0) {
-          ElNotification.error({ title: '错误', message: '请输入成交价格', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请输入成交价格', position: 'bottom-right', duration: 3000 })
           return
         }
       } else {
@@ -3333,7 +3685,9 @@ async function handleSubmit() {
         }
       }
       if (!nav || nav <= 0) {
-        ElNotification.error({ title: '错误', message: '无法获取产品净值，请手动输入净值日期', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '无法获取产品净值，请手动输入净值日期', position: 'bottom-right', duration: 3000 })
         return
         }
       }
@@ -3352,7 +3706,9 @@ async function handleSubmit() {
       }
       
       if (finalFundingLines.length === 0) {
-        ElNotification.error({ title: '错误', message: '请选择赎回来源账户并分配份额', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请选择赎回来源账户并分配份额', position: 'bottom-right', duration: 3000 })
         return
       }
 
@@ -3365,7 +3721,9 @@ async function handleSubmit() {
       if (form.value.channel === 'OTC') {
         // 验证到账账户
         if (!form.value.accountId) {
-          ElNotification.error({ title: '错误', message: '请选择到账账户', position: 'bottom-right' })
+          ElNotification.error({
+        title: '错误',
+        message: '请选择到账账户', position: 'bottom-right', duration: 3000 })
           return
         }
 
@@ -3405,8 +3763,10 @@ async function handleSubmit() {
         console.log('创建赎回订单 payload:', JSON.stringify(orderPayload, null, 2))
         await orderApi.createOrder(orderPayload)
         ElNotification.success({
+          title: '成功',
           message: '赎回订单已创建，请在"订单&结算"中确认结算',
-          position: 'bottom-right'
+          position: 'bottom-right',
+          duration: 3000
         })
         emit('success')
         handleClose()
@@ -3463,13 +3823,18 @@ async function handleSubmit() {
         note: autoNote,
         requestedAt: form.value.requestedAt,
       })
-      ElNotification.success({ title: '成功', message: '卖出记录成功', position: 'bottom-right' })
+      const sellMessage = autoNote 
+        ? `卖出记录成功：${autoNote}`
+        : '卖出记录成功'
+      ElNotification.success({ title: '成功', message: sellMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'BOND_REPO') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.repoDays) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括账户父账户和子账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括账户父账户和子账户）', position: 'bottom-right', duration: 3000 })
         return
       }
       // 逆回购：CASH CREDIT + CASH DEBIT（到期后）
@@ -3495,25 +3860,34 @@ async function handleSubmit() {
         note: repoNote,
         requestedAt: form.value.occurredAt,
       })
-      ElNotification.success({ title: '成功', message: '逆回购记录成功', position: 'bottom-right' })
+      const repoMessage = repoNote 
+        ? `逆回购记录成功：${repoNote}`
+        : '逆回购记录成功'
+      ElNotification.success({ title: '成功', message: repoMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'CUSTODY_TRANSFER') {
       if (!form.value.productId || !form.value.shares || !form.value.transferDate || form.value.transferInPrice === undefined) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息', position: 'bottom-right', duration: 3000 })
         return
       }
       
       // 验证：转托管份额必须是整数
       if (!Number.isInteger(form.value.shares)) {
-        ElNotification.error({ title: '错误', message: '转托管份额必须是整数', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '转托管份额必须是整数', position: 'bottom-right', duration: 3000 })
         return
       }
       
       // 验证：转托管后场外必须至少保留1份
       if (!otcHoldingForTransfer.value) {
-        ElNotification.error({ title: '错误', message: '该产品暂无场外持仓，无法转托管', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '该产品暂无场外持仓，无法转托管', position: 'bottom-right', duration: 3000 })
         return
       }
       
@@ -3521,7 +3895,9 @@ async function handleSubmit() {
       const minKeep = 1 // 最少保留1份
       const maxTransfer = currentShares - minKeep
       if (form.value.shares > maxTransfer) {
-        ElNotification.error({ title: '错误', message: `转出份额不能超过 ${maxTransfer} 份（当前持仓 ${currentShares} 份，最少保留 ${minKeep} 份）`, position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: `转出份额不能超过 ${maxTransfer} 份（当前持仓 ${currentShares} 份，最少保留 ${minKeep} 份）`, position: 'bottom-right', duration: 3000 })
         return
       }
       
@@ -3538,13 +3914,18 @@ async function handleSubmit() {
         transferDate: form.value.transferDate,
         note: custodyNote,
       })
-      ElNotification.success({ title: '成功', message: '转托管成功', position: 'bottom-right' })
+      const custodyMessage = custodyNote 
+        ? `转托管成功：${custodyNote}`
+        : '转托管成功'
+      ElNotification.success({ title: '成功', message: custodyMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'REFUND') {
       if (!form.value.relatedTxnId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括退款账户父账户和子账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括退款账户父账户和子账户）', position: 'bottom-right', duration: 3000 })
         return
       }
       // 自动生成备注
@@ -3555,26 +3936,31 @@ async function handleSubmit() {
         accountId: form.value.accountId,
         note: refundNote,
       })
-      ElNotification.success({ title: '成功', message: '退款成功', position: 'bottom-right' })
+      const refundMessage = refundNote 
+        ? `退款成功：${refundNote}`
+        : '退款成功'
+      ElNotification.success({ title: '成功', message: refundMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
       handleClose()
       return
     } else if (selectedType.value === 'ADJUST') {
       // 余额调整
       if (!form.value.parentAccountId || !form.value.accountId || form.value.amount === undefined) {
-        ElNotification.error({ title: '错误', message: '请填写完整信息（包括账户父账户和子账户）', position: 'bottom-right' })
+        ElNotification.error({
+        title: '错误',
+        message: '请填写完整信息（包括账户父账户和子账户）', position: 'bottom-right', duration: 3000 })
         return
       }
       // 调整：需要计算差额，生成ADJUST分录
-      ElNotification.warning({ title: '警告', message: '余额调整功能建议使用账户管理页面的余额调整功能', position: 'bottom-right' })
+      ElNotification.warning({ title: '警告', message: '余额调整功能建议使用账户管理页面的余额调整功能', position: 'bottom-right', duration: 3000 })
       return
     }
 
     // 其他类型暂不支持
-    ElNotification.error({ title: '错误', message: '不支持的业务类型', position: 'bottom-right' })
+    ElNotification.error({ title: '错误', message: '不支持的业务类型', position: 'bottom-right', duration: 3000 })
     return
   } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right' })
+    ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right', duration: 3000 })
   } finally {
     submitting.value = false
   }

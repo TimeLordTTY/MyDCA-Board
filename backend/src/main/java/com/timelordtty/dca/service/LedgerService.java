@@ -16,7 +16,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -63,6 +66,8 @@ import java.util.stream.Collectors;
  */
 @Service
 public class LedgerService {
+
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LedgerService.class);
 
     private final LedgerTxnMapper ledgerTxnMapper;
     private final LedgerPostingMapper ledgerPostingMapper;
@@ -157,84 +162,7 @@ public class LedgerService {
         }
 
         // 验证并修正虚拟账户的 accountId
-        // 如果 posting 的 accountType 是虚拟账户类型（INCOME/EXPENSE/FEE/POSITION），但 accountId 指向的是 REAL 账户，
-        // 需要自动获取或创建对应的虚拟账户
-        for (LedgerPosting posting : postings) {
-            String accountType = posting.getAccountType();
-            // 如果是虚拟账户类型，需要确保 accountId 指向的是虚拟账户
-            if ("INCOME".equals(accountType) || "EXPENSE".equals(accountType) || "FEE".equals(accountType) || "POSITION".equals(accountType)) {
-                Account account = accountMapper.selectById(posting.getAccountId());
-                // 调试日志：记录虚拟账户修正过程
-                System.out.println(String.format("检查虚拟账户: posting.accountType=%s, posting.accountId=%d, 账户存在=%s, 账户性质=%s, 虚拟子类型=%s", 
-                    accountType, posting.getAccountId(), account != null, 
-                    account != null ? account.getAccountKind() : "null", 
-                    account != null ? account.getVirtualSubtype() : "null"));
-                // 如果账户不存在，或者不是虚拟账户，或者虚拟账户的 virtual_subtype 不匹配，需要获取或创建虚拟账户
-                if (account == null || !"VIRTUAL".equals(account.getAccountKind()) || 
-                    !accountType.equals(account.getVirtualSubtype())) {
-                    // 需要从其他 REAL 账户获取 owner 信息
-                    Account realAccount = null;
-                    for (LedgerPosting p : postings) {
-                        if (!"INCOME".equals(p.getAccountType()) && !"EXPENSE".equals(p.getAccountType()) && 
-                            !"FEE".equals(p.getAccountType()) && !"POSITION".equals(p.getAccountType())) {
-                            Account acc = accountMapper.selectById(p.getAccountId());
-                            if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                                realAccount = acc;
-                                break;
-                            }
-                        }
-                    }
-                    if (realAccount == null) {
-                        throw new RuntimeException("无法确定虚拟账户的归属信息，请确保至少有一个 REAL 账户的分录");
-                    }
-                    // 获取或创建虚拟账户
-                    String ownerType = realAccount.getOwnerType() != null ? realAccount.getOwnerType() : "PERSONAL";
-                    
-                    // 业务规则：个人账户记账时，同时更新个人和家庭虚拟账户
-                    // 1. 如果 realAccount 是 PERSONAL 类型，使用个人虚拟账户
-                    // 2. 如果用户属于家庭，同时创建额外的分录来更新家庭虚拟账户
-                    Account virtualAccount;
-                    if ("POSITION".equals(accountType)) {
-                        // POSITION 账户需要产品信息，如果提供了 productId，自动创建或获取 POSITION 账户
-                        if (productId != null) {
-                            ProductMaster product = productMasterMapper.selectById(productId);
-                            if (product == null) {
-                                throw new RuntimeException("产品不存在: productId=" + productId);
-                            }
-                            virtualAccount = accountService.getOrCreatePositionAccount(
-                                productId, product.getProductName(), ownerType, 
-                                realAccount.getOwnerUserId(), realAccount.getOwnerFamilyId());
-                        } else {
-                            // 如果没有提供 productId，抛出异常提示
-                            throw new RuntimeException("POSITION 账户必须通过 getOrCreatePositionAccount 方法创建，需要提供 productId 和 productName");
-                        }
-                    } else {
-                        if ("PERSONAL".equals(ownerType)) {
-                            // 个人账户，使用个人虚拟账户
-                            virtualAccount = accountService.getOrCreateVirtualAccount(
-                                accountType, accountType, "PERSONAL", realAccount.getOwnerUserId(), null, null, null);
-                            
-                            // 如果用户属于家庭，标记需要同步更新家庭虚拟账户
-                            // 注意：不创建额外的分录（会导致借贷不平衡），而是在更新余额时直接同步更新家庭虚拟账户
-                            if (realAccount.getOwnerFamilyId() != null) {
-                                // 在 posting 的 note 中标记家庭ID，用于后续同步更新
-                                String originalNote = posting.getNote();
-                                posting.setNote((originalNote != null ? originalNote + " | " : "") + 
-                                    "FAMILY_SYNC:" + realAccount.getOwnerFamilyId());
-                            }
-                        } else {
-                            // FAMILY 类型，只使用家庭虚拟账户
-                            virtualAccount = accountService.getOrCreateVirtualAccount(
-                                accountType, accountType, "FAMILY", null, realAccount.getOwnerFamilyId(), null, null);
-                        }
-                    }
-                    // 修正 posting 的 accountId
-                    System.out.println(String.format("修正虚拟账户: 原accountId=%d, 新accountId=%d, 虚拟账户类型=%s, ownerType=%s", 
-                        posting.getAccountId(), virtualAccount.getId(), accountType, ownerType));
-                    posting.setAccountId(virtualAccount.getId());
-                }
-            }
-        }
+        fixVirtualAccountIds(postings, productId);
 
         // 验证所有账户都是叶子账户（业务规则：禁止对父账户记账）
         // 父账户只用于组织管理，不参与实际记账
@@ -278,18 +206,51 @@ public class LedgerService {
 
         ledgerTxnMapper.insert(txn);
 
-        // 创建分录并更新账户余额，同时记录历史余额
-        insertPostingsWithBalance(txnId, postings);
-
-        // 重算涉及账户的历史余额（确保按交易时间顺序正确）
+        // 收集涉及的账户ID
         Set<Long> accountIds = postings.stream()
             .map(LedgerPosting::getAccountId)
             .collect(Collectors.toSet());
-        for (Long accountId : accountIds) {
-            recalculateAccountBalanceHistory(accountId);
+
+        // 创建分录并更新账户余额，同时记录历史余额
+        insertPostingsWithBalance(txnId, postings);
+
+        // 性能优化：只有当交易时间是历史时间（插入到中间）时才重算历史余额
+        // 如果是最新时间的交易，insertPostingsWithBalance 已经正确计算了余额
+        if (needsHistoryRecalculation(accountIds, txn.getRequestedAt())) {
+            recalculateAccountBalanceHistoryForAccounts(accountIds);
         }
 
         return txn;
+    }
+    
+    /**
+     * 判断是否需要重算历史余额
+     * 
+     * 优化策略：只有当新交易的时间早于相关账户的最新交易时间时，才需要重算。
+     * 这样可以避免在正常记账（记录当前时间的交易）时进行不必要的历史重算。
+     * 
+     * @param accountIds 涉及的账户ID集合
+     * @param newTxnTime 新交易的时间
+     * @return true 如果需要重算历史余额
+     */
+    private boolean needsHistoryRecalculation(Set<Long> accountIds, LocalDateTime newTxnTime) {
+        if (accountIds == null || accountIds.isEmpty() || newTxnTime == null) {
+            return false;
+        }
+        
+        // 查询这些账户的最新交易时间
+        LocalDateTime latestTxnTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
+            new ArrayList<>(accountIds));
+        
+        // 如果没有历史交易，不需要重算
+        if (latestTxnTime == null) {
+            return false;
+        }
+        
+        // 如果新交易时间早于最新交易时间，说明是插入到历史中间，需要重算
+        // 注意：这里使用 isBefore 而不是 !isAfter，因为相等时间（同一秒）也不需要重算
+        // 实际上，如果时间完全相同，由于 insertPostingsWithBalance 已经处理了，也不需要重算
+        return newTxnTime.isBefore(latestTxnTime);
     }
 
     /**
@@ -432,6 +393,96 @@ public class LedgerService {
     }
 
     /**
+     * 修正虚拟账户的 accountId
+     * 
+     * 如果 posting 的 accountType 是虚拟账户类型（INCOME/EXPENSE/FEE/POSITION），但 accountId 指向的是 REAL 账户，
+     * 需要自动获取或创建对应的虚拟账户并修正 accountId。
+     * 
+     * 这个方法在 createTransaction 和 updateTransaction 中都会调用，确保虚拟账户 ID 正确。
+     * 
+     * @param postings 分录列表
+     * @param productId 产品ID（仅POSITION账户需要）
+     */
+    private void fixVirtualAccountIds(List<LedgerPosting> postings, Long productId) {
+        for (LedgerPosting posting : postings) {
+            String accountType = posting.getAccountType();
+            // 如果是虚拟账户类型，需要确保 accountId 指向的是虚拟账户
+            if ("INCOME".equals(accountType) || "EXPENSE".equals(accountType) || "FEE".equals(accountType) || "POSITION".equals(accountType)) {
+                Account account = accountMapper.selectById(posting.getAccountId());
+                // 调试日志：记录虚拟账户修正过程
+                log.info("检查虚拟账户: posting.accountType={}, posting.accountId={}, 账户存在={}, 账户性质={}, 虚拟子类型={}", 
+                    accountType, posting.getAccountId(), account != null, 
+                    account != null ? account.getAccountKind() : "null", 
+                    account != null ? account.getVirtualSubtype() : "null");
+                // 如果账户不存在，或者不是虚拟账户，或者虚拟账户的 virtual_subtype 不匹配，需要获取或创建虚拟账户
+                if (account == null || !"VIRTUAL".equals(account.getAccountKind()) || 
+                    !accountType.equals(account.getVirtualSubtype())) {
+                    // 需要从其他 REAL 账户获取 owner 信息
+                    Account realAccount = null;
+                    for (LedgerPosting p : postings) {
+                        if (!"INCOME".equals(p.getAccountType()) && !"EXPENSE".equals(p.getAccountType()) && 
+                            !"FEE".equals(p.getAccountType()) && !"POSITION".equals(p.getAccountType())) {
+                            Account acc = accountMapper.selectById(p.getAccountId());
+                            if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                                realAccount = acc;
+                                break;
+                            }
+                        }
+                    }
+                    if (realAccount == null) {
+                        throw new RuntimeException("无法确定虚拟账户的归属信息，请确保至少有一个 REAL 账户的分录");
+                    }
+                    // 获取或创建虚拟账户
+                    String ownerType = realAccount.getOwnerType() != null ? realAccount.getOwnerType() : "PERSONAL";
+                    
+                    // 业务规则：个人账户记账时，同时更新个人和家庭虚拟账户
+                    // 1. 如果 realAccount 是 PERSONAL 类型，使用个人虚拟账户
+                    // 2. 如果用户属于家庭，同时创建额外的分录来更新家庭虚拟账户
+                    Account virtualAccount;
+                    if ("POSITION".equals(accountType)) {
+                        // POSITION 账户需要产品信息，如果提供了 productId，自动创建或获取 POSITION 账户
+                        if (productId != null) {
+                            ProductMaster product = productMasterMapper.selectById(productId);
+                            if (product == null) {
+                                throw new RuntimeException("产品不存在: productId=" + productId);
+                            }
+                            virtualAccount = accountService.getOrCreatePositionAccount(
+                                productId, product.getProductName(), ownerType, 
+                                realAccount.getOwnerUserId(), realAccount.getOwnerFamilyId());
+                        } else {
+                            // 如果没有提供 productId，抛出异常提示
+                            throw new RuntimeException("POSITION 账户必须通过 getOrCreatePositionAccount 方法创建，需要提供 productId 和 productName");
+                        }
+                    } else {
+                        if ("PERSONAL".equals(ownerType)) {
+                            // 个人账户，使用个人虚拟账户
+                            virtualAccount = accountService.getOrCreateVirtualAccount(
+                                accountType, accountType, "PERSONAL", realAccount.getOwnerUserId(), null, null, null);
+                            
+                            // 如果用户属于家庭，标记需要同步更新家庭虚拟账户
+                            // 注意：不创建额外的分录（会导致借贷不平衡），而是在更新余额时直接同步更新家庭虚拟账户
+                            if (realAccount.getOwnerFamilyId() != null) {
+                                // 在 posting 的 note 中标记家庭ID，用于后续同步更新
+                                String originalNote = posting.getNote();
+                                posting.setNote((originalNote != null ? originalNote + " | " : "") + 
+                                    "FAMILY_SYNC:" + realAccount.getOwnerFamilyId());
+                            }
+                        } else {
+                            // FAMILY 类型，只使用家庭虚拟账户
+                            virtualAccount = accountService.getOrCreateVirtualAccount(
+                                accountType, accountType, "FAMILY", null, realAccount.getOwnerFamilyId(), null, null);
+                        }
+                    }
+                    // 修正 posting 的 accountId
+                    log.info("修正虚拟账户: 原accountId={}, 新accountId={}, 虚拟账户类型={}, ownerType={}", 
+                        posting.getAccountId(), virtualAccount.getId(), accountType, ownerType);
+                    posting.setAccountId(virtualAccount.getId());
+                }
+            }
+        }
+    }
+
+    /**
      * 插入分录并记录历史余额（辅助方法）
      * 
      * 这个方法会：
@@ -497,7 +548,16 @@ public class LedgerService {
             // 如果账户有父账户，计算父账户余额
             if (accountAfter != null && accountAfter.getParentAccountId() != null) {
                 List<Account> children = accountService.getAccountChildren(accountAfter.getParentAccountId());
+                // 父账户余额 = Σ 子账户余额（只排除信贷账户），与账户页保持一致
                 BigDecimal parentBalance = children.stream()
+                    .filter(child -> {
+                        // 只排除信贷类账户，其他类型（包括 accountType 为 null 的）都计入
+                        String accountType = child.getAccountType();
+                        return !"CREDIT_CARD".equals(accountType) &&
+                               !"HUABEI".equals(accountType) &&
+                               !"BAITIAO".equals(accountType) &&
+                               !"LOAN".equals(accountType);
+                    })
                     .map(Account::getBalance)
                     .filter(b -> b != null)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -553,19 +613,44 @@ public class LedgerService {
     }
 
     public List<LedgerTxn> getTransactions(Long userId, String txnType, LocalDate startDate, 
-                                          LocalDate endDate, Long productId, Long accountId, Integer page, Integer pageSize) {
+                                          LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note, Integer page, Integer pageSize) {
         Integer offset = null;
         Integer limit = null;
         if (page != null && pageSize != null && page > 0 && pageSize > 0) {
             offset = (page - 1) * pageSize;
             limit = pageSize;
         }
-        return ledgerTxnMapper.selectByCondition(userId, txnType, startDate, endDate, productId, accountId, offset, limit);
+        
+        // 如果指定了父账户但没有指定子账户，获取该父账户下所有子账户的ID
+        List<Long> childAccountIds = null;
+        if (parentAccountId != null && accountId == null) {
+            List<Account> children = accountService.getAccountChildren(parentAccountId);
+            if (children != null && !children.isEmpty()) {
+                childAccountIds = children.stream().map(Account::getId).collect(java.util.stream.Collectors.toList());
+            } else {
+                // 如果指定了父账户但没有子账户，返回空列表（不应该匹配任何记录）
+                return java.util.Collections.emptyList();
+            }
+        }
+        
+        return ledgerTxnMapper.selectByCondition(userId, txnType, startDate, endDate, productId, accountId, childAccountIds, note, offset, limit);
     }
     
     public int countTransactions(Long userId, String txnType, LocalDate startDate, 
-                                LocalDate endDate, Long productId, Long accountId) {
-        return ledgerTxnMapper.countByCondition(userId, txnType, startDate, endDate, productId, accountId);
+                                LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note) {
+        // 如果指定了父账户但没有指定子账户，获取该父账户下所有子账户的ID
+        List<Long> childAccountIds = null;
+        if (parentAccountId != null && accountId == null) {
+            List<Account> children = accountService.getAccountChildren(parentAccountId);
+            if (children != null && !children.isEmpty()) {
+                childAccountIds = children.stream().map(Account::getId).collect(java.util.stream.Collectors.toList());
+            } else {
+                // 如果指定了父账户但没有子账户，返回0（不应该匹配任何记录）
+                return 0;
+            }
+        }
+        
+        return ledgerTxnMapper.countByCondition(userId, txnType, startDate, endDate, productId, accountId, childAccountIds, note);
     }
 
     public LedgerTxn getTransactionDetail(String txnId) {
@@ -575,6 +660,19 @@ public class LedgerService {
     public List<LedgerPosting> getPostingsByTxnId(String txnId) {
         return ledgerPostingMapper.selectByTxnId(txnId);
     }
+
+    /**
+     * 批量查询多个交易的postings
+     * @param txnIds 交易ID列表
+     * @return 所有交易的postings列表
+     */
+    public List<LedgerPosting> getPostingsByTxnIds(List<String> txnIds) {
+        if (txnIds == null || txnIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return ledgerPostingMapper.selectByTxnIds(txnIds);
+    }
+
 
     /**
      * 创建退款交易
@@ -902,10 +1000,10 @@ public class LedgerService {
             throw new RuntimeException("场外持仓份额不足，当前持仓: " + totalShares + "，转出份额: " + transferShares);
         }
         
-        // 摊薄成本法（同花顺方式）：
+        // 成本处理说明（与常见券商持仓口径对齐）：
         // - 场外转出成本 = 场外平均成本 × 转出份额（按平均成本法）
-        // - 场内转入成本 = 场内价格 × 转入份额（按实际转入金额）
-        // 这样场内的成本计算与直接购买一致，便于用户理解
+        // - 场内转入成本 = 场外转出成本（完全沿用原持仓成本，不因当日价格波动而改变）
+        // 这样转托管只是“搬仓”，不会改变整体持仓成本和平均成本，便于与券商对账
         
         // 计算场外转出成本（按平均成本法）
         BigDecimal avgCost = totalShares.compareTo(BigDecimal.ZERO) > 0 
@@ -913,8 +1011,9 @@ public class LedgerService {
             : BigDecimal.ZERO;
         BigDecimal outCost = avgCost.multiply(transferShares);
         
-        // 场内转入成本 = 场内价格 × 份额（与同花顺一致）
-        BigDecimal inCost = transferPrice.multiply(transferShares);
+        // 场内转入成本沿用场外成本，确保转托管不改变整体平均成本
+        // 注意：transferPrice 仅用于记录展示，不进入成本计算
+        BigDecimal inCost = outCost;
         
         // 生成转托管分录
         // 场外POSITION CREDIT（减少份额和成本）
@@ -1012,23 +1111,12 @@ public class LedgerService {
         Account account = accountMapper.selectById(accountId);
         if (account == null) return;
         
-        BigDecimal currentBalance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
-        
         // 2. 查询该账户所有分录（按交易时间排序）
         List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountIdOrderByTxnTime(accountId);
         if (postings.isEmpty()) return;
         
-        // 3. 计算起始余额 = 当前余额 - 所有分录的净变化量
-        // 净变化量 = DEBIT总额 - CREDIT总额（对于资产类账户）
-        BigDecimal netChange = BigDecimal.ZERO;
-        for (LedgerPosting p : postings) {
-            if ("DEBIT".equals(p.getPostingType())) {
-                netChange = netChange.add(p.getAmount());
-            } else {
-                netChange = netChange.subtract(p.getAmount());
-            }
-        }
-        BigDecimal startBalance = currentBalance.subtract(netChange);
+        // 3. 起始余额：使用账户 initial_balance，从第一条分录开始完整回放
+        BigDecimal startBalance = account.getInitialBalance() != null ? account.getInitialBalance() : BigDecimal.ZERO;
         
         // 4. 按时间顺序计算每条分录的余额
         List<LedgerPosting> updates = new ArrayList<>();
@@ -1076,10 +1164,434 @@ public class LedgerService {
             }
         }
         
-        // 5. 批量更新（如果有变化）
+        // 5. 批量更新分录余额（如果有变化）
         if (!updates.isEmpty()) {
             ledgerPostingMapper.batchUpdateBalanceAfter(updates);
         }
+
+        // 6. 同步 accounts 表中的余额为最后一条分录后的余额，确保账户当前余额与历史分录一致
+        accountMapper.updateBalance(accountId, runningBalance);
+    }
+
+    /**
+     * 统一重算多个账户的历史余额（按时间顺序，确保父账户余额使用历史时刻的余额）
+     * 
+     * 算法说明：
+     * 1. 收集所有受影响账户及其父账户的所有子账户
+     * 2. 按时间顺序获取所有相关分录
+     * 3. 按时间顺序计算每个账户的历史余额
+     * 4. 在计算每个分录时，同时计算该时刻的父账户余额（使用历史时刻的兄弟账户余额）
+     * 
+     * @param accountIds 需要重算的账户ID集合
+     */
+    public void recalculateAccountBalanceHistoryForAccounts(Set<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) return;
+        
+        log.info("[重算历史余额] 开始，输入账户IDs: {}", accountIds);
+        
+        // 1. 收集所有需要重算的账户（包括受影响账户及其父账户的所有子账户）
+        Set<Long> allAccountIds = new HashSet<>(accountIds);
+        Set<Long> parentAccountIds = new HashSet<>();
+        
+        // 获取所有受影响账户的父账户ID
+        for (Long accountId : accountIds) {
+            Account account = accountMapper.selectById(accountId);
+            if (account != null && account.getParentAccountId() != null) {
+                parentAccountIds.add(account.getParentAccountId());
+                log.info("[重算历史余额] 账户 {} ({}) 的父账户ID: {}", accountId, account.getAccountName(), account.getParentAccountId());
+            }
+        }
+        
+        // 获取所有父账户的所有子账户（用于计算父账户余额）
+        for (Long parentId : parentAccountIds) {
+            List<Account> children = accountService.getAccountChildren(parentId);
+            log.info("[重算历史余额] 父账户 {} 的子账户数量: {}", parentId, children.size());
+            for (Account child : children) {
+                allAccountIds.add(child.getId());
+                log.info("[重算历史余额]   - 子账户: {} ({})", child.getId(), child.getAccountName());
+            }
+        }
+        
+        if (allAccountIds.isEmpty()) return;
+        
+        log.info("[重算历史余额] 最终需要重算的账户IDs: {}", allAccountIds);
+        
+        // 2. 查询所有相关账户的分录（按交易时间排序）
+        List<LedgerPosting> allPostings = ledgerPostingMapper.selectByAccountIdsOrderByTxnTime(new ArrayList<>(allAccountIds));
+        log.info("[重算历史余额] 查询到的分录数量: {}", allPostings.size());
+        if (allPostings.isEmpty()) return;
+        
+        // 3. 初始化每个账户的起始余额和运行余额
+        // 同时确保所有父账户的所有子账户都在 accountRunningBalances 中（即使它们没有分录）
+        Map<Long, BigDecimal> accountRunningBalances = new HashMap<>();
+        for (Long accountId : allAccountIds) {
+            Account account = accountMapper.selectById(accountId);
+            BigDecimal initialBalance = account != null && account.getInitialBalance() != null 
+                ? account.getInitialBalance() : BigDecimal.ZERO;
+            accountRunningBalances.put(accountId, initialBalance);
+        }
+        
+        // 确保所有父账户的所有子账户都在 accountRunningBalances 中
+        for (Long parentId : parentAccountIds) {
+            List<Account> children = accountService.getAccountChildren(parentId);
+            for (Account child : children) {
+                if (!accountRunningBalances.containsKey(child.getId())) {
+                    BigDecimal initialBalance = child.getInitialBalance() != null 
+                        ? child.getInitialBalance() : BigDecimal.ZERO;
+                    accountRunningBalances.put(child.getId(), initialBalance);
+                }
+            }
+        }
+        
+        // 4. 按时间顺序处理所有分录
+        // 收集所有有父账户的分录，用于后续更新父账户余额
+        Map<Long, List<Account>> siblingsByParentId = new HashMap<>();
+        List<LedgerPosting> updates = new ArrayList<>();
+        
+        for (LedgerPosting p : allPostings) {
+            Long accountId = p.getAccountId();
+            BigDecimal currentBalance = accountRunningBalances.get(accountId);
+            
+            // 更新账户余额
+            if ("DEBIT".equals(p.getPostingType())) {
+                currentBalance = currentBalance.add(p.getAmount());
+            } else {
+                currentBalance = currentBalance.subtract(p.getAmount());
+            }
+            accountRunningBalances.put(accountId, currentBalance);
+            
+            boolean needUpdate = false;
+            
+            // 更新分录的账户余额
+            if (p.getAccountBalanceAfter() == null || 
+                p.getAccountBalanceAfter().compareTo(currentBalance) != 0) {
+                p.setAccountBalanceAfter(currentBalance);
+                needUpdate = true;
+            }
+            
+            // 计算父账户余额（如果有父账户，使用历史时刻的所有兄弟账户余额）
+            Account account = accountMapper.selectById(accountId);
+            if (account != null && account.getParentAccountId() != null) {
+                Long parentId = account.getParentAccountId();
+                
+                // 获取该父账户的所有子账户（缓存，避免重复查询）
+                List<Account> siblings = siblingsByParentId.get(parentId);
+                if (siblings == null) {
+                    siblings = accountService.getAccountChildren(parentId);
+                    siblingsByParentId.put(parentId, siblings);
+                }
+                
+                // 计算该时间点的父账户余额（所有子账户余额之和）
+                BigDecimal parentBalance = BigDecimal.ZERO;
+                StringBuilder debugInfo = new StringBuilder();
+                debugInfo.append("[父账户余额计算] 分录ID=").append(p.getId())
+                        .append(", 账户=").append(account.getAccountName())
+                        .append(", 时间=").append(p.getTxnId()).append(": ");
+                for (Account sibling : siblings) {
+                    // 只排除信贷类账户，其他类型（包括 accountType 为 null 的）都计入
+                    String accountType = sibling.getAccountType();
+                    boolean isCreditAccount = "CREDIT_CARD".equals(accountType) || 
+                                              "HUABEI".equals(accountType) || 
+                                              "BAITIAO".equals(accountType) || 
+                                              "LOAN".equals(accountType);
+                    if (!isCreditAccount) {
+                        // 使用历史时刻的余额（从 runningBalances 中获取）
+                        // 如果该账户在 runningBalances 中，使用计算中的余额；否则使用 initialBalance
+                        BigDecimal siblingBalance = accountRunningBalances.get(sibling.getId());
+                        if (siblingBalance == null) {
+                            // 如果该账户不在 runningBalances 中（没有分录），使用 initialBalance
+                            siblingBalance = sibling.getInitialBalance() != null 
+                                ? sibling.getInitialBalance() : BigDecimal.ZERO;
+                            debugInfo.append(sibling.getAccountName()).append("(初始)=").append(siblingBalance).append(" + ");
+                        } else {
+                            debugInfo.append(sibling.getAccountName()).append("=").append(siblingBalance).append(" + ");
+                        }
+                        parentBalance = parentBalance.add(siblingBalance);
+                    }
+                }
+                debugInfo.append(" => 父账户余额=").append(parentBalance);
+                log.info(debugInfo.toString());
+                
+                // 更新该分录的父账户余额
+                if (p.getParentAccountBalanceAfter() == null ||
+                    p.getParentAccountBalanceAfter().compareTo(parentBalance) != 0) {
+                    p.setParentAccountBalanceAfter(parentBalance);
+                    needUpdate = true;
+                }
+            }
+            
+            if (needUpdate) {
+                updates.add(p);
+            }
+        }
+        
+        // 5. 批量更新分录余额（如果有变化）
+        if (!updates.isEmpty()) {
+            ledgerPostingMapper.batchUpdateBalanceAfter(updates);
+        }
+        
+        // 6. 同步 accounts 表中的余额为最后一条分录后的余额
+        // 更新所有有分录的账户的余额（不仅仅是传入的 accountIds）
+        for (Long accountId : allAccountIds) {
+            BigDecimal finalBalance = accountRunningBalances.get(accountId);
+            if (finalBalance != null) {
+                accountMapper.updateBalance(accountId, finalBalance);
+            }
+        }
+    }
+
+    /**
+     * 重算所有账户的历史余额
+     * 
+     * 用于修复历史数据中可能存在的父账户余额计算错误。
+     * 这个方法会：
+     * 1. 查询所有有分录的账户ID
+     * 2. 调用 recalculateAccountBalanceHistoryForAccounts 重新计算
+     * 
+     * 注意：这个操作可能比较耗时，建议在低峰期执行
+     */
+    @Transactional
+    public void recalculateAllAccountBalanceHistory() {
+        // 查询所有有分录的账户ID
+        List<Long> allAccountIds = ledgerPostingMapper.selectDistinctAccountIds();
+        if (allAccountIds == null || allAccountIds.isEmpty()) {
+            return;
+        }
+        
+        // 调用统一重算方法
+        recalculateAccountBalanceHistoryForAccounts(new java.util.HashSet<>(allAccountIds));
+    }
+
+    /**
+     * 删除一笔交易及其所有分录，并回滚相关账户余额。
+     *
+     * 业务规则：
+     * - 目前仅用于手工流水（orderId 为空的交易）；
+     *   与订单、报销等业务关联的交易不允许直接删除。
+     */
+    @Transactional
+    public void deleteTransaction(String txnId) {
+        LedgerTxn txn = ledgerTxnMapper.selectByTxnId(txnId);
+        if (txn == null) {
+            throw new RuntimeException("交易不存在: " + txnId);
+        }
+        if (txn.getOrderId() != null) {
+            throw new RuntimeException("禁止直接删除与订单关联的流水，请通过订单模块处理");
+        }
+
+        List<LedgerPosting> postings = ledgerPostingMapper.selectByTxnId(txnId);
+        java.util.Set<Long> affectedAccountIds = new java.util.HashSet<>();
+
+        // 回滚账户余额：对每条分录执行反向记账
+        for (LedgerPosting posting : postings) {
+            String reversedType = "DEBIT".equals(posting.getPostingType()) ? "CREDIT" : "DEBIT";
+            updateAccountBalance(posting.getAccountId(), reversedType, posting.getAmount());
+            affectedAccountIds.add(posting.getAccountId());
+        }
+
+        // 删除分录与交易
+        ledgerPostingMapper.deleteByTxnId(txnId);
+        ledgerTxnMapper.deleteByTxnId(txnId);
+
+        // 重算受影响账户的历史余额（统一重算所有受影响账户及其父账户）
+        recalculateAccountBalanceHistoryForAccounts(affectedAccountIds);
+    }
+
+    /**
+     * 更新一笔交易：真正的UPDATE操作，保留created_at。
+     *
+     * 业务规则：
+     * - 仅允许更新当前用户自己的手工流水（orderId 为空）。
+     * - 保留原始的created_at，只更新updated_at。
+     * - 先回滚旧分录的账户余额，再应用新分录的账户余额。
+     * - 重算所有受影响账户（旧账户+新账户）的历史余额。
+     *
+     * @param oldTxnId 原交易ID
+     * @param txnType 新的交易类型
+     * @param bizGroupKey 新的业务分组键
+     * @param postings 新的分录列表
+     * @param note 新的备注
+     * @param requestedAtStr 新的请求时间（格式：yyyy-MM-dd HH:mm:ss）
+     * @param categoryId 新的分类ID
+     * @param isReimbursable 是否可报销
+     * @param productId 新的产品ID
+     * @return 更新后的交易记录
+     */
+    @Transactional
+    public LedgerTxn updateTransaction(String oldTxnId,
+                                       String txnType,
+                                       String bizGroupKey,
+                                       List<LedgerPosting> postings,
+                                       String note,
+                                       String requestedAtStr,
+                                       Long categoryId,
+                                       Boolean isReimbursable,
+                                       Long productId) {
+        LedgerTxn existing = ledgerTxnMapper.selectByTxnId(oldTxnId);
+        if (existing == null) {
+            throw new RuntimeException("交易不存在: " + oldTxnId);
+        }
+        if (existing.getOrderId() != null) {
+            throw new RuntimeException("禁止直接修改与订单关联的流水，请通过订单模块处理");
+        }
+
+        // 验证借贷平衡
+        BigDecimal totalDebit = postings.stream()
+                .filter(p -> "DEBIT".equals(p.getPostingType()))
+                .map(LedgerPosting::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalCredit = postings.stream()
+                .filter(p -> "CREDIT".equals(p.getPostingType()))
+                .map(LedgerPosting::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal difference = totalDebit.subtract(totalCredit).abs();
+        BigDecimal tolerance = new BigDecimal("0.0000000001");
+        if (difference.compareTo(tolerance) > 0) {
+            throw new RuntimeException(String.format("借贷不平衡：DEBIT总额=%s，CREDIT总额=%s，差额=%s", 
+                totalDebit, totalCredit, difference));
+        }
+
+        // 验证所有账户都是叶子账户
+        for (LedgerPosting posting : postings) {
+            if (!accountService.isLeafAccount(posting.getAccountId())) {
+                throw new RuntimeException(
+                    String.format("账户ID %d 不是叶子账户，禁止对父账户记账", posting.getAccountId())
+                );
+            }
+        }
+
+        // 获取旧分录，用于回滚余额
+        List<LedgerPosting> oldPostings = ledgerPostingMapper.selectByTxnId(oldTxnId);
+        Set<Long> oldAccountIds = oldPostings.stream()
+                .map(LedgerPosting::getAccountId)
+                .collect(Collectors.toSet());
+        
+        // 收集新分录涉及的账户ID
+        Set<Long> newAccountIds = postings.stream()
+                .map(LedgerPosting::getAccountId)
+                .collect(Collectors.toSet());
+        
+        // 合并所有受影响的账户ID（用于后续重算历史余额）
+        Set<Long> allAffectedAccountIds = new HashSet<>(oldAccountIds);
+        allAffectedAccountIds.addAll(newAccountIds);
+
+        // 1. 回滚旧分录的账户余额
+        for (LedgerPosting oldPosting : oldPostings) {
+            String reversedType = "DEBIT".equals(oldPosting.getPostingType()) ? "CREDIT" : "DEBIT";
+            updateAccountBalance(oldPosting.getAccountId(), reversedType, oldPosting.getAmount());
+        }
+
+        // 2. 删除旧分录
+        ledgerPostingMapper.deleteByTxnId(oldTxnId);
+
+        // 3. 更新交易记录（保留created_at）
+        // 处理requestedAt
+        LocalDateTime requestedAt = existing.getRequestedAt(); // 默认使用原时间
+        if (requestedAtStr != null && !requestedAtStr.isEmpty()) {
+            try {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                requestedAt = LocalDateTime.parse(requestedAtStr, formatter);
+            } catch (Exception e) {
+                // 解析失败，使用原时间
+            }
+        }
+        
+        existing.setTxnType(txnType);
+        existing.setBizGroupKey(bizGroupKey != null ? bizGroupKey : existing.getTxnId());
+        existing.setRequestedAt(requestedAt);
+        existing.setTradeDate(requestedAt.toLocalDate());
+        existing.setNote(note);
+        existing.setCategoryId(categoryId);
+        existing.setIsReimbursable(isReimbursable != null ? isReimbursable : false);
+        existing.setProductId(productId);
+        // created_at保持不变，updated_at会自动更新
+        
+        ledgerTxnMapper.update(existing);
+
+        // 4. 验证并修正虚拟账户的 accountId（与 createTransaction 相同的逻辑）
+        // 这是关键步骤：确保 EXPENSE/INCOME 等虚拟账户类型的 posting 使用正确的虚拟账户 ID
+        fixVirtualAccountIds(postings, productId);
+        
+        // 5. 插入新分录并更新账户余额
+        for (LedgerPosting posting : postings) {
+            posting.setTxnId(oldTxnId); // 使用原交易ID
+        }
+        insertPostingsWithBalance(oldTxnId, postings);
+
+        // 6. 性能优化：判断是否需要重算历史余额
+        // 修改操作比较复杂，需要考虑：
+        // - 旧分录被删除后，旧账户的后续余额会变化
+        // - 新分录插入后，新账户的后续余额可能会变化
+        // 因此，只有当所有涉及的交易时间都是各自账户的最新时间时，才不需要重算
+        boolean needsRecalc = needsHistoryRecalculationForUpdate(
+            oldAccountIds, existing.getRequestedAt(),  // 旧账户和旧时间（已删除）
+            newAccountIds, requestedAt                  // 新账户和新时间
+        );
+        
+        log.info("[updateTransaction] 旧账户IDs: {}, 新账户IDs: {}", oldAccountIds, newAccountIds);
+        log.info("[updateTransaction] 需要重算历史余额: {}, 所有受影响账户: {}", needsRecalc, allAffectedAccountIds);
+        
+        if (needsRecalc) {
+            recalculateAccountBalanceHistoryForAccounts(allAffectedAccountIds);
+        } else {
+            log.info("[updateTransaction] 跳过历史余额重算");
+        }
+
+        // 返回更新后的交易记录
+        return ledgerTxnMapper.selectByTxnId(oldTxnId);
+    }
+    
+    /**
+     * 判断修改操作是否需要重算历史余额
+     * 
+     * 修改操作涉及删除旧分录和插入新分录：
+     * 1. 如果账户发生变更（旧账户和新账户不完全相同），总是需要重算
+     *    - 因为新账户可能已经有历史分录，新插入的分录需要基于历史余额计算
+     * 2. 如果旧分录不是旧账户的最新分录，删除后会影响后续余额，需要重算
+     * 3. 如果新分录不是新账户的最新分录，插入后会影响后续余额，需要重算
+     * 
+     * @param oldAccountIds 旧账户ID集合
+     * @param oldTxnTime 旧交易时间
+     * @param newAccountIds 新账户ID集合
+     * @param newTxnTime 新交易时间
+     * @return true 如果需要重算
+     */
+    private boolean needsHistoryRecalculationForUpdate(
+            Set<Long> oldAccountIds, LocalDateTime oldTxnTime,
+            Set<Long> newAccountIds, LocalDateTime newTxnTime) {
+        
+        log.info("[needsHistoryRecalculationForUpdate] 检查是否需要重算: oldAccountIds={}, newAccountIds={}", oldAccountIds, newAccountIds);
+        
+        // 情况1：如果账户发生变更（旧账户和新账户不完全相同），总是需要重算
+        // 这是因为新账户可能已经有历史分录，需要正确计算历史余额
+        if (oldAccountIds != null && newAccountIds != null && !oldAccountIds.equals(newAccountIds)) {
+            log.info("[needsHistoryRecalculationForUpdate] 账户变更，需要重算");
+            return true;
+        }
+        
+        // 检查旧账户：删除的分录是否是最新的
+        // 注意：此时旧分录已经被删除，所以查询的最新时间不包括旧分录
+        if (oldAccountIds != null && !oldAccountIds.isEmpty() && oldTxnTime != null) {
+            LocalDateTime latestOldTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
+                new ArrayList<>(oldAccountIds));
+            // 如果旧账户还有分录，且有分录的时间晚于被删除的分录时间，需要重算
+            if (latestOldTime != null && latestOldTime.isAfter(oldTxnTime)) {
+                return true;
+            }
+        }
+        
+        // 检查新账户：插入的分录是否是最新的
+        // 注意：此时新分录已经被插入，所以查询的最新时间包括新分录
+        if (newAccountIds != null && !newAccountIds.isEmpty() && newTxnTime != null) {
+            LocalDateTime latestNewTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
+                new ArrayList<>(newAccountIds));
+            // 如果有比新分录更晚的分录，需要重算
+            if (latestNewTime != null && latestNewTime.isAfter(newTxnTime)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 }
 

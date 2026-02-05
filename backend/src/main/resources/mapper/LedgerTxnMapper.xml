@@ -69,9 +69,26 @@
         <if test="accountId != null">
             AND EXISTS (
                 SELECT 1 FROM ledger_posting lp 
+                INNER JOIN accounts a ON lp.account_id = a.id
                 WHERE lp.txn_id = lt.txn_id 
-                AND lp.account_id = #{accountId}
+                AND (
+                    lp.account_id = #{accountId}
+                    OR a.parent_account_id = #{accountId}
+                )
             )
+        </if>
+        <if test="childAccountIds != null and childAccountIds.size() > 0">
+            AND EXISTS (
+                SELECT 1 FROM ledger_posting lp 
+                WHERE lp.txn_id = lt.txn_id 
+                AND lp.account_id IN
+                <foreach collection="childAccountIds" item="childId" open="(" separator="," close=")">
+                    #{childId}
+                </foreach>
+            )
+        </if>
+        <if test="note != null and note != ''">
+            AND lt.note LIKE CONCAT('%', #{note}, '%')
         </if>
         ORDER BY lt.requested_at DESC
         <if test="limit != null and limit > 0">
@@ -105,9 +122,26 @@
         <if test="accountId != null">
             AND EXISTS (
                 SELECT 1 FROM ledger_posting lp 
+                INNER JOIN accounts a ON lp.account_id = a.id
                 WHERE lp.txn_id = lt.txn_id 
-                AND lp.account_id = #{accountId}
+                AND (
+                    lp.account_id = #{accountId}
+                    OR a.parent_account_id = #{accountId}
+                )
             )
+        </if>
+        <if test="childAccountIds != null and childAccountIds.size() > 0">
+            AND EXISTS (
+                SELECT 1 FROM ledger_posting lp 
+                WHERE lp.txn_id = lt.txn_id 
+                AND lp.account_id IN
+                <foreach collection="childAccountIds" item="childId" open="(" separator="," close=")">
+                    #{childId}
+                </foreach>
+            )
+        </if>
+        <if test="note != null and note != ''">
+            AND lt.note LIKE CONCAT('%', #{note}, '%')
         </if>
     </select>
 
@@ -137,6 +171,16 @@
             is_reimbursed = #{isReimbursed},
             is_reversed = #{isReversed},
             reversed_by_txn_id = #{reversedByTxnId},
+            <if test="txnType != null">
+                txn_type = #{txnType},
+            </if>
+            <if test="bizGroupKey != null">
+                biz_group_key = #{bizGroupKey},
+            </if>
+            <if test="requestedAt != null">
+                requested_at = #{requestedAt},
+                trade_date = DATE(#{requestedAt}),
+            </if>
             updated_at = NOW()
         WHERE id = #{id}
     </update>

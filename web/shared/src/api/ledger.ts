@@ -90,4 +90,19 @@ export const ledgerApi = {
     const response = await apiClient.post<LedgerTxn>('/ledger/txns/custody-transfer', data)
     return response.data
   },
+
+  /**
+   * 更新交易流水
+   */
+  updateTransaction: async (txnId: string, data: CreateTransactionRequest): Promise<LedgerTxn> => {
+    const response = await apiClient.put<LedgerTxn>(`/ledger/txns/${txnId}`, data)
+    return response.data
+  },
+
+  /**
+   * 删除交易流水
+   */
+  deleteTransaction: async (txnId: string): Promise<void> => {
+    await apiClient.delete(`/ledger/txns/${txnId}`)
+  },
 }

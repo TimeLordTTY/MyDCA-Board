@@ -21,6 +21,15 @@
         SELECT * FROM ledger_posting WHERE txn_id = #{txnId}
     </select>
 
+    <select id="selectByTxnIds" resultMap="BaseResultMap">
+        SELECT * FROM ledger_posting
+        WHERE txn_id IN
+        <foreach collection="txnIds" item="txnId" open="(" separator="," close=")">
+            #{txnId}
+        </foreach>
+        ORDER BY txn_id, id
+    </select>
+
     <select id="selectByAccountId" resultMap="BaseResultMap">
         SELECT * FROM ledger_posting WHERE account_id = #{accountId} ORDER BY created_at DESC
     </select>
@@ -77,6 +86,17 @@
         ORDER BY lt.requested_at ASC, lp.id ASC
     </select>
 
+    <!-- 查询多个账户的所有分录（按交易时间排序，用于统一重算历史余额） -->
+    <select id="selectByAccountIdsOrderByTxnTime" resultMap="BaseResultMap">
+        SELECT lp.* FROM ledger_posting lp
+        INNER JOIN ledger_txn lt ON lp.txn_id = lt.txn_id
+        WHERE lp.account_id IN
+        <foreach collection="accountIds" item="accountId" open="(" separator="," close=")">
+            #{accountId}
+        </foreach>
+        ORDER BY lt.requested_at ASC, lp.id ASC
+    </select>
+
     <!-- 批量更新分录的历史余额 -->
     <update id="batchUpdateBalanceAfter">
         UPDATE ledger_posting
@@ -99,5 +119,21 @@
     <delete id="deleteByTxnId">
         DELETE FROM ledger_posting WHERE txn_id = #{txnId}
     </delete>
+
+    <!-- 查询所有有分录的账户ID（用于全量重算历史余额） -->
+    <select id="selectDistinctAccountIds" resultType="java.lang.Long">
+        SELECT DISTINCT account_id FROM ledger_posting
+    </select>
+    
+    <!-- 查询指定账户的最新交易时间（用于判断新交易是否需要重算历史） -->
+    <select id="selectLatestTxnTimeByAccountIds" resultType="java.time.LocalDateTime">
+        SELECT MAX(lt.requested_at)
+        FROM ledger_posting lp
+        INNER JOIN ledger_txn lt ON lp.txn_id = lt.txn_id
+        WHERE lp.account_id IN
+        <foreach collection="accountIds" item="accountId" open="(" separator="," close=")">
+            #{accountId}
+        </foreach>
+    </select>
 
 </mapper>

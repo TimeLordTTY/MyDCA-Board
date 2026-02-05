@@ -6,6 +6,13 @@
       @success="handleEntrySuccess"
     />
 
+    <!-- 编辑流水模态框（复用UnifiedEntryModal） -->
+    <UnifiedEntryModal
+      v-model="editVisible"
+      :editing-txn="editingTxn"
+      @success="handleEditSuccess"
+    />
+
     <!-- 退款模态框 -->
     <RefundModal
       v-model="refundVisible"
@@ -95,13 +102,15 @@
           range-separator="至"
           start-placeholder="开始日期"
           end-placeholder="结束日期"
-          style="width: 240px"
+          style="width: 200px"
+          size="small"
           @change="handleDateRangeChange"
         />
         <el-select 
           v-model="filters.parentAccountId" 
           placeholder="父账户" 
-          style="width: 150px" 
+          style="width: 140px" 
+          size="small"
           clearable 
           @change="handleParentAccountChange"
         >
@@ -115,7 +124,8 @@
         <el-select 
           v-model="filters.accountId" 
           placeholder="子账户" 
-          style="width: 150px" 
+          style="width: 140px" 
+          size="small"
           clearable 
           :disabled="!filters.parentAccountId"
           @change="handleFilterChange"
@@ -127,7 +137,15 @@
             :value="acc.id"
           />
         </el-select>
-        <el-button @click="handleFilterChange">搜索</el-button>
+        <el-input
+          v-model="filters.note"
+          placeholder="备注查询"
+          style="width: 150px"
+          size="small"
+          clearable
+          @keyup.enter="handleFilterChange"
+        />
+        <el-button size="small" @click="handleFilterChange">搜索</el-button>
       </div>
 
       <!-- 流水列表 -->
@@ -135,14 +153,14 @@
         <table class="ledger-table">
           <thead>
             <tr>
-              <th style="width: 150px;">时间</th>
+              <th style="width: 110px;">时间</th>
               <th class="right" style="width: 100px;">金额</th>
-              <th style="width: 140px;">分类</th>
+              <th style="width: 110px;">分类</th>
               <th style="width: 200px;">叶子账户</th>
               <th class="right" style="width: 110px;">叶子账户余额</th>
               <th class="right" style="width: 110px;">父账户余额</th>
-              <th style="width: 180px;">备注</th>
-              <th class="right" style="width: 130px;">操作</th>
+              <th style="width: 250px;">备注</th>
+              <th class="right" style="width: 220px; position: sticky; right: 0; background: white; z-index: 10;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -153,16 +171,22 @@
               <td colspan="8" class="td-muted" style="text-align: center; padding: 24px">暂无流水记录</td>
             </tr>
             <tr v-for="(txn, index) in transactions" :key="txn.txnId" :class="{ 'row-even': index % 2 === 0 }">
-              <td class="mono">{{ formatDateTime(txn.requestedAt) }}</td>
+              <td class="mono time-cell">
+                <div class="time-date">{{ formatDate(txn.requestedAt) }}</div>
+                <div class="time-time">{{ formatTime(txn.requestedAt) }}</div>
+              </td>
               <td class="right mono" :class="getAmountClass(txn.txnType)">
                 {{ formatAmountWithSign(txn.txnType, (txn as any).summaryAmount || 0) }}
               </td>
-              <td>{{ getCategoryDisplayText(txn) }}</td>
+              <td class="category-cell">
+                <div class="category-parent">{{ getCategoryParent(txn) }}</div>
+                <div class="category-child">{{ getCategoryChild(txn) }}</div>
+              </td>
               <td>{{ (txn as any).leafAccountName || '—' }}</td>
               <td class="right mono">{{ formatCurrency((txn as any).leafAccountBalance || 0) }}</td>
               <td class="right mono">{{ formatCurrency((txn as any).parentAccountBalance || 0) }}</td>
-              <td class="td-muted">{{ txn.note || '' }}</td>
-              <td class="right">
+              <td class="td-muted note-cell">{{ txn.note || '' }}</td>
+              <td class="right operation-cell">
                 <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: nowrap;">
                   <button
                     v-if="txn.txnType === 'EXPENSE'"
@@ -177,6 +201,20 @@
                     @click="handleReimburse(txn)"
                   >
                     报销
+                  </button>
+                  <button
+                    v-if="!txn.orderId"
+                    class="btn-small"
+                    @click="handleEdit(txn)"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    v-if="!txn.orderId"
+                    class="btn-small btn-danger"
+                    @click="handleDelete(txn)"
+                  >
+                    删除
                   </button>
                   <button class="btn-small" @click="handleViewDetail(txn)">详情</button>
                 </div>
@@ -204,7 +242,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElNotification, ElPagination } from 'element-plus'
+import { ElNotification, ElPagination, ElMessageBox } from 'element-plus'
 import { ledgerApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
 import type { LedgerTxn, LedgerTxnDetail, LedgerPosting } from '@wealth-hub/shared'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
@@ -212,6 +250,9 @@ import RefundModal from '../components/RefundModal.vue'
 import ReimburseModal from '../components/ReimburseModal.vue'
 
 const accountStore = useAccountStore()
+
+// 本地账户数据（确保响应式）
+const localAccounts = ref<any[]>([])
 
 const loading = ref(false)
 const transactions = ref<LedgerTxn[]>([])
@@ -222,6 +263,8 @@ const refundVisible = ref(false)
 const reimburseVisible = ref(false)
 const selectedExpenseTxn = ref<LedgerTxn | null>(null)
 const unifiedEntryVisible = ref(false)
+const editVisible = ref(false)
+const editingTxn = ref<LedgerTxnDetail | null>(null)
 
 const pagination = reactive({
   page: 1,
@@ -233,27 +276,21 @@ const filters = reactive({
   dateRange: [] as Date[],
   parentAccountId: undefined as number | undefined,
   accountId: undefined as number | undefined,
+  note: '',
   startDate: '',
   endDate: '',
 })
 
-// 父账户列表（有子账户的账户）
+// 父账户列表（有子账户的账户）- 从本地 accounts 计算
 const parentAccounts = computed(() => {
-  const parentList: any[] = []
+  // API 返回的是树形结构，父账户 = 有 children 的账户
+  const allAccounts = localAccounts.value
+  if (!allAccounts || allAccounts.length === 0) return []
   
-  function traverse(accounts: any[]) {
-    accounts.forEach(acc => {
-      // 如果有children且children不为空，说明是父账户
-      if (acc.children && acc.children.length > 0 && acc.accountKind === 'REAL') {
-        parentList.push(acc)
-        // 递归处理子账户（因为子账户可能也是父账户）
-        traverse(acc.children)
-      }
-    })
-  }
-  
-  traverse(accountStore.accountTree)
-  return parentList
+  // 返回有 children 且是 REAL 类型的账户
+  return allAccounts.filter((acc: any) => 
+    acc.children && acc.children.length > 0 && acc.accountKind === 'REAL'
+  )
 })
 
 // 可用的子账户（根据选择的父账户）
@@ -308,7 +345,9 @@ async function loadTransactions() {
     const response = await ledgerApi.getTransactions({
       startDate: filters.startDate || undefined,
       endDate: filters.endDate || undefined,
+      parentAccountId: filters.parentAccountId || undefined,
       accountId: filters.accountId || undefined,
+      note: filters.note || undefined,
       page: pagination.page,
       pageSize: pagination.pageSize,
     })
@@ -493,6 +532,56 @@ function getCategoryDisplayText(txn: LedgerTxn): string {
   return category.categoryL1
 }
 
+function formatDate(dateTimeStr: string): string {
+  if (!dateTimeStr) return '—'
+  const date = new Date(dateTimeStr)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatTime(dateTimeStr: string): string {
+  if (!dateTimeStr) return '—'
+  const date = new Date(dateTimeStr)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${hours}:${minutes}:${seconds}`
+}
+
+function getCategoryParent(txn: LedgerTxn): string {
+  const categoryId = txn.categoryId ? Number(txn.categoryId) : undefined
+  if (!categoryId) {
+    return '—'
+  }
+  
+  const categories = txn.txnType === 'EXPENSE' ? expenseCategories : incomeCategories
+  const category = findCategoryById(categories, categoryId)
+  
+  if (!category) {
+    return '—'
+  }
+  
+  return category.categoryL1
+}
+
+function getCategoryChild(txn: LedgerTxn): string {
+  const categoryId = txn.categoryId ? Number(txn.categoryId) : undefined
+  if (!categoryId) {
+    return ''
+  }
+  
+  const categories = txn.txnType === 'EXPENSE' ? expenseCategories : incomeCategories
+  const category = findCategoryById(categories, categoryId)
+  
+  if (!category || !category.categoryL2) {
+    return ''
+  }
+  
+  return category.categoryL2
+}
+
 /**
  * 根据交易类型获取金额显示的颜色类
  * 颜色约定：
@@ -633,8 +722,55 @@ async function handleEntrySuccess() {
   loadTransactions()
 }
 
-onMounted(() => {
-  accountStore.fetchAccounts()
+async function handleEdit(txn: LedgerTxn) {
+  try {
+    const txnId = (txn as any).originalTxnId || txn.txnId
+    const detail = await ledgerApi.getTransactionDetail(txnId)
+    editingTxn.value = detail
+    editVisible.value = true
+  } catch (error: any) {
+    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
+  }
+}
+
+async function handleEditSuccess() {
+  editVisible.value = false
+  editingTxn.value = null
+  await accountStore.fetchAccounts()
+  loadTransactions()
+}
+
+async function handleDelete(txn: LedgerTxn) {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除这条流水吗？删除后无法恢复，且会影响后续流水的余额计算。`,
+      '确认删除',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+    
+    const txnId = (txn as any).originalTxnId || txn.txnId
+    await ledgerApi.deleteTransaction(txnId)
+    
+    ElNotification.success({ title: '成功', message: '流水已删除', position: 'bottom-right' })
+    await accountStore.fetchAccounts()
+    loadTransactions()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElNotification.error({ title: '错误', message: error.message || '删除失败', position: 'bottom-right' })
+    }
+  }
+}
+
+onMounted(async () => {
+  // 先加载账户数据，确保父账户下拉框有数据
+  await accountStore.fetchAccounts()
+  // 手动赋值到本地 ref（确保响应式）
+  localAccounts.value = accountStore.accounts || []
+  
   loadTransactions()
   
   // 监听全局数据刷新事件
@@ -643,12 +779,13 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* 流水表格容器 - 支持隐藏滚动条 */
+/* 流水表格容器 - 支持横向滚动，确保操作列可见 */
 .ledger-table-container {
   overflow-y: auto;
   overflow-x: auto;
-  max-height: calc(100vh - 400px); /* 根据实际布局调整 */
+  max-height: calc(100vh - 310px); /* 调整高度避免外层滚动，同时尽量多显示记录 */
   min-height: 300px;
+  position: relative;
 }
 
 /* 流水表格样式 - 更大、更美观 */
@@ -677,10 +814,75 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-/* 备注列允许换行 */
-.ledger-table tbody td:nth-child(7) {
+/* 时间列：换行显示，字体适中 */
+.ledger-table tbody td.time-cell {
   white-space: normal;
-  max-width: 200px;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 8px;
+}
+
+.time-cell .time-date {
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+
+.time-cell .time-time {
+  color: #909399;
+  font-size: 11px;
+}
+
+/* 分类列：换行显示，字体适中 */
+.ledger-table tbody td.category-cell {
+  white-space: normal;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 8px;
+}
+
+.category-cell .category-parent {
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+
+.category-cell .category-child {
+  color: #909399;
+  font-size: 11px;
+}
+
+/* 备注列：允许换行，字体缩小 */
+.ledger-table tbody td.note-cell {
+  white-space: normal;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 10px 12px;
+}
+
+/* 操作列：固定右侧，确保可见 */
+.ledger-table thead th:last-child {
+  position: sticky;
+  right: 0;
+  background: linear-gradient(135deg, rgba(78, 164, 255, 0.12), rgba(124, 199, 255, 0.08));
+  z-index: 10;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.05);
+}
+
+.ledger-table tbody td.operation-cell {
+  white-space: nowrap;
+  position: sticky;
+  right: 0;
+  background: white;
+  z-index: 5;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.05);
+}
+
+.ledger-table tbody tr.row-even td.operation-cell {
+  background: rgba(78, 164, 255, 0.04);
+}
+
+.ledger-table tbody tr:hover td.operation-cell {
+  background: rgba(78, 164, 255, 0.1) !important;
 }
 
 .ledger-table tbody tr.row-even {

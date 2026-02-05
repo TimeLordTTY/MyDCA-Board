@@ -144,8 +144,11 @@ public class MarketDataScheduler {
     /**
      * 服务启动时执行一次历史行情补齐
      * 使用@PostConstruct在服务启动后执行
+     * 
+     * 注意：已禁用自动启动，改为通过前端"刷新行情"按钮手动触发
+     * 如需恢复自动启动，取消下面 @PostConstruct 的注释
      */
-    @PostConstruct
+    // @PostConstruct  // 禁用启动时自动执行
     public void backfillHistoryOnStartup() {
         try {
             logger.info("服务启动，开始补齐历史行情数据...");

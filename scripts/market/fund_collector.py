@@ -229,18 +229,18 @@ class FundCollector:
             """
             cursor.execute(check_sql, (product_id, nav_date))
             if cursor.fetchone():
-                # 更新
+                # 更新（与当前 nav 表结构对齐：nav + source，created_at 由默认值控制）
                 update_sql = """
                     UPDATE nav
-                    SET nav = %s, updated_at = NOW()
+                    SET nav = %s, source = 'AKSHARE'
                     WHERE product_id = %s AND nav_date = %s
                 """
                 cursor.execute(update_sql, (nav, product_id, nav_date))
             else:
-                # 插入
+                # 插入（nav 表没有 updated_at 字段，created_at 使用默认值）
                 insert_sql = """
-                    INSERT INTO nav (product_id, nav_date, nav, created_at, updated_at)
-                    VALUES (%s, %s, %s, NOW(), NOW())
+                    INSERT INTO nav (product_id, nav_date, nav, source)
+                    VALUES (%s, %s, %s, 'AKSHARE')
                 """
                 cursor.execute(insert_sql, (product_id, nav_date, nav))
             self.conn.commit()

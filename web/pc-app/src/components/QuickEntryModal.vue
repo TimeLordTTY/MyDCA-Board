@@ -143,7 +143,7 @@ function handleClose() {
 
 async function handleSubmit() {
   if (!form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
-    ElNotification.error({ title: '错误', message: '请填写完整信息', position: 'bottom-right' })
+    ElNotification({ type: 'error', title: '错误', message: '请填写完整信息', position: 'bottom-right', duration: 3000 })
     return
   }
 
@@ -162,11 +162,14 @@ async function handleSubmit() {
       occurredAt: form.value.occurredAt,
       categoryId: categoryId,
     })
-    ElNotification.success({ title: '成功', message: '提交成功', position: 'bottom-right' })
+    const quickMessage = form.value.note 
+      ? `提交成功：${form.value.note}`
+      : '提交成功'
+    ElNotification.success({ title: '成功', message: quickMessage, position: 'bottom-right', duration: 3000 })
     emit('success')
     handleClose()
   } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right' })
+    ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right', duration: 3000 })
   } finally {
     submitting.value = false
   }

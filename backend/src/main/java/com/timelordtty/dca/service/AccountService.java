@@ -166,6 +166,23 @@ public class AccountService {
     }
 
     /**
+     * 批量查询账户
+     * @param accountIds 账户ID列表
+     * @return 账户Map，key为accountId，value为Account实体
+     */
+    public java.util.Map<Long, Account> getAccountsByIds(List<Long> accountIds) {
+        if (accountIds == null || accountIds.isEmpty()) {
+            return new java.util.HashMap<>();
+        }
+        List<Account> accounts = accountMapper.selectByIds(accountIds);
+        java.util.Map<Long, Account> accountMap = new java.util.HashMap<>();
+        for (Account account : accounts) {
+            accountMap.put(account.getId(), account);
+        }
+        return accountMap;
+    }
+
+    /**
      * 更新账户信息
      * 
      * @param account 待更新的账户实体（必须包含id）

@@ -114,6 +114,7 @@ public class HoldingService {
 
         Map<Long, HoldingInfo> holdings = new HashMap<>();
 
+        // 1) 基于 POSITION 分录计算基础持仓成本和份额
         for (LedgerPosting posting : postings) {
             // 通过ledger_txn获取productId
             LedgerTxn txn = ledgerTxnMapper.selectByTxnId(posting.getTxnId());
@@ -136,7 +137,7 @@ public class HoldingService {
                 holding.setTotalCost(BigDecimal.ZERO);
             }
 
-            // 计算份额和成本
+            // 计算份额和成本（仅基于 POSITION 分录）
             if ("DEBIT".equals(posting.getPostingType())) {
                 // DEBIT：持仓增加
                 if (posting.getShares() != null) {
@@ -203,7 +204,32 @@ public class HoldingService {
             }
         }
 
-        // 计算平均成本、市值和未实现盈亏
+        // 2. 将与该产品相关的所有手续费计入成本
+        // 为了与同花顺口径对齐：
+        //   最终持仓成本 = 买入总金额（含买入手续费）- 卖出净额（卖出金额 - 卖出手续费）
+        // 当前 POSITION 分录只记录「买入净额」和「卖出毛额」，因此这里需要再把
+        //   所有与该产品相关的 FEE 分录金额加回到 totalCost 中。
+        List<LedgerPosting> feePostings = ledgerPostingMapper
+            .selectByAccountTypeAndOwner("FEE", userId, familyId);
+        for (LedgerPosting feePosting : feePostings) {
+            LedgerTxn feeTxn = ledgerTxnMapper.selectByTxnId(feePosting.getTxnId());
+            if (feeTxn == null || feeTxn.getProductId() == null) {
+                continue;
+            }
+            Long productId = feeTxn.getProductId();
+            HoldingInfo holding = holdings.get(productId);
+            // 如果该产品当前没有持仓记录（totalShares 为0），
+            // 则不需要把手续费计入（已经全部卖出或与当前用户无关）
+            if (holding == null) {
+                continue;
+            }
+            if (holding.getTotalCost() == null) {
+                holding.setTotalCost(BigDecimal.ZERO);
+            }
+            holding.setTotalCost(holding.getTotalCost().add(feePosting.getAmount()));
+        }
+
+        // 3. 计算平均成本、市值和未实现盈亏
         for (Map.Entry<Long, HoldingInfo> entry : holdings.entrySet()) {
             HoldingInfo holding = entry.getValue();
             Long productId = entry.getKey();

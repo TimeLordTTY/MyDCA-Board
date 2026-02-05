@@ -70,4 +70,20 @@ export const productApi = {
   saveSellFeeTiers: async (productId: number, tiers: FundSellFeeTier[]): Promise<void> => {
     await apiClient.post(`/products/${productId}/sell-fee-tiers`, tiers)
   },
+
+  /**
+   * 刷新单个产品的行情数据
+   */
+  refreshMarketData: async (productId: number): Promise<{ message: string }> => {
+    const response = await apiClient.post<{ message: string }>(`/products/${productId}/refresh-market-data`)
+    return response.data
+  },
+
+  /**
+   * 刷新所有产品的行情数据
+   */
+  refreshAllMarketData: async (): Promise<{ message: string }> => {
+    const response = await apiClient.post<{ message: string }>('/products/refresh-all-market-data')
+    return response.data
+  },
 }

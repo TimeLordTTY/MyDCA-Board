@@ -130,8 +130,11 @@ watch(visible, (val) => {
     const expense = props.expenseTxn
     const txnAny = expense as any
     
+    // 默认使用原流水的发生时间
+    const defaultOccurredAt = expense.occurredAt || new Date().toISOString().slice(0, 19).replace('T', ' ')
+    
     form.value = {
-      occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      occurredAt: defaultOccurredAt,
       accountId: undefined, // 需要从postings中获取
       amount: originalAmount.value, // 默认退款全额
       note: expense.note ? `退款：${expense.note}` : '退款',
