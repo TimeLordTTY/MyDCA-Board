@@ -15,7 +15,8 @@
           </h3>
           <div class="sub">买入/卖出来自"订单&结算"。持仓数据基于流水实时计算。</div>
         </div>
-        <div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <el-checkbox v-model="showCleared" size="small">显示已清仓</el-checkbox>
           <el-button type="primary" @click="handleOpenImport">导入初始持仓</el-button>
         </div>
       </div>
@@ -186,6 +187,7 @@ const navs = ref<Map<number, Nav>>(new Map())
 const detailVisible = ref(false)
 const selectedHolding = ref<any>(null)
 const importDialogVisible = ref(false)
+const showCleared = ref(false) // 是否显示已清仓产品（份额为0）
 
 // 合并持仓和行情数据
 const holdingsWithQuote = computed(() => {
@@ -226,12 +228,14 @@ const holdingsWithQuote = computed(() => {
 const exchangeHoldings = computed(() =>
   holdingsWithQuote.value
     .filter(h => h.channel === 'EXCHANGE')
+    .filter(h => showCleared.value || (h.sharesCalc && h.sharesCalc > 0)) // 不勾选时过滤已清仓
     .slice()
     .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
 )
 const otcHoldings = computed(() =>
   holdingsWithQuote.value
     .filter(h => h.channel !== 'EXCHANGE')
+    .filter(h => showCleared.value || (h.sharesCalc && h.sharesCalc > 0)) // 不勾选时过滤已清仓
     .slice()
     .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
 )

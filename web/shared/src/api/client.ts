@@ -6,8 +6,8 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
 // API基础URL
-// 开发环境：通过vite proxy代理到 http://localhost:8766
-// 生产环境：通过nginx代理到后端服务
+// 开发环境：通过 vite proxy 代理到 http://localhost:8766
+// 生产环境：通过 nginx 将 /api/** 代理到后端服务
 const API_BASE_URL = '/api/v2'
 
 // 创建axios实例
@@ -47,7 +47,6 @@ apiClient.interceptors.response.use(
       if (status === 401 || status === 403) {
         // 清除token
         localStorage.removeItem('token')
-        // 直接跳转到登录页
         // 自动检测当前部署的 base 路径（如 /wealth-hub/ 或 /wealth-hub-mobile/）
         const basePath = window.location.pathname.match(/^\/[^/]+\//)?.[0] || '/'
         const loginPath = basePath + 'login'
