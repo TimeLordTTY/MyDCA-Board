@@ -450,14 +450,23 @@ const isBuyType = computed(() => {
 })
 
 const availableFunds = computed(() => {
+  if (!accountStore.cashLeafAccounts || !Array.isArray(accountStore.cashLeafAccounts)) {
+    return 0
+  }
   return accountStore.cashLeafAccounts.reduce((sum, acc) => sum + (acc.balance || 0) - (acc.reservedAmount || 0), 0)
 })
 
 const reservedAmount = computed(() => {
+  if (!accountStore.cashLeafAccounts || !Array.isArray(accountStore.cashLeafAccounts)) {
+    return 0
+  }
   return accountStore.cashLeafAccounts.reduce((sum, acc) => sum + (acc.reservedAmount || 0), 0)
 })
 
 const spendableAmount = computed(() => {
+  if (!accountStore.cashLeafAccounts || !Array.isArray(accountStore.cashLeafAccounts)) {
+    return 0
+  }
   return accountStore.cashLeafAccounts
     .filter((acc) => acc.fundUsage === 'SPENDABLE')
     .reduce((sum, acc) => sum + (acc.balance || 0) - (acc.reservedAmount || 0), 0)

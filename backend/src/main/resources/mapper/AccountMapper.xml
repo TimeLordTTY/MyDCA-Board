@@ -107,6 +107,14 @@
         LIMIT 1
     </select>
 
+    <select id="selectAllLinkedAccounts" resultMap="BaseResultMap">
+        SELECT * FROM accounts
+        WHERE is_active = 1
+        AND account_kind = 'REAL'
+        AND linked_product_id IS NOT NULL
+        ORDER BY account_name
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO accounts (
             account_code, account_name, account_kind, account_type, account_subtype,

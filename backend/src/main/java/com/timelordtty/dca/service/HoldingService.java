@@ -542,7 +542,10 @@ public class HoldingService {
         
         // 获取产品最新净值用于计算市值
         BigDecimal latestNav = BigDecimal.ONE; // 默认净值为1
-        // TODO: 从 nav 表获取最新净值
+        Nav latestNavRecord = navMapper.selectLatest(productId);
+        if (latestNavRecord != null && latestNavRecord.getNav() != null) {
+            latestNav = latestNavRecord.getNav();
+        }
         
         // 首先通过 POSITION 分录计算持仓（这是最准确的方式）
         // 查询该产品的所有 POSITION 类型分录
@@ -610,12 +613,19 @@ public class HoldingService {
             // 有关联账户，根据子账户金额按比例计算份额
             for (Account linkedAccount : linkedAccounts) {
                 BigDecimal totalShares = linkedAccount.getInitialShares();
+                
+                // 获取子账户
+                List<Account> children = accountMapper.selectChildren(linkedAccount.getId());
+                
                 if (totalShares == null || totalShares.compareTo(BigDecimal.ZERO) <= 0) {
                     continue;
                 }
                 
-                // 获取子账户
-                List<Account> children = accountMapper.selectChildren(linkedAccount.getId());
+                // 计算所有子账户金额总和（用于按比例分配）
+                BigDecimal totalBalance = children.stream()
+                    .filter(c -> c.getBalance() != null && c.getBalance().compareTo(BigDecimal.ZERO) > 0)
+                    .map(Account::getBalance)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
                 
                 if (children.isEmpty()) {
                     // 没有子账户，整个账户就是持仓
@@ -627,12 +637,6 @@ public class HoldingService {
                     result.add(info);
                 } else {
                     // 有子账户，根据子账户金额分配份额
-                    // 计算所有子账户金额总和
-                    BigDecimal totalBalance = children.stream()
-                        .filter(c -> c.getBalance() != null && c.getBalance().compareTo(BigDecimal.ZERO) > 0)
-                        .map(Account::getBalance)
-                        .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    
                     for (Account child : children) {
                         BigDecimal childBalance = child.getBalance();
                         if (childBalance == null || childBalance.compareTo(BigDecimal.ZERO) <= 0) {

@@ -5,6 +5,9 @@
 
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios'
 
+// API基础URL
+// 开发环境：通过vite proxy代理到 http://localhost:8766
+// 生产环境：通过nginx代理到后端服务
 const API_BASE_URL = '/api/v2'
 
 // 创建axios实例
@@ -45,13 +48,17 @@ apiClient.interceptors.response.use(
         // 清除token
         localStorage.removeItem('token')
         // 直接跳转到登录页
+        // 自动检测当前部署的 base 路径（如 /wealth-hub/ 或 /wealth-hub-mobile/）
+        const basePath = window.location.pathname.match(/^\/[^/]+\//)?.[0] || '/'
+        const loginPath = basePath + 'login'
         console.log('Session expired, redirecting to login...', {
           currentPath: window.location.pathname,
+          loginPath,
           status
         })
-        if (window.location.pathname !== '/login') {
+        if (!window.location.pathname.endsWith('/login')) {
           // 使用replace而不是href，避免在历史记录中留下记录
-          window.location.replace('/login')
+          window.location.replace(loginPath)
         }
       }
 

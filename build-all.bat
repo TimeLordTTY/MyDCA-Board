@@ -12,7 +12,7 @@ set "ROOT_DIR=%~dp0"
 cd /d "%ROOT_DIR%"
 
 REM Build frontend
-echo [1/3] Building frontend...
+echo [1/2] Building frontend...
 cd /d "%ROOT_DIR%web"
 if not exist "build-web.bat" (
     echo Error: build-web.bat not found!
@@ -29,7 +29,7 @@ cd /d "%ROOT_DIR%"
 
 REM Build Java backend
 echo.
-echo [2/3] Building Java backend...
+echo [2/2] Building Java backend...
 cd /d "%ROOT_DIR%backend"
 if not exist "pom.xml" (
     echo Error: pom.xml not found!
@@ -44,18 +44,20 @@ if !errorlevel! neq 0 (
 )
 cd /d "%ROOT_DIR%"
 
-REM Check Python scripts
-echo.
-echo [3/3] Checking Python scripts...
-if exist "%ROOT_DIR%scripts\python" (
-    echo Python scripts check passed (no compilation needed)
-) else (
-    echo Python scripts directory not found
-)
-
 echo.
 echo ========================================
 echo All projects built successfully!
 echo ========================================
-pause
+echo.
+
+REM For local development: start frontend dev servers (PC + Mobile)
+if exist "%ROOT_DIR%start-dev.bat" (
+    echo Starting frontend dev servers...
+    call "%ROOT_DIR%start-dev.bat"
+) else (
+    echo start-dev.bat not found, skip starting frontend dev servers.
+)
+
+cd /d "%ROOT_DIR%"
 endlocal
+pause

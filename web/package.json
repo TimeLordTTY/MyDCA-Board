@@ -1,0 +1,20 @@
+{
+  "name": "wealth-hub-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "财富中枢系统 - 前端 Monorepo",
+  "workspaces": [
+    "shared",
+    "pc-app",
+    "mobile-app"
+  ],
+  "scripts": {
+    "build:shared": "npm -w @wealth-hub/shared run build",
+    "build:pc": "npm -w wealth-hub-pc-app run build",
+    "build:mobile": "npm -w wealth-hub-mobile-app run build",
+    "build": "npm run build:shared && npm run build:pc && npm run build:mobile",
+    "dev:pc": "npm -w wealth-hub-pc-app run dev",
+    "dev:mobile": "npm -w wealth-hub-mobile-app run dev",
+    "clean": "rimraf shared/dist pc-app/dist mobile-app/dist"
+  }
+}

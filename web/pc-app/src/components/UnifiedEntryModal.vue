@@ -1269,6 +1269,11 @@ const parentAccounts = computed(() => {
   // 从账户树中获取所有有子账户的账户
   const parentList: Account[] = []
   
+  // 安全检查：确保 accountTree 存在且是数组
+  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
+    return parentList
+  }
+  
   function traverse(accounts: Account[]) {
     accounts.forEach(acc => {
       // 如果有children且children不为空，说明是父账户
@@ -1302,6 +1307,11 @@ function findAccountById(accounts: Account[], id: number): Account | null {
 const availableChildAccounts = computed(() => {
   if (!form.value.parentAccountId) return []
   
+  // 安全检查：确保 accountTree 存在且是数组
+  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
+    return []
+  }
+  
   const parentAccount = findAccountById(accountStore.accountTree, form.value.parentAccountId)
   if (!parentAccount || !parentAccount.children) return []
   
@@ -1312,6 +1322,11 @@ const availableChildAccounts = computed(() => {
 // 转出账户的可用于账户（根据选择的转出父账户）
 const availableFromChildAccounts = computed(() => {
   if (!form.value.fromParentAccountId) return []
+  
+  // 安全检查：确保 accountTree 存在且是数组
+  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
+    return []
+  }
   
   const parentAccount = findAccountById(accountStore.accountTree, form.value.fromParentAccountId)
   if (!parentAccount || !parentAccount.children) return []
@@ -1324,6 +1339,11 @@ const availableFromChildAccounts = computed(() => {
 const availableToChildAccounts = computed(() => {
   if (!form.value.toParentAccountId) return []
   
+  // 安全检查：确保 accountTree 存在且是数组
+  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
+    return []
+  }
+  
   const parentAccount = findAccountById(accountStore.accountTree, form.value.toParentAccountId)
   if (!parentAccount || !parentAccount.children) return []
   
@@ -1334,6 +1354,11 @@ const availableToChildAccounts = computed(() => {
 // 关联产品的父账户列表（有 linkedProductId 的账户）
 const linkedProductParentAccounts = computed(() => {
   const result: Account[] = []
+  
+  // 安全检查：确保 accountTree 存在且是数组
+  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
+    return result
+  }
   
   function traverse(accounts: Account[]) {
     accounts.forEach(acc => {
@@ -1696,7 +1721,7 @@ function calculateParentBalances(account: Account | null): { balance: number; cr
 // 父账户余额和贷款额
 const selectedParentBalances = computed(() => {
   if (!form.value.parentAccountId) return { balance: 0, credit: 0 }
-  const account = findAccountInTree(accountStore.accountTree, form.value.parentAccountId)
+  const account = findAccountInTree(accountStore.accountTree || null, form.value.parentAccountId)
   return calculateParentBalances(account)
 })
 
@@ -1706,7 +1731,7 @@ const selectedParentAccountCredit = computed(() => selectedParentBalances.value.
 // 子账户余额：从账户树中获取
 const selectedChildAccountBalance = computed(() => {
   if (!form.value.accountId) return 0
-  const account = findAccountInTree(accountStore.accountTree, form.value.accountId)
+  const account = findAccountInTree(accountStore.accountTree || null, form.value.accountId)
   if (!account) return 0
   return account.balance || 0
 })
@@ -1714,7 +1739,7 @@ const selectedChildAccountBalance = computed(() => {
 // 子账户是否为信贷账户
 const isSelectedChildCreditAccount = computed(() => {
   if (!form.value.accountId) return false
-  const account = findAccountInTree(accountStore.accountTree, form.value.accountId)
+  const account = findAccountInTree(accountStore.accountTree || null, form.value.accountId)
   if (!account) return false
   return isCreditAccountType(account.accountType)
 })
@@ -1878,6 +1903,11 @@ function calculateMmfChildAmount(parent: Account, child: Account): number {
 const accountCascaderOptions = computed(() => {
   const options: any[] = []
   
+  // 安全检查：确保 accountTree 存在且是数组
+  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
+    return options
+  }
+  
   function buildOptions(accounts: Account[]) {
     accounts.forEach(acc => {
       if (acc.children && acc.children.length > 0 && acc.accountKind === 'REAL') {
@@ -2005,15 +2035,15 @@ const selectedToAccount = computed({
 // 获取选中账户的余额显示
 function getSelectedAccountBalance(parentId: number | undefined, childId: number | undefined) {
   if (!childId) return { text: '', isCredit: false, balance: 0 }
-  const account = findAccountInTree(accountStore.accountTree, childId)
+  const account = findAccountInTree(accountStore.accountTree || null, childId)
   if (!account) return { text: '', isCredit: false, balance: 0 }
   
   const isCredit = isCreditAccountType(account.accountType)
-  
+
   // 对于 MMF 子账户，需要计算实际金额
   let actualBalance = account.balance || 0
   if (parentId) {
-    const parent = findAccountInTree(accountStore.accountTree, parentId)
+    const parent = findAccountInTree(accountStore.accountTree || null, parentId)
     if (parent && parent.accountType === 'MMF' && parent.linkedProductId && parent.initialShares) {
       actualBalance = calculateMmfChildAmount(parent, account)
     }
@@ -2138,7 +2168,7 @@ watch(visible, async (val) => {
           const cashCreditPosting = postings.find(p => p.postingType === 'CREDIT' && p.accountType === 'CASH')
           if (cashCreditPosting) {
             form.value.amount = Number(cashCreditPosting.amount)
-            const account = findAccountInTree(accountStore.accountTree, cashCreditPosting.accountId)
+            const account = findAccountInTree(accountStore.accountTree || null, cashCreditPosting.accountId)
             if (account) {
               form.value.accountId = account.id
               form.value.parentAccountId = account.parentAccountId
@@ -2149,7 +2179,7 @@ watch(visible, async (val) => {
             if (cashCreditPostings.length > 1) {
               useComboPayment.value = true
               expenseFundingLines.value = cashCreditPostings.map(p => {
-                const acc = findAccountInTree(accountStore.accountTree, p.accountId)
+                const acc = findAccountInTree(accountStore.accountTree || null, p.accountId)
                 return {
                   parentAccountId: acc?.parentAccountId,
                   accountId: p.accountId,
@@ -2165,7 +2195,7 @@ watch(visible, async (val) => {
           const cashDebitPosting = postings.find(p => p.postingType === 'DEBIT' && p.accountType === 'CASH')
           if (cashDebitPosting) {
             form.value.amount = Number(cashDebitPosting.amount)
-            const account = findAccountInTree(accountStore.accountTree, cashDebitPosting.accountId)
+            const account = findAccountInTree(accountStore.accountTree || null, cashDebitPosting.accountId)
             if (account) {
               form.value.accountId = account.id
               form.value.parentAccountId = account.parentAccountId
@@ -2183,7 +2213,7 @@ watch(visible, async (val) => {
         const creditPosting = postings.find(p => p.postingType === 'CREDIT')
         if (creditPosting) {
           form.value.amount = Number(creditPosting.amount)
-          const fromAccount = findAccountInTree(accountStore.accountTree, creditPosting.accountId)
+          const fromAccount = findAccountInTree(accountStore.accountTree || null, creditPosting.accountId)
           if (fromAccount) {
             form.value.fromAccountId = fromAccount.id
             form.value.fromParentAccountId = fromAccount.parentAccountId
@@ -2193,7 +2223,7 @@ watch(visible, async (val) => {
         // 找到 DEBIT（转入）的账户
         const debitPosting = postings.find(p => p.postingType === 'DEBIT')
         if (debitPosting) {
-          const toAccount = findAccountInTree(accountStore.accountTree, debitPosting.accountId)
+          const toAccount = findAccountInTree(accountStore.accountTree || null, debitPosting.accountId)
           if (toAccount) {
             form.value.toAccountId = toAccount.id
             form.value.toParentAccountId = toAccount.parentAccountId
@@ -2202,16 +2232,16 @@ watch(visible, async (val) => {
 
         // 根据原交易账户信息，判断备注是否为系统自动生成的"转账: A → B"
         const fromParentAccount = form.value.fromParentAccountId
-          ? findAccountInTree(accountStore.accountTree, form.value.fromParentAccountId)
+          ? findAccountInTree(accountStore.accountTree || null, form.value.fromParentAccountId)
           : null
         const fromLeafAccount = form.value.fromAccountId
-          ? findAccountInTree(accountStore.accountTree, form.value.fromAccountId)
+          ? findAccountInTree(accountStore.accountTree || null, form.value.fromAccountId)
           : null
         const toParentAccount = form.value.toParentAccountId
-          ? findAccountInTree(accountStore.accountTree, form.value.toParentAccountId)
+          ? findAccountInTree(accountStore.accountTree || null, form.value.toParentAccountId)
           : null
         const toLeafAccount = form.value.toAccountId
-          ? findAccountInTree(accountStore.accountTree, form.value.toAccountId)
+          ? findAccountInTree(accountStore.accountTree || null, form.value.toAccountId)
           : null
 
         const fromParentName = fromParentAccount?.accountName || ''
@@ -2929,7 +2959,10 @@ watch(
 )
 
 // 递归查找账户树中的账户
-function findAccountInTree(accounts: Account[], accountId: number): Account | null {
+function findAccountInTree(accounts: Account[] | null | undefined, accountId: number): Account | null {
+  if (!accounts || !Array.isArray(accounts)) {
+    return null
+  }
   for (const acc of accounts) {
     if (acc.id === accountId) {
       return acc
@@ -3047,7 +3080,7 @@ async function handleSubmit() {
         const categoryName = category ? getCategoryDisplayName(category) : ''
         const accountName = useComboPayment.value 
           ? '组合支付'
-          : (findAccountInTree(accountStore.accountTree, form.value.accountId!)?.accountName || '')
+          : (findAccountInTree(accountStore.accountTree || null, form.value.accountId!)?.accountName || '')
         autoNote = categoryName + (accountName ? ` - ${accountName}` : '')
       }
       
@@ -3121,7 +3154,7 @@ async function handleSubmit() {
       if (!incomeAutoNote) {
         const category = findCategoryById(incomeCategories, categoryId)
         const categoryName = category ? getCategoryDisplayName(category) : ''
-        const accountName = findAccountInTree(accountStore.accountTree, form.value.accountId!)?.accountName || ''
+        const accountName = findAccountInTree(accountStore.accountTree || null, form.value.accountId!)?.accountName || ''
         incomeAutoNote = categoryName + (accountName ? ` - ${accountName}` : '')
       }
       
@@ -3187,15 +3220,15 @@ async function handleSubmit() {
         currency: 'CNY',
       })
       // 生成自动备注（包含父账户名称）
-      const repayParentAccount = findAccountInTree(accountStore.accountTree, form.value.parentAccountId!)
-      const repayAccount = findAccountInTree(accountStore.accountTree, form.value.accountId!)
-      const creditAccount = findAccountInTree(accountStore.accountTree, form.value.creditAccountId!)
+      const repayParentAccount = findAccountInTree(accountStore.accountTree || null, form.value.parentAccountId!)
+      const repayAccount = findAccountInTree(accountStore.accountTree || null, form.value.accountId!)
+      const creditAccount = findAccountInTree(accountStore.accountTree || null, form.value.creditAccountId!)
       const repayParentName = repayParentAccount?.accountName || ''
       const repayName = repayAccount?.accountName || '账户'
       const creditName = creditAccount?.accountName || '信贷账户'
       // 还款时信贷账户本身就是叶子账户，需要找它的父账户
       const creditParentAccount = creditAccount?.parentAccountId 
-        ? findAccountInTree(accountStore.accountTree, creditAccount.parentAccountId) 
+        ? findAccountInTree(accountStore.accountTree || null, creditAccount.parentAccountId) 
         : null
       const creditParentName = creditParentAccount?.accountName || ''
       const repayFullName = repayParentName ? `${repayParentName}-${repayName}` : repayName
@@ -3249,10 +3282,10 @@ async function handleSubmit() {
           currency: 'CNY',
         })
         // 获取账户名称用于自动备注（包含父账户名称，避免子账户重名）
-        const fromParentAccount = findAccountInTree(accountStore.accountTree, form.value.fromParentAccountId!)
-        const fromAccount = findAccountInTree(accountStore.accountTree, form.value.fromAccountId!)
-        const toParentAccount = findAccountInTree(accountStore.accountTree, form.value.toParentAccountId!)
-        const toAccount = findAccountInTree(accountStore.accountTree, form.value.toAccountId!)
+        const fromParentAccount = findAccountInTree(accountStore.accountTree || null, form.value.fromParentAccountId!)
+        const fromAccount = findAccountInTree(accountStore.accountTree || null, form.value.fromAccountId!)
+        const toParentAccount = findAccountInTree(accountStore.accountTree || null, form.value.toParentAccountId!)
+        const toAccount = findAccountInTree(accountStore.accountTree || null, form.value.toAccountId!)
         const fromParentName = fromParentAccount?.accountName || ''
         const fromName = fromAccount?.accountName || '账户'
         const toParentName = toParentAccount?.accountName || ''

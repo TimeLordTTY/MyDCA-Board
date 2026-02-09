@@ -1,5 +1,6 @@
 package com.timelordtty.dca.scheduler;
 
+import com.timelordtty.dca.service.AccountService;
 import com.timelordtty.dca.service.PythonScriptService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,7 @@ public class MarketDataScheduler {
     private static final Logger logger = LoggerFactory.getLogger(MarketDataScheduler.class);
 
     private final PythonScriptService pythonScriptService;
+    private final AccountService accountService;
 
     // 避免重复/并发执行（启动时 + 定时任务可能重叠）
     private final AtomicBoolean exchangeRealtimeRunning = new AtomicBoolean(false);
@@ -40,8 +42,9 @@ public class MarketDataScheduler {
     private static final LocalTime MARKET_OPEN_AFTERNOON = LocalTime.of(13, 0);
     private static final LocalTime MARKET_CLOSE_AFTERNOON = LocalTime.of(15, 0);
 
-    public MarketDataScheduler(PythonScriptService pythonScriptService) {
+    public MarketDataScheduler(PythonScriptService pythonScriptService, AccountService accountService) {
         this.pythonScriptService = pythonScriptService;
+        this.accountService = accountService;
     }
 
     /**
@@ -121,6 +124,11 @@ public class MarketDataScheduler {
             logger.info("开始采集场外产品净值...");
             String result = pythonScriptService.collectFundNav();
             logger.info("场外产品净值采集完成: {}", result);
+            
+            // 净值采集完成后，更新关联账户的子账户余额
+            logger.info("开始按净值更新关联账户余额...");
+            int updateCount = accountService.updateLinkedAccountBalancesByNav();
+            logger.info("关联账户余额更新完成，共更新{}个账户", updateCount);
         } catch (Exception e) {
             logger.error("场外产品净值采集异常", e);
         }

@@ -1,165 +1,95 @@
-# 前端项目编译说明
+# 前端 Monorepo 使用说明（重要）
 
 ## 项目结构
 
-前端项目分为三个部分：
-- **shared** - 共享核心逻辑（TypeScript库）
-- **pc-app** - PC端应用（Vue 3 + Element Plus）
-- **mobile-app** - Mobile端应用（Vue 3 + Vant 4）
+前端项目分为三个部分，通过 **npm workspaces** 统一管理：
 
-## 编译顺序
+- **shared**：共享核心逻辑（TypeScript 库，封装 API、Store、类型等）
+- **pc-app**：PC 端应用（Vue 3 + Element Plus）
+- **mobile-app**：移动端应用（Vue 3 + Vant 4）
 
-由于 `pc-app` 和 `mobile-app` 依赖 `shared`，需要先编译 `shared`，再编译应用端。
+三个包共用一份根目录下的 `node_modules`，避免重复安装依赖。
 
-## 编译步骤
-
-### 1. 安装依赖（首次运行）
+## 依赖安装（只能在 web 根目录执行）
 
 ```bash
-# 安装共享层依赖
-cd web/shared
-npm install
-
-# 安装PC端依赖
-cd ../pc-app
-npm install
-
-# 安装Mobile端依赖
-cd ../mobile-app
+cd web
 npm install
 ```
 
-### 2. 编译共享层（必须先编译）
+- **不要** 在 `shared/`、`pc-app/`、`mobile-app/` 子目录中单独执行 `npm install`。
+- 如果在子目录运行 `npm install`，可能会装出多份 `vue` / `pinia`，重新触发 Pinia `_s` 报错。
+
+## 一键构建（推荐）
 
 ```bash
-cd web/shared
-npm run build
-```
-
-编译输出：`web/shared/dist/`
-
-### 3. 编译PC端
-
-```bash
-cd web/pc-app
-npm run build
-```
-
-编译输出：`web/pc-app/dist/`
-
-### 4. 编译Mobile端
-
-```bash
-cd web/mobile-app
-npm run build
-```
-
-编译输出：`web/mobile-app/dist/`
-
-## 一键编译脚本
-
-### Windows 批处理脚本（推荐）
-
-使用 `web/build-web.bat` 一键编译所有前端项目：
-
-```batch
 cd web
 build-web.bat
 ```
 
-或者直接双击 `build-web.bat` 文件运行。
-
-**脚本功能：**
-- 自动检查并安装缺失的依赖（如果 `node_modules` 不存在）
-- 按顺序编译：shared → pc-app → mobile-app
-- 编译失败时自动停止并显示错误信息
-- 支持中文输出
-
-### Windows PowerShell
-
-使用 `web/build-web.ps1` 一键编译所有前端项目：
+或在 PowerShell 中：
 
 ```powershell
 cd web
-.\build-web.ps1
+.\build-web.bat
 ```
 
 **脚本功能：**
-- 自动检查并安装缺失的依赖（如果 `node_modules` 不存在）
-- 按顺序编译：shared → pc-app → mobile-app
-- 编译失败时自动停止并显示错误信息
-- 彩色输出提示
 
-## 开发模式
+- **[1/4]** 在 `web/` 根目录执行 `npm install`（workspace 模式，共享 `node_modules`）
+- **[2/4]** 构建 shared：`npm -w @wealth-hub/shared run build`
+- **[3/4]** 构建 PC 端：`npm -w wealth-hub-pc-app run build`
+- **[4/4]** 构建 Mobile 端：`npm -w wealth-hub-mobile-app run build`
+- **[5/5]** 汇总构建产物到统一目录：
+  - PC 端 → `web/dist/wealth-hub`
+  - Mobile 端 → `web/dist/wealth-hub-mobile`
 
-### 启动开发服务器
+部署时只需要把 `web/dist` 目录整体同步到服务器即可（例如 `/www/wwwroot/wealth-hub/frontend/dist`）。
 
-**共享层（监听模式）：**
-```bash
-cd web/shared
-npm run dev
-```
+## 本地开发
 
-**PC端：**
-```bash
-cd web/pc-app
-npm run dev
-```
-访问：http://localhost:3000
-
-**Mobile端：**
-```bash
-cd web/mobile-app
-npm run dev
-```
-访问：http://localhost:3001
-
-## 类型检查
-
-所有项目都支持TypeScript类型检查：
+推荐使用项目根目录的 `start-dev.bat`：
 
 ```bash
-# 共享层
-cd web/shared
-npm run type-check
-
-# PC端
-cd web/pc-app
-npm run type-check
-
-# Mobile端
-cd web/mobile-app
-npm run type-check
+cd <项目根目录>
+start-dev.bat
 ```
 
-## 注意事项
+脚本行为：
 
-1. **依赖顺序**：必须先编译 `shared`，因为 `pc-app` 和 `mobile-app` 依赖它
-2. **Node.js版本**：建议使用 Node.js 18+
-3. **npm版本**：建议使用 npm 9+
-4. **首次运行**：需要先执行 `npm install` 安装依赖
-5. **共享层更新**：如果修改了 `shared` 的代码，需要重新编译 `shared`，然后重新编译应用端
+- 在 `web/` 执行一次 `npm install`（如有需要）
+- 构建一次 shared（保证类型与运行时代码最新）
+- 启动两个开发服务器：
+  - PC 端：`http://localhost:3000/wealth-hub/`
+  - Mobile 端：`http://localhost:3001/wealth-hub-mobile/`
 
-## 常见问题
+## 与 Vue / Pinia 相关的关键约定（防止 `_s` 问题再出现）
 
-### 问题1：找不到 @wealth-hub/shared 模块
+1. **shared 包的依赖声明（`web/shared/package.json`）**
+   - `vue`、`pinia` 必须放在 `peerDependencies` + `devDependencies`，**不能** 放在 `dependencies`。
+   - 这样 shared 只声明「兼容哪个版本」，真正的 Vue/Pinia 只会在外层应用安装一份。
 
-**解决方案**：
-1. 确保已编译 `shared` 项目
-2. 检查 `shared/dist/` 目录是否存在
-3. 在 `pc-app` 或 `mobile-app` 中重新运行 `npm install`
+2. **shared 构建配置（`web/shared/vite.config.ts`）**
+   - `build.rollupOptions.external` 必须包含：`['vue', 'axios', 'pinia']`。
+   - 这样打出来的库不会把 Vue/Pinia 打进 bundle，而是使用应用端提供的实例。
 
-### 问题2：TypeScript类型错误
+3. **应用端 Vite 配置（`pc-app/vite.config.ts`、`mobile-app/vite.config.ts`）**
+   - `resolve.dedupe` 必须包含：`['vue', 'pinia', 'vue-router']`。
+   - 避免解析路径时拉出第二份 Vue/Pinia 实例。
 
-**解决方案**：
-运行类型检查命令查看详细错误：
-```bash
-npm run type-check
-```
+4. **路由守卫中不要过早使用 Pinia Store**
+   - Mobile 端的 `router.beforeEach` 已改为仅使用 `localStorage.getItem('token')` 进行鉴权。
+   - 请不要在 `beforeEach` 中直接 `useUserStore()`，否则在 Pinia 实例尚未激活时容易出错。
 
-### 问题3：构建失败
+只要以上约定保持不变，就不会再出现 Pinia `_s` 相关错误。
 
-**解决方案**：
-1. 删除 `node_modules` 和 `package-lock.json`
-2. 重新运行 `npm install`
-3. 重新编译
+## Nginx 与打包目录的对应关系
+
+- `build-web.bat` 输出：
+  - PC 端：`web/dist/wealth-hub`
+  - Mobile 端：`web/dist/wealth-hub-mobile`
+- 建议服务器目录结构：
+  - `/www/wwwroot/wealth-hub/frontend/dist/wealth-hub`
+  - `/www/wwwroot/wealth-hub/frontend/dist/wealth-hub-mobile`
+
+对应的 Nginx 配置示例见：`config/nginx/wealth-hub.conf`。

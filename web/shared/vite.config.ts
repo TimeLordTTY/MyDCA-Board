@@ -16,7 +16,7 @@ export default defineConfig({
       fileName: 'index',
     },
     rollupOptions: {
-      external: ['axios', 'pinia'],
+      external: ['vue', 'axios', 'pinia'],
     },
   },
 })

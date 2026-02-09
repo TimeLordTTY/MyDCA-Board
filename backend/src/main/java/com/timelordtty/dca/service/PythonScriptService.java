@@ -23,7 +23,7 @@ public class PythonScriptService {
 
     // 项目根目录（相对于jar包或工作目录）
     private static final String PROJECT_ROOT = detectProjectRoot();
-    private static final String PYTHON_CMD = "python"; // Windows: python, Linux: python3
+    private static final String PYTHON_CMD = detectPythonCommand(); // 自动检测python或python3
 
     /**
      * 检测项目根目录
@@ -60,6 +60,31 @@ public class PythonScriptService {
         // 如果找不到，使用当前目录（可能是从项目根目录启动）
         logger.warn("未找到 scripts/market 目录，使用当前目录作为项目根目录: {}", userDir);
         return userDir;
+    }
+
+    /**
+     * 检测Python命令
+     * 优先尝试python3，如果不存在则尝试python
+     */
+    private static String detectPythonCommand() {
+        String[] commands = {"python3", "python"};
+        for (String cmd : commands) {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(cmd, "--version");
+                pb.redirectErrorStream(true);
+                Process process = pb.start();
+                int exitCode = process.waitFor();
+                if (exitCode == 0) {
+                    logger.info("检测到Python命令: {}", cmd);
+                    return cmd;
+                }
+            } catch (Exception e) {
+                // 继续尝试下一个命令
+            }
+        }
+        // 如果都检测不到，默认使用python3（Linux常见）
+        logger.warn("无法检测Python命令，默认使用python3");
+        return "python3";
     }
 
     /**

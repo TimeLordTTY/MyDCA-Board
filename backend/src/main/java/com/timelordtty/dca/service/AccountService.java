@@ -787,5 +787,87 @@ public class AccountService {
         
         return count;
     }
+
+    /**
+     * 按净值更新关联产品的账户子账户余额
+     * 
+     * 对于关联了产品的账户（linked_product_id不为空），根据最新净值更新子账户余额
+     * 余额计算公式：子账户余额 = 子账户份额 × 最新净值
+     * 子账户份额 = 父账户initial_shares × (子账户当前余额 / 子账户总余额)
+     * 
+     * 执行时机：每日净值更新后（如18:00后）
+     * 
+     * @return 更新的账户数量
+     */
+    @Transactional
+    public int updateLinkedAccountBalancesByNav() {
+        // 查找所有关联了产品的账户
+        List<Account> linkedAccounts = accountMapper.selectAllLinkedAccounts();
+        int updateCount = 0;
+        
+        for (Account linkedAccount : linkedAccounts) {
+            if (linkedAccount.getLinkedProductId() == null || 
+                linkedAccount.getInitialShares() == null ||
+                linkedAccount.getInitialShares().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            
+            // 获取产品最新净值
+            Nav latestNav = navService.getLatestNav(linkedAccount.getLinkedProductId());
+            if (latestNav == null || latestNav.getNav() == null || 
+                latestNav.getNav().compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            
+            BigDecimal nav = latestNav.getNav();
+            BigDecimal totalShares = linkedAccount.getInitialShares();
+            
+            // 获取子账户
+            List<Account> children = accountMapper.selectChildren(linkedAccount.getId());
+            if (children.isEmpty()) {
+                // 没有子账户，更新父账户余额
+                BigDecimal newBalance = totalShares.multiply(nav).setScale(2, RoundingMode.HALF_UP);
+                accountMapper.updateBalance(linkedAccount.getId(), newBalance);
+                updateCount++;
+            } else {
+                // 计算子账户总余额（用于按比例分配份额）
+                BigDecimal totalBalance = children.stream()
+                    .filter(c -> c.getBalance() != null && c.getBalance().compareTo(BigDecimal.ZERO) > 0)
+                    .map(Account::getBalance)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                
+                if (totalBalance.compareTo(BigDecimal.ZERO) > 0) {
+                    // 按比例分配份额并更新余额
+                    for (Account child : children) {
+                        BigDecimal childBalance = child.getBalance();
+                        if (childBalance == null || childBalance.compareTo(BigDecimal.ZERO) <= 0) {
+                            continue;
+                        }
+                        
+                        // 子账户份额 = 子账户金额 / 总金额 × 总份额
+                        BigDecimal childShares = childBalance
+                            .divide(totalBalance, 10, RoundingMode.HALF_UP)
+                            .multiply(totalShares);
+                        
+                        // 新余额 = 子账户份额 × 最新净值
+                        BigDecimal newBalance = childShares.multiply(nav).setScale(2, RoundingMode.HALF_UP);
+                        accountMapper.updateBalance(child.getId(), newBalance);
+                        updateCount++;
+                    }
+                } else {
+                    // 如果所有子账户余额都为0，按份额平均分配
+                    BigDecimal sharesPerChild = totalShares.divide(
+                        new BigDecimal(children.size()), 6, RoundingMode.HALF_UP);
+                    for (Account child : children) {
+                        BigDecimal newBalance = sharesPerChild.multiply(nav).setScale(2, RoundingMode.HALF_UP);
+                        accountMapper.updateBalance(child.getId(), newBalance);
+                        updateCount++;
+                    }
+                }
+            }
+        }
+        
+        return updateCount;
+    }
 }
 
