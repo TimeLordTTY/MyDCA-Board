@@ -648,11 +648,6 @@ public class LedgerController {
         Long categoryId = request.containsKey("categoryId") ? Long.valueOf(request.get("categoryId").toString()) : null;
         Boolean isReimbursable = request.containsKey("isReimbursable") ? Boolean.valueOf(request.get("isReimbursable").toString()) : false;
 
-        // 将categoryId信息附加到note中
-        if (categoryId != null) {
-            note = (note != null ? note : "") + " [categoryId:" + categoryId + "]";
-        }
-
         // 使用统一记账接口，支持更多参数
         List<LedgerPosting> postings = new java.util.ArrayList<>();
         Account account = accountService.getAccount(accountId);
