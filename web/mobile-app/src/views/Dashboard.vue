@@ -186,9 +186,11 @@ const topHoldings = ref<any[]>([])
 const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
 const navs = ref<Map<number, Nav>>(new Map())
 
-async function loadData() {
+async function loadData(showToast = true) {
   try {
-    showLoadingToast({ message: '加载中...', forbidClick: true })
+    if (showToast) {
+      showLoadingToast({ message: '加载中...', forbidClick: true })
+    }
 
     // 独立加载每个接口，一个失败不影响其他
     // 1. 资产概览
@@ -285,8 +287,19 @@ async function loadData() {
           unrealizedPnl,
         }
       })
+        // 过滤掉持仓为 0 的产品
+        .filter(h => (h.totalShares || 0) > 0)
+        // 按盈亏分组排序：先盈利，再持平，再亏损；组内按绝对盈亏从大到小
+        .sort((a, b) => {
+          const pnlA = a.unrealizedPnl || 0
+          const pnlB = b.unrealizedPnl || 0
+          const groupA = pnlA > 0 ? 2 : pnlA < 0 ? 0 : 1
+          const groupB = pnlB > 0 ? 2 : pnlB < 0 ? 0 : 1
+          if (groupA !== groupB) return groupB - groupA
+          return Math.abs(pnlB) - Math.abs(pnlA)
+        })
       
-      topHoldings.value = holdingsWithQuote.sort((a, b) => Math.abs(b.unrealizedPnl || 0) - Math.abs(a.unrealizedPnl || 0))
+      topHoldings.value = holdingsWithQuote
       
       // 更新资产概览中的持仓市值和浮动盈亏
       const totalMarketValue = holdingsWithQuote.reduce((sum, h) => sum + (h.marketValue || 0), 0)
@@ -309,7 +322,7 @@ async function loadData() {
 
 async function onRefresh() {
   refreshing.value = true
-  await loadData()
+  await loadData(false)  // 下拉刷新时不弹 loading toast，用 van-pull-refresh 自带的动画
   refreshing.value = false
 }
 

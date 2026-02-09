@@ -11,6 +11,8 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
     dedupe: ['vue', 'pinia', 'vue-router'],
+    // npm workspaces 模式下，需要从根目录查找依赖
+    preserveSymlinks: false,
   },
   server: {
     port: 3001, // Mobile端使用不同端口

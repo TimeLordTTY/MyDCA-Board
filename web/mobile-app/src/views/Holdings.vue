@@ -8,6 +8,13 @@
 
     <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
       <div class="page-container">
+        <!-- 场内/场外筛选 -->
+        <van-tabs v-model:active="channelFilter" type="card" shrink>
+          <van-tab title="全部" name="ALL" />
+          <van-tab title="场内" name="EXCHANGE" />
+          <van-tab title="场外" name="OTC" />
+        </van-tabs>
+
         <!-- 持仓汇总卡片 -->
         <div class="summary-card" v-if="holdings.length > 0">
           <div class="summary-item">
@@ -130,9 +137,22 @@ const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
 const navs = ref<Map<number, Nav>>(new Map())
 const currentHolding = ref<any>(null)
 
-// 合并持仓和行情数据
+// 场内/场外筛选：ALL / EXCHANGE / OTC
+const channelFilter = ref<'ALL' | 'EXCHANGE' | 'OTC'>('ALL')
+
+// 按盈亏分组排序：先盈利 (>0)，再持平 (=0)，最后亏损 (<0)，组内按绝对盈亏从大到小
+function sortByPnl(a: { unrealizedPnl?: number }, b: { unrealizedPnl?: number }) {
+  const pnlA = a.unrealizedPnl || 0
+  const pnlB = b.unrealizedPnl || 0
+  const groupA = pnlA > 0 ? 2 : pnlA < 0 ? 0 : 1
+  const groupB = pnlB > 0 ? 2 : pnlB < 0 ? 0 : 1
+  if (groupA !== groupB) return groupB - groupA
+  return Math.abs(pnlB) - Math.abs(pnlA)
+}
+
+// 合并持仓和行情数据，并按筛选条件+盈亏顺序排序
 const holdings = computed(() => {
-  return rawHoldings.value.map(holding => {
+  const merged = rawHoldings.value.map(holding => {
     const quote = quotes.value.get(holding.productId)
     const nav = navs.value.get(holding.productId)
     
@@ -160,6 +180,18 @@ const holdings = computed(() => {
       unrealizedPnl,
     }
   })
+    // 过滤掉持仓为 0 的产品
+    .filter(h => (h.totalShares || 0) > 0)
+    // 场内/场外筛选
+    .filter(h => {
+      if (channelFilter.value === 'ALL') return true
+      if (channelFilter.value === 'EXCHANGE') return h.channel === 'EXCHANGE'
+      return h.channel !== 'EXCHANGE'
+    })
+    // 按盈亏分组排序
+    .sort(sortByPnl)
+
+  return merged
 })
 
 const totalMarketValue = computed(() => {

@@ -125,7 +125,6 @@ onMounted(() => {
 .page-content {
   flex: 1;
   width: 100%;
-  overflow-x: hidden;
 }
 
 /* 页面切换动画 */

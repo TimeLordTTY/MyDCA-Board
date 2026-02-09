@@ -10,24 +10,17 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      // 强制所有模块（包括 @wealth-hub/shared）使用同一份 vue 和 pinia
-      // 这是解决 "Cannot read properties of undefined (reading '_s')" 错误的关键
-      'vue': resolve(__dirname, 'node_modules/vue'),
-      'pinia': resolve(__dirname, 'node_modules/pinia'),
     },
-    // 确保 vue 和 pinia 只使用单一实例
-    dedupe: ['vue', 'pinia'],
+    // 确保 vue 和 pinia 只使用单一实例（从 workspace 根 node_modules 解析）
+    dedupe: ['vue', 'pinia', 'vue-router'],
+    // npm workspaces 模式下，需要从根目录查找依赖
+    preserveSymlinks: false,
   },
   optimizeDeps: {
     // 确保这些依赖被预构建并共享
     include: ['vue', 'pinia', '@wealth-hub/shared'],
-  },
-  build: {
-    // 确保构建时也遵循 dedupe 配置
-    commonjsOptions: {
-      include: [/node_modules/],
-    },
-    dedupe: ['vue', 'pinia', 'vue-router'],
+    // npm workspaces 模式下，从根目录查找依赖
+    force: false,
   },
   server: {
     port: 3000,

@@ -66,12 +66,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+html {
+  /* overflow-x: hidden 只放在 html 上
+     原因：Vant PullRefresh 的 useScrollParent 遍历到 <html> 时会跳过，
+     如果放在 body 上，CSS 规范会隐式将 overflow-y 变为 auto，
+     导致 body 被识别为滚动容器，但实际滚动在 documentElement 上，
+     body.scrollTop 永远为 0，下拉刷新在任何位置都会误触发。 */
+  overflow-x: hidden;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   height: 100%;
   width: 100%;
-  overflow-x: hidden;
+  /* 禁止浏览器原生下拉刷新/回弹，交给 van-pull-refresh 处理 */
+  overscroll-behavior-y: contain;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
