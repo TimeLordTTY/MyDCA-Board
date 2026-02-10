@@ -3,10 +3,13 @@ package com.timelordtty.dca.service;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.OrderMapper;
 import com.timelordtty.dca.mapper.OrderFundingLineMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.mapper.SettlementConfirmMapper;
 import com.timelordtty.dca.model.Account;
+import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.OrderFundingLine;
+import com.timelordtty.dca.model.ProductMaster;
 import com.timelordtty.dca.model.SettlementConfirm;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -52,12 +56,15 @@ public class OrderService {
     private final com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper;
     private final com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper;
     private final LedgerService ledgerService;
+    private final UserService userService;
+    private final ProductMasterMapper productMasterMapper;
 
     public OrderService(OrderMapper orderMapper, AccountMapper accountMapper, AccountService accountService,
                        OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper,
                        com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper,
                        com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper,
-                       LedgerService ledgerService) {
+                       LedgerService ledgerService, UserService userService,
+                       ProductMasterMapper productMasterMapper) {
         this.orderMapper = orderMapper;
         this.accountMapper = accountMapper;
         this.accountService = accountService;
@@ -66,6 +73,8 @@ public class OrderService {
         this.ledgerTxnMapper = ledgerTxnMapper;
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.ledgerService = ledgerService;
+        this.userService = userService;
+        this.productMasterMapper = productMasterMapper;
     }
 
     /**
@@ -134,7 +143,7 @@ public class OrderService {
             boolean isSellOrder = "SELL".equals(orderType) || "REDEMPTION".equals(orderType);
 
             if (isBuyOrder) {
-                // 买入/申购：使用amount字段，需要占用资金
+                // 买入/申购：使用amount字段，立即生成付款流水（CASH CREDIT + RECEIVABLE DEBIT）
                 BigDecimal totalFunding = fundingLines.stream()
                         .filter(fl -> fl.getAmount() != null)
                         .map(OrderFundingLine::getAmount)
@@ -147,7 +156,7 @@ public class OrderService {
                     );
                 }
 
-                // 校验每个账户并增加reserved_amount
+                // 校验每个账户并写入 order_funding_line
                 int lineNo = 1;
                 for (OrderFundingLine fundingLine : fundingLines) {
                     Long fundingAccountId = fundingLine.getAccountId();
@@ -178,12 +187,11 @@ public class OrderService {
                     fundingLine.setCurrency(fundingAccount.getCurrency() != null ? fundingAccount.getCurrency() : "CNY");
                     orderFundingLineMapper.insert(fundingLine);
 
-                    // 增加reserved_amount（占用资金，不扣款，不生成流水）
-                    if (fundingLine.getAmount() != null) {
-                        BigDecimal newReservedAmount = fundingAccount.getReservedAmount().add(fundingLine.getAmount());
-                        accountMapper.updateReservedAmount(fundingAccountId, newReservedAmount);
-                    }
+                    // 不再增加reserved_amount，而是直接通过流水扣款（见下方流水生成）
                 }
+
+                // 生成付款流水：CASH CREDIT（付款账户减少）+ RECEIVABLE DEBIT（待结算增加）
+                generateBuyOrderLedger(order, fundingLines, totalFunding);
             } else if (isSellOrder) {
                 // 卖出/赎回：分离 SOURCE（出金账户）和 TARGET（到账账户）
                 List<OrderFundingLine> sourceLines = fundingLines.stream()
@@ -270,11 +278,7 @@ public class OrderService {
                 throw new RuntimeException("可用余额不足");
             }
 
-            // 增加reserved_amount（占用资金，不扣款，不生成流水）
-            BigDecimal newReservedAmount = account.getReservedAmount().add(amount != null ? amount : BigDecimal.ZERO);
-            accountMapper.updateReservedAmount(accountId, newReservedAmount);
-
-            // 为了兼容，也写入order_funding_line（单行）
+            // 写入order_funding_line（单行）
             OrderFundingLine fundingLine = new OrderFundingLine();
             fundingLine.setOrderId(orderId);
             fundingLine.setLineNo(1);
@@ -282,6 +286,17 @@ public class OrderService {
             fundingLine.setAmount(amount != null ? amount : BigDecimal.ZERO);
             fundingLine.setCurrency(account.getCurrency() != null ? account.getCurrency() : "CNY");
             orderFundingLineMapper.insert(fundingLine);
+
+            // 买入/申购：直接生成付款流水而非增加reserved_amount
+            boolean isBuyOrderSingle = "BUY".equals(orderType) || "SUBSCRIPTION".equals(orderType);
+            if (isBuyOrderSingle && amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
+                List<OrderFundingLine> singleLine = new ArrayList<>();
+                singleLine.add(fundingLine);
+                generateBuyOrderLedger(order, singleLine, amount);
+            } else {
+                // 卖出/赎回：保持原逻辑，不在下单时生成流水
+                // 不需要reserved_amount（卖出时锁定的是份额，不是金额）
+            }
         }
 
         return order;
@@ -314,32 +329,86 @@ public class OrderService {
     }
 
     /**
-     * 取消订单：仅允许取消处于 PENDING 状态的订单，并释放相应占用资金，同时删除相关流水记录
+     * 买入/申购下单时立即生成付款流水
      * 
-     * 重要说明：
-     * - 订单创建时：只增加 reserved_amount（占用金额），不扣减 balance，不创建流水，不创建持仓
-     * - 订单结算时：释放 reserved_amount，扣减/增加 balance（通过流水），创建流水，创建/更新持仓
-     * - 订单取消时（PENDING状态）：
-     *   1. 释放 reserved_amount（恢复可用余额）
-     *   2. 删除所有与订单相关的流水记录（如果有，直接删除，不是退款）
-     *   3. 反向操作恢复账户余额（如果有流水记录）
-     *   4. 持仓不会变化（因为未结算的订单不会创建持仓）
+     * 分录模板（保持借贷平衡）：
+     * - CASH CREDIT × N（付款账户余额减少，按 funding_line 拆分）
+     * - RECEIVABLE DEBIT（待结算应收增加，金额 = 付款总额）
+     * 
+     * 结算时再生成第二笔流水（SettlementService 负责）：
+     * - RECEIVABLE CREDIT（待结算应收清零）
+     * - POSITION DEBIT / 关联账户 CASH DEBIT（持仓/余额增加）
+     * - FEE DEBIT（手续费）
+     */
+    private void generateBuyOrderLedger(Order order, List<OrderFundingLine> fundingLines, BigDecimal totalAmount) {
+        // 获取用户信息
+        com.timelordtty.dca.dto.AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        String ownerType = currentUser.getFamilyId() != null ? "FAMILY" : "PERSONAL";
+        Long ownerUserId = currentUser.getId();
+        Long ownerFamilyId = currentUser.getFamilyId();
+
+        // 获取产品信息（用于备注）
+        ProductMaster product = productMasterMapper.selectById(order.getProductId());
+        String productName = product != null ? product.getProductName() : "产品" + order.getProductId();
+
+        List<LedgerPosting> postings = new ArrayList<>();
+
+        // 1. CASH CREDIT：付款账户余额减少（按 funding_line 拆分）
+        for (OrderFundingLine fundingLine : fundingLines) {
+            if (fundingLine.getAmount() != null && fundingLine.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                LedgerPosting cashPosting = new LedgerPosting();
+                cashPosting.setPostingType("CREDIT");
+                cashPosting.setAccountId(fundingLine.getAccountId());
+                cashPosting.setAccountType("CASH");
+                cashPosting.setAmount(fundingLine.getAmount());
+                cashPosting.setCurrency(fundingLine.getCurrency() != null ? fundingLine.getCurrency() : "CNY");
+                postings.add(cashPosting);
+            }
+        }
+
+        // 2. RECEIVABLE DEBIT：待结算应收增加
+        Account receivableAccount = accountService.getOrCreateVirtualAccount(
+            "RECEIVABLE", "RECEIVABLE", ownerType, ownerUserId, ownerFamilyId, null, null);
+        LedgerPosting receivablePosting = new LedgerPosting();
+        receivablePosting.setPostingType("DEBIT");
+        receivablePosting.setAccountId(receivableAccount.getId());
+        receivablePosting.setAccountType("RECEIVABLE");
+        receivablePosting.setAmount(totalAmount);
+        receivablePosting.setCurrency("CNY");
+        postings.add(receivablePosting);
+
+        // 3. 创建流水（使用订单发起时间）
+        String orderTypeLabel = "BUY".equals(order.getOrderType()) ? "买入" : "申购";
+        String note = String.format("下单付款: %s %s，金额%.2f元", orderTypeLabel, productName, totalAmount);
+        
+        String requestedAtStr = order.getRequestedAt()
+            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        
+        ledgerService.createTransaction(
+            order.getUserId(),
+            ownerFamilyId,
+            order.getOrderType(),
+            order.getOrderId(),  // bizGroupKey = orderId
+            postings,
+            note,
+            requestedAtStr,
+            null,   // categoryId
+            false,  // isReimbursable
+            order.getProductId(),
+            order.getOrderId()   // orderId - 关联订单，取消时可通过 selectByOrderId 找到
+        );
+    }
+
+    /**
+     * 取消订单：仅允许取消处于 PENDING 状态的订单，删除相关流水记录并恢复余额
      * 
      * 流程说明：
      * 1. 校验订单状态为PENDING
-     * 2. 查询并删除与订单相关的所有流水记录（ledger_txn和ledger_posting）
-     *    - 如果存在流水记录，反向操作恢复账户余额
-     *    - 如果不存在流水记录（正常情况，因为未结算），跳过此步骤
-     * 3. 查询order_funding_line，获取所有资金来源行
-     * 4. 逐条释放各账户的reserved_amount（恢复可用余额）
-     * 5. 删除order_funding_line记录
-     * 6. 更新订单状态为CANCELLED
-     * 
-     * 业务规则：
-     * - 只能取消PENDING状态的订单
-     * - 取消时释放所有资金来源账户的reserved_amount（恢复可用余额）
-     * - 如果存在流水记录，删除流水记录并恢复账户余额
-     * - 持仓不会变化（未结算的订单不会创建持仓）
+     * 2. 查询并删除与订单相关的所有流水记录（包括下单时创建的付款流水）
+     *    - 反向操作恢复账户余额
+     * 3. 释放可能残留的reserved_amount（兼容旧逻辑）
+     * 4. 删除order_funding_line记录
+     * 5. 更新订单状态为CANCELLED
      * 
      * @param orderId 系统订单ID
      */

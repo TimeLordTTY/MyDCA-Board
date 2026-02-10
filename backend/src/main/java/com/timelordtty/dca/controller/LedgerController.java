@@ -29,6 +29,7 @@ import java.util.Set;
  * - GET /api/v2/ledger/txns/{txnId} - 获取流水详情（包含所有postings）
  * - POST /api/v2/ledger/txns - 创建交易流水（双分录，支持组合支付）
  * - POST /api/v2/ledger/quick-entry - 快速录入（消费/收入）
+ * - POST /api/v2/ledger/quick-buy-mmf - 快速购买货币基金（N+0，无需订单和结算）
  * - POST /api/v2/ledger/txns/{txnId}/refund - 创建退款交易
  * - POST /api/v2/ledger/txns/{txnId}/reimburse - 创建报销交易
  * 
@@ -179,6 +180,43 @@ public class LedgerController {
                     // 生成入金记录（赎回款到账）
                     Map<String, Object> inMap = buildTxnMap(txn, debitPosting, "REDEMPTION_IN", false, accountMap);
                     inMap.put("note", txn.getNote() + " [入金]");
+                    result.add(inMap);
+                } else {
+                    // 没有同时存在出金和入金，正常处理
+                    addNormalTxnMap(result, txn, postings, accountMap);
+                }
+            }
+            // 对于申购/买入交易，如果存在出金（CREDIT）和入金（DEBIT）的 REAL CASH 账户，也生成对应记录
+            else if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) && postings.size() >= 2) {
+                // 收集所有出金（CREDIT）的 REAL CASH 账户分录，以及第一个入金（DEBIT）分录
+                List<LedgerPosting> creditPostings = new ArrayList<>();  // 出金（付款账户减少），可能多个账户
+                LedgerPosting debitPosting = null;   // 入金（关联账户增加）
+                
+                for (LedgerPosting posting : postings) {
+                    if ("CASH".equals(posting.getAccountType())) {
+                        Account acc = accountMap.get(posting.getAccountId());
+                        if (acc != null && "REAL".equals(acc.getAccountKind())) {
+                            if ("CREDIT".equals(posting.getPostingType())) {
+                                creditPostings.add(posting);
+                            } else if ("DEBIT".equals(posting.getPostingType()) && debitPosting == null) {
+                                debitPosting = posting;
+                            }
+                        }
+                    }
+                }
+                
+                // 如果同时有出金和入金账户（说明是有关联账户的申购），生成记录
+                if (!creditPostings.isEmpty() && debitPosting != null) {
+                    // 对于每个出金账户，生成一条出金记录（付款账户减少）
+                    for (LedgerPosting creditPosting : creditPostings) {
+                        Map<String, Object> outMap = buildTxnMap(txn, creditPosting, txn.getTxnType() + "_OUT", true, accountMap);
+                        outMap.put("note", txn.getNote() + " [付款]");
+                        result.add(outMap);
+                    }
+                    
+                    // 生成入金记录（关联账户增加）
+                    Map<String, Object> inMap = buildTxnMap(txn, debitPosting, txn.getTxnType() + "_IN", false, accountMap);
+                    inMap.put("note", txn.getNote() + " [入账]");
                     result.add(inMap);
                 } else {
                     // 没有同时存在出金和入金，正常处理
@@ -699,6 +737,46 @@ public class LedgerController {
         
         LedgerTxn txn = ledgerService.createTransaction(
             currentUser.getId(), currentUser.getFamilyId(), type, null, postings, note, occurredAt, categoryId, isReimbursable);
+        return ResponseEntity.ok(txn);
+    }
+
+    /**
+     * 快速购买货币基金（N+0，无需订单和结算）
+     * 
+     * 适用于场外货币基金（MMF），有关联账户的产品。
+     * 直接创建交易流水并更新持仓份额，无需创建订单和结算记录。
+     * 
+     * 请求参数：
+     * - productId: 产品ID（必须是MMF类型且有关联账户）
+     * - sourceAccountId: 出金账户ID（必须是叶子账户）
+     * - targetAccountId: 入金账户ID（关联账户的子账户，可选，不传则使用关联账户的第一个子账户）
+     * - amount: 购买金额
+     * - nav: 净值（可选，默认1.0）
+     * - note: 备注（可选）
+     * - occurredAt: 交易时间（可选，默认当前时间）
+     * 
+     * @param request 请求体
+     * @return 创建的交易记录
+     */
+    @PostMapping("/quick-buy-mmf")
+    public ResponseEntity<LedgerTxn> quickBuyMoneyMarketFund(@RequestBody Map<String, Object> request) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        
+        Long productId = Long.valueOf(request.get("productId").toString());
+        Long sourceAccountId = Long.valueOf(request.get("sourceAccountId").toString());
+        Long targetAccountId = request.containsKey("targetAccountId") && request.get("targetAccountId") != null
+            ? Long.valueOf(request.get("targetAccountId").toString()) : null;
+        BigDecimal amount = new BigDecimal(request.get("amount").toString());
+        BigDecimal nav = request.containsKey("nav") && request.get("nav") != null
+            ? new BigDecimal(request.get("nav").toString()) : null;
+        String note = request.containsKey("note") ? request.get("note").toString() : null;
+        LocalDateTime requestedAt = request.containsKey("occurredAt") && request.get("occurredAt") != null
+            ? LocalDateTime.parse(request.get("occurredAt").toString().replace(" ", "T"))
+            : null;
+        
+        LedgerTxn txn = ledgerService.quickBuyMoneyMarketFund(
+            currentUser.getId(), currentUser.getFamilyId(), productId, 
+            sourceAccountId, targetAccountId, amount, nav, note, requestedAt);
         return ResponseEntity.ok(txn);
     }
 

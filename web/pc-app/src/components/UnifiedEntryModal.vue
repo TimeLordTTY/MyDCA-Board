@@ -3582,35 +3582,89 @@ async function handleSubmit() {
       const orderTypeLabel = form.value.orderType === 'BUY' ? '买入' : '申购'
       const autoNote = `${orderTypeLabel}${channelLabel}${product.productName}`
 
-      // 对于场外（OTC）产品，只创建订单，不立即记账（等结算时再记账）
+      // 对于场外（OTC）产品，检查是否是货币基金且有关联账户
       if (form.value.channel === 'OTC') {
-        try {
-          // 创建订单（占用资金），不立即记账
-          // 场外产品需要等待结算确认，份额以结算确认为准
-          await orderApi.createOrder({
-            productId: form.value.productId,
-            orderType: form.value.orderType,
-            amount: totalAmount,
-            fundingLines: finalFundingLines,
-          // 这里的订单主要用于"待结算/今日建议"提醒，份额以结算确认为准，因此不写shares
-          requestedAt: form.value.requestedAt, // 传递用户指定的发起时间
-          expectedNavDate: form.value.navDate,
-          expectedConfirmDate: form.value.confirmDate,
-          feeEstimate: form.value.fee || undefined, // 传递手续费
-            note: autoNote,
-          })
-          
-          ElNotification.success({
-            title: '订单创建成功',
-            message: '请在"订单&结算"中确认结算',
-            position: 'bottom-right',
-            duration: 3000,
-          })
-        } catch (error: any) {
-          ElNotification.error({
-        title: '错误',
-        message: error.message || '操作失败', position: 'bottom-right', duration: 3000 })
-          return
+        // 检查是否是MMF且有关联账户
+        const linkedAccount = accountStore.accounts.find(
+          (a) => a.linkedProductId === form.value.productId && a.accountType === 'MMF'
+        )
+        
+        if (product.assetType === 'MMF' && linkedAccount) {
+          // 货币基金快速购买（N+0，无需订单和结算）
+          try {
+            // 确定入金账户：如果选择了关联账户的子账户，使用它；否则使用第一个子账户
+            let targetAccountId: number | undefined
+            if (form.value.accountId && buyChildAccounts.value.length > 0) {
+              const selectedChild = buyChildAccounts.value.find((c) => c.id === form.value.accountId)
+              if (selectedChild) {
+                targetAccountId = selectedChild.id
+              }
+            }
+            if (!targetAccountId && buyChildAccounts.value.length > 0) {
+              targetAccountId = buyChildAccounts.value[0].id
+            }
+            
+            // 使用第一个出金账户（通常只有一个）
+            const sourceAccountId = finalFundingLines[0]?.accountId
+            if (!sourceAccountId) {
+              ElNotification.error({
+                title: '错误',
+                message: '请选择出金账户', position: 'bottom-right', duration: 3000 })
+              return
+            }
+            
+            await ledgerApi.quickBuyMoneyMarketFund({
+              productId: form.value.productId,
+              sourceAccountId,
+              targetAccountId,
+              amount: totalAmount,
+              nav: nav || undefined,
+              note: autoNote,
+              occurredAt: form.value.requestedAt,
+            })
+            
+            ElNotification.success({
+              title: '购买成功',
+              message: `货币基金购买成功：${product.productName}`,
+              position: 'bottom-right',
+              duration: 3000,
+            })
+          } catch (error: any) {
+            ElNotification.error({
+              title: '错误',
+              message: error.message || '操作失败', position: 'bottom-right', duration: 3000 })
+            return
+          }
+        } else {
+          // 普通场外产品：创建订单，等待结算
+          try {
+            // 创建订单（占用资金），不立即记账
+            // 场外产品需要等待结算确认，份额以结算确认为准
+            await orderApi.createOrder({
+              productId: form.value.productId,
+              orderType: form.value.orderType,
+              amount: totalAmount,
+              fundingLines: finalFundingLines,
+            // 这里的订单主要用于"待结算/今日建议"提醒，份额以结算确认为准，因此不写shares
+            requestedAt: form.value.requestedAt, // 传递用户指定的发起时间
+            expectedNavDate: form.value.navDate,
+            expectedConfirmDate: form.value.confirmDate,
+            feeEstimate: form.value.fee || undefined, // 传递手续费
+              note: autoNote,
+            })
+            
+            ElNotification.success({
+              title: '订单创建成功',
+              message: '请在"订单&结算"中确认结算',
+              position: 'bottom-right',
+              duration: 3000,
+            })
+          } catch (error: any) {
+            ElNotification.error({
+          title: '错误',
+          message: error.message || '操作失败', position: 'bottom-right', duration: 3000 })
+            return
+          }
         }
       } else {
         // 场内（EXCHANGE）产品，直接记账

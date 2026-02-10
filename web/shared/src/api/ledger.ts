@@ -12,6 +12,7 @@ import type {
   QuickEntryRequest,
   RefundRequest,
   ReimburseRequest,
+  QuickBuyMmfRequest,
 } from '../types'
 
 export const ledgerApi = {
@@ -104,5 +105,14 @@ export const ledgerApi = {
    */
   deleteTransaction: async (txnId: string): Promise<void> => {
     await apiClient.delete(`/ledger/txns/${txnId}`)
+  },
+
+  /**
+   * 快速购买货币基金（N+0，无需订单和结算）
+   * 适用于场外货币基金（MMF），有关联账户的产品
+   */
+  quickBuyMoneyMarketFund: async (data: QuickBuyMmfRequest): Promise<LedgerTxn> => {
+    const response = await apiClient.post<LedgerTxn>('/ledger/quick-buy-mmf', data)
+    return response.data
   },
 }

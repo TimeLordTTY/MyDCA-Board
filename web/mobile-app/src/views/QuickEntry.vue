@@ -1451,16 +1451,41 @@ async function handleBuySubmit() {
       }
 
       const prodName = product?.productName || '产品'
-      await orderApi.createOrder({
-        productId: buyForm.value.productId!,
-        orderType: 'SUBSCRIPTION',
-        amount,
-        fundingLines: [{ accountId: buyForm.value.cashAccountId!, amount }],
-        expectedNavDate: buyForm.value.navDate || undefined,
-        note: buyForm.value.note || `申购场外${prodName}`,
-        feeEstimate: otcFee > 0 ? otcFee : undefined,
-      } as any)
-      showSuccessToast('申购订单已创建，请在订单中确认结算')
+      
+      // 检查是否是货币基金且有关联账户
+      const linkedAccount = accounts.value.find(
+        (a) => a.linkedProductId === buyForm.value.productId && a.accountType === 'MMF'
+      )
+      
+      if (product?.assetType === 'MMF' && linkedAccount) {
+        // 货币基金快速购买（N+0，无需订单和结算）
+        // 确定入金账户：使用关联账户的第一个子账户
+        const childAccounts = accounts.value.filter(
+          (a) => a.parentAccountId === linkedAccount.id && a.isActive !== false
+        )
+        const targetAccountId = childAccounts.length > 0 ? childAccounts[0].id : undefined
+        
+        await ledgerApi.quickBuyMoneyMarketFund({
+          productId: buyForm.value.productId!,
+          sourceAccountId: buyForm.value.cashAccountId!,
+          targetAccountId,
+          amount,
+          note: buyForm.value.note || `快速购买${prodName}`,
+        })
+        showSuccessToast('货币基金购买成功')
+      } else {
+        // 普通场外产品：创建订单，等待结算
+        await orderApi.createOrder({
+          productId: buyForm.value.productId!,
+          orderType: 'SUBSCRIPTION',
+          amount,
+          fundingLines: [{ accountId: buyForm.value.cashAccountId!, amount }],
+          expectedNavDate: buyForm.value.navDate || undefined,
+          note: buyForm.value.note || `申购场外${prodName}`,
+          feeEstimate: otcFee > 0 ? otcFee : undefined,
+        } as any)
+        showSuccessToast('申购订单已创建，请在订单中确认结算')
+      }
     }
 
     showBuyForm.value = false

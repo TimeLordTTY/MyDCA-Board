@@ -13,11 +13,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -132,6 +134,16 @@ public class LedgerService {
     @Transactional
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable, Long productId) {
+        return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable, productId, null);
+    }
+
+    /**
+     * 创建交易记录（完整版，支持 orderId 关联）
+     */
+    @Transactional
+    public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
+                                      List<LedgerPosting> postings, String note, String requestedAtStr, 
+                                      Long categoryId, Boolean isReimbursable, Long productId, String orderId) {
         // 生成唯一交易ID：格式为TXN-16位大写字母数字
         // 示例：TXN-A1B2C3D4E5F6G7H8
         String txnId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
@@ -200,6 +212,7 @@ public class LedgerService {
         txn.setNote(note);
         txn.setCategoryId(categoryId);
         txn.setProductId(productId);
+        txn.setOrderId(orderId); // 关联订单ID（可为空）
         txn.setIsReimbursable(isReimbursable != null ? isReimbursable : false);
         txn.setIsReimbursed(false);
         txn.setIsReversed(false);
@@ -226,8 +239,12 @@ public class LedgerService {
     /**
      * 判断是否需要重算历史余额
      * 
-     * 优化策略：只有当新交易的时间早于相关账户的最新交易时间时，才需要重算。
-     * 这样可以避免在正常记账（记录当前时间的交易）时进行不必要的历史重算。
+     * 优化策略：只有当新交易的时间早于相关账户（含兄弟账户）的最新交易时间时，才需要重算。
+     * 
+     * 关键点：父账户余额 = 所有子账户余额之和，因此在计算父账户历史余额时，
+     * 需要考虑兄弟账户的历史变化。如果兄弟账户在新交易时间之后有更多posting，
+     * 则 insertPostingsWithBalance 用的"当前DB余额"计算的父余额是错误的，
+     * 必须触发 recalculateAccountBalanceHistoryForAccounts 来用历史running balance重算。
      * 
      * @param accountIds 涉及的账户ID集合
      * @param newTxnTime 新交易的时间
@@ -238,9 +255,23 @@ public class LedgerService {
             return false;
         }
         
-        // 查询这些账户的最新交易时间
+        // 扩展检查范围：包含所有兄弟账户
+        // 因为父账户余额依赖于所有子账户的历史状态，
+        // 如果任何兄弟账户在新交易时间之后有posting，父余额就需要用历史值重算
+        Set<Long> allRelatedIds = new HashSet<>(accountIds);
+        for (Long accountId : accountIds) {
+            Account account = accountMapper.selectById(accountId);
+            if (account != null && account.getParentAccountId() != null) {
+                List<Account> siblings = accountService.getAccountChildren(account.getParentAccountId());
+                for (Account sibling : siblings) {
+                    allRelatedIds.add(sibling.getId());
+                }
+            }
+        }
+        
+        // 查询所有相关账户（含兄弟）的最新交易时间
         LocalDateTime latestTxnTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
-            new ArrayList<>(accountIds));
+            new ArrayList<>(allRelatedIds));
         
         // 如果没有历史交易，不需要重算
         if (latestTxnTime == null) {
@@ -248,8 +279,6 @@ public class LedgerService {
         }
         
         // 如果新交易时间早于最新交易时间，说明是插入到历史中间，需要重算
-        // 注意：这里使用 isBefore 而不是 !isAfter，因为相等时间（同一秒）也不需要重算
-        // 实际上，如果时间完全相同，由于 insertPostingsWithBalance 已经处理了，也不需要重算
         return newTxnTime.isBefore(latestTxnTime);
     }
 
@@ -599,6 +628,42 @@ public class LedgerService {
             
             // 插入分录（包含历史余额）
             ledgerPostingMapper.insert(posting);
+        }
+        
+        // === 二次修正：统一同一交易内所有同父posting的parent_account_balance_after ===
+        // 因为一笔交易是原子的（如转账：A-4000 + B+4000），所有posting应使用交易完成后的父账户余额
+        // 上面逐条处理时，前面的posting看不到后面posting的变化，会导致中间态
+        Map<Long, BigDecimal> finalParentBalances = new HashMap<>();
+        List<LedgerPosting> parentBalanceUpdates = new ArrayList<>();
+        for (LedgerPosting posting : postings) {
+            Account acct = accountMapper.selectById(posting.getAccountId());
+            if (acct != null && acct.getParentAccountId() != null) {
+                Long parentId = acct.getParentAccountId();
+                BigDecimal finalBal = finalParentBalances.get(parentId);
+                if (finalBal == null) {
+                    // 计算最终父账户余额（所有子账户的当前余额之和，此时所有posting已生效）
+                    List<Account> children = accountService.getAccountChildren(parentId);
+                    finalBal = children.stream()
+                        .filter(child -> {
+                            String at = child.getAccountType();
+                            return !"CREDIT_CARD".equals(at) && !"HUABEI".equals(at) && 
+                                   !"BAITIAO".equals(at) && !"LOAN".equals(at);
+                        })
+                        .map(Account::getBalance)
+                        .filter(b -> b != null)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    finalParentBalances.put(parentId, finalBal);
+                }
+                // 如果不一致，修正
+                if (posting.getParentAccountBalanceAfter() == null ||
+                    posting.getParentAccountBalanceAfter().compareTo(finalBal) != 0) {
+                    posting.setParentAccountBalanceAfter(finalBal);
+                    parentBalanceUpdates.add(posting);
+                }
+            }
+        }
+        if (!parentBalanceUpdates.isEmpty()) {
+            ledgerPostingMapper.batchUpdateBalanceAfter(parentBalanceUpdates);
         }
     }
 
@@ -1084,14 +1149,56 @@ public class LedgerService {
     }
 
     /**
+     * 根据账户类型计算余额变化方向（公共方法，供重算和余额更新共用）
+     * 
+     * - 资产类（CASH/POSITION/MMF/BROKER等）：DEBIT=加，CREDIT=减
+     * - 负债类（LIABILITY/CREDIT_CARD/HUABEI/BAITIAO/LOAN）：DEBIT=减，CREDIT=加
+     * - 收入类（INCOME）：DEBIT=减，CREDIT=加
+     * - 支出/手续费类（EXPENSE/FEE）：DEBIT=加，CREDIT=减
+     * 
+     * @param account 账户对象
+     * @param postingType DEBIT 或 CREDIT
+     * @param amount 金额
+     * @return 余额变化量（正数表示增加，负数表示减少）
+     */
+    private BigDecimal calculateBalanceDelta(Account account, String postingType, BigDecimal amount) {
+        // 对于虚拟账户，使用 virtual_subtype 作为账户类型
+        // 对于 REAL 账户，使用 account_type
+        String accountType;
+        if ("VIRTUAL".equals(account.getAccountKind())) {
+            accountType = account.getVirtualSubtype();
+        } else {
+            accountType = account.getAccountType();
+            if (accountType == null || accountType.isEmpty()) {
+                accountType = account.getFundUsage();
+            }
+        }
+        
+        if (accountType == null) {
+            // 默认按资产类处理
+            return "DEBIT".equals(postingType) ? amount : amount.negate();
+        }
+        
+        // 负债类/收入类：DEBIT减少余额，CREDIT增加余额
+        if ("LIABILITY".equals(accountType) || accountType.contains("CREDIT") || 
+            accountType.contains("HUABEI") || accountType.contains("BAITIAO") ||
+            accountType.contains("LOAN") || "INCOME".equals(accountType)) {
+            return "DEBIT".equals(postingType) ? amount.negate() : amount;
+        }
+        
+        // 资产类/支出类/手续费类：DEBIT增加余额，CREDIT减少余额
+        return "DEBIT".equals(postingType) ? amount : amount.negate();
+    }
+
+    /**
      * 重算账户的历史余额
      * 当插入/修改交易时调用，确保历史余额按交易时间顺序正确
      * 
      * 算法说明：
      * 1. 获取账户当前余额
      * 2. 查询该账户所有分录（按交易的 requested_at 时间排序）
-     * 3. 计算起始余额 = 当前余额 - 所有分录的净变化量
-     * 4. 按时间顺序重新计算每条分录的 accountBalanceAfter
+     * 3. 计算起始余额 = initial_balance
+     * 4. 按时间顺序、根据账户类型重新计算每条分录的 accountBalanceAfter
      * 5. 批量更新有变化的分录
      * 
      * @param accountId 需要重算的账户ID
@@ -1108,7 +1215,7 @@ public class LedgerService {
         // 3. 起始余额：使用账户 initial_balance，从第一条分录开始完整回放
         BigDecimal startBalance = account.getInitialBalance() != null ? account.getInitialBalance() : BigDecimal.ZERO;
         
-        // 4. 按时间顺序计算每条分录的余额
+        // 4. 按时间顺序计算每条分录的余额（根据账户类型区分方向）
         List<LedgerPosting> updates = new ArrayList<>();
         BigDecimal runningBalance = startBalance;
         
@@ -1116,11 +1223,7 @@ public class LedgerService {
         Long parentAccountId = account.getParentAccountId();
         
         for (LedgerPosting p : postings) {
-            if ("DEBIT".equals(p.getPostingType())) {
-                runningBalance = runningBalance.add(p.getAmount());
-            } else {
-                runningBalance = runningBalance.subtract(p.getAmount());
-            }
+            runningBalance = runningBalance.add(calculateBalanceDelta(account, p.getPostingType(), p.getAmount()));
             
             // 只有余额变化时才加入更新列表
             boolean needUpdate = false;
@@ -1238,15 +1341,34 @@ public class LedgerService {
         Map<Long, List<Account>> siblingsByParentId = new HashMap<>();
         List<LedgerPosting> updates = new ArrayList<>();
         
+        // 缓存账户对象，避免在循环中重复查询
+        Map<Long, Account> accountCache = new HashMap<>();
+        for (Long accountId : allAccountIds) {
+            Account acct = accountMapper.selectById(accountId);
+            if (acct != null) {
+                accountCache.put(accountId, acct);
+            }
+        }
+        
         for (LedgerPosting p : allPostings) {
             Long accountId = p.getAccountId();
             BigDecimal currentBalance = accountRunningBalances.get(accountId);
             
-            // 更新账户余额
-            if ("DEBIT".equals(p.getPostingType())) {
-                currentBalance = currentBalance.add(p.getAmount());
+            // 根据账户类型计算余额变化方向（修复：不再统一 DEBIT=加/CREDIT=减）
+            Account acct = accountCache.get(accountId);
+            if (acct == null) {
+                acct = accountMapper.selectById(accountId);
+                if (acct != null) accountCache.put(accountId, acct);
+            }
+            if (acct != null) {
+                currentBalance = currentBalance.add(calculateBalanceDelta(acct, p.getPostingType(), p.getAmount()));
             } else {
-                currentBalance = currentBalance.subtract(p.getAmount());
+                // 兜底：找不到账户时按资产类处理
+                if ("DEBIT".equals(p.getPostingType())) {
+                    currentBalance = currentBalance.add(p.getAmount());
+                } else {
+                    currentBalance = currentBalance.subtract(p.getAmount());
+                }
             }
             accountRunningBalances.put(accountId, currentBalance);
             
@@ -1260,7 +1382,11 @@ public class LedgerService {
             }
             
             // 计算父账户余额（如果有父账户，使用历史时刻的所有兄弟账户余额）
-            Account account = accountMapper.selectById(accountId);
+            Account account = accountCache.get(accountId);
+            if (account == null) {
+                account = accountMapper.selectById(accountId);
+                if (account != null) accountCache.put(accountId, account);
+            }
             if (account != null && account.getParentAccountId() != null) {
                 Long parentId = account.getParentAccountId();
                 
@@ -1315,12 +1441,42 @@ public class LedgerService {
             }
         }
         
-        // 5. 批量更新分录余额（如果有变化）
+        // 5. 修正同一交易内同父账户posting的parent_account_balance_after
+        // 同一笔交易是原子的，同一父账户下的所有posting应使用该交易最后一条posting计算出的父余额
+        // 按txn_id分组，找到每个txn_id+parentId组合的最终父余额
+        Map<String, Map<Long, BigDecimal>> txnParentFinalBal = new LinkedHashMap<>();
+        for (LedgerPosting p : allPostings) {
+            Account acct = accountCache.get(p.getAccountId());
+            if (acct != null && acct.getParentAccountId() != null && p.getParentAccountBalanceAfter() != null) {
+                txnParentFinalBal
+                    .computeIfAbsent(p.getTxnId(), k -> new HashMap<>())
+                    .put(acct.getParentAccountId(), p.getParentAccountBalanceAfter());
+            }
+        }
+        // 将同一交易同一父账户的所有posting统一为最终值
+        for (LedgerPosting p : allPostings) {
+            Account acct = accountCache.get(p.getAccountId());
+            if (acct != null && acct.getParentAccountId() != null) {
+                Map<Long, BigDecimal> parentMap = txnParentFinalBal.get(p.getTxnId());
+                if (parentMap != null) {
+                    BigDecimal finalBal = parentMap.get(acct.getParentAccountId());
+                    if (finalBal != null && (p.getParentAccountBalanceAfter() == null ||
+                        p.getParentAccountBalanceAfter().compareTo(finalBal) != 0)) {
+                        p.setParentAccountBalanceAfter(finalBal);
+                        if (!updates.contains(p)) {
+                            updates.add(p);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 6. 批量更新分录余额（如果有变化）
         if (!updates.isEmpty()) {
             ledgerPostingMapper.batchUpdateBalanceAfter(updates);
         }
         
-        // 6. 同步 accounts 表中的余额为最后一条分录后的余额
+        // 7. 同步 accounts 表中的余额为最后一条分录后的余额
         // 更新所有有分录的账户的余额（不仅仅是传入的 accountIds）
         for (Long accountId : allAccountIds) {
             BigDecimal finalBalance = accountRunningBalances.get(accountId);
@@ -1582,6 +1738,136 @@ public class LedgerService {
         }
         
         return false;
+    }
+
+    /**
+     * 快速购买货币基金（N+0，无需订单和结算）
+     * 
+     * 适用于场外货币基金（MMF），有关联账户的产品。
+     * 直接创建交易流水并更新持仓份额，无需创建订单和结算记录。
+     * 
+     * 业务逻辑：
+     * 1. 检查产品是否是MMF且有关联账户
+     * 2. 计算份额（金额 / 净值，货币基金净值通常为1.0）
+     * 3. 更新关联账户的 initial_shares
+     * 4. 创建交易流水：CASH CREDIT（出金账户减少）+ CASH DEBIT（入金账户增加）
+     * 
+     * @param userId 用户ID
+     * @param familyId 家庭ID，可为空
+     * @param productId 产品ID（必须是MMF类型且有关联账户）
+     * @param sourceAccountId 出金账户ID（必须是叶子账户）
+     * @param targetAccountId 入金账户ID（关联账户的子账户，可为空则使用关联账户的第一个子账户）
+     * @param amount 购买金额
+     * @param nav 净值（通常为1.0，可为空则默认1.0）
+     * @param note 备注（可选）
+     * @param requestedAt 交易时间（可为空则使用当前时间）
+     * @return 创建的交易记录
+     */
+    public LedgerTxn quickBuyMoneyMarketFund(Long userId, Long familyId, Long productId, 
+                                            Long sourceAccountId, Long targetAccountId,
+                                            BigDecimal amount, BigDecimal nav, String note, 
+                                            LocalDateTime requestedAt) {
+        // 1. 验证产品
+        ProductMaster product = productMasterMapper.selectById(productId);
+        if (product == null) {
+            throw new RuntimeException("产品不存在: productId=" + productId);
+        }
+        if (!"MMF".equals(product.getAssetType())) {
+            throw new RuntimeException("该产品不是货币基金，请使用普通购买流程: productId=" + productId);
+        }
+        
+        // 2. 检查是否有关联账户
+        Account linkedAccount = accountMapper.selectByLinkedProductId(productId);
+        if (linkedAccount == null) {
+            throw new RuntimeException("该产品没有关联账户，请使用普通购买流程: productId=" + productId);
+        }
+        
+        // 3. 验证出金账户
+        Account sourceAccount = accountMapper.selectById(sourceAccountId);
+        if (sourceAccount == null) {
+            throw new RuntimeException("出金账户不存在: accountId=" + sourceAccountId);
+        }
+        if (sourceAccount.getParentAccountId() == null) {
+            throw new RuntimeException("出金账户必须是叶子账户: accountId=" + sourceAccountId);
+        }
+        
+        // 4. 确定入金账户
+        Account targetAccount = null;
+        if (targetAccountId != null) {
+            targetAccount = accountMapper.selectById(targetAccountId);
+            if (targetAccount == null) {
+                throw new RuntimeException("入金账户不存在: accountId=" + targetAccountId);
+            }
+            // 验证入金账户是关联账户的子账户
+            if (targetAccount.getParentAccountId() == null || 
+                !targetAccount.getParentAccountId().equals(linkedAccount.getId())) {
+                throw new RuntimeException("入金账户必须是关联账户的子账户: accountId=" + targetAccountId);
+            }
+        } else {
+            // 如果没有指定，使用关联账户的第一个子账户
+            List<Account> children = accountService.getAccountChildren(linkedAccount.getId());
+            if (children == null || children.isEmpty()) {
+                throw new RuntimeException("关联账户没有子账户，无法入金: linkedAccountId=" + linkedAccount.getId());
+            }
+            targetAccount = children.get(0);
+        }
+        
+        // 5. 计算份额（金额 / 净值）
+        BigDecimal finalNav = nav != null && nav.compareTo(BigDecimal.ZERO) > 0 ? nav : BigDecimal.ONE;
+        BigDecimal shares = amount.divide(finalNav, 6, RoundingMode.HALF_UP);
+        
+        // 6. 更新关联账户的 initial_shares
+        BigDecimal currentShares = linkedAccount.getInitialShares();
+        if (currentShares == null) {
+            currentShares = BigDecimal.ZERO;
+        }
+        BigDecimal newShares = currentShares.add(shares);
+        accountMapper.updateInitialShares(linkedAccount.getId(), newShares);
+        
+        // 7. 创建交易流水
+        String ownerType = familyId != null ? "FAMILY" : "PERSONAL";
+        List<LedgerPosting> postings = new ArrayList<>();
+        
+        // CASH CREDIT：出金账户减少
+        LedgerPosting sourcePosting = new LedgerPosting();
+        sourcePosting.setPostingType("CREDIT");
+        sourcePosting.setAccountId(sourceAccountId);
+        sourcePosting.setAccountType("CASH");
+        sourcePosting.setAmount(amount);
+        sourcePosting.setCurrency(sourceAccount.getCurrency() != null ? sourceAccount.getCurrency() : "CNY");
+        postings.add(sourcePosting);
+        
+        // CASH DEBIT：入金账户增加
+        LedgerPosting targetPosting = new LedgerPosting();
+        targetPosting.setPostingType("DEBIT");
+        targetPosting.setAccountId(targetAccount.getId());
+        targetPosting.setAccountType("CASH");
+        targetPosting.setAmount(amount);
+        targetPosting.setShares(shares); // 记录份额，用于持仓计算
+        targetPosting.setCurrency(targetAccount.getCurrency() != null ? targetAccount.getCurrency() : "CNY");
+        postings.add(targetPosting);
+        
+        // 8. 创建交易
+        String finalNote = note != null ? note : 
+            String.format("快速购买: %s %s份，金额%s元", product.getProductName(), shares, amount);
+        
+        // 将 LocalDateTime 转换为字符串格式（yyyy-MM-dd HH:mm:ss）
+        String requestedAtStr = null;
+        if (requestedAt != null) {
+            java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            requestedAtStr = requestedAt.format(formatter);
+        }
+        
+        LedgerTxn txn = createTransaction(userId, familyId, "SUBSCRIPTION", null, postings, finalNote, requestedAtStr, null, false);
+        
+        // 9. 设置产品ID（用于持仓计算）
+        txn.setProductId(productId);
+        ledgerTxnMapper.update(txn);
+        
+        log.info("快速购买货币基金成功: productId={}, shares={}, amount={}, linkedAccountId={}", 
+            productId, shares, amount, linkedAccount.getId());
+        
+        return txn;
     }
 }
 

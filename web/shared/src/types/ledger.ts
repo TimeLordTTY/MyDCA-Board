@@ -118,3 +118,13 @@ export interface ReimburseRequest {
   occurredAt?: string
   note?: string
 }
+
+export interface QuickBuyMmfRequest {
+  productId: number
+  sourceAccountId: number
+  targetAccountId?: number
+  amount: number
+  nav?: number
+  note?: string
+  occurredAt?: string
+}

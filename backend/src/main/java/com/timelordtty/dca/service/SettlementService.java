@@ -230,19 +230,19 @@ public class SettlementService {
         Long ownerFamilyId = currentUser.getFamilyId();
 
         if ("BUY".equals(order.getOrderType()) || "SUBSCRIPTION".equals(order.getOrderType())) {
-            // 买入/申购：POSITION DEBIT + 多条CASH CREDIT（按funding_line拆分）+ FEE DEBIT
+            // 买入/申购结算：
+            // 下单时已生成付款流水（CASH CREDIT + RECEIVABLE DEBIT）
+            // 结算时只需要：RECEIVABLE CREDIT + POSITION DEBIT（或关联账户入账）+ FEE DEBIT
             
-            // 计算成本：使用份额 × 净值（而不是金额 - 手续费）
-            // 因为份额已经考虑了手续费，所以成本 = 份额 × 净值
-            BigDecimal cost;
-            if (confirmShares != null && confirmNav != null && confirmNav.compareTo(BigDecimal.ZERO) > 0) {
-                // 使用份额 × 净值计算成本（更准确）
-                cost = confirmShares.multiply(confirmNav).setScale(2, RoundingMode.HALF_UP);
-            } else {
-                // 如果没有份额和净值，使用金额 - 手续费（兜底逻辑）
             BigDecimal totalAmount = fundingLines.stream()
                     .map(OrderFundingLine::getAmount)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
+            
+            // 计算成本：使用份额 × 净值
+            BigDecimal cost;
+            if (confirmShares != null && confirmNav != null && confirmNav.compareTo(BigDecimal.ZERO) > 0) {
+                cost = confirmShares.multiply(confirmNav).setScale(2, RoundingMode.HALF_UP);
+            } else {
                 cost = totalAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
             }
 
@@ -250,13 +250,28 @@ public class SettlementService {
             Account linkedAccount = accountMapper.selectByLinkedProductId(order.getProductId());
             boolean hasLinkedAccount = linkedAccount != null;
 
-            // 获取或创建POSITION账户（非关联账户产品才需要）
-            Account positionAccount = null;
+            // 分离 SOURCE 和 TARGET 类型的 fundingLines
+            List<OrderFundingLine> targetLines = fundingLines.stream()
+                .filter(fl -> "TARGET".equals(fl.getLineType()))
+                .collect(java.util.stream.Collectors.toList());
+
+            // 1. RECEIVABLE CREDIT：清零下单时创建的待结算应收
+            Account receivableAccount = accountService.getOrCreateVirtualAccount(
+                "RECEIVABLE", "RECEIVABLE", ownerType, ownerUserId, ownerFamilyId, null, null);
+            LedgerPosting receivablePosting = new LedgerPosting();
+            receivablePosting.setPostingType("CREDIT");
+            receivablePosting.setAccountId(receivableAccount.getId());
+            receivablePosting.setAccountType("RECEIVABLE");
+            receivablePosting.setAmount(totalAmount);
+            receivablePosting.setCurrency("CNY");
+            postings.add(receivablePosting);
+
+            // 2. DEBIT 端：根据产品类型决定入账方式
             if (!hasLinkedAccount) {
-                positionAccount = accountService.getOrCreatePositionAccount(
+                // 非关联产品：POSITION DEBIT（持仓增加）
+                Account positionAccount = accountService.getOrCreatePositionAccount(
                     order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
 
-                // POSITION账户：DEBIT（持仓增加）
                 LedgerPosting positionPosting = new LedgerPosting();
                 positionPosting.setPostingType("DEBIT");
                 positionPosting.setAccountId(positionAccount.getId());
@@ -266,52 +281,57 @@ public class SettlementService {
                 positionPosting.setCurrency(product.getCurrency() != null ? product.getCurrency() : "CNY");
                 postings.add(positionPosting);
             } else {
-                // 有关联账户的产品，更新 initial_shares（增加购买的份额）
+                // 有关联账户的产品：更新 initial_shares（增加购买的份额）
                 BigDecimal currentShares = linkedAccount.getInitialShares();
                 if (currentShares == null) {
                     currentShares = BigDecimal.ZERO;
                 }
                 BigDecimal newShares = currentShares.add(confirmShares != null ? confirmShares : BigDecimal.ZERO);
                 accountMapper.updateInitialShares(linkedAccount.getId(), newShares);
-            }
 
-            // 按funding_line生成多条CASH CREDIT分录（现金减少）
-            for (OrderFundingLine fundingLine : fundingLines) {
-                LedgerPosting cashPosting = new LedgerPosting();
-                cashPosting.setPostingType("CREDIT");
-                cashPosting.setAccountId(fundingLine.getAccountId());
-                cashPosting.setAccountType("CASH");
-                cashPosting.setAmount(fundingLine.getAmount());
-                cashPosting.setCurrency(fundingLine.getCurrency());
-                postings.add(cashPosting);
-            }
-
-            // 如果购买关联账户产品，还需要为关联账户的子账户（fundingLines中的TARGET类型）增加余额
-            // 分离 SOURCE 和 TARGET 类型的 fundingLines
-            List<OrderFundingLine> sourceLines = fundingLines.stream()
-                .filter(fl -> "SOURCE".equals(fl.getLineType()) || fl.getLineType() == null)
-                .collect(java.util.stream.Collectors.toList());
-            List<OrderFundingLine> targetLines = fundingLines.stream()
-                .filter(fl -> "TARGET".equals(fl.getLineType()))
-                .collect(java.util.stream.Collectors.toList());
-
-            // 如果有 TARGET 类型的 fundingLines，说明买入后需要入金到这些账户
-            if (hasLinkedAccount && !targetLines.isEmpty()) {
-                // 为 TARGET 账户生成 CASH DEBIT 分录（余额增加）
-                for (OrderFundingLine targetLine : targetLines) {
+                // 如果有 TARGET 账户，生成 CASH DEBIT 分录（关联账户余额增加）
+                if (!targetLines.isEmpty()) {
+                    BigDecimal netAmount = totalAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+                    BigDecimal remainingAmount = netAmount;
+                    for (int i = 0; i < targetLines.size(); i++) {
+                        OrderFundingLine targetLine = targetLines.get(i);
+                        BigDecimal accountAmount = targetLine.getAmount() != null ? targetLine.getAmount() : remainingAmount;
+                        if (i == targetLines.size() - 1) {
+                            accountAmount = remainingAmount;
+                        } else {
+                            remainingAmount = remainingAmount.subtract(accountAmount);
+                        }
+                        
+                        LedgerPosting cashDebitPosting = new LedgerPosting();
+                        cashDebitPosting.setPostingType("DEBIT");
+                        cashDebitPosting.setAccountId(targetLine.getAccountId());
+                        cashDebitPosting.setAccountType("CASH");
+                        cashDebitPosting.setAmount(accountAmount);
+                        cashDebitPosting.setCurrency(targetLine.getCurrency() != null ? targetLine.getCurrency() : "CNY");
+                        postings.add(cashDebitPosting);
+                    }
+                } else {
+                    // 没有明确 TARGET，则将净额入账到关联账户本身（如果是叶子账户）
+                    // 或找其第一个子账户
+                    BigDecimal netAmount = totalAmount.subtract(confirmFee != null ? confirmFee : BigDecimal.ZERO);
+                    Long targetAccountId = linkedAccount.getId();
+                    // 检查关联账户是否有子账户
+                    List<Account> children = accountMapper.selectChildren(linkedAccount.getId());
+                    if (children != null && !children.isEmpty()) {
+                        targetAccountId = children.get(0).getId();
+                    }
                     LedgerPosting cashDebitPosting = new LedgerPosting();
                     cashDebitPosting.setPostingType("DEBIT");
-                    cashDebitPosting.setAccountId(targetLine.getAccountId());
+                    cashDebitPosting.setAccountId(targetAccountId);
                     cashDebitPosting.setAccountType("CASH");
-                    cashDebitPosting.setAmount(targetLine.getAmount() != null ? targetLine.getAmount() : BigDecimal.ZERO);
-                    cashDebitPosting.setCurrency(targetLine.getCurrency() != null ? targetLine.getCurrency() : "CNY");
+                    cashDebitPosting.setAmount(netAmount);
+                    cashDebitPosting.setCurrency("CNY");
                     postings.add(cashDebitPosting);
                 }
             }
 
-            // 手续费分录（如果有）
+            // 3. 手续费分录（如果有）
             if (confirmFee != null && confirmFee.compareTo(BigDecimal.ZERO) > 0) {
-                // 获取或创建FEE账户
                 Account feeAccount = accountService.getOrCreateVirtualAccount(
                     "FEE", "FEE", ownerType, ownerUserId, ownerFamilyId, null, null);
                 
@@ -816,7 +836,8 @@ public class SettlementService {
                 requestedAtStr,
                 null,  // categoryId
                 false, // isReimbursable
-                product.getId() // productId - 关联到产品，用于产品交易记录查询
+                product.getId(), // productId - 关联到产品
+                orderId  // orderId - 关联订单
             );
         }
         
