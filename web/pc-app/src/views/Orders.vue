@@ -840,8 +840,15 @@ function getOrderDetailAmount(order: OrderDetail & { navData?: any }): string {
     return order.amount ? formatCurrency(Number(order.amount.toFixed(2))) : '—'
   } else {
     // 赎回：按净值计算金额
+    // 优先使用结算确认的金额，其次使用结算确认的份额和净值计算，最后使用订单的份额和净值
+    if (order.settlement?.confirmAmount) {
+      // 如果已有结算确认金额，直接使用
+      return formatCurrency(Number(order.settlement.confirmAmount.toFixed(2)))
+    }
+    
     const nav = order.settlement?.confirmNav || (order as any).navData?.nav
-    const shares = order.shares || 0
+    // 优先使用结算确认的份额，其次使用订单的份额
+    const shares = order.settlement?.confirmShares ?? order.shares ?? 0
     
     if (nav && nav > 0 && shares > 0) {
       const amount = shares * nav

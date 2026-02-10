@@ -1,7 +1,7 @@
 {
     "host": "127.0.0.1",
     "port": 9009,
-    "user": "dca",
+    "user": "dca_v2",
     "password": "FW5GxWai5Shyrekb",
     "database": "dca_v2",
     "charset": "utf8mb4",

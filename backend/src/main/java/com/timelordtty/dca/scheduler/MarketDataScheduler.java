@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import jakarta.annotation.PostConstruct;
 import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -45,6 +44,10 @@ public class MarketDataScheduler {
     public MarketDataScheduler(PythonScriptService pythonScriptService, AccountService accountService) {
         this.pythonScriptService = pythonScriptService;
         this.accountService = accountService;
+        logger.info("MarketDataScheduler 初始化完成，定时任务已注册:");
+        logger.info("  - 场外产品净值采集: 每日 18:00 (cron: 0 0 18 * * ?)");
+        logger.info("  - 场内产品日K线: 每日 15:30 (cron: 0 30 15 * * ?)");
+        logger.info("  - 场内产品实时行情: 交易时间内每分钟 (cron: 0 * * * * ?)");
     }
 
     /**
@@ -120,6 +123,9 @@ public class MarketDataScheduler {
      */
     @Scheduled(cron = "0 0 18 * * ?")
     public void collectOTCNav() {
+        LocalDateTime now = LocalDateTime.now();
+        logger.info("========== 定时任务触发：场外产品净值采集 ==========");
+        logger.info("触发时间: {}", now);
         try {
             logger.info("开始采集场外产品净值...");
             String result = pythonScriptService.collectFundNav();
@@ -129,8 +135,10 @@ public class MarketDataScheduler {
             logger.info("开始按净值更新关联账户余额...");
             int updateCount = accountService.updateLinkedAccountBalancesByNav();
             logger.info("关联账户余额更新完成，共更新{}个账户", updateCount);
+            logger.info("========== 场外产品净值采集任务完成 ==========");
         } catch (Exception e) {
             logger.error("场外产品净值采集异常", e);
+            logger.error("========== 场外产品净值采集任务失败 ==========");
         }
     }
 

@@ -105,7 +105,7 @@ if sys.platform == 'win32':
 import pymysql
 import pandas as pd
 from datetime import datetime, date
-from typing import List, Optional
+from typing import List, Optional, Dict
 import time
 import logging
 
@@ -160,20 +160,21 @@ class FundCollector:
             cursor.execute(sql)
             return cursor.fetchall()
     
-    def fetch_fund_nav(self, product_code: str, asset_type: str) -> Optional[dict]:
+    def fetch_fund_nav(self, product_code: str, asset_type: str, db_latest_date: Optional[date] = None) -> List[dict]:
         """
-        采集基金净值
+        采集基金净值（获取最近的数据，而不仅仅是最后一条）
         
         Args:
             product_code: 产品代码
             asset_type: 资产类型
+            db_latest_date: 数据库中已有的最新净值日期，用于过滤只获取新数据
             
         Returns:
-            包含nav_date和nav的字典，如果采集失败返回None
+            包含nav_date和nav的字典列表，如果采集失败返回空列表
         """
         if not AKSHARE_AVAILABLE:
             logger.error("akshare 未安装，无法获取基金净值")
-            return None
+            return []
         
         try:
             # 使用akshare采集基金净值
@@ -204,23 +205,83 @@ class FundCollector:
             
             if df is None or df.empty:
                 print(f"未获取到产品 {product_code} 的净值数据")
-                return None
+                return []
             
-            # 获取最新净值（最后一行）
-            latest = df.iloc[-1]
-            nav_date = pd.to_datetime(latest.get('净值日期', latest.get('日期', date.today())))
-            nav = float(latest.get('单位净值', latest.get('净值', 0)))
+            # 解析所有净值数据
+            nav_list = []
+            date_columns = ['净值日期', '日期', 'date', '交易日期']
+            nav_columns = ['单位净值', '累计净值', '净值', 'nav', '单位净值(元)']
             
-            return {
-                'nav_date': nav_date.date() if hasattr(nav_date, 'date') else nav_date,
-                'nav': nav
-            }
+            for _, row in df.iterrows():
+                # 查找日期列
+                nav_date = None
+                for col in date_columns:
+                    if col in row and pd.notna(row[col]):
+                        nav_date = pd.to_datetime(row[col])
+                        break
+                
+                if nav_date is None:
+                    continue
+                
+                nav_date_obj = nav_date.date() if hasattr(nav_date, 'date') else nav_date
+                
+                # 如果数据库已有该日期或更晚的日期，跳过
+                if db_latest_date and nav_date_obj <= db_latest_date:
+                    continue
+                
+                # 查找净值列
+                nav = None
+                for col in nav_columns:
+                    if col in row and pd.notna(row[col]):
+                        try:
+                            nav = float(row[col])
+                            break
+                        except (ValueError, TypeError):
+                            continue
+                
+                if nav is None or nav <= 0:
+                    continue
+                
+                nav_list.append({
+                    'nav_date': nav_date_obj,
+                    'nav': nav
+                })
+            
+            # 按日期排序（从旧到新）
+            nav_list.sort(key=lambda x: x['nav_date'])
+            
+            return nav_list
         except Exception as e:
             print(f"采集产品 {product_code} 净值失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+    
+    def get_latest_nav_date(self, product_id: int) -> Optional[date]:
+        """获取数据库中该产品的最新净值日期"""
+        with self.conn.cursor() as cursor:
+            sql = """
+                SELECT MAX(nav_date) as latest_date
+                FROM nav
+                WHERE product_id = %s
+            """
+            cursor.execute(sql, (product_id,))
+            result = cursor.fetchone()
+            if result and result[0]:
+                return result[0] if isinstance(result[0], date) else result[0].date()
             return None
     
     def save_nav(self, product_id: int, nav_date: date, nav: float):
-        """保存净值到数据库"""
+        """保存净值到数据库（只有当日期更新时才保存）"""
+        # 先检查数据库中已有的最新净值日期
+        db_latest_date = self.get_latest_nav_date(product_id)
+        
+        if db_latest_date:
+            # 如果akshare返回的日期不新于数据库中的最新日期，跳过
+            if nav_date <= db_latest_date:
+                print(f"  跳过：数据库中已有 {db_latest_date} 的净值，akshare返回的是 {nav_date}（未更新）")
+                return False
+        
         with self.conn.cursor() as cursor:
             # 检查是否已存在
             check_sql = """
@@ -236,6 +297,7 @@ class FundCollector:
                     WHERE product_id = %s AND nav_date = %s
                 """
                 cursor.execute(update_sql, (nav, product_id, nav_date))
+                print(f"  更新：{nav_date} = {nav}（数据库中已有该日期记录）")
             else:
                 # 插入（nav 表没有 updated_at 字段，created_at 使用默认值）
                 insert_sql = """
@@ -243,7 +305,9 @@ class FundCollector:
                     VALUES (%s, %s, %s, 'AKSHARE')
                 """
                 cursor.execute(insert_sql, (product_id, nav_date, nav))
+                print(f"  新增：{nav_date} = {nav}")
             self.conn.commit()
+            return True
     
     def collect_all(self):
         """采集所有基金的净值"""
@@ -252,6 +316,7 @@ class FundCollector:
         
         success_count = 0
         fail_count = 0
+        skip_count = 0  # 跳过的数量（日期未更新）
         
         for fund in funds:
             product_id = fund['id']
@@ -259,21 +324,36 @@ class FundCollector:
             product_name = fund['product_name']
             asset_type = fund['asset_type']
             
-            print(f"正在采集: {product_name} ({product_code})...")
+            # 先查询数据库中已有的最新日期
+            db_latest_date = self.get_latest_nav_date(product_id)
+            db_latest_str = db_latest_date.strftime('%Y-%m-%d') if db_latest_date else "无"
             
-            nav_data = self.fetch_fund_nav(product_code, asset_type)
-            if nav_data:
-                self.save_nav(product_id, nav_data['nav_date'], nav_data['nav'])
-                print(f"  ✓ 成功: {nav_data['nav_date']} = {nav_data['nav']}")
-                success_count += 1
+            print(f"正在采集: {product_name} ({product_code}) [数据库最新: {db_latest_str}]...")
+            
+            # 获取净值数据列表（只获取比数据库最新日期更新的数据）
+            nav_data_list = self.fetch_fund_nav(product_code, asset_type, db_latest_date)
+            if nav_data_list:
+                # 保存所有新的净值数据
+                saved_count = 0
+                for nav_data in nav_data_list:
+                    saved = self.save_nav(product_id, nav_data['nav_date'], nav_data['nav'])
+                    if saved:
+                        saved_count += 1
+                
+                if saved_count > 0:
+                    print(f"  ✓ 成功：保存了 {saved_count} 条新净值数据（最新日期: {nav_data_list[-1]['nav_date']}）")
+                    success_count += 1
+                else:
+                    print(f"  - 跳过：所有数据都已存在")
+                    skip_count += 1
             else:
-                print(f"  ✗ 失败")
+                print(f"  ✗ 失败：无法获取净值数据或没有新数据")
                 fail_count += 1
             
             # 避免请求过快
             time.sleep(1)
         
-        print(f"\n采集完成: 成功 {success_count}, 失败 {fail_count}")
+        print(f"\n采集完成: 成功 {success_count}, 跳过 {skip_count}（日期未更新）, 失败 {fail_count}")
     
     def run(self):
         """运行采集任务"""
