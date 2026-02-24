@@ -475,8 +475,10 @@ public class LedgerService {
                             if (product == null) {
                                 throw new RuntimeException("产品不存在: productId=" + productId);
                             }
+                            // 持仓账户：如果用户属于家庭，统一使用 FAMILY 类型，避免同一产品产生重复的 PERSONAL/FAMILY 持仓账户
+                            String positionOwnerType = realAccount.getOwnerFamilyId() != null ? "FAMILY" : ownerType;
                             virtualAccount = accountService.getOrCreatePositionAccount(
-                                productId, product.getProductName(), ownerType, 
+                                productId, product.getProductName(), positionOwnerType, 
                                 realAccount.getOwnerUserId(), realAccount.getOwnerFamilyId());
                         } else {
                             // 如果没有提供 productId，抛出异常提示
