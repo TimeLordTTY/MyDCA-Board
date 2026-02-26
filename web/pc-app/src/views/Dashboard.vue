@@ -708,7 +708,14 @@ async function openOrderSettlement(orderId: string) {
     const isBuy = isBuyOrderType(detail.orderType)
     const today = new Date().toISOString().split('T')[0]
     
-    settlementForm.value.amount = detail.amount ? Number(detail.amount) : undefined
+    // 买入/申购金额：有 fundingLines 时用 SOURCE 行金额之和，保证多来源订单份额计算正确
+    if (isBuy && detail.fundingLines && detail.fundingLines.length > 0) {
+      const sourceLines = detail.fundingLines.filter((l: any) => !l.lineType || l.lineType === 'SOURCE')
+      const totalFromLines = sourceLines.reduce((sum: number, l: any) => sum + (Number(l.amount) || 0), 0)
+      settlementForm.value.amount = totalFromLines > 0 ? totalFromLines : (detail.amount ? Number(detail.amount) : undefined)
+    } else {
+      settlementForm.value.amount = detail.amount ? Number(detail.amount) : undefined
+    }
     settlementForm.value.shares = detail.shares ? Number(detail.shares) : undefined
     settlementForm.value.navDate = detail.expectedNavDate || today
     settlementForm.value.confirmDate = detail.expectedConfirmDate || today
