@@ -95,6 +95,15 @@ public class LedgerController {
         for (LedgerPosting posting : allPostings) {
             postingsByTxnId.computeIfAbsent(posting.getTxnId(), k -> new ArrayList<>()).add(posting);
         }
+
+        // 当按父账户筛选时，只保留「至少有一条分录属于该父账户下子账户」的交易，避免出现其他父账户的流水
+        if (allowedAccountIds != null && !allowedAccountIds.isEmpty()) {
+            final java.util.Set<Long> allowedIds = allowedAccountIds;
+            txns = txns.stream()
+                    .filter(txn -> postingsByTxnId.getOrDefault(txn.getTxnId(), java.util.Collections.emptyList()).stream()
+                            .anyMatch(p -> allowedIds.contains(p.getAccountId())))
+                    .collect(java.util.stream.Collectors.toList());
+        }
         
         // 收集所有需要的accountId，批量查询账户
         Set<Long> accountIds = new java.util.HashSet<>();
@@ -116,12 +125,18 @@ public class LedgerController {
         
         // 为每个交易计算摘要信息（金额、主要账户等）
         List<Map<String, Object>> result = new ArrayList<>();
+
+        // 展示策略：
+        // - 流水页（通常不传 productId）：为了可读性，会把转账/申购/赎回等拆成「付款/入账」两条展示记录
+        // - 持仓页（会传 productId）：更关注“该产品的一笔交易”，不应拆成两条，否则用户会觉得重复
+        final boolean splitForDisplay = (productId == null);
+
         for (LedgerTxn txn : txns) {
             // 从Map中获取 postings（批量查询的结果）
             List<LedgerPosting> postings = postingsByTxnId.getOrDefault(txn.getTxnId(), new ArrayList<>());
             
             // 对于转账交易，生成两条记录（转出和转入）
-            if (("TRANSFER_OUT".equals(txn.getTxnType()) || "TRANSFER_IN".equals(txn.getTxnType())) && postings.size() >= 2) {
+            if (splitForDisplay && ("TRANSFER_OUT".equals(txn.getTxnType()) || "TRANSFER_IN".equals(txn.getTxnType())) && postings.size() >= 2) {
                 // 找到转出（CREDIT）和转入（DEBIT）的 REAL 账户分录
                 LedgerPosting creditPosting = null;  // 转出
                 LedgerPosting debitPosting = null;   // 转入
@@ -150,7 +165,7 @@ public class LedgerController {
                 }
             } 
             // 对于赎回/卖出交易，如果存在出金（CREDIT）和入金（DEBIT）的 REAL CASH 账户，也生成对应记录
-            else if (("SELL".equals(txn.getTxnType()) || "REDEMPTION".equals(txn.getTxnType())) && postings.size() >= 2) {
+            else if (splitForDisplay && ("SELL".equals(txn.getTxnType()) || "REDEMPTION".equals(txn.getTxnType())) && postings.size() >= 2) {
                 // 收集所有出金（CREDIT）的 REAL CASH 账户分录，以及第一个入金（DEBIT）分录
                 List<LedgerPosting> creditPostings = new ArrayList<>();  // 出金（产品关联账户减少），可能多个账户
                 LedgerPosting debitPosting = null;   // 入金（赎回款到账）
@@ -187,7 +202,7 @@ public class LedgerController {
                 }
             }
             // 对于申购/买入交易，如果存在出金（CREDIT）和入金（DEBIT）的 REAL CASH 账户，也生成对应记录
-            else if (("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) && postings.size() >= 2) {
+            else if (splitForDisplay && ("BUY".equals(txn.getTxnType()) || "SUBSCRIPTION".equals(txn.getTxnType())) && postings.size() >= 2) {
                 // 收集所有出金（CREDIT）的 REAL CASH 账户分录，以及第一个入金（DEBIT）分录
                 List<LedgerPosting> creditPostings = new ArrayList<>();  // 出金（付款账户减少），可能多个账户
                 LedgerPosting debitPosting = null;   // 入金（关联账户增加）
@@ -224,7 +239,7 @@ public class LedgerController {
                 }
             }
             // 对于支出交易，如果有多个 CASH CREDIT 分录（组合支付），为每个分录生成一条记录
-            else if ("EXPENSE".equals(txn.getTxnType()) && postings.size() >= 2) {
+            else if (splitForDisplay && "EXPENSE".equals(txn.getTxnType()) && postings.size() >= 2) {
                 // 收集所有 CASH CREDIT 的 REAL 账户分录
                 List<LedgerPosting> cashCreditPostings = new ArrayList<>();
                 for (LedgerPosting posting : postings) {
@@ -248,130 +263,7 @@ public class LedgerController {
                 }
             } else {
                 // 非转账、非组合支付交易，正常处理
-                Map<String, Object> txnMap = new HashMap<>();
-                txnMap.put("id", txn.getId());
-                txnMap.put("txnId", txn.getTxnId());
-                txnMap.put("userId", txn.getUserId());
-                txnMap.put("familyId", txn.getFamilyId());
-                txnMap.put("txnType", txn.getTxnType());
-                txnMap.put("bizGroupKey", txn.getBizGroupKey());
-                txnMap.put("productId", txn.getProductId());
-                txnMap.put("orderId", txn.getOrderId());
-                txnMap.put("relatedTxnId", txn.getRelatedTxnId());
-                txnMap.put("relatedOrderId", txn.getRelatedOrderId());
-                txnMap.put("relationType", txn.getRelationType());
-                txnMap.put("requestedAt", txn.getRequestedAt());
-                txnMap.put("tradeDate", txn.getTradeDate());
-                txnMap.put("navDate", txn.getNavDate());
-                txnMap.put("confirmDate", txn.getConfirmDate());
-                txnMap.put("fetchDate", txn.getFetchDate());
-                txnMap.put("status", txn.getStatus());
-                txnMap.put("note", txn.getNote());
-                txnMap.put("categoryId", txn.getCategoryId());
-                txnMap.put("isReimbursable", txn.getIsReimbursable());
-                txnMap.put("isReimbursed", txn.getIsReimbursed());
-                txnMap.put("isReversed", txn.getIsReversed());
-                txnMap.put("reversedByTxnId", txn.getReversedByTxnId());
-                txnMap.put("createdAt", txn.getCreatedAt());
-                txnMap.put("updatedAt", txn.getUpdatedAt());
-                
-                if (!postings.isEmpty()) {
-                    // 计算主要金额（对于收入/支出，取 CASH 账户的金额）
-                    BigDecimal summaryAmount = BigDecimal.ZERO;
-                    Long mainAccountId = null;
-                    String currentTxnType = txn.getTxnType();
-                    
-                    // 对于转账类型，根据交易类型选择正确的分录
-                    // TRANSFER_OUT: 显示转出账户（CREDIT），TRANSFER_IN: 显示转入账户（DEBIT）
-                    if ("TRANSFER_OUT".equals(currentTxnType) || "TRANSFER_IN".equals(currentTxnType)) {
-                        String targetPostingType = "TRANSFER_OUT".equals(currentTxnType) ? "CREDIT" : "DEBIT";
-                        for (LedgerPosting posting : postings) {
-                            if ("CASH".equals(posting.getAccountType()) && targetPostingType.equals(posting.getPostingType())) {
-                                Account acc = accountMap.get(posting.getAccountId());
-                                if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                                    // 转账金额：转出显示为负数，转入显示为正数
-                                    summaryAmount = "CREDIT".equals(posting.getPostingType()) 
-                                        ? posting.getAmount().negate() 
-                                        : posting.getAmount();
-                                    mainAccountId = posting.getAccountId();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 如果不是转账类型或没找到，优先查找 CASH 账户（真实账户）
-                    if (mainAccountId == null) {
-                        for (LedgerPosting posting : postings) {
-                            if ("CASH".equals(posting.getAccountType())) {
-                                Account acc = accountMap.get(posting.getAccountId());
-                                if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                                    // 对于BUY/SUBSCRIPTION交易，CASH CREDIT表示现金减少，应该显示为负数
-                                    if (("BUY".equals(currentTxnType) || "SUBSCRIPTION".equals(currentTxnType)) 
-                                        && "CREDIT".equals(posting.getPostingType())) {
-                                        summaryAmount = posting.getAmount().negate();
-                                    } else {
-                                        summaryAmount = posting.getAmount();
-                                    }
-                                    mainAccountId = posting.getAccountId();
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    // 如果没有找到 CASH 账户，查找其他 REAL 账户
-                    if (mainAccountId == null) {
-                        for (LedgerPosting posting : postings) {
-                            Account acc = accountMap.get(posting.getAccountId());
-                            if (acc != null && "REAL".equals(acc.getAccountKind())) {
-                                summaryAmount = posting.getAmount();
-                                mainAccountId = posting.getAccountId();
-                                break;
-                            }
-                        }
-                    }
-                    
-                    // 如果还是没有找到，取第一个 postings 的金额（可能是虚拟账户）
-                    if (mainAccountId == null && !postings.isEmpty()) {
-                        summaryAmount = postings.get(0).getAmount();
-                        mainAccountId = postings.get(0).getAccountId();
-                    }
-                    
-                    txnMap.put("summaryAmount", summaryAmount);
-                    txnMap.put("mainAccountId", mainAccountId);
-                    
-                    // 计算 summaryShares（优先从 POSITION 账户获取，否则从任何有 shares 字段的分录获取）
-                    BigDecimal summaryShares = BigDecimal.ZERO;
-                    for (LedgerPosting posting : postings) {
-                        if ("POSITION".equals(posting.getAccountType()) && posting.getShares() != null) {
-                            summaryShares = posting.getShares();
-                            break;
-                        }
-                    }
-                    // 如果 POSITION 账户没有 shares，尝试从其他分录获取
-                    if (summaryShares.compareTo(BigDecimal.ZERO) == 0) {
-                        for (LedgerPosting posting : postings) {
-                            if (posting.getShares() != null && posting.getShares().compareTo(BigDecimal.ZERO) > 0) {
-                                summaryShares = posting.getShares();
-                                break;
-                            }
-                        }
-                    }
-                    txnMap.put("summaryShares", summaryShares);
-                    
-                    // 获取账户信息
-                    populateAccountInfo(txnMap, mainAccountId, postings, accountMap);
-                } else {
-                    txnMap.put("summaryAmount", BigDecimal.ZERO);
-                    txnMap.put("summaryShares", BigDecimal.ZERO);
-                    txnMap.put("mainAccountId", null);
-                    txnMap.put("leafAccountName", null);
-                    txnMap.put("leafAccountBalance", null);
-                    txnMap.put("parentAccountBalance", null);
-                }
-                
-                result.add(txnMap);
+                addNormalTxnMap(result, txn, postings, accountMap);
             }
         }
         

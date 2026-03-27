@@ -281,6 +281,14 @@ const filters = reactive({
   endDate: '',
 })
 
+// 避免使用 toISOString 触发时区转换（导致日期被减一天），这里按本地时间格式化日期
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // 父账户列表（有子账户的账户）- 从本地 accounts 计算
 const parentAccounts = computed(() => {
   // API 返回的是树形结构，父账户 = 有 children 的账户
@@ -325,8 +333,8 @@ function handleParentAccountChange() {
 
 function handleDateRangeChange() {
   if (filters.dateRange && filters.dateRange.length === 2) {
-    filters.startDate = filters.dateRange[0].toISOString().split('T')[0]
-    filters.endDate = filters.dateRange[1].toISOString().split('T')[0]
+    filters.startDate = formatLocalDate(filters.dateRange[0])
+    filters.endDate = formatLocalDate(filters.dateRange[1])
   } else {
     filters.startDate = ''
     filters.endDate = ''

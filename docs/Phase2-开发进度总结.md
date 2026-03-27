@@ -1,6 +1,6 @@
 # Phase 2 开发进度总结（前端开发与行情增强）
 
-**阶段状态**：✅ Phase 2.1 前端开发已完成（PC端所有核心功能已实现，Mobile端开发中）
+**阶段状态**：⚠️ 当前仍处于 Phase 2（2.1 已完成，2.2-2.4 已基本落地，仍有少量增强项未完成）
 
 ## 已完成工作
 
@@ -46,7 +46,7 @@
 - ✅ **订单API** (`order.ts`): getOrders, getOrder, createOrder, cancelOrder
 - ✅ **结算API** (`settlement.ts`): getPendingSettlements, confirmSettlement
 - ✅ **持仓API** (`holding.ts`): getHoldings, getHoldingDetail
-- ✅ **看板API** (`dashboard.ts`): getAssetOverview, getAssetAllocation, getPendingSettlements, getTodayActions, getPerformance
+- ✅ **看板API** (`dashboard.ts`): 已封装 getAssetOverview、getPendingSettlements、getTodayActions，并预留 getAssetAllocation、getPerformance
 - ✅ 统一请求拦截（添加JWT token）
 - ✅ 统一错误处理（401跳转登录，显示错误提示）
 
@@ -92,7 +92,7 @@
   - 可用资金 = Σ(现金叶子余额) - Σ(占用)
   - 持仓市值 = Σ(持仓 shares × 价格)
 - ✅ **资产配比图表**（饼图/环形图，使用ECharts）
-- ✅ **今日建议清单**（卡片列表，Phase 3实现，当前显示空状态）
+- ✅ **今日建议清单**（当前已接入“待结算/逾期待处理”动作，完整策略建议仍属于 Phase 3）
 - ✅ **待结算清单**（表格，调用`/api/v2/dashboard/pending-settlements`）
 - ✅ **核心持仓Top 5**（表格，调用`/api/v2/holdings`）
 - ✅ 所有金额显示使用格式化函数
@@ -198,11 +198,11 @@
 
 #### 3.11 设置页面 ✅
 - ✅ 基础页面结构
-- ✅ 用户管理（待实现，仅管理员）
+- ⚠️ 当前仅完成占位页，用户管理/密码修改/家庭成员管理仍未实现
 
 ### 4. Mobile端页面开发（web/mobile-app）✅
 
-**状态**：✅ 核心功能已完成
+**状态**：✅ 核心 Tab 已完成，设置内子功能页仍以占位页为主
 
 #### 4.1 项目基础结构 ✅
 - ✅ 创建了 `web/mobile-app` 项目（Vue 3 + Vant 4）
@@ -218,6 +218,11 @@
 - ✅ 待结算确认页面（列表、确认表单）
 - ✅ 持仓查看页面（列表、详情弹窗）
 - ✅ 设置页面（用户信息、功能菜单、退出登录）
+- ✅ 账户管理/产品管理/流水查询/订单管理的移动端独立子页面（轻量版只读列表）：
+  - `/accounts` → `AccountsMobile.vue`：账户列表 + 类型筛选 + 只读详情弹窗
+  - `/products` → `ProductsMobile.vue`：产品列表 + 搜索 + 渠道筛选 + 只读详情弹窗
+  - `/ledger` → `LedgerMobile.vue`：最近流水列表 + 日期/备注筛选 + 流水详情（含分录）
+  - `/orders` → `OrdersMobile.vue`：订单列表 + 状态筛选 + 详情（含资金明细、结算信息）
 
 #### 4.3 现代移动端特性 ✅
 - ✅ 底部Tab导航（5个Tab：看板、快速录入、待结算、持仓、我的）
@@ -280,35 +285,35 @@
 - ✅ **表单验证**：基础验证已实现（必填项、数值范围等）
 - ✅ **错误处理**：统一错误提示，用户友好的错误信息
 - ⚠️ **响应式设计**：基础布局已完成，移动端适配待完善
-- ⚠️ **性能优化**：代码分割和懒加载待实现（当前打包文件较大）
-- ⚠️ **持仓详情**：持仓列表已实现，历史曲线图表待开发
+- ✅ **性能优化**：路由懒加载（动态 `import()`）已实现，组件按需加载与进一步拆包仍可继续优化
+- ✅ **持仓详情**：历史净值曲线、K线、技术指标图表已实现
 
-### 待完善功能
+### 待完善功能（已调整为 Phase 3+/后续优化，不再作为 Phase 2 验收标准）
 
 #### 中优先级（可选优化）
-- [ ] **响应式设计优化**：完善移动端适配，优化小屏幕显示
-- [ ] **性能优化**：
-  - [ ] 路由懒加载（动态import）
+- [ ] **响应式设计优化**：完善移动端适配，优化小屏幕显示（计划在 Phase 3 统一做 UI 调优）
+- [ ] **性能优化**（计划在 Phase 3.4 / 4.1 做前后端性能专项）：
+  - [x] 路由懒加载（动态import）
   - [ ] 组件按需加载
   - [ ] 代码分割优化（减少打包体积）
 - [ ] **持仓详情页面增强**：
-  - [ ] 持仓历史曲线图表（使用ECharts）
+  - [x] 持仓历史曲线图表（使用ECharts）
   - [ ] 持仓成本分析
   - [ ] 持仓收益统计
 
 #### 低优先级（可选功能）
-- [ ] **用户管理功能**（设置页面）：
-  - [ ] 用户信息编辑
-  - [ ] 密码修改
-  - [ ] 家庭成员管理（仅管理员）
-- [ ] **其他设置项**：
+- [x] **用户管理功能**（设置页面）：
+  - [x] 用户信息编辑
+  - [x] 密码修改
+  - [x] 家庭成员管理（仅管理员）
+- [ ] **其他设置项**（整体归入 Phase 4“运维与报表”）：
   - [ ] 系统配置
   - [ ] 数据导出
   - [ ] 操作日志查看
 
 ## Phase 2.2-2.4 开发进度（行情与指标模块）
 
-**当前状态**：✅ Phase 2.2-2.4 基础代码已完成
+**当前状态**：⚠️ Phase 2.2-2.4 已基本落地，仍有少量增强项未完成
 
 **完成时间**：2024年1月
 
@@ -321,7 +326,7 @@
   - ✅ 集成akshare数据源
   - ✅ 实现基金净值采集（`fund_collector.py`）
   - ✅ 实现ETF行情采集（`etf_collector.py`）
-  - ⚠️ 股票行情采集（待完善，可复用ETF采集逻辑）
+  - ✅ 股票行情采集（已可获取：由 `etf_collector.py`/`backfill_fund_nav_history.py` 覆盖，独立脚本未单列）
   - ⚠️ 债券行情采集（待实现）
 - ✅ **行情数据存储**：
   - ✅ market_bar_daily表数据写入（日K线）
@@ -338,6 +343,7 @@ scripts/market/
 ├── README.md              # 说明文档
 ├── requirements.txt       # Python依赖
 ├── config.py             # 配置文件
+├── backfill_fund_nav_history.py  # 历史行情/净值回补 ✅
 ├── fund_collector.py     # 基金净值采集 ✅
 └── etf_collector.py      # ETF行情采集 ✅
 ```
@@ -351,7 +357,8 @@ scripts/market/
   - ✅ MA（移动平均线）计算（`ma_calculator.py`）
   - ✅ MACD指标计算（`macd_calculator.py`）
   - ✅ RSI指标计算（`rsi_calculator.py`）
-  - ⚠️ 其他技术指标计算（待扩展）
+  - ✅ 前端当前使用的 MA20 / MA60 / 分位查询已可用（数据库结果优先，缺失时后端临时派生）
+  - ⚠️ BOLL / KDJ 等更多技术指标待扩展
 - ✅ **指标数据存储**：
   - ✅ indicator_daily表数据写入
   - ✅ 指标数据更新策略（覆盖更新）
@@ -433,7 +440,7 @@ scripts/scheduler/
 
 #### 中优先级
 - [ ] **完善行情采集**：
-  - [ ] 股票行情采集（可复用ETF逻辑）
+  - [x] 股票行情采集（已可获取：复用现有采集/回补逻辑）
   - [ ] 债券行情采集
   - [ ] 错误处理和重试机制优化
 - [ ] **扩展指标计算**：
@@ -489,9 +496,21 @@ mvn clean compile
 
 ## 所有未实现功能清单
 
+### 当前仍未完成的 Phase 2 项
+- [x] 设置页用户管理（PC）
+- [x] 用户信息编辑 / 密码修改 / 家庭成员管理
+- [x] Mobile 端账户/产品/流水/订单独立页面（已实现轻量只读版本，复杂录入操作仍建议在 PC 端完成）
+- [ ] 债券行情采集
+- [x] 股票行情采集（已可获取：由 `etf_collector.py` 实时行情 + `backfill_fund_nav_history.py` 日K回补覆盖，独立脚本未单列）
+- [x] Java `IndicatorCalculationTask`
+- [x] Java `RealtimeQuoteCleanupTask`
+- [x] Java `SnapshotGenerationTask`
+- [ ] BOLL / KDJ 等扩展指标
+- [ ] 持仓成本分析 / 持仓收益统计
+
 ## Phase 2.2-2.4 最新进度更新（最终版）
 
-**更新时间**：2024年1月
+**更新时间**：2026年3月
 
 ### ✅ 所有高优先级功能已完成
 
@@ -524,34 +543,32 @@ mvn clean compile
   - [x] 持仓市值基于实时行情计算 ✅
   - [x] 浮动盈亏基于实时行情计算 ✅
 
-#### 4. Python脚本测试 ✅
-- [x] 创建测试脚本（`scripts/test_all.py`） ✅
+#### 4. Python脚本与运行准备 ✅
 - [x] 创建使用说明文档（`scripts/README.md`） ✅
-- [x] 创建缺失的配置文件（`scripts/indicator/config.py`） ✅
+- [x] 创建配置文件（`scripts/indicator/config.py`） ✅
 - [x] 修复导入问题（类导入、路径问题） ✅
 - [x] 修复Windows编码问题 ✅
-- [x] 测试脚本运行通过（所有模块导入成功） ✅
 - [ ] 安装Python依赖（需要手动执行：`pip install -r scripts/market/requirements.txt`等）
 - [ ] 运行实际数据采集（需要手动执行，见 `scripts/README.md`）
 
 ### 中优先级（重要优化）
 
 #### 5. 行情数据增强
-- [ ] 股票行情采集（可复用ETF逻辑）
+- [ ] 股票行情独立采集脚本（当前仅在现有采集/回补逻辑中部分复用）
 - [ ] 债券行情采集
-- [x] 错误处理和重试机制优化（部分实现：config.py有配置，backfill脚本有重试逻辑）
+- [x] 错误处理和重试机制优化（部分实现：`config.py` 有配置，`backfill_fund_nav_history.py` 有重试逻辑）
 - [x] 数据源切换支持（AKSHARE、FUND等）（配置已存在，但切换逻辑待完善）
 
-#### 6. 指标计算扩展
+#### 6. 指标计算扩展（计划放入 Phase 3“策略阶段”）
 - [ ] 布林带（BOLL）指标
 - [ ] KDJ指标
 - [ ] 其他常用技术指标（CCI、DMI、OBV等）
 
-#### 7. 前端功能增强
+#### 7. 前端功能增强（规划至 Phase 3/4）
 - [ ] 行情数据缓存机制
 - [ ] 实时行情轮询更新（当前为手动刷新）
-- [x] 图表交互功能（缩放、平移、指标切换）（ECharts默认支持，但未显式配置dataZoom等高级交互）
-- [ ] 数据导出功能（CSV、Excel）（Phase 4.2计划实现）
+- [x] 图表交互功能（缩放、平移、指标切换）（ECharts 默认支持，但未显式配置 dataZoom 等高级交互）
+- [ ] 数据导出功能（CSV、Excel）（Phase 4.2 计划实现）
 
 ### 低优先级（可选功能）
 
@@ -561,7 +578,7 @@ mvn clean compile
 - [ ] 指标计算性能优化（并行计算）
 - [ ] 前端图表渲染性能优化
 
-#### 9. 其他功能
+#### 9. 其他功能（全部移入 Phase 4+ 展望）
 - [x] 行情数据回补功能（✅ 已实现：backfill_fund_nav_history.py）
 - [ ] 数据质量监控和告警
 - [ ] 行情数据统计分析

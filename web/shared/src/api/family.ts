@@ -3,14 +3,14 @@
  */
 
 import { apiClient } from './client'
-import type { Family, UserFamilyRole } from '../types'
+import type { Family, FamilyMember, SimpleOkResponse } from '../types'
 
 export const familyApi = {
   /**
-   * 获取家庭列表
+   * 获取家庭信息（当前用户所属家庭）
    */
-  getFamilies: async (): Promise<Family[]> => {
-    const response = await apiClient.get<Family[]>('/families')
+  getFamily: async (): Promise<Family> => {
+    const response = await apiClient.get<Family>('/families')
     return response.data
   },
 
@@ -23,10 +23,33 @@ export const familyApi = {
   },
 
   /**
-   * 添加家庭成员
+   * 获取成员列表
    */
-  addMember: async (data: { userId: number; familyId: number; role?: 'ADMIN' | 'MEMBER' }): Promise<UserFamilyRole> => {
-    const response = await apiClient.post<UserFamilyRole>('/families/members', data)
+  getMembers: async (): Promise<FamilyMember[]> => {
+    const response = await apiClient.get<FamilyMember[]>('/families/members')
+    return response.data
+  },
+
+  /**
+   * 添加成员（支持 userId 或 username）
+   */
+  addMember: async (data: { userId?: number; username?: string; role?: 'ADMIN' | 'MEMBER' }): Promise<void> => {
+    await apiClient.post('/families/members', data)
+  },
+
+  /**
+   * 移除成员
+   */
+  removeMember: async (userId: number): Promise<SimpleOkResponse> => {
+    const response = await apiClient.delete<SimpleOkResponse>(`/families/members/${userId}`)
+    return response.data
+  },
+
+  /**
+   * 更新成员角色
+   */
+  updateMemberRole: async (userId: number, role: 'ADMIN' | 'MEMBER'): Promise<SimpleOkResponse> => {
+    const response = await apiClient.put<SimpleOkResponse>(`/families/members/${userId}/role`, { role })
     return response.data
   },
 }

@@ -65,7 +65,7 @@
   - [x] 从ledger_posting查询持仓的逻辑
   - [x] 持仓计算（总份额、总成本、平均成本）
   - [x] 通过ledger_txn获取productId
-  - [ ] 持仓市值和未实现盈亏（需要外部行情数据，Phase 2实现）
+  - [x] 持仓市值和未实现盈亏（已结合净值/行情数据计算）
   - [ ] 持仓快照生成（Phase 2实现）
 
 #### Phase 1.6: 看板聚合模块 ✅
@@ -96,7 +96,7 @@
   - [x] 从ledger_posting查询所有POSITION类型的账户
   - [x] 通过ledger_txn获取productId
   - [x] 计算每个产品的持仓：总份额、总成本、平均成本
-  - [ ] 计算市值和未实现盈亏（需要结合行情数据，Phase 2实现）
+  - [x] 计算市值和未实现盈亏（已结合净值数据实现）
   - [ ] 添加日志记录（计算的产品数量、总持仓价值等）（中优先级）
 
 - [x] **DashboardService.getAssetOverview()**：完善资产概览计算
@@ -212,7 +212,7 @@ mvn clean compile
   - [x] 持仓计算（总份额、总成本、平均成本）
   - [x] 通过ledger_txn获取productId
 - [x] 持仓查询API（HoldingController）
-- [ ] 持仓市值和未实现盈亏（需要外部行情数据，Phase 2实现）
+- [x] 持仓市值和未实现盈亏（已结合净值/行情数据实现）
 - [ ] 持仓快照生成（Phase 2实现）
 
 #### ✅ Phase 1.6: 看板聚合模块
@@ -307,19 +307,21 @@ mvn clean compile
 
 ## Phase 2 状态
 
-**当前状态**：✅ Phase 2.1 前端开发已完成
+**当前状态**：⚠️ 当前仍处于 Phase 2（2.1 已完成，2.2-2.4 已基本落地，仍有少量增强项待补齐）
 
 ### Phase 2.1：前端开发 ✅
 - ✅ 共享层开发（API Client、Types、Utils、Stores）
 - ✅ PC端所有页面开发（与Phase 1后端API对接）
-- ⚠️ Mobile端所有页面开发（待Phase 2.1后续实现）
+- ✅ Mobile端核心页面开发（看板、快速录入、待结算、持仓、设置）
+- ⚠️ Mobile端设置内的账户/产品/流水/订单子页面当前仍为占位页
 
 **详细进度**：详见 `Phase2-开发进度总结.md`
 
-### Phase 2.2-2.4：行情与指标（待开始）
-- Python行情服务
-- 指标计算模块
-- 定时任务
+### Phase 2.2-2.4：行情与指标（已基本落地）
+- ✅ Python行情服务（基金净值、ETF实时行情、ETF日K、历史回补）
+- ✅ 指标查询与持仓详情图表（MA20、MA60、分位展示）
+- ✅ 定时任务（Python APScheduler + Java `MarketDataScheduler`）
+- ⚠️ 未完成项：债券行情采集、Java侧指标计算任务/实时行情清理/快照生成
 
 ---
 

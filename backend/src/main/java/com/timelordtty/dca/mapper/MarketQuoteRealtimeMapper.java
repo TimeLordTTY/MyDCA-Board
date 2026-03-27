@@ -14,6 +14,7 @@ public interface MarketQuoteRealtimeMapper {
     List<MarketQuoteRealtime> selectHistory(@Param("productId") Long productId,
                                            @Param("startTime") LocalDateTime startTime,
                                            @Param("endTime") LocalDateTime endTime);
+    int deleteByQuoteTimeBefore(@Param("before") LocalDateTime before);
     int insert(MarketQuoteRealtime quote);
     int update(MarketQuoteRealtime quote);
 }

@@ -2260,6 +2260,99 @@ watch(visible, async (val) => {
           form.value.note = props.editingTxn.note || ''
         }
       }
+
+      // 买入/申购、卖出/赎回：回填产品、时间、净值、金额、份额、手续费、资金来源
+      if ((props.editingTxn.txnType === 'BUY' || props.editingTxn.txnType === 'SUBSCRIPTION' || props.editingTxn.txnType === 'SELL' || props.editingTxn.txnType === 'REDEMPTION') && props.editingTxn.postings) {
+        const postings = props.editingTxn.postings
+        if (props.editingTxn.productId) {
+          form.value.productId = props.editingTxn.productId
+          const product = productStore.products.find(p => p.id === props.editingTxn!.productId)
+          if (product && (product.channel === 'EXCHANGE' || product.channel === 'OTC')) {
+            form.value.channel = product.channel
+          }
+          if (props.editingTxn.txnType === 'BUY' || props.editingTxn.txnType === 'SUBSCRIPTION') {
+            form.value.orderType = product?.channel === 'OTC' ? 'SUBSCRIPTION' : 'BUY'
+          } else {
+            form.value.orderType = product?.channel === 'OTC' ? 'REDEMPTION' : 'SELL'
+          }
+        }
+        if (props.editingTxn.requestedAt) {
+          form.value.requestedAt = props.editingTxn.requestedAt
+        }
+        if (props.editingTxn.confirmDate) {
+          form.value.confirmDate = String(props.editingTxn.confirmDate).slice(0, 10)
+        }
+        if (props.editingTxn.navDate) {
+          form.value.navDate = String(props.editingTxn.navDate).slice(0, 10)
+        }
+        // 从分录取：FEE、POSITION(份额/净值)、CASH CREDIT(金额/资金来源)
+        const feePosting = postings.find(p => p.accountType === 'FEE')
+        if (feePosting) {
+          form.value.fee = Number(feePosting.amount)
+        }
+        const positionPosting = postings.find(p => p.accountType === 'POSITION')
+        if (positionPosting) {
+          if (positionPosting.shares != null) {
+            form.value.shares = Number(positionPosting.shares)
+          }
+          if (positionPosting.amount != null && positionPosting.shares != null && Number(positionPosting.shares) > 0) {
+            form.value.nav = Number((Number(positionPosting.amount) / Number(positionPosting.shares)).toFixed(6))
+          }
+        }
+        const cashCreditPostings = postings.filter(p => p.accountType === 'CASH' && p.postingType === 'CREDIT')
+        if (cashCreditPostings.length > 0) {
+          const totalAmount = cashCreditPostings.reduce((sum, p) => sum + Number(p.amount), 0)
+          if (props.editingTxn.txnType === 'BUY' || props.editingTxn.txnType === 'SUBSCRIPTION') {
+            form.value.amount = totalAmount
+            if (cashCreditPostings.length === 1) {
+              const acc = findAccountInTree(accountStore.accountTree || null, cashCreditPostings[0].accountId)
+              if (acc) {
+                form.value.parentAccountId = acc.parentAccountId
+                form.value.accountId = acc.id
+              }
+            } else {
+              buyFundingLines.value = cashCreditPostings.map(p => ({
+                accountId: p.accountId,
+                amount: Number(p.amount)
+              }))
+            }
+          } else if (props.editingTxn.txnType === 'SELL' || props.editingTxn.txnType === 'REDEMPTION') {
+            // 卖出/赎回：CASH CREDIT 是出金来源账户，优先按该分录回显来源分配
+            const positionCreditPostings = postings.filter(
+              p => p.accountType === 'POSITION' && p.postingType === 'CREDIT'
+            )
+            const totalCreditAmount = cashCreditPostings.reduce((sum, p) => sum + Number(p.amount), 0)
+            const totalPositionShares = positionCreditPostings.reduce((sum, p) => sum + Number(p.shares || 0), 0)
+
+            sellFundingLines.value = cashCreditPostings.map(p => {
+              const postingShares = Number(p.shares || 0)
+              // CASH 分录通常没有 shares，这里按金额占比回推份额，保证编辑时可提交
+              const inferredShares =
+                postingShares > 0
+                  ? postingShares
+                  : (totalPositionShares > 0 && totalCreditAmount > 0
+                      ? Number(((Number(p.amount) / totalCreditAmount) * totalPositionShares).toFixed(6))
+                      : undefined)
+              return {
+                accountId: p.accountId,
+                shares: inferredShares,
+              }
+            })
+          }
+        }
+        const cashDebitPostings = postings.filter(p => p.accountType === 'CASH' && p.postingType === 'DEBIT')
+        if ((props.editingTxn.txnType === 'SELL' || props.editingTxn.txnType === 'REDEMPTION') && cashDebitPostings.length > 0) {
+          // 卖出/赎回：CASH DEBIT 是到账账户与到账金额
+          form.value.amount = cashDebitPostings.reduce((sum, p) => sum + Number(p.amount), 0)
+          if (cashDebitPostings.length === 1) {
+            const acc = findAccountInTree(accountStore.accountTree || null, cashDebitPostings[0].accountId)
+            if (acc) {
+              form.value.parentAccountId = acc.parentAccountId
+              form.value.accountId = acc.id
+            }
+          }
+        }
+      }
     } else {
       // 新建模式：重置表单
       step.value = 1
@@ -3667,18 +3760,34 @@ async function handleSubmit() {
           }
         }
       } else {
-        // 场内（EXCHANGE）产品，直接记账
-        await ledgerApi.createTransaction({
-          txnType: form.value.orderType,
-          productId: form.value.productId,
-          postings,
-          note: autoNote,
-          requestedAt: form.value.requestedAt,
-        })
-        const buyMessage = autoNote 
-          ? `买入/申购记录成功：${autoNote}`
-          : '买入/申购记录成功'
-        ElNotification.success({ title: '成功', message: buyMessage, position: 'bottom-right', duration: 3000 })
+        // 场内（EXCHANGE）产品：编辑则更新，否则新建
+        if (props.editingTxn) {
+          await ledgerApi.updateTransaction(props.editingTxn.txnId, {
+            txnType: form.value.orderType,
+            productId: form.value.productId,
+            postings,
+            note: autoNote,
+            requestedAt: form.value.requestedAt,
+          })
+          ElNotification.success({
+            title: '成功',
+            message: '买入/申购记录已更新',
+            position: 'bottom-right',
+            duration: 3000,
+          })
+        } else {
+          await ledgerApi.createTransaction({
+            txnType: form.value.orderType,
+            productId: form.value.productId,
+            postings,
+            note: autoNote,
+            requestedAt: form.value.requestedAt,
+          })
+          const buyMessage = autoNote 
+            ? `买入/申购记录成功：${autoNote}`
+            : '买入/申购记录成功'
+          ElNotification.success({ title: '成功', message: buyMessage, position: 'bottom-right', duration: 3000 })
+        }
       }
       
       emit('success')
@@ -3903,17 +4012,33 @@ async function handleSubmit() {
       const orderTypeLabel = '卖出'
       const autoNote = `${orderTypeLabel}${channelLabel}${product.productName}`
 
-      await ledgerApi.createTransaction({
-        txnType: form.value.orderType,
-        productId: form.value.productId,
-        postings,
-        note: autoNote,
-        requestedAt: form.value.requestedAt,
-      })
-      const sellMessage = autoNote 
-        ? `卖出记录成功：${autoNote}`
-        : '卖出记录成功'
-      ElNotification.success({ title: '成功', message: sellMessage, position: 'bottom-right', duration: 3000 })
+      if (props.editingTxn) {
+        await ledgerApi.updateTransaction(props.editingTxn.txnId, {
+          txnType: form.value.orderType,
+          productId: form.value.productId,
+          postings,
+          note: autoNote,
+          requestedAt: form.value.requestedAt,
+        })
+        ElNotification.success({
+          title: '成功',
+          message: '卖出记录已更新',
+          position: 'bottom-right',
+          duration: 3000,
+        })
+      } else {
+        await ledgerApi.createTransaction({
+          txnType: form.value.orderType,
+          productId: form.value.productId,
+          postings,
+          note: autoNote,
+          requestedAt: form.value.requestedAt,
+        })
+        const sellMessage = autoNote 
+          ? `卖出记录成功：${autoNote}`
+          : '卖出记录成功'
+        ElNotification.success({ title: '成功', message: sellMessage, position: 'bottom-right', duration: 3000 })
+      }
       emit('success')
       handleClose()
       return

@@ -5,6 +5,7 @@ import com.timelordtty.dca.mapper.UserMapper;
 import com.timelordtty.dca.model.User;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
@@ -18,9 +19,11 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
     private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
 
-    public UserService(UserMapper userMapper) {
+    public UserService(UserMapper userMapper, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
+        this.passwordEncoder = passwordEncoder;
     }
 
     /**
@@ -46,6 +49,45 @@ public class UserService {
         userInfo.setFamilyId(user.getFamilyId());
 
         return userInfo;
+    }
+
+    public AuthResponse.UserInfo updateCurrentUserProfile(String nickname, String email, String phone) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        User user = userMapper.selectByUsername(username);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+
+        String safeNickname = nickname != null ? nickname.trim() : null;
+        String safeEmail = email != null ? email.trim() : null;
+        String safePhone = phone != null ? phone.trim() : null;
+
+        userMapper.updateProfile(user.getId(), safeNickname, safeEmail, safePhone);
+        return getCurrentUser();
+    }
+
+    public void changePassword(String oldPassword, String newPassword) {
+        if (oldPassword == null || newPassword == null) {
+            throw new IllegalArgumentException("密码不能为空");
+        }
+        String newPw = newPassword.trim();
+        if (newPw.length() < 8) {
+            throw new IllegalArgumentException("新密码长度至少 8 位");
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
+        User user = userMapper.selectByUsername(username);
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        if (user.getPasswordHash() == null || !passwordEncoder.matches(oldPassword, user.getPasswordHash())) {
+            throw new IllegalArgumentException("旧密码不正确");
+        }
+
+        String encoded = passwordEncoder.encode(newPw);
+        userMapper.updatePasswordHash(user.getId(), encoded);
     }
 }
 

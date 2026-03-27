@@ -1,5 +1,6 @@
 package com.timelordtty.dca.service;
 
+import com.timelordtty.dca.dto.FamilyMemberDto;
 import com.timelordtty.dca.mapper.FamilyMapper;
 import com.timelordtty.dca.mapper.UserFamilyRoleMapper;
 import com.timelordtty.dca.mapper.UserMapper;
@@ -9,6 +10,8 @@ import com.timelordtty.dca.model.UserFamilyRole;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -80,6 +83,44 @@ public class FamilyService {
         return familyMapper.selectById(familyId);
     }
 
+    public List<FamilyMemberDto> getMembers(Long familyId) {
+        List<UserFamilyRole> roles = userFamilyRoleMapper.selectByFamilyId(familyId);
+        List<FamilyMemberDto> result = new ArrayList<>();
+        for (UserFamilyRole r : roles) {
+            User u = userMapper.selectById(r.getUserId());
+            if (u == null) {
+                continue;
+            }
+            FamilyMemberDto dto = new FamilyMemberDto();
+            dto.setUserId(u.getId());
+            dto.setUsername(u.getUsername());
+            dto.setNickname(u.getNickname());
+            dto.setEmail(u.getEmail());
+            dto.setPhone(u.getPhone());
+            dto.setRole(r.getRole());
+            result.add(dto);
+        }
+        return result;
+    }
+
+    public void assertAdmin(Long operatorUserId, Long familyId) {
+        String role = userFamilyRoleMapper.selectRole(operatorUserId, familyId);
+        if (!"ADMIN".equals(role)) {
+            throw new RuntimeException("无权限：仅家庭管理员可操作");
+        }
+    }
+
+    public Long findUserIdByUsername(String username) {
+        if (username == null || username.trim().isEmpty()) {
+            throw new RuntimeException("用户名不能为空");
+        }
+        User user = userMapper.selectByUsername(username.trim());
+        if (user == null) {
+            throw new RuntimeException("用户不存在: " + username);
+        }
+        return user.getId();
+    }
+
     /**
      * 向家庭添加成员并分配角色（如 MEMBER/ADMIN）
      *
@@ -105,6 +146,59 @@ public class FamilyService {
         userFamilyRole.setFamilyId(familyId);
         userFamilyRole.setRole(role != null ? role : "MEMBER");
         userFamilyRoleMapper.insert(userFamilyRole);
+
+        // 更新用户的family_id（便于前端快速判断）
+        User user = userMapper.selectById(userId);
+        if (user != null) {
+            user.setFamilyId(familyId);
+            userMapper.update(user);
+        }
+    }
+
+    @Transactional
+    public void removeMember(Long familyId, Long userId) {
+        // 不能移除最后一个 ADMIN
+        String targetRole = userFamilyRoleMapper.selectRole(userId, familyId);
+        if ("ADMIN".equals(targetRole)) {
+            int adminCount = userFamilyRoleMapper.countAdmins(familyId);
+            if (adminCount <= 1) {
+                throw new RuntimeException("不能移除最后一个管理员");
+            }
+        }
+
+        userFamilyRoleMapper.delete(userId, familyId);
+
+        // 如果用户当前 family_id 指向该家庭，则清空
+        User user = userMapper.selectById(userId);
+        if (user != null && familyId.equals(user.getFamilyId())) {
+            user.setFamilyId(null);
+            userMapper.update(user);
+        }
+    }
+
+    @Transactional
+    public void updateMemberRole(Long familyId, Long userId, String role) {
+        if (role == null || role.trim().isEmpty()) {
+            throw new RuntimeException("角色不能为空");
+        }
+        String normalizedRole = role.trim().toUpperCase();
+        if (!"ADMIN".equals(normalizedRole) && !"MEMBER".equals(normalizedRole)) {
+            throw new RuntimeException("不支持的角色: " + role);
+        }
+
+        // 不能把最后一个 ADMIN 降级
+        String currentRole = userFamilyRoleMapper.selectRole(userId, familyId);
+        if ("ADMIN".equals(currentRole) && !"ADMIN".equals(normalizedRole)) {
+            int adminCount = userFamilyRoleMapper.countAdmins(familyId);
+            if (adminCount <= 1) {
+                throw new RuntimeException("不能降级最后一个管理员");
+            }
+        }
+
+        int updated = userFamilyRoleMapper.updateRole(userId, familyId, normalizedRole);
+        if (updated <= 0) {
+            throw new RuntimeException("成员不存在或更新失败");
+        }
     }
 }
 

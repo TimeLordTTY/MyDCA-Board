@@ -93,7 +93,7 @@ public class ProductService {
 
     public ProductMaster updateProduct(ProductMaster product) {
         productMasterMapper.update(product);
-        return product;
+        return productMasterMapper.selectById(product.getId());
     }
     
     /**

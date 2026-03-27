@@ -52,6 +52,11 @@
         ORDER BY quote_time ASC
     </select>
 
+    <delete id="deleteByQuoteTimeBefore">
+        DELETE FROM market_quote_realtime
+        WHERE quote_time &lt; #{before}
+    </delete>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO market_quote_realtime (
             product_id, quote_time, price, prev_close, pct_chg,

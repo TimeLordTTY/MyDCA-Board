@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.NetWorthSnapshotMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.NetWorthSnapshot">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="family_id" property="familyId"/>
+        <result column="snapshot_date" property="snapshotDate"/>
+        <result column="total_assets" property="totalAssets"/>
+        <result column="total_liabilities" property="totalLiabilities"/>
+        <result column="net_worth" property="netWorth"/>
+        <result column="cash_balance" property="cashBalance"/>
+        <result column="position_value" property="positionValue"/>
+        <result column="realized_pnl" property="realizedPnl"/>
+        <result column="unrealized_pnl" property="unrealizedPnl"/>
+        <result column="income_pnl" property="incomePnl"/>
+        <result column="fetch_date" property="fetchDate"/>
+        <result column="is_dirty" property="isDirty"/>
+        <result column="dirty_from_date" property="dirtyFromDate"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectByUserAndDate" resultMap="BaseResultMap">
+        SELECT *
+        FROM net_worth_snapshot
+        WHERE user_id = #{userId}
+          AND snapshot_date = #{snapshotDate}
+        LIMIT 1
+    </select>
+
+    <insert id="upsert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO net_worth_snapshot (
+            user_id, family_id, snapshot_date,
+            total_assets, total_liabilities, net_worth,
+            cash_balance, position_value,
+            realized_pnl, unrealized_pnl, income_pnl,
+            fetch_date, is_dirty, dirty_from_date,
+            created_at, updated_at
+        ) VALUES (
+            #{userId}, #{familyId}, #{snapshotDate},
+            #{totalAssets}, #{totalLiabilities}, #{netWorth},
+            #{cashBalance}, #{positionValue},
+            #{realizedPnl}, #{unrealizedPnl}, #{incomePnl},
+            #{fetchDate}, #{isDirty}, #{dirtyFromDate},
+            NOW(), NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            family_id = VALUES(family_id),
+            total_assets = VALUES(total_assets),
+            total_liabilities = VALUES(total_liabilities),
+            net_worth = VALUES(net_worth),
+            cash_balance = VALUES(cash_balance),
+            position_value = VALUES(position_value),
+            realized_pnl = VALUES(realized_pnl),
+            unrealized_pnl = VALUES(unrealized_pnl),
+            income_pnl = VALUES(income_pnl),
+            fetch_date = VALUES(fetch_date),
+            is_dirty = VALUES(is_dirty),
+            dirty_from_date = VALUES(dirty_from_date),
+            updated_at = NOW()
+    </insert>
+
+</mapper>
+

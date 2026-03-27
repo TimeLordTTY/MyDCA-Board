@@ -204,11 +204,13 @@ public class HoldingService {
             }
         }
 
-        // 2. 将与该产品相关的所有手续费计入成本
-        // 为了与同花顺口径对齐：
-        //   最终持仓成本 = 买入总金额（含买入手续费）- 卖出净额（卖出金额 - 卖出手续费）
-        // 当前 POSITION 分录只记录「买入净额」和「卖出毛额」，因此这里需要再把
-        //   所有与该产品相关的 FEE 分录金额加回到 totalCost 中。
+        // 2) 将“买入/申购”相关手续费计入持仓成本（与券商/同花顺口径对齐）
+        //
+        // 关键点：
+        // - 手续费应当计入“买入成本”，影响平均成本与未实现盈亏
+        // - 但“卖出手续费”等已实现费用不应计入剩余持仓成本，否则会导致成本被抬高（典型现象：成本偏大）
+        //
+        // 因此这里仅将 txn_type=BUY/SUBSCRIPTION 的 FEE 分录加回成本。
         List<LedgerPosting> feePostings = ledgerPostingMapper
             .selectByAccountTypeAndOwner("FEE", userId, familyId);
         for (LedgerPosting feePosting : feePostings) {
@@ -216,11 +218,16 @@ public class HoldingService {
             if (feeTxn == null || feeTxn.getProductId() == null) {
                 continue;
             }
+            // 只统计买入/申购的手续费
+            if (!"BUY".equals(feeTxn.getTxnType()) && !"SUBSCRIPTION".equals(feeTxn.getTxnType())) {
+                continue;
+            }
             Long productId = feeTxn.getProductId();
             HoldingInfo holding = holdings.get(productId);
-            // 如果该产品当前没有持仓记录（totalShares 为0），
-            // 则不需要把手续费计入（已经全部卖出或与当前用户无关）
             if (holding == null) {
+                continue;
+            }
+            if (holding.getTotalShares() == null || holding.getTotalShares().compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
             if (holding.getTotalCost() == null) {

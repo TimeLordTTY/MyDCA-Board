@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.HoldingsSnapshotMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.HoldingsSnapshot">
+        <id column="id" property="id"/>
+        <result column="user_id" property="userId"/>
+        <result column="product_id" property="productId"/>
+        <result column="snapshot_date" property="snapshotDate"/>
+        <result column="shares" property="shares"/>
+        <result column="cost" property="cost"/>
+        <result column="cost_method" property="costMethod"/>
+        <result column="nav" property="nav"/>
+        <result column="nav_date" property="navDate"/>
+        <result column="market_value" property="marketValue"/>
+        <result column="unrealized_pnl" property="unrealizedPnl"/>
+        <result column="return_rate" property="returnRate"/>
+        <result column="fetch_date" property="fetchDate"/>
+        <result column="is_dirty" property="isDirty"/>
+        <result column="dirty_from_date" property="dirtyFromDate"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="selectByUserAndDate" resultMap="BaseResultMap">
+        SELECT *
+        FROM holdings_snapshot
+        WHERE user_id = #{userId}
+          AND snapshot_date = #{snapshotDate}
+        ORDER BY product_id
+    </select>
+
+    <insert id="upsert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO holdings_snapshot (
+            user_id, product_id, snapshot_date,
+            shares, cost, cost_method,
+            nav, nav_date,
+            market_value, unrealized_pnl, return_rate,
+            fetch_date, is_dirty, dirty_from_date,
+            created_at, updated_at
+        ) VALUES (
+            #{userId}, #{productId}, #{snapshotDate},
+            #{shares}, #{cost}, #{costMethod},
+            #{nav}, #{navDate},
+            #{marketValue}, #{unrealizedPnl}, #{returnRate},
+            #{fetchDate}, #{isDirty}, #{dirtyFromDate},
+            NOW(), NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            shares = VALUES(shares),
+            cost = VALUES(cost),
+            cost_method = VALUES(cost_method),
+            nav = VALUES(nav),
+            nav_date = VALUES(nav_date),
+            market_value = VALUES(market_value),
+            unrealized_pnl = VALUES(unrealized_pnl),
+            return_rate = VALUES(return_rate),
+            fetch_date = VALUES(fetch_date),
+            is_dirty = VALUES(is_dirty),
+            dirty_from_date = VALUES(dirty_from_date),
+            updated_at = NOW()
+    </insert>
+
+</mapper>
+

@@ -19,6 +19,26 @@
         SELECT * FROM user_family_roles WHERE family_id = #{familyId}
     </select>
 
+    <select id="selectRole" resultType="string">
+        SELECT role
+        FROM user_family_roles
+        WHERE user_id = #{userId} AND family_id = #{familyId}
+        LIMIT 1
+    </select>
+
+    <select id="countAdmins" resultType="int">
+        SELECT COUNT(1)
+        FROM user_family_roles
+        WHERE family_id = #{familyId} AND role = 'ADMIN'
+    </select>
+
+    <update id="updateRole">
+        UPDATE user_family_roles
+        SET role = #{role},
+            updated_at = NOW()
+        WHERE user_id = #{userId} AND family_id = #{familyId}
+    </update>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO user_family_roles (user_id, family_id, role, created_at, updated_at)
         VALUES (#{userId}, #{familyId}, #{role}, NOW(), NOW())

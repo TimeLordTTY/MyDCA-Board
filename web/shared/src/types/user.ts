@@ -53,3 +53,27 @@ export interface UserInfo {
   phone?: string
   familyId?: number
 }
+
+export interface UpdateProfileRequest {
+  nickname?: string
+  email?: string
+  phone?: string
+}
+
+export interface ChangePasswordRequest {
+  oldPassword: string
+  newPassword: string
+}
+
+export interface SimpleOkResponse {
+  ok: boolean
+}
+
+export interface FamilyMember {
+  userId: number
+  username: string
+  nickname?: string
+  email?: string
+  phone?: string
+  role: 'ADMIN' | 'MEMBER'
+}

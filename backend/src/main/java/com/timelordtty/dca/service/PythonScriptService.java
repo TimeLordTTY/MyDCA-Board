@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -196,6 +198,67 @@ public class PythonScriptService {
             return executeScript("scripts/market/etf_collector.py", "--type", "daily");
         } catch (IOException e) {
             logger.error("ETF日K线采集失败", e);
+            return "失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 执行指标计算脚本（全量产品）
+     */
+    public String runIndicatorCalculator() {
+        try {
+            return executeScript("scripts/indicator/calculator.py");
+        } catch (IOException e) {
+            logger.error("指标计算失败", e);
+            return "失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 执行指标计算脚本（可选：指定产品与日期）
+     *
+     * @param productId 产品ID（可为null，null表示全量）
+     * @param endDate 截止日期（可为null，null表示今天）
+     */
+    public String runIndicatorCalculator(Long productId, LocalDate endDate) {
+        try {
+            List<String> args = new ArrayList<>();
+            if (productId != null) {
+                args.add("--product-id");
+                args.add(String.valueOf(productId));
+            }
+            if (endDate != null) {
+                args.add("--date");
+                args.add(endDate.format(DateTimeFormatter.ISO_DATE));
+            }
+            return executeScript("scripts/indicator/calculator.py", args.toArray(new String[0]));
+        } catch (IOException e) {
+            logger.error("指标计算失败", e);
+            return "失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 执行小荷包（product_id=15）货币基金日收益回填脚本
+     * <p>
+     * 说明：
+     * - 使用 mmf_interest_backfill.py 作为统一的计算入口
+     * - 平台账户固定为 17，子账户固定为 16（小荷包）
+     * - start 固定为 2026-02-11，脚本内部会根据 existing interest 做幂等处理
+     */
+    public String runMmfDailyInterestForXiaoHeBao() {
+        try {
+            // 这里不传 end 参数，让脚本默认以“今天”为截止日期
+            return executeScript(
+                    "scripts/mmf/mmf_interest_backfill.py",
+                    "--product-id", "15",
+                    "--platform-account-id", "17",
+                    "--child-account-id", "16",
+                    "--start", "2026-02-11",
+                    "--apply"
+            );
+        } catch (IOException e) {
+            logger.error("小荷包货币基金日收益计算失败", e);
             return "失败: " + e.getMessage();
         }
     }

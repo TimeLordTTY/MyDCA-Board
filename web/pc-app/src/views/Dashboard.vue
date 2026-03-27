@@ -193,7 +193,7 @@
     <div class="kpis">
       <div class="kpi primary">
         <div class="label">✨ 净资产（Net Worth）</div>
-        <div class="value">{{ formatCurrency(overview.netWorth) }}</div>
+        <div class="value">{{ formatCurrency(netWorthCalc) }}</div>
         <div class="mini">= 现金 + 持仓市值 - 负债</div>
         <div class="row">
           <span class="chip" :class="overview.todayPnl && overview.todayPnl >= 0 ? 'good' : 'bad'">
@@ -556,6 +556,20 @@ const positionValue = computed(() => {
   return holdingsWithQuote.value.reduce((sum, h) => sum + (h.marketValue || 0), 0)
 })
 
+// 总览净资产/总资产：必须与“持仓市值”同一口径（前端按实时行情计算）
+// 否则会出现：持仓市值接近10万，但净资产仍只有现金-负债的情况。
+const totalAssetsCalc = computed(() => {
+  const cash = Number(overview.value.cashBalance || 0)
+  const pos = Number(positionValue.value || 0)
+  return cash + pos
+})
+
+const netWorthCalc = computed(() => {
+  const assets = Number(totalAssetsCalc.value || 0)
+  const liab = Number((overview.value as any).liability || 0)
+  return assets - liab
+})
+
 // 按盈亏排序，取绝对值最大的前5个
 const topHoldings = computed(() => {
   return holdingsWithQuote.value
@@ -916,6 +930,8 @@ async function handleConfirmSettlementFromDashboard() {
 function updateAllocationChart() {
   if (!allocationChart) return
 
+  const round2 = (v: number) => Number((Number(v) || 0).toFixed(2))
+
   // 计算现金：包括CASH、PAYMENT、MMF账户余额，以及BROKER账户余额
   // 注意：MMF账户余额是通过份额*净值计算的，已经包含在账户余额中
   // 从账户树中获取所有叶子账户
@@ -943,6 +959,7 @@ function updateAllocationChart() {
   }
   
   traverseAccounts(accountStore.accountTree)
+  cashValue = round2(cashValue)
   
   // 计算持仓市值，按产品类型分类
   // 注意：持仓市值只包括通过持仓表（holdings）计算的产品持仓
@@ -968,11 +985,19 @@ function updateAllocationChart() {
     }
     // MMF 不计入持仓市值，因为MMF账户余额已经通过份额*净值计算并包含在现金中
   })
+  bankWmValue = round2(bankWmValue)
+  fundValue = round2(fundValue)
+  stockValue = round2(stockValue)
 
   const option = {
     tooltip: {
       trigger: 'item',
-      formatter: '{b}: {c} ({d}%)',
+      formatter: (params: any) => {
+        const name = params?.name ?? ''
+        const value = round2(Number(params?.value ?? 0))
+        const percent = Number(params?.percent ?? 0)
+        return `${name}: ${formatCurrency(value)}（${formatNumber(percent, 2)}%）`
+      },
     },
     series: [
       {

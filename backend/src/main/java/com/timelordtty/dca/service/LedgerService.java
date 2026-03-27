@@ -1666,82 +1666,16 @@ public class LedgerService {
         }
         insertPostingsWithBalance(oldTxnId, postings);
 
-        // 6. 性能优化：判断是否需要重算历史余额
-        // 修改操作比较复杂，需要考虑：
-        // - 旧分录被删除后，旧账户的后续余额会变化
-        // - 新分录插入后，新账户的后续余额可能会变化
-        // 因此，只有当所有涉及的交易时间都是各自账户的最新时间时，才不需要重算
-        boolean needsRecalc = needsHistoryRecalculationForUpdate(
-            oldAccountIds, existing.getRequestedAt(),  // 旧账户和旧时间（已删除）
-            newAccountIds, requestedAt                  // 新账户和新时间
-        );
-        
-        log.info("[updateTransaction] 旧账户IDs: {}, 新账户IDs: {}", oldAccountIds, newAccountIds);
-        log.info("[updateTransaction] 需要重算历史余额: {}, 所有受影响账户: {}", needsRecalc, allAffectedAccountIds);
-        
-        if (needsRecalc) {
-            recalculateAccountBalanceHistoryForAccounts(allAffectedAccountIds);
-        } else {
-            log.info("[updateTransaction] 跳过历史余额重算");
-        }
+        // 6. 为保证编辑后的余额绝对正确，统一重算所有受影响账户的历史余额
+        // 之前这里为了性能做了条件判断（needsHistoryRecalculationForUpdate），
+        // 但在某些边界场景下会导致余额没有被完全重算，从而出现你看到的“编辑/删除后余额没变”的问题。
+        // 现在直接对所有受影响账户调用统一重算逻辑，确保父账户和叶子账户余额都与最新流水一致。
+        recalculateAccountBalanceHistoryForAccounts(allAffectedAccountIds);
 
         // 返回更新后的交易记录
         return ledgerTxnMapper.selectByTxnId(oldTxnId);
     }
     
-    /**
-     * 判断修改操作是否需要重算历史余额
-     * 
-     * 修改操作涉及删除旧分录和插入新分录：
-     * 1. 如果账户发生变更（旧账户和新账户不完全相同），总是需要重算
-     *    - 因为新账户可能已经有历史分录，新插入的分录需要基于历史余额计算
-     * 2. 如果旧分录不是旧账户的最新分录，删除后会影响后续余额，需要重算
-     * 3. 如果新分录不是新账户的最新分录，插入后会影响后续余额，需要重算
-     * 
-     * @param oldAccountIds 旧账户ID集合
-     * @param oldTxnTime 旧交易时间
-     * @param newAccountIds 新账户ID集合
-     * @param newTxnTime 新交易时间
-     * @return true 如果需要重算
-     */
-    private boolean needsHistoryRecalculationForUpdate(
-            Set<Long> oldAccountIds, LocalDateTime oldTxnTime,
-            Set<Long> newAccountIds, LocalDateTime newTxnTime) {
-        
-        log.info("[needsHistoryRecalculationForUpdate] 检查是否需要重算: oldAccountIds={}, newAccountIds={}", oldAccountIds, newAccountIds);
-        
-        // 情况1：如果账户发生变更（旧账户和新账户不完全相同），总是需要重算
-        // 这是因为新账户可能已经有历史分录，需要正确计算历史余额
-        if (oldAccountIds != null && newAccountIds != null && !oldAccountIds.equals(newAccountIds)) {
-            log.info("[needsHistoryRecalculationForUpdate] 账户变更，需要重算");
-            return true;
-        }
-        
-        // 检查旧账户：删除的分录是否是最新的
-        // 注意：此时旧分录已经被删除，所以查询的最新时间不包括旧分录
-        if (oldAccountIds != null && !oldAccountIds.isEmpty() && oldTxnTime != null) {
-            LocalDateTime latestOldTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
-                new ArrayList<>(oldAccountIds));
-            // 如果旧账户还有分录，且有分录的时间晚于被删除的分录时间，需要重算
-            if (latestOldTime != null && latestOldTime.isAfter(oldTxnTime)) {
-                return true;
-            }
-        }
-        
-        // 检查新账户：插入的分录是否是最新的
-        // 注意：此时新分录已经被插入，所以查询的最新时间包括新分录
-        if (newAccountIds != null && !newAccountIds.isEmpty() && newTxnTime != null) {
-            LocalDateTime latestNewTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
-                new ArrayList<>(newAccountIds));
-            // 如果有比新分录更晚的分录，需要重算
-            if (latestNewTime != null && latestNewTime.isAfter(newTxnTime)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-
     /**
      * 快速购买货币基金（N+0，无需订单和结算）
      * 
@@ -1827,7 +1761,6 @@ public class LedgerService {
         accountMapper.updateInitialShares(linkedAccount.getId(), newShares);
         
         // 7. 创建交易流水
-        String ownerType = familyId != null ? "FAMILY" : "PERSONAL";
         List<LedgerPosting> postings = new ArrayList<>();
         
         // CASH CREDIT：出金账户减少

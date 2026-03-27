@@ -24,6 +24,12 @@
         SELECT * FROM users WHERE username = #{username}
     </select>
 
+    <select id="selectActiveUserIds" resultType="long">
+        SELECT id FROM users
+        WHERE is_active = 1
+        ORDER BY id
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO users (username, password_hash, nickname, email, phone, family_id, is_active, created_at, updated_at)
         VALUES (#{username}, #{passwordHash}, #{nickname}, #{email}, #{phone}, #{familyId}, #{isActive}, NOW(), NOW())
@@ -36,6 +42,22 @@
             phone = #{phone},
             family_id = #{familyId},
             is_active = #{isActive},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateProfile">
+        UPDATE users
+        SET nickname = #{nickname},
+            email = #{email},
+            phone = #{phone},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="updatePasswordHash">
+        UPDATE users
+        SET password_hash = #{passwordHash},
             updated_at = NOW()
         WHERE id = #{id}
     </update>
