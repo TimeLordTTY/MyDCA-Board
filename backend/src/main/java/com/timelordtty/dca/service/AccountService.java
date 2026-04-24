@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -39,18 +38,16 @@ public class AccountService {
     private final ProductMasterMapper productMasterMapper;
     private final NavService navService;
     private final LedgerService ledgerService;
-    private final HoldingService holdingService;
     private final UserService userService;
 
     public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper,
                          ProductMasterMapper productMasterMapper, NavService navService,
-                         @Lazy LedgerService ledgerService, @Lazy HoldingService holdingService, UserService userService) {
+                         @Lazy LedgerService ledgerService, UserService userService) {
         this.accountMapper = accountMapper;
         this.ledgerPostingMapper = ledgerPostingMapper;
         this.productMasterMapper = productMasterMapper;
         this.navService = navService;
         this.ledgerService = ledgerService;
-        this.holdingService = holdingService;
         this.userService = userService;
     }
 
@@ -84,7 +81,14 @@ public class AccountService {
         }
 
         // 设置默认值
-        if (account.getBalance() == null) {
+        //
+        // 重要：余额初始化只允许通过 initialBalance 控制。
+        // - 新建账户时（account.id 为空）忽略入参里的 balance，避免“表单残留/误传 balance”
+        //   导致新建账户出现非预期余额（看起来像“从别的平台同步过来”）。
+        if (account.getId() == null) {
+            BigDecimal init = account.getInitialBalance();
+            account.setBalance(init != null ? init : BigDecimal.ZERO);
+        } else if (account.getBalance() == null) {
             account.setBalance(BigDecimal.ZERO);
         }
         if (account.getReservedAmount() == null) {
@@ -142,14 +146,34 @@ public class AccountService {
      * - 父账户可以是 BANK/PAYMENT/BROKER/CASH 等平台容器，子账户类型可独立选择（如支付宝下的花呗、余额宝等）
      */
     private void validateAccountCreation(Account account) {
-        // 规则1: VIRTUAL账户不允许设置parent_account_id
+        // 券商平台下允许的虚拟子账户类型（用于持仓隔离/汇总）
+        boolean isAllowedBrokerVirtualChild =
+            "VIRTUAL".equals(account.getAccountKind())
+                && account.getParentAccountId() != null
+                && ("POSITION".equals(account.getVirtualSubtype()) || "POSITION_VALUE".equals(account.getVirtualSubtype()));
+
+        boolean parentIsBrokerPlatform = false;
+        if (isAllowedBrokerVirtualChild) {
+            Account parent = accountMapper.selectById(account.getParentAccountId());
+            parentIsBrokerPlatform = parent != null
+                && "BROKER".equals(parent.getAccountType())
+                && parent.getParentAccountId() == null;
+        }
+
+        // 规则1: 默认情况下 VIRTUAL 账户不允许设置 parent_account_id
+        // 但“券商维度持仓账户”（VIRTUAL + virtual_subtype=POSITION 且 parent 为 BROKER 平台）是特例，允许挂载在券商平台下。
         if ("VIRTUAL".equals(account.getAccountKind()) && account.getParentAccountId() != null) {
-            throw new RuntimeException("VIRTUAL账户不允许设置父账户");
+            if (!(isAllowedBrokerVirtualChild && parentIsBrokerPlatform)) {
+                throw new RuntimeException("VIRTUAL账户不允许设置父账户");
+            }
         }
 
         // 规则2: 子账户必须是REAL
         if (account.getParentAccountId() != null && !"REAL".equals(account.getAccountKind())) {
-            throw new RuntimeException("子账户必须是REAL类型");
+            // 放行：券商平台下的持仓类虚拟子账户
+            if (!(isAllowedBrokerVirtualChild && parentIsBrokerPlatform)) {
+                throw new RuntimeException("子账户必须是REAL类型");
+            }
         }
         // 不再限制子账户 accountType 必须为 CASH：
         // - 允许在同一平台下挂载 CASH/MMF/BANK/PAYMENT 等资产账户
@@ -399,6 +423,10 @@ public class AccountService {
         for (Account parentAccount : parentAccounts) {
             // 查询子账户
             List<Account> children = accountMapper.selectChildren(parentAccount.getId());
+            // UI 账户树只展示 REAL 子账户；系统自动创建的 VIRTUAL（如券商维度持仓账户）不应暴露给用户
+            children = children.stream()
+                    .filter(c -> "REAL".equals(c.getAccountKind()))
+                    .collect(java.util.stream.Collectors.toList());
             
             // 计算子账户余额总和（排除信贷账户）
             // 信贷账户（CREDIT_CARD/HUABEI/BAITIAO/LOAN）不计入余额，因为它们的余额是欠款，不是资产
@@ -584,6 +612,72 @@ public class AccountService {
                                              String ownerType, Long ownerUserId, Long ownerFamilyId) {
         return getOrCreateVirtualAccount("POSITION", "POSITION", ownerType, ownerUserId, ownerFamilyId, 
                                         productId, productName);
+    }
+
+    /**
+     * 获取或创建“券商维度”的产品持仓账户（POSITION账户）。
+     *
+     * 目标：同一产品在不同券商账户下应当拥有各自独立的持仓成本与份额。
+     *
+     * 账户约定：
+     * - account_kind = VIRTUAL
+     * - virtual_subtype = POSITION
+     * - parent_account_id = brokerAccountId（券商平台账户，BROKER 类型父账户）
+     * - linked_product_id = productId
+     * - account_code = BROKER-POS-{brokerAccountId}-{productId}（唯一）
+     */
+    @Transactional
+    public Account getOrCreateBrokerPositionAccount(Long brokerAccountId,
+                                                    Long productId,
+                                                    String productName,
+                                                    String ownerType,
+                                                    Long ownerUserId,
+                                                    Long ownerFamilyId) {
+        if (brokerAccountId == null) {
+            throw new RuntimeException("brokerAccountId 不能为空");
+        }
+        if (productId == null) {
+            throw new RuntimeException("productId 不能为空");
+        }
+
+        Account brokerAccount = accountMapper.selectById(brokerAccountId);
+        if (brokerAccount == null) {
+            throw new RuntimeException("券商账户不存在: " + brokerAccountId);
+        }
+        if (!"BROKER".equals(brokerAccount.getAccountType())) {
+            throw new RuntimeException("账户不是券商账户: " + brokerAccountId);
+        }
+        if (brokerAccount.getParentAccountId() != null) {
+            throw new RuntimeException("账户不是平台账户（父账户）: " + brokerAccountId);
+        }
+
+        String accountCode = "BROKER-POS-" + brokerAccountId + "-" + productId;
+        Account existing = accountMapper.selectByCode(accountCode);
+        if (existing != null) {
+            return existing;
+        }
+
+        String resolvedProductName = productName != null ? productName : ("产品" + productId);
+        Account positionAccount = new Account();
+        positionAccount.setAccountCode(accountCode);
+        positionAccount.setAccountName(brokerAccount.getAccountName() + "-持仓账户-" + resolvedProductName);
+        positionAccount.setAccountKind("VIRTUAL");
+        positionAccount.setAccountType("OTHER"); // 虚拟账户 account_type 统一用 OTHER，真实类型在 virtual_subtype
+        positionAccount.setVirtualSubtype("POSITION");
+        positionAccount.setOwnerType(ownerType != null ? ownerType : brokerAccount.getOwnerType());
+        positionAccount.setOwnerUserId(ownerUserId != null ? ownerUserId : brokerAccount.getOwnerUserId());
+        positionAccount.setOwnerFamilyId(ownerFamilyId != null ? ownerFamilyId : brokerAccount.getOwnerFamilyId());
+        positionAccount.setCurrency(brokerAccount.getCurrency() != null ? brokerAccount.getCurrency() : "CNY");
+        positionAccount.setParentAccountId(brokerAccountId);
+        positionAccount.setLinkedProductId(productId);
+        positionAccount.setInitialBalance(BigDecimal.ZERO);
+        positionAccount.setBalance(BigDecimal.ZERO);
+        positionAccount.setReservedAmount(BigDecimal.ZERO);
+        positionAccount.setIsActive(true);
+        positionAccount.setIsFixedAmount(false);
+        positionAccount.setNote("券商维度持仓账户（自动创建）");
+
+        return createAccount(positionAccount);
     }
 
     /**

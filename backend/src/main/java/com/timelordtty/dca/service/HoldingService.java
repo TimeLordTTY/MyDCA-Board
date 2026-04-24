@@ -105,14 +105,14 @@ public class HoldingService {
      * 
      * @param userId 用户ID
      * @param familyId 家庭ID，可为空
-     * @return 持仓信息Map，key为productId，value为HoldingInfo
+     * @return 持仓信息列表（同一产品在不同券商会有多条）
      */
-    public Map<Long, HoldingInfo> calculateHoldings(Long userId, Long familyId) {
+    public List<HoldingInfo> calculateHoldings(Long userId, Long familyId) {
         // 直接查询所有POSITION类型的分录（属于该用户或家庭的）
         // 这样更直接，不需要先查账户
         List<LedgerPosting> postings = ledgerPostingMapper.selectByAccountTypeAndOwner("POSITION", userId, familyId);
 
-        Map<Long, HoldingInfo> holdings = new HashMap<>();
+        Map<String, HoldingInfo> holdings = new HashMap<>();
 
         // 1) 基于 POSITION 分录计算基础持仓成本和份额
         for (LedgerPosting posting : postings) {
@@ -124,11 +124,27 @@ public class HoldingService {
 
             Long productId = txn.getProductId();
 
+            // 推断券商：券商维度 POSITION 账户会挂在 BROKER 父账户下
+            Long brokerAccountId = null;
+            String brokerAccountName = null;
+            Account positionAccount = accountMapper.selectById(posting.getAccountId());
+            if (positionAccount != null && positionAccount.getParentAccountId() != null) {
+                Account parent = accountMapper.selectById(positionAccount.getParentAccountId());
+                if (parent != null && "BROKER".equals(parent.getAccountType()) && parent.getParentAccountId() == null) {
+                    brokerAccountId = parent.getId();
+                    brokerAccountName = parent.getAccountName();
+                }
+            }
+
+            String key = (brokerAccountId != null ? brokerAccountId.toString() : "NULL") + ":" + productId;
+
             // 创建或获取持仓信息
-            HoldingInfo holding = holdings.get(productId);
+            HoldingInfo holding = holdings.get(key);
             if (holding == null) {
                 holding = new HoldingInfo();
                 holding.setProductId(productId);
+                holding.setBrokerAccountId(brokerAccountId);
+                holding.setBrokerAccountName(brokerAccountName);
             }
             if (holding.getTotalShares() == null) {
                 holding.setTotalShares(BigDecimal.ZERO);
@@ -152,7 +168,7 @@ public class HoldingService {
                 holding.setTotalCost(holding.getTotalCost().subtract(posting.getAmount()));
             }
 
-            holdings.put(productId, holding);
+            holdings.put(key, holding);
         }
 
         // 查询有关联产品的账户（通过 linked_product_id 和 initial_shares）
@@ -167,15 +183,18 @@ public class HoldingService {
                 
                 // 如果已经有 POSITION 分录的持仓数据，跳过账户的 initial_shares
                 // 避免重复计算（POSITION 分录已经是完整的持仓记录）
-                if (holdings.containsKey(productId) && holdings.get(productId).getTotalShares().compareTo(BigDecimal.ZERO) > 0) {
+                String key = "NULL:" + productId;
+                if (holdings.containsKey(key) && holdings.get(key).getTotalShares().compareTo(BigDecimal.ZERO) > 0) {
                     continue;
                 }
                 
                 // 创建或获取持仓信息
-                HoldingInfo holding = holdings.get(productId);
+                HoldingInfo holding = holdings.get(key);
                 if (holding == null) {
                     holding = new HoldingInfo();
                     holding.setProductId(productId);
+                    holding.setBrokerAccountId(null);
+                    holding.setBrokerAccountName(null);
                     holding.setTotalShares(BigDecimal.ZERO);
                     holding.setTotalCost(BigDecimal.ZERO);
                 }
@@ -200,7 +219,7 @@ public class HoldingService {
                 }
                 holding.setTotalCost(holding.getTotalCost().add(cost));
                 
-                holdings.put(productId, holding);
+                holdings.put(key, holding);
             }
         }
 
@@ -223,23 +242,39 @@ public class HoldingService {
                 continue;
             }
             Long productId = feeTxn.getProductId();
-            HoldingInfo holding = holdings.get(productId);
-            if (holding == null) {
-                continue;
+            // 优先从同一 txn 的 POSITION DEBIT 分录上推断券商维度（新逻辑下可稳定推断）
+            Long brokerAccountId = null;
+            String brokerAccountName = null;
+            List<LedgerPosting> txnPostings = ledgerPostingMapper.selectByTxnId(feePosting.getTxnId());
+            if (txnPostings != null) {
+                for (LedgerPosting p : txnPostings) {
+                    if (!"POSITION".equals(p.getAccountType()) || !"DEBIT".equals(p.getPostingType())) {
+                        continue;
+                    }
+                    Account posAcc = accountMapper.selectById(p.getAccountId());
+                    if (posAcc != null && posAcc.getParentAccountId() != null) {
+                        Account parent = accountMapper.selectById(posAcc.getParentAccountId());
+                        if (parent != null && "BROKER".equals(parent.getAccountType()) && parent.getParentAccountId() == null) {
+                            brokerAccountId = parent.getId();
+                            brokerAccountName = parent.getAccountName();
+                        }
+                    }
+                    break;
+                }
             }
-            if (holding.getTotalShares() == null || holding.getTotalShares().compareTo(BigDecimal.ZERO) <= 0) {
-                continue;
-            }
-            if (holding.getTotalCost() == null) {
-                holding.setTotalCost(BigDecimal.ZERO);
-            }
+            String key = (brokerAccountId != null ? brokerAccountId.toString() : "NULL") + ":" + productId;
+            HoldingInfo holding = holdings.get(key);
+            if (holding == null) continue;
+            if (holding.getTotalShares() == null || holding.getTotalShares().compareTo(BigDecimal.ZERO) <= 0) continue;
+            if (holding.getTotalCost() == null) holding.setTotalCost(BigDecimal.ZERO);
             holding.setTotalCost(holding.getTotalCost().add(feePosting.getAmount()));
+            holding.setBrokerAccountId(brokerAccountId);
+            holding.setBrokerAccountName(brokerAccountName);
         }
 
         // 3. 计算平均成本、市值和未实现盈亏
-        for (Map.Entry<Long, HoldingInfo> entry : holdings.entrySet()) {
-            HoldingInfo holding = entry.getValue();
-            Long productId = entry.getKey();
+        for (HoldingInfo holding : holdings.values()) {
+            Long productId = holding.getProductId();
             
             // 回填产品信息，供前端展示/行情查询使用
             if (holding.getProductId() == null) {
@@ -262,6 +297,17 @@ public class HoldingService {
                 holding.setAvgCost(avgCost);
             } else {
                 holding.setAvgCost(BigDecimal.ZERO);
+            }
+
+            // 清仓归零：摊薄成本法在“全部卖出且盈利”时可能出现 totalCost < 0。
+            // 对于剩余份额 <= 0 的情况，持仓应视为已清仓，剩余成本/浮盈亏归零，避免前端显示负成本/负余额。
+            if (holding.getTotalShares() == null || holding.getTotalShares().compareTo(BigDecimal.ZERO) <= 0) {
+                holding.setTotalShares(BigDecimal.ZERO);
+                holding.setTotalCost(BigDecimal.ZERO);
+                holding.setAvgCost(BigDecimal.ZERO);
+                holding.setMarketValue(BigDecimal.ZERO);
+                holding.setUnrealizedPnl(BigDecimal.ZERO);
+                continue;
             }
             
             // 获取最新净值计算市值和未实现盈亏
@@ -288,7 +334,7 @@ public class HoldingService {
             }
         }
 
-        return holdings;
+        return new ArrayList<>(holdings.values());
     }
 
     /**
@@ -300,11 +346,13 @@ public class HoldingService {
      * @return 持仓信息，如果不存在则返回null
      */
     public HoldingInfo getHolding(Long productId, Long userId, Long familyId) {
-        Map<Long, HoldingInfo> holdings = calculateHoldings(userId, familyId);
-        return holdings.get(productId);
+        List<HoldingInfo> holdings = calculateHoldings(userId, familyId);
+        return holdings.stream().filter(h -> h != null && productId.equals(h.getProductId())).findFirst().orElse(null);
     }
 
     public static class HoldingInfo {
+        private Long brokerAccountId;
+        private String brokerAccountName;
         private Long productId;
         private String productCode;
         private String productName;
@@ -317,6 +365,10 @@ public class HoldingService {
         private BigDecimal unrealizedPnl;
 
         // Getters and setters
+        public Long getBrokerAccountId() { return brokerAccountId; }
+        public void setBrokerAccountId(Long brokerAccountId) { this.brokerAccountId = brokerAccountId; }
+        public String getBrokerAccountName() { return brokerAccountName; }
+        public void setBrokerAccountName(String brokerAccountName) { this.brokerAccountName = brokerAccountName; }
         public Long getProductId() { return productId; }
         public void setProductId(Long productId) { this.productId = productId; }
         public String getProductCode() { return productCode; }

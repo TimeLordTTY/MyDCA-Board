@@ -2,12 +2,12 @@ package com.timelordtty.dca.controller;
 
 import com.timelordtty.dca.dto.AuthResponse;
 import com.timelordtty.dca.service.HoldingService;
+import com.timelordtty.dca.service.FamilyService;
 import com.timelordtty.dca.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * 持仓控制器
@@ -18,16 +18,21 @@ public class HoldingController {
 
     private final HoldingService holdingService;
     private final UserService userService;
+    private final FamilyService familyService;
 
-    public HoldingController(HoldingService holdingService, UserService userService) {
+    public HoldingController(HoldingService holdingService, UserService userService, FamilyService familyService) {
         this.holdingService = holdingService;
         this.userService = userService;
+        this.familyService = familyService;
     }
 
     @GetMapping
-    public ResponseEntity<Map<Long, HoldingService.HoldingInfo>> getHoldings() {
+    public ResponseEntity<List<HoldingService.HoldingInfo>> getHoldings(
+            @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
+            @RequestParam(required = false) Long memberUserId) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
-        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(currentUser.getId(), currentUser.getFamilyId());
+        ScopeOwner owner = resolveScopeOwner(currentUser, scope, memberUserId);
+        List<HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(owner.ownerUserId, owner.ownerFamilyId);
         return ResponseEntity.ok(holdings);
     }
 
@@ -50,11 +55,51 @@ public class HoldingController {
      */
     @GetMapping("/product/{productId}/by-account")
     public ResponseEntity<List<HoldingService.AccountHoldingInfo>> getProductHoldingsByAccount(
-            @PathVariable Long productId) {
+            @PathVariable Long productId,
+            @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
+            @RequestParam(required = false) Long memberUserId) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        ScopeOwner owner = resolveScopeOwner(currentUser, scope, memberUserId);
         List<HoldingService.AccountHoldingInfo> holdings = holdingService.getProductHoldingsByAccount(
-            productId, currentUser.getId(), currentUser.getFamilyId());
+            productId, owner.ownerUserId, owner.ownerFamilyId);
         return ResponseEntity.ok(holdings);
+    }
+
+    private static class ScopeOwner {
+        final Long ownerUserId;
+        final Long ownerFamilyId;
+        ScopeOwner(Long ownerUserId, Long ownerFamilyId) {
+            this.ownerUserId = ownerUserId;
+            this.ownerFamilyId = ownerFamilyId;
+        }
+    }
+
+    private ScopeOwner resolveScopeOwner(AuthResponse.UserInfo currentUser, String scope, Long memberUserId) {
+        String normalized = scope != null ? scope.trim().toUpperCase() : "PERSONAL";
+        if ("PERSONAL".equals(normalized)) {
+            // 普通用户默认只看个人数据（避免看到家庭共享数据）
+            return new ScopeOwner(currentUser.getId(), null);
+        }
+        if ("FAMILY_ALL".equals(normalized)) {
+            if (currentUser.getFamilyId() == null) {
+                throw new RuntimeException("无家庭，无法查看家庭范围数据");
+            }
+            familyService.assertAdmin(currentUser.getId(), currentUser.getFamilyId());
+            // 全家汇总：只按 familyId 过滤
+            return new ScopeOwner(null, currentUser.getFamilyId());
+        }
+        if ("MEMBER".equals(normalized)) {
+            if (currentUser.getFamilyId() == null) {
+                throw new RuntimeException("无家庭，无法查看成员范围数据");
+            }
+            familyService.assertAdmin(currentUser.getId(), currentUser.getFamilyId());
+            if (memberUserId == null) {
+                throw new RuntimeException("memberUserId 不能为空");
+            }
+            // 成员下钻：仅查看该成员个人范围（不包含家庭共享）
+            return new ScopeOwner(memberUserId, null);
+        }
+        throw new RuntimeException("不支持的 scope: " + scope);
     }
 }
 

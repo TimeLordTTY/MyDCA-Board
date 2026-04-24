@@ -475,11 +475,46 @@ public class LedgerService {
                             if (product == null) {
                                 throw new RuntimeException("产品不存在: productId=" + productId);
                             }
+                            // 场内：优先推断券商平台账户，将持仓写入“券商维度 POSITION 账户”，从而实现同标的跨券商隔离
+                            Long brokerAccountId = null;
+                            for (LedgerPosting p : postings) {
+                                if ("INCOME".equals(p.getAccountType()) || "EXPENSE".equals(p.getAccountType()) ||
+                                    "FEE".equals(p.getAccountType()) || "POSITION".equals(p.getAccountType())) {
+                                    continue;
+                                }
+                                Account acc = accountMapper.selectById(p.getAccountId());
+                                if (acc == null || !"REAL".equals(acc.getAccountKind())) continue;
+                                // 1) 直接选中券商平台账户
+                                if ("BROKER".equals(acc.getAccountType()) && acc.getParentAccountId() == null) {
+                                    brokerAccountId = acc.getId();
+                                    break;
+                                }
+                                // 2) 子账户挂在券商平台下
+                                if (acc.getParentAccountId() != null) {
+                                    Account parent = accountMapper.selectById(acc.getParentAccountId());
+                                    if (parent != null && "BROKER".equals(parent.getAccountType()) && parent.getParentAccountId() == null) {
+                                        brokerAccountId = parent.getId();
+                                        break;
+                                    }
+                                }
+                            }
+
                             // 持仓账户：如果用户属于家庭，统一使用 FAMILY 类型，避免同一产品产生重复的 PERSONAL/FAMILY 持仓账户
                             String positionOwnerType = realAccount.getOwnerFamilyId() != null ? "FAMILY" : ownerType;
-                            virtualAccount = accountService.getOrCreatePositionAccount(
-                                productId, product.getProductName(), positionOwnerType, 
-                                realAccount.getOwnerUserId(), realAccount.getOwnerFamilyId());
+                            virtualAccount = brokerAccountId != null
+                                ? accountService.getOrCreateBrokerPositionAccount(
+                                    brokerAccountId,
+                                    productId,
+                                    product.getProductName(),
+                                    positionOwnerType,
+                                    realAccount.getOwnerUserId(),
+                                    realAccount.getOwnerFamilyId())
+                                : accountService.getOrCreatePositionAccount(
+                                    productId,
+                                    product.getProductName(),
+                                    positionOwnerType,
+                                    realAccount.getOwnerUserId(),
+                                    realAccount.getOwnerFamilyId());
                         } else {
                             // 如果没有提供 productId，抛出异常提示
                             throw new RuntimeException("POSITION 账户必须通过 getOrCreatePositionAccount 方法创建，需要提供 productId 和 productName");

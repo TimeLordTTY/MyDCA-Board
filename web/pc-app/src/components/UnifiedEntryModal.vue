@@ -460,6 +460,27 @@
           </el-form-item>
           <!-- 场内买入：简化表单 -->
           <template v-if="form.channel === 'EXCHANGE'">
+            <el-form-item label="券商资金账户" required>
+              <el-cascader
+                v-model="selectedAccount"
+                :options="accountCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="先选择券商-子账户（用于扣款与计算手续费）"
+                style="width: 100%"
+                clearable
+                @change="handleBuyAccountCascaderChange"
+              >
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <div style="color: #909399; font-size: 12px; margin-top: 4px">
+                系统会从该账户自动识别券商并按对应费率计算手续费。
+              </div>
+            </el-form-item>
             <el-form-item label="交易时间" required>
               <el-date-picker
                 v-model="form.requestedAt"
@@ -550,7 +571,7 @@
           </el-form-item>
           </template>
           
-          <el-form-item label="资金来源账户" required>
+          <el-form-item v-if="form.channel !== 'EXCHANGE'" label="资金来源账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
               <el-cascader
                 v-model="selectedAccount"
@@ -735,6 +756,14 @@
           </el-form-item>
           <!-- 场内卖出：简化表单 -->
           <template v-if="form.channel === 'EXCHANGE'">
+            <el-form-item label="券商" required>
+              <el-select v-model="form.brokerAccountId" placeholder="先选择券商（用于计算手续费）" style="width: 100%" filterable clearable>
+                <el-option v-for="b in brokerPlatforms" :key="b.id" :label="b.name" :value="b.id" />
+              </el-select>
+              <div style="color: #909399; font-size: 12px; margin-top: 4px">
+                手续费会按所选券商的费率配置自动计算。
+              </div>
+            </el-form-item>
             <el-form-item label="交易时间" required>
               <el-date-picker
                 v-model="form.requestedAt"
@@ -1461,7 +1490,15 @@ async function preloadAllHoldings() {
       // 数组格式
       holdings.forEach((h: any) => {
         if (h.productId) {
-          holdingsMap.set(h.productId, h)
+          const pid = Number(h.productId)
+          const prev = holdingsMap.get(pid)
+          if (!prev) {
+            holdingsMap.set(pid, { productId: pid, totalShares: Number(h.totalShares || 0), marketValue: Number(h.marketValue || 0) })
+          } else {
+            prev.totalShares = Number(prev.totalShares || 0) + Number(h.totalShares || 0)
+            prev.marketValue = Number(prev.marketValue || 0) + Number(h.marketValue || 0)
+            holdingsMap.set(pid, prev)
+          }
         }
       })
     } else if (holdings && typeof holdings === 'object') {
@@ -1469,7 +1506,15 @@ async function preloadAllHoldings() {
       Object.entries(holdings).forEach(([key, value]: [string, any]) => {
         const productId = value?.productId || parseInt(key)
         if (productId && value) {
-          holdingsMap.set(productId, value)
+          const pid = Number(productId)
+          const prev = holdingsMap.get(pid)
+          if (!prev) {
+            holdingsMap.set(pid, { productId: pid, totalShares: Number(value.totalShares || 0), marketValue: Number(value.marketValue || 0) })
+          } else {
+            prev.totalShares = Number(prev.totalShares || 0) + Number(value.totalShares || 0)
+            prev.marketValue = Number(prev.marketValue || 0) + Number(value.marketValue || 0)
+            holdingsMap.set(pid, prev)
+          }
         }
       })
     }
@@ -2600,6 +2645,11 @@ function handleBuyAccountChange() {
 function handleBuyAccountCascaderChange() {
   // 清空资金分配
   buyFundingLines.value = []
+  // 从资金来源账户推断券商（若能推断则自动填充，避免手续费默认错误）
+  if (form.value.channel === 'EXCHANGE') {
+    const inferred = inferBrokerAccountIdByAccountId(form.value.accountId) || inferBrokerAccountIdByAccountId(form.value.parentAccountId)
+    if (inferred) form.value.brokerAccountId = inferred
+  }
 }
 
 function handleSellParentAccountChange() {
@@ -2612,6 +2662,11 @@ function handleSellParentAccountChange() {
 function handleSellAccountCascaderChange() {
   // 选择到账账户时，不清空出金来源分配（sellFundingLines）
   // 因为出金来源和到账账户是两个不同的概念
+  // 从到账账户推断券商（场内手续费按券商算）
+  if (form.value.channel === 'EXCHANGE') {
+    const inferred = inferBrokerAccountIdByAccountId(form.value.accountId) || inferBrokerAccountIdByAccountId(form.value.parentAccountId)
+    if (inferred) form.value.brokerAccountId = inferred
+  }
 }
 
 function handleAddBuyFundingLine() {
@@ -2888,6 +2943,18 @@ watch(() => form.value.navDate, async (newNavDate) => {
 // 场内交易自动计算手续费
 const isCalculatingFee = ref(false)
 
+function inferBrokerAccountIdByAccountId(accountId: number | undefined): number | undefined {
+  if (!accountId) return undefined
+  const acc = accountStore.accounts.find(a => a.id === accountId)
+  if (!acc) return undefined
+  if (acc.accountType === 'BROKER' && !acc.parentAccountId) return acc.id
+  if (acc.parentAccountId) {
+    const parent = accountStore.accounts.find(a => a.id === acc.parentAccountId)
+    if (parent?.accountType === 'BROKER' && !parent.parentAccountId) return parent.id
+  }
+  return undefined
+}
+
 // 计算场内交易手续费的函数
 async function calculateExchangeFee() {
   // 只有场内交易才自动计算手续费
@@ -2908,28 +2975,11 @@ async function calculateExchangeFee() {
     const amount = form.value.shares * form.value.nav
     const orderType = (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') ? 'BUY' : 'SELL'
     
-    // 尝试从选中的账户找到券商账户
-    let brokerAccountId: number | undefined
-    if (form.value.accountId) {
-      // 查找父账户是否为券商账户
-      const account = accountStore.accounts.find(a => a.id === form.value.accountId)
-      if (account?.parentAccountId) {
-        const parent = accountStore.accounts.find(a => a.id === account.parentAccountId)
-        if (parent?.accountType === 'BROKER') {
-          brokerAccountId = parent.id
-        }
-      } else if (account?.accountType === 'BROKER') {
-        brokerAccountId = account.id
-      }
-    }
-    
-    // 如果没找到，尝试在账户列表中找华宝证券
-    if (!brokerAccountId) {
-      const huabao = accountStore.accounts.find(a => 
-        a.accountType === 'BROKER' && (a.accountName?.includes('华宝') || a.accountCode?.includes('huabao'))
-      )
-      brokerAccountId = huabao?.id
-    }
+    // 直接根据“所选资金账户/到账账户”推断券商，不做任何默认
+    const brokerAccountId =
+      inferBrokerAccountIdByAccountId(form.value.accountId) ||
+      inferBrokerAccountIdByAccountId(form.value.parentAccountId)
+    if (!brokerAccountId) return
     
     console.log('计算手续费参数:', { productId: form.value.productId, accountId: brokerAccountId, orderType, amount })
     
@@ -3024,7 +3074,7 @@ async function calculateOTCRedemptionFee() {
 
 // 监听数量和价格变化，自动计算场内手续费
 watch(
-  () => [form.value.channel, form.value.productId, form.value.shares, form.value.nav],
+  () => [form.value.channel, form.value.productId, form.value.shares, form.value.nav, form.value.accountId, form.value.parentAccountId, selectedType.value],
   () => {
     calculateExchangeFee()
   },

@@ -40,7 +40,20 @@
                     <span v-if="platform.linkedProductId" class="tag blue tiny" style="margin-left: 8px;">已关联产品</span>
                   </div>
                   <div v-else class="tiny muted">
-                    父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                    <template v-if="platform.accountType === 'BROKER'">
+                      券商总资产 = 现金子账户余额 + 标的市值：
+                      <span class="mono">{{ formatCurrency(getBrokerCashBalance(platform)) }}</span>
+                      +
+                      <span class="mono">{{ formatCurrency(getBrokerHoldingsMarketValue(platform.id)) }}</span>
+                      =
+                      <span class="mono" style="font-weight: 700;">
+                        {{ formatCurrency(getBrokerCashBalance(platform) + getBrokerHoldingsMarketValue(platform.id)) }}
+                      </span>
+                      ；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                    </template>
+                    <template v-else>
+                      父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                    </template>
                   </div>
                 </div>
                   <div class="row-gap">
@@ -61,7 +74,7 @@
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
                 </div>
-                <div v-if="expandedPlatforms.has(platform.id) && platform.children && platform.children.length > 0" class="platform-children">
+                <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
                 <div
                   v-for="child in platform.children"
                   :key="child.id"
@@ -110,6 +123,48 @@
                     <button class="btn" @click="handleEditAccount(child)">编辑</button>
                   </div>
                 </div>
+
+                <!-- 券商：展示各标的持仓（只读；不进入下拉框） -->
+                <div v-if="platform.accountType === 'BROKER'" style="margin-top: 8px;">
+                  <div class="tiny muted" style="margin: 6px 0 8px; display: flex; justify-content: space-between; gap: 12px;">
+                    <span>
+                      持仓（仅场内标的；仅展示，不参与记账下拉框）
+                      <span class="mono" style="margin-left: 8px;">
+                        {{ (brokerHoldingsByBrokerId.get(platform.id)?.length || 0) }} 条
+                      </span>
+                    </span>
+                    <span v-if="brokerHoldingsLoadedAt" class="mono" style="color: #94a3b8;">
+                      更新于 {{ brokerHoldingsLoadedAt }}
+                    </span>
+                  </div>
+
+                  <div
+                    v-if="(brokerHoldingsByBrokerId.get(platform.id)?.length || 0) === 0"
+                    class="tiny muted"
+                    style="padding: 8px 10px; border: 1px dashed #e2e8f0; border-radius: 8px;"
+                  >
+                    暂无该券商的场内持仓（如果你刚下单/刚录入，请点右上角“刷新数据”或等待 15 秒自动更新）。
+                  </div>
+
+                  <div
+                    v-for="h in brokerHoldingsByBrokerId.get(platform.id)"
+                    :key="`${String(platform.id)}:${String(h.productId)}`"
+                    class="bucket-item"
+                    style="border-left: 3px solid #60a5fa;"
+                  >
+                    <div style="font-weight: 800">
+                      {{ h.productName || `产品${h.productId}` }}
+                      <span class="tag blue tiny" style="margin-left: 8px;">持仓</span>
+                    </div>
+                    <div class="tiny muted">
+                      份额：<span class="mono">{{ formatNumber(h.shares, 2) }}</span>；
+                      市值：<span class="mono">{{ formatCurrency(h.marketValue) }}</span>
+                      <span v-if="h.currentPrice && h.currentPrice > 0" class="mono" style="margin-left: 8px;">
+                        （价格 {{ formatNumber(h.currentPrice, 4) }}）
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -156,7 +211,20 @@
                       <span v-if="platform.linkedProductId" class="tag blue tiny" style="margin-left: 8px;">已关联产品</span>
                     </div>
                     <div v-else class="tiny muted">
-                      父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                      <template v-if="platform.accountType === 'BROKER'">
+                        券商总资产 = 现金子账户余额 + 标的市值：
+                        <span class="mono">{{ formatCurrency(getBrokerCashBalance(platform)) }}</span>
+                        +
+                        <span class="mono">{{ formatCurrency(getBrokerHoldingsMarketValue(platform.id)) }}</span>
+                        =
+                        <span class="mono" style="font-weight: 700;">
+                          {{ formatCurrency(getBrokerCashBalance(platform) + getBrokerHoldingsMarketValue(platform.id)) }}
+                        </span>
+                        ；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                      </template>
+                      <template v-else>
+                        父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                      </template>
                     </div>
                   </div>
                   <div class="row-gap">
@@ -177,7 +245,7 @@
                     <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
                   </div>
                 </div>
-                <div v-if="expandedPlatforms.has(platform.id) && platform.children && platform.children.length > 0" class="platform-children">
+                <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
                   <div
                     v-for="child in platform.children"
                     :key="child.id"
@@ -224,6 +292,48 @@
                     </div>
                     <div class="bucket-actions">
                       <button class="btn" @click="handleEditAccount(child)">编辑</button>
+                    </div>
+                  </div>
+
+                  <!-- 券商：展示各标的持仓（只读；不进入下拉框） -->
+                  <div v-if="platform.accountType === 'BROKER'" style="margin-top: 8px;">
+                    <div class="tiny muted" style="margin: 6px 0 8px; display: flex; justify-content: space-between; gap: 12px;">
+                      <span>
+                        持仓（仅场内标的；仅展示，不参与记账下拉框）
+                        <span class="mono" style="margin-left: 8px;">
+                          {{ (brokerHoldingsByBrokerId.get(platform.id)?.length || 0) }} 条
+                        </span>
+                      </span>
+                      <span v-if="brokerHoldingsLoadedAt" class="mono" style="color: #94a3b8;">
+                        更新于 {{ brokerHoldingsLoadedAt }}
+                      </span>
+                    </div>
+
+                    <div
+                      v-if="(brokerHoldingsByBrokerId.get(platform.id)?.length || 0) === 0"
+                      class="tiny muted"
+                      style="padding: 8px 10px; border: 1px dashed #e2e8f0; border-radius: 8px;"
+                    >
+                      暂无该券商的场内持仓（如果你刚下单/刚录入，请点右上角“刷新数据”或等待 15 秒自动更新）。
+                    </div>
+
+                    <div
+                      v-for="h in brokerHoldingsByBrokerId.get(platform.id)"
+                      :key="`${String(platform.id)}:${String(h.productId)}`"
+                      class="bucket-item"
+                      style="border-left: 3px solid #60a5fa;"
+                    >
+                      <div style="font-weight: 800">
+                        {{ h.productName || `产品${h.productId}` }}
+                        <span class="tag blue tiny" style="margin-left: 8px;">持仓</span>
+                      </div>
+                      <div class="tiny muted">
+                        份额：<span class="mono">{{ formatNumber(h.shares, 2) }}</span>；
+                        市值：<span class="mono">{{ formatCurrency(h.marketValue) }}</span>
+                        <span v-if="h.currentPrice && h.currentPrice > 0" class="mono" style="margin-left: 8px;">
+                          （价格 {{ formatNumber(h.currentPrice, 4) }}）
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -704,7 +814,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessageBox, ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import {
   useAccountStore,
@@ -718,14 +828,62 @@ import {
   currencyMap,
   accountApi,
   navApi,
+  holdingApi,
+  marketApi,
 } from '@wealth-hub/shared'
 import { brokerFeeApi, type BrokerFeeConfig, productApi, type ProductMaster } from '@wealth-hub/shared'
-import type { Account, Nav } from '@wealth-hub/shared'
+import type { Account, HoldingInfo, MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
 
 const accountStore = useAccountStore()
 
 // 使用本地ref来存储数据，确保响应式
 const accountTree = ref<Account[]>([])
+
+type BrokerHoldingRow = {
+  brokerAccountId: number
+  productId: number
+  productName?: string | null
+  channel?: string | null
+  shares: number
+  currentPrice: number
+  marketValue: number
+}
+
+const brokerHoldings = ref<BrokerHoldingRow[]>([])
+const brokerHoldingsLoadedAt = ref<string>('')
+
+const brokerHoldingsByBrokerId = computed(() => {
+  const m = new Map<number, BrokerHoldingRow[]>()
+  for (const h of brokerHoldings.value) {
+    const arr = m.get(h.brokerAccountId) || []
+    arr.push(h)
+    m.set(h.brokerAccountId, arr)
+  }
+  // 排序：市值高的在前
+  for (const [bid, arr] of m.entries()) {
+    arr.sort((a, b) => (b.marketValue || 0) - (a.marketValue || 0))
+    m.set(bid, arr)
+  }
+  return m
+})
+
+function getBrokerCashBalance(platform: Account): number {
+  const children = (platform.children || []) as any[]
+  const assetTypes = new Set(['CASH', 'BANK', 'PAYMENT', 'MMF', 'BROKER'])
+  let total = 0
+  for (const c of children) {
+    if (c?.accountKind !== 'REAL') continue
+    if (!assetTypes.has(String(c?.accountType || ''))) continue
+    const v = Number(c?.balance || 0)
+    if (Number.isFinite(v)) total += v
+  }
+  return total
+}
+
+function getBrokerHoldingsMarketValue(brokerId: number): number {
+  const list = brokerHoldingsByBrokerId.value.get(Number(brokerId)) || []
+  return list.reduce((sum, h) => sum + (Number(h.marketValue) || 0), 0)
+}
 
 // 树状结构展开状态
 const expandedPlatforms = ref<Set<number>>(new Set())
@@ -1229,11 +1387,69 @@ async function loadAccounts() {
     await accountStore.fetchAccounts()
     // 从store中获取数据并更新本地ref
     accountTree.value = accountStore.accountTree || []
+    await loadBrokerHoldingsForAccounts()
     console.log('Accounts loaded:', accountStore.accounts.length, 'accounts')
     console.log('Account tree:', accountTree.value.length, 'platforms')
   } catch (error) {
     console.error('Failed to load accounts:', error)
     accountTree.value = []
+  }
+}
+
+async function loadBrokerHoldingsForAccounts() {
+  try {
+    // holdingApi.getHoldings() 已定义为数组返回
+    // 加时间戳参数，避免任何缓存导致“第二笔交易没刷新”
+    const list: HoldingInfo[] = await holdingApi.getHoldings({ _ts: Date.now() } as any)
+
+    // 账户管理页的券商持仓：只认可场内（EXCHANGE）标的。
+    // 业务口径：OTC（场外）不属于券商持仓，与券商账户无关。
+    const brokerHoldingsOnly = list
+      .filter(h => (h as any).brokerAccountId != null)
+      .filter(h => (h as any).channel === 'EXCHANGE')
+      .filter(h => Number((h as any).totalShares ?? (h as any).shares ?? 0) > 0)
+
+    if (brokerHoldingsOnly.length === 0) {
+      brokerHoldings.value = []
+      return
+    }
+
+    const exchangeIds = brokerHoldingsOnly
+      .map(h => Number(h.productId))
+      .filter(id => Number.isFinite(id) && id > 0)
+
+    const quotes = new Map<number, MarketQuoteRealtime>()
+    if (exchangeIds.length > 0) {
+      try {
+        const q = await marketApi.getRealtimeQuotes(exchangeIds)
+        for (const it of q) quotes.set(it.productId, it)
+      } catch (e) {
+        console.warn('账户管理页：加载实时行情失败，将使用0价格', e)
+      }
+    }
+
+    brokerHoldings.value = brokerHoldingsOnly.map((h: any) => {
+      const brokerAccountId = Number(h.brokerAccountId)
+      const productId = Number(h.productId)
+      const shares = Number(h.totalShares ?? h.shares ?? 0)
+      const q = quotes.get(productId)
+      const currentPrice = Number(q?.price ?? 0)
+      const marketValue = shares * currentPrice
+      return {
+        brokerAccountId,
+        productId,
+        productName: h.productName,
+        channel: h.channel,
+        shares,
+        currentPrice,
+        marketValue,
+      }
+    })
+    brokerHoldingsLoadedAt.value = new Date().toISOString().slice(0, 19).replace('T', ' ')
+  } catch (e) {
+    console.warn('账户管理页：加载券商持仓失败', e)
+    brokerHoldings.value = []
+    brokerHoldingsLoadedAt.value = ''
   }
 }
 
@@ -1368,6 +1584,24 @@ onMounted(async () => {
   await loadAccounts()
   // 加载 MMF 平台的净值
   await loadMmfNavs()
+
+  // 行情/净值会变化：轻量轮询刷新券商标的市值与父账户总资产展示
+  brokerHoldingsTimer = window.setInterval(() => {
+    loadBrokerHoldingsForAccounts()
+  }, 15000)
+
+  // 监听全局刷新事件（主布局的“刷新数据”按钮会派发）
+  window.addEventListener('data-refresh', loadBrokerHoldingsForAccounts)
+})
+
+let brokerHoldingsTimer: number | undefined
+
+onUnmounted(() => {
+  if (brokerHoldingsTimer != null) {
+    window.clearInterval(brokerHoldingsTimer)
+    brokerHoldingsTimer = undefined
+  }
+  window.removeEventListener('data-refresh', loadBrokerHoldingsForAccounts)
 })
 </script>
 

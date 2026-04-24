@@ -3,6 +3,7 @@ package com.timelordtty.dca.controller;
 import com.timelordtty.dca.dto.AuthResponse;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.service.DashboardService;
+import com.timelordtty.dca.service.FamilyService;
 import com.timelordtty.dca.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +20,12 @@ public class DashboardController {
 
     private final DashboardService dashboardService;
     private final UserService userService;
+    private final FamilyService familyService;
 
-    public DashboardController(DashboardService dashboardService, UserService userService) {
+    public DashboardController(DashboardService dashboardService, UserService userService, FamilyService familyService) {
         this.dashboardService = dashboardService;
         this.userService = userService;
+        this.familyService = familyService;
     }
 
     @GetMapping("/pending-settlements")
@@ -41,6 +44,13 @@ public class DashboardController {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         // 统一转换为大写进行比较
         String normalizedViewType = viewType != null ? viewType.toUpperCase() : "PERSONAL";
+        if ("FAMILY".equals(normalizedViewType)) {
+            if (currentUser.getFamilyId() == null) {
+                return ResponseEntity.badRequest().build();
+            }
+            // 只有家庭管理员才能查看家庭总览
+            familyService.assertAdmin(currentUser.getId(), currentUser.getFamilyId());
+        }
         DashboardService.AssetOverview overview = dashboardService.getAssetOverview(
                 currentUser.getId(), currentUser.getFamilyId(), normalizedViewType);
         return ResponseEntity.ok(overview);

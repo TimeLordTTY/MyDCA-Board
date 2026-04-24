@@ -16,6 +16,15 @@
           <div class="sub">买入/卖出来自"订单&结算"。持仓数据基于流水实时计算。</div>
         </div>
         <div style="display: flex; align-items: center; gap: 16px;">
+          <el-select v-model="brokerFilter" size="small" style="width: 200px" clearable placeholder="全部券商">
+            <el-option label="全部券商" value="" />
+            <el-option
+              v-for="b in brokerOptions"
+              :key="String(b.id)"
+              :label="b.name"
+              :value="String(b.id)"
+            />
+          </el-select>
           <el-checkbox v-model="showCleared" size="small">显示已清仓</el-checkbox>
           <el-button type="primary" @click="handleOpenImport">导入初始持仓</el-button>
         </div>
@@ -47,11 +56,17 @@
                 <tr v-else-if="exchangeHoldings.length === 0">
                   <td colspan="5" class="td-muted" style="text-align: center">暂无场内持仓</td>
                 </tr>
-                <tr v-for="holding in exchangeHoldings" :key="holding.productId">
+                <tr
+                  v-for="holding in exchangeHoldings"
+                  :key="`${String((holding as any).brokerAccountId ?? 'NULL')}:${String(holding.productId)}`"
+                >
                   <!-- 名称 + 代码（灰显） -->
                   <td>
                     <div class="holding-name-cell">
                       <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
+                      <div v-if="(holding as any).brokerAccountName" style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                        {{ (holding as any).brokerAccountName }}
+                      </div>
                       <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
                         {{ holding.productCode || '—' }}
                       </div>
@@ -121,10 +136,16 @@
                 <tr v-else-if="otcHoldings.length === 0">
                   <td colspan="5" class="td-muted" style="text-align: center">暂无场外持仓</td>
                 </tr>
-                <tr v-for="holding in otcHoldings" :key="holding.productId">
+                <tr
+                  v-for="holding in otcHoldings"
+                  :key="`${String((holding as any).brokerAccountId ?? 'NULL')}:${String(holding.productId)}`"
+                >
                   <td>
                     <div class="holding-name-cell">
                       <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
+                      <div v-if="(holding as any).brokerAccountName" style="font-size: 12px; color: #64748b; margin-top: 2px;">
+                        {{ (holding as any).brokerAccountName }}
+                      </div>
                       <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
                         {{ holding.productCode || '—' }}
                       </div>
@@ -188,6 +209,7 @@ const detailVisible = ref(false)
 const selectedHolding = ref<any>(null)
 const importDialogVisible = ref(false)
 const showCleared = ref(false) // 是否显示已清仓产品（份额为0）
+const brokerFilter = ref('') // ''=全部；否则 brokerAccountId
 
 // 合并持仓和行情数据
 const holdingsWithQuote = computed(() => {
@@ -225,15 +247,34 @@ const holdingsWithQuote = computed(() => {
   })
 })
 
+const brokerOptions = computed(() => {
+  const m = new Map<number, string>()
+  for (const h of holdings.value) {
+    const id = (h as any).brokerAccountId
+    if (id == null) continue
+    const name = (h as any).brokerAccountName || `券商${id}`
+    m.set(Number(id), String(name))
+  }
+  return Array.from(m.entries())
+    .map(([id, name]) => ({ id, name }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+})
+
+const filteredHoldingsWithQuote = computed(() => {
+  if (!brokerFilter.value) return holdingsWithQuote.value
+  const bid = Number(brokerFilter.value)
+  return holdingsWithQuote.value.filter(h => Number((h as any).brokerAccountId) === bid)
+})
+
 const exchangeHoldings = computed(() =>
-  holdingsWithQuote.value
+  filteredHoldingsWithQuote.value
     .filter(h => h.channel === 'EXCHANGE')
     .filter(h => showCleared.value || (h.sharesCalc && h.sharesCalc > 0)) // 不勾选时过滤已清仓
     .slice()
     .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
 )
 const otcHoldings = computed(() =>
-  holdingsWithQuote.value
+  filteredHoldingsWithQuote.value
     .filter(h => h.channel !== 'EXCHANGE')
     .filter(h => showCleared.value || (h.sharesCalc && h.sharesCalc > 0)) // 不勾选时过滤已清仓
     .slice()

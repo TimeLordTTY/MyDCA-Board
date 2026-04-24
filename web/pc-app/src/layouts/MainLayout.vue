@@ -69,7 +69,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElNotification } from 'element-plus'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
 import QuickEntryModal from '../components/QuickEntryModal.vue'
-import { productApi, apiClient } from '@wealth-hub/shared'
+import { productApi, apiClient, ledgerApi } from '@wealth-hub/shared'
 
 const router = useRouter()
 const route = useRoute()
@@ -78,6 +78,7 @@ const unifiedEntryVisible = ref(false)
 const quickExpenseVisible = ref(false)
 const quickIncomeVisible = ref(false)
 const refreshingMarket = ref(false)
+const refreshingData = ref(false)
 
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', label: '总览' },
@@ -89,9 +90,47 @@ const navItems = [
   { name: 'Settings', path: '/settings', label: '设置' },
 ]
 
-function handleRefresh() {
-  // TODO: 刷新当前页面数据
-  window.location.reload()
+async function handleRefresh() {
+  if (refreshingData.value) return
+  try {
+    refreshingData.value = true
+    // 直接触发后台“历史余额重算”，同时刷新页面数据
+    ElNotification.info({
+      title: '刷新中',
+      message: '已触发历史余额重算（后台执行中），页面数据将刷新',
+      position: 'bottom-right',
+      duration: 2500,
+    })
+
+    ledgerApi.recalculateAllBalanceHistory()
+      .then((res) => {
+        ElNotification.success({
+          title: '刷新完成',
+          message: `${res.message}（耗时 ${res.durationMs}ms）`,
+          position: 'bottom-right',
+          duration: 4000,
+        })
+        window.dispatchEvent(new CustomEvent('data-refresh'))
+      })
+      .catch((error: any) => {
+        ElNotification.error({
+          title: '重算失败',
+          message: error.message || '重算历史余额失败',
+          position: 'bottom-right',
+        })
+      })
+
+    // 先触发一次页面数据刷新（不等待后台重算完成）
+    window.dispatchEvent(new CustomEvent('data-refresh'))
+  } catch (error: any) {
+    ElNotification.error({
+      title: '错误',
+      message: error.message || '刷新失败',
+      position: 'bottom-right',
+    })
+  } finally {
+    refreshingData.value = false
+  }
 }
 
 async function handleRefreshMarketData() {

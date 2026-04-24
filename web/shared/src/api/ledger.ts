@@ -115,4 +115,12 @@ export const ledgerApi = {
     const response = await apiClient.post<LedgerTxn>('/ledger/quick-buy-mmf', data)
     return response.data
   },
+
+  /**
+   * 重算所有账户的历史余额（用于数据迁移/修复后对齐 account_balance_after）
+   */
+  recalculateAllBalanceHistory: async (): Promise<{ message: string; durationMs: number }> => {
+    const response = await apiClient.post<{ message: string; durationMs: number }>('/ledger/recalculate-all-balance-history')
+    return response.data
+  },
 }

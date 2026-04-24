@@ -2,6 +2,7 @@ package com.timelordtty.dca.controller;
 
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.service.AccountService;
+import com.timelordtty.dca.service.FamilyService;
 import com.timelordtty.dca.service.MmfSharesService;
 import com.timelordtty.dca.service.UserService;
 import com.timelordtty.dca.dto.AuthResponse;
@@ -22,17 +23,22 @@ public class AccountController {
     private final AccountService accountService;
     private final MmfSharesService mmfSharesService;
     private final UserService userService;
+    private final FamilyService familyService;
 
-    public AccountController(AccountService accountService, MmfSharesService mmfSharesService, UserService userService) {
+    public AccountController(AccountService accountService, MmfSharesService mmfSharesService, UserService userService, FamilyService familyService) {
         this.accountService = accountService;
         this.mmfSharesService = mmfSharesService;
         this.userService = userService;
+        this.familyService = familyService;
     }
 
     @GetMapping
-    public ResponseEntity<List<Account>> getAccounts() {
+    public ResponseEntity<List<Account>> getAccounts(
+            @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
+            @RequestParam(required = false) Long memberUserId) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
-        List<Account> accounts = accountService.getAccountTree(currentUser.getId(), currentUser.getFamilyId());
+        ScopeOwner owner = resolveScopeOwner(currentUser, scope, memberUserId);
+        List<Account> accounts = accountService.getAccountTree(owner.ownerUserId, owner.ownerFamilyId);
         return ResponseEntity.ok(accounts);
     }
 
@@ -119,6 +125,40 @@ public class AccountController {
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(detail);
+    }
+
+    private static class ScopeOwner {
+        final Long ownerUserId;
+        final Long ownerFamilyId;
+        ScopeOwner(Long ownerUserId, Long ownerFamilyId) {
+            this.ownerUserId = ownerUserId;
+            this.ownerFamilyId = ownerFamilyId;
+        }
+    }
+
+    private ScopeOwner resolveScopeOwner(AuthResponse.UserInfo currentUser, String scope, Long memberUserId) {
+        String normalized = scope != null ? scope.trim().toUpperCase() : "PERSONAL";
+        if ("PERSONAL".equals(normalized)) {
+            return new ScopeOwner(currentUser.getId(), null);
+        }
+        if ("FAMILY_ALL".equals(normalized)) {
+            if (currentUser.getFamilyId() == null) {
+                throw new RuntimeException("无家庭，无法查看家庭范围数据");
+            }
+            familyService.assertAdmin(currentUser.getId(), currentUser.getFamilyId());
+            return new ScopeOwner(null, currentUser.getFamilyId());
+        }
+        if ("MEMBER".equals(normalized)) {
+            if (currentUser.getFamilyId() == null) {
+                throw new RuntimeException("无家庭，无法查看成员范围数据");
+            }
+            familyService.assertAdmin(currentUser.getId(), currentUser.getFamilyId());
+            if (memberUserId == null) {
+                throw new RuntimeException("memberUserId 不能为空");
+            }
+            return new ScopeOwner(memberUserId, null);
+        }
+        throw new RuntimeException("不支持的 scope: " + scope);
     }
 }
 

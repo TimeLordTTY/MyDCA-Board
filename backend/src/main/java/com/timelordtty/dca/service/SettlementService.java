@@ -74,13 +74,12 @@ public class SettlementService {
     private final AccountService accountService;
     private final ProductMasterMapper productMasterMapper;
     private final BrokerFeeService brokerFeeService;
-    private final HoldingService holdingService;
 
     public SettlementService(OrderMapper orderMapper, SettlementConfirmMapper settlementConfirmMapper,
                             AccountMapper accountMapper, LedgerService ledgerService,
                             OrderFundingLineMapper orderFundingLineMapper, UserService userService,
                             @Lazy AccountService accountService, ProductMasterMapper productMasterMapper,
-                            BrokerFeeService brokerFeeService, HoldingService holdingService) {
+                            BrokerFeeService brokerFeeService) {
         this.orderMapper = orderMapper;
         this.settlementConfirmMapper = settlementConfirmMapper;
         this.accountMapper = accountMapper;
@@ -90,7 +89,6 @@ public class SettlementService {
         this.accountService = accountService;
         this.productMasterMapper = productMasterMapper;
         this.brokerFeeService = brokerFeeService;
-        this.holdingService = holdingService;
     }
 
     /**
@@ -269,8 +267,17 @@ public class SettlementService {
             // 2. DEBIT 端：根据产品类型决定入账方式
             if (!hasLinkedAccount) {
                 // 非关联产品：POSITION DEBIT（持仓增加）
-                Account positionAccount = accountService.getOrCreatePositionAccount(
-                    order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
+                // 优先按资金来源推断券商账户，将 POSITION 记到“券商维度持仓账户”，实现同标的跨券商隔离成本
+                List<Long> fundingAccountIds = fundingLines.stream()
+                    .map(OrderFundingLine::getAccountId)
+                    .collect(java.util.stream.Collectors.toList());
+                Long brokerAccountId = brokerFeeService.findBrokerAccountId(fundingAccountIds);
+
+                Account positionAccount = brokerAccountId != null
+                    ? accountService.getOrCreateBrokerPositionAccount(
+                        brokerAccountId, order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId)
+                    : accountService.getOrCreatePositionAccount(
+                        order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
 
                 LedgerPosting positionPosting = new LedgerPosting();
                 positionPosting.setPostingType("DEBIT");
@@ -282,6 +289,9 @@ public class SettlementService {
                 postings.add(positionPosting);
             } else {
                 // 有关联账户的产品：更新 initial_shares（增加购买的份额）
+                if (linkedAccount == null) {
+                    throw new RuntimeException("关联账户为空，无法更新初始份额");
+                }
                 BigDecimal currentShares = linkedAccount.getInitialShares();
                 if (currentShares == null) {
                     currentShares = BigDecimal.ZERO;
@@ -353,8 +363,17 @@ public class SettlementService {
             // 获取持仓账户（非关联账户产品才需要）
             Account positionAccount = null;
             if (!hasLinkedAccount) {
-                positionAccount = accountService.getOrCreatePositionAccount(
-                    order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
+                // 优先按资金来源推断券商账户，将 POSITION 记到“券商维度持仓账户”，实现同标的跨券商隔离成本
+                List<Long> fundingAccountIds = fundingLines.stream()
+                    .map(OrderFundingLine::getAccountId)
+                    .collect(java.util.stream.Collectors.toList());
+                Long brokerAccountId = brokerFeeService.findBrokerAccountId(fundingAccountIds);
+
+                positionAccount = brokerAccountId != null
+                    ? accountService.getOrCreateBrokerPositionAccount(
+                        brokerAccountId, order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId)
+                    : accountService.getOrCreatePositionAccount(
+                        order.getProductId(), product.getProductName(), ownerType, ownerUserId, ownerFamilyId);
             }
 
             // 注意：使用"摊薄成本法"（同花顺方式）
@@ -384,7 +403,7 @@ public class SettlementService {
 
             // 判断出金账户是否是关联账户的子账户
             boolean sourceIsLinkedChild = false;
-            if (hasLinkedAccount && !sourceLines.isEmpty()) {
+            if (linkedAccount != null && !sourceLines.isEmpty()) {
                 for (OrderFundingLine sourceLine : sourceLines) {
                     Account sourceAccount = accountMapper.selectById(sourceLine.getAccountId());
                     if (sourceAccount != null && sourceAccount.getParentAccountId() != null 
@@ -655,6 +674,9 @@ public class SettlementService {
                 
                 // 3. 更新关联账户的 initial_shares（减少赎回的份额）
                 // 这确保持仓计算正确反映赎回后的份额
+                if (linkedAccount == null) {
+                    throw new RuntimeException("关联账户为空，无法更新初始份额");
+                }
                 BigDecimal currentShares = linkedAccount.getInitialShares();
                 if (currentShares != null) {
                     BigDecimal newShares = currentShares.subtract(totalShares);

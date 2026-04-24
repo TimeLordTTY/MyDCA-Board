@@ -4,6 +4,8 @@
  */
 
 export interface HoldingInfo {
+  brokerAccountId?: number | null
+  brokerAccountName?: string | null
   productId: number
   productCode?: string
   productName?: string

@@ -13,7 +13,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 快照服务：生成持仓快照与净资产快照
@@ -61,9 +60,9 @@ public class SnapshotService {
      * 生成持仓快照（个人视图）
      */
     public void generateHoldingsSnapshot(Long userId, LocalDate snapshotDate) {
-        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(userId, null);
+        List<HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(userId, null);
         int count = 0;
-        for (HoldingService.HoldingInfo h : holdings.values()) {
+        for (HoldingService.HoldingInfo h : holdings) {
             if (h == null || h.getProductId() == null) {
                 continue;
             }
@@ -108,8 +107,8 @@ public class SnapshotService {
     public void generateNetWorthSnapshot(Long userId, LocalDate snapshotDate) {
         DashboardService.AssetOverview overview = dashboardService.getAssetOverview(userId, null, "PERSONAL");
 
-        Map<Long, HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(userId, null);
-        BigDecimal unrealizedPnl = holdings.values().stream()
+        List<HoldingService.HoldingInfo> holdings = holdingService.calculateHoldings(userId, null);
+        BigDecimal unrealizedPnl = holdings.stream()
                 .map(h -> h != null ? nz(h.getUnrealizedPnl()) : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
