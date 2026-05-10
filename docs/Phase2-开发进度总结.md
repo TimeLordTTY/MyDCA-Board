@@ -1,6 +1,8 @@
 # Phase 2 开发进度总结（前端开发与行情增强）
 
-**阶段状态**：⚠️ 当前仍处于 Phase 2（2.1 已完成，2.2-2.4 已基本落地，仍有少量增强项未完成）
+**阶段状态**：✅ Phase 2 高优先级闭环已完成（2.1 双端前端、2.2 行情、2.3 指标、2.4 定时任务均已落地）；剩余项归入 Phase 3+/可选增强
+
+**当前代码核对时间**：2026-05-10
 
 ## 已完成工作
 
@@ -38,15 +40,16 @@
 
 #### 2.3 API Client ✅
 - ✅ **认证API** (`auth.ts`): register, login, logout
-- ✅ **用户API** (`user.ts`): getCurrentUser
-- ✅ **家庭API** (`family.ts`): getFamilies, createFamily, addMember
-- ✅ **产品API** (`product.ts`): getProducts, getProduct, createProduct, updateProduct
-- ✅ **账户API** (`account.ts`): getAccounts, getAccount, createAccount, updateAccount, adjustBalance
-- ✅ **流水API** (`ledger.ts`): getTransactions, getTransactionDetail, createTransaction, quickEntry, refund, reimburse
-- ✅ **订单API** (`order.ts`): getOrders, getOrder, createOrder, cancelOrder
+- ✅ **用户API** (`user.ts`): getCurrentUser, updateProfile, changePassword
+- ✅ **家庭API** (`family.ts`): getFamily, createFamily, getMembers, addMember, removeMember, updateMemberRole
+- ✅ **产品API** (`product.ts`): getProducts, getProduct, createProduct, updateProduct, updateProductSortOrder, refreshMarketData, refreshAllMarketData, get/saveSellFeeTiers
+- ✅ **账户API** (`account.ts`): getAccounts, getAccount, createAccount, updateAccount, adjustBalance, getMmfSharesDetail
+- ✅ **券商费率API** (`brokerFee.ts`): get/create/update/deleteFeeConfig
+- ✅ **流水API** (`ledger.ts`): getTransactions, getTransactionDetail, createTransaction, update/deleteTransaction, quickEntry, quickBuyMoneyMarketFund, refund, reimburse, createCustodyTransfer, recalculateAllBalanceHistory
+- ✅ **订单API** (`order.ts`): getOrders, getOrder, createOrder, cancelOrder, confirmSettlement, calculateFee
 - ✅ **结算API** (`settlement.ts`): getPendingSettlements, confirmSettlement
-- ✅ **持仓API** (`holding.ts`): getHoldings, getHoldingDetail
-- ✅ **看板API** (`dashboard.ts`): 已封装 getAssetOverview、getPendingSettlements、getTodayActions，并预留 getAssetAllocation、getPerformance
+- ✅ **持仓API** (`holding.ts`): getHoldings, importInitialHoldings, getProductHoldingsByAccount；getHoldingDetail 为前端预留包装，后端暂未实现 `/api/v2/holdings/{productId}`
+- ✅ **看板API** (`dashboard.ts`): 已对接 getAssetOverview、getPendingSettlements、getTodayActions；getAssetAllocation、getPerformance 仅为前端预留包装，后端尚未实现对应接口
 - ✅ 统一请求拦截（添加JWT token）
 - ✅ 统一错误处理（401跳转登录，显示错误提示）
 
@@ -197,12 +200,13 @@
 - ✅ 所有金额格式化显示
 
 #### 3.11 设置页面 ✅
-- ✅ 基础页面结构
-- ⚠️ 当前仅完成占位页，用户管理/密码修改/家庭成员管理仍未实现
+- ✅ 个人信息编辑（昵称、邮箱、手机号）
+- ✅ 修改密码
+- ✅ 家庭成员管理（添加、移除、角色更新）
 
 ### 4. Mobile端页面开发（web/mobile-app）✅
 
-**状态**：✅ 核心 Tab 已完成，设置内子功能页仍以占位页为主
+**状态**：✅ 核心 Tab 已完成，设置内账户/产品/流水/订单子功能页已实现轻量只读版本
 
 #### 4.1 项目基础结构 ✅
 - ✅ 创建了 `web/mobile-app` 项目（Vue 3 + Vant 4）
@@ -313,7 +317,7 @@
 
 ## Phase 2.2-2.4 开发进度（行情与指标模块）
 
-**当前状态**：⚠️ Phase 2.2-2.4 已基本落地，仍有少量增强项未完成
+**当前状态**：✅ Phase 2.2-2.4 高优先级能力已落地；剩余为增强项（债券行情、BOLL/KDJ 等）
 
 **完成时间**：2024年1月
 
@@ -395,9 +399,10 @@ scripts/indicator/
   - ✅ 指标数据更新任务
 - ✅ **Java定时任务**：
   - ✅ MarketDataScheduler：行情数据同步（场内实时行情、场外净值、场内日K线）
-  - ⚠️ IndicatorCalculationTask：指标计算（待实现，当前通过Python调度器执行）
-  - ⚠️ RealtimeQuoteCleanupTask：实时行情清理（待实现）
-  - ⚠️ SnapshotGenerationTask：快照生成（待实现）
+  - ✅ IndicatorCalculationTask：每日 20:30 调用 Python `calculator.py` 计算指标
+  - ✅ RealtimeQuoteCleanupTask：每日 02:00 清理 30 天前实时行情
+  - ✅ SnapshotGenerationTask：每日 21:00 生成持仓快照和净资产快照
+  - ✅ MmfInterestCalculationTask：每日 20:00 计算 MMF 日收益
 
 **文件结构**：
 ```
@@ -411,7 +416,10 @@ scripts/scheduler/
 - 基金净值采集：每天 18:00
 - ETF实时行情：交易时间内每5分钟（9:30-15:00）
 - ETF日K线：每天 15:30（收盘后）
-- 指标计算：每天 16:00（数据采集完成后）
+- 指标计算：Python APScheduler 配置为每天 16:00；Java `IndicatorCalculationTask` 每天 20:30 兜底/统一触发
+- MMF 日收益：Java 每天 20:00
+- 快照生成：Java 每天 21:00
+- 实时行情清理：Java 每天 02:00
 
 ### 待完成工作
 

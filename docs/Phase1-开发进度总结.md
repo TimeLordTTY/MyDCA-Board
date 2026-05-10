@@ -2,6 +2,8 @@
 
 **阶段状态**：✅ Phase 1 后端开发已完成
 
+**当前代码核对时间**：2026-05-10。本文已按当前仓库实现补齐 Phase 2 以来新增的后端能力（行情/指标/快照/MMF/费率配置）和前端落地状态。
+
 ## 已完成工作
 
 ### 1. 编译错误修复 ✅
@@ -66,14 +68,15 @@
   - [x] 持仓计算（总份额、总成本、平均成本）
   - [x] 通过ledger_txn获取productId
   - [x] 持仓市值和未实现盈亏（已结合净值/行情数据计算）
-  - [ ] 持仓快照生成（Phase 2实现）
+  - [x] 持仓快照生成（SnapshotService + SnapshotGenerationTask，已实现）
 
 #### Phase 1.6: 看板聚合模块 ✅
 - [x] DashboardService（**已完成**）
   - [x] 资产概览计算（包含现金余额和持仓市值）
   - [x] 待结算清单（已实现）
-  - [ ] 资产配置统计（Phase 2实现）
-  - [ ] 今日盈亏计算（需要外部行情数据，Phase 2实现）
+  - [x] 资产配比图表（PC 前端基于账户、持仓、行情/净值本地计算）
+  - [ ] 后端资产配置接口 `/api/v2/dashboard/asset-allocation`（待实现）
+  - [ ] 后端今日盈亏字段（前端已有基于行情的持仓浮盈亏展示，`DashboardService` 暂未计算 todayPnl）
 
 ## 需要完善的内容
 
@@ -103,7 +106,7 @@
   - [x] 加上持仓市值（调用HoldingService）
   - [x] 计算总资产 = 现金余额 + 持仓市值
   - [x] 计算净资产 = 总资产 - 总负债
-  - [ ] 计算今日盈亏（需要结合行情数据，Phase 2实现）
+  - [ ] 后端计算今日盈亏（前端已基于行情/净值展示持仓浮盈亏，`DashboardService` 暂未回填 todayPnl）
   - [ ] 添加日志记录（资产总额、负债总额、净资产等）（中优先级）
 
 - [x] **QuickEntryService**：完善快速录入逻辑
@@ -211,60 +214,90 @@ mvn clean compile
   - [x] 从ledger_posting查询持仓的逻辑
   - [x] 持仓计算（总份额、总成本、平均成本）
   - [x] 通过ledger_txn获取productId
+  - [x] 按券商账户隔离（per-broker isolation）
+  - [x] 初始持仓导入（importInitialHoldings）
 - [x] 持仓查询API（HoldingController）
 - [x] 持仓市值和未实现盈亏（已结合净值/行情数据实现）
-- [ ] 持仓快照生成（Phase 2实现）
+- [x] **持仓快照生成（SnapshotService + SnapshotGenerationTask，已实现）**
+- [x] **净资产快照生成（NetWorthSnapshot，已实现）**
 
 #### ✅ Phase 1.6: 看板聚合模块
 - [x] DashboardService（已完成）
   - [x] 资产概览计算（包含现金余额和持仓市值）
   - [x] 待结算清单（已实现）
-- [x] 看板API（DashboardController）
-- [ ] 资产配置统计（Phase 2实现）
-- [ ] 今日盈亏计算（需要外部行情数据，Phase 2实现）
+  - [x] 今日建议清单（已实现）
+- [x] 看板API（DashboardController）- 3个端点
+  - [x] GET `/api/v2/dashboard/asset-overview`
+  - [x] GET `/api/v2/dashboard/pending-settlements`
+  - [x] GET `/api/v2/dashboard/today-actions`
+- [ ] 后端资产配置接口（待实现；PC 看板当前由前端本地计算资产配比图）
+- [ ] 收益统计（含XIRR，待实现）
 
 ---
 
 ### 后端代码统计
 
-#### 实体类（Model）- 10个
+#### 实体类（Model）- 18个
 - User.java
 - Family.java
 - UserFamilyRole.java
 - ProductMaster.java
 - Account.java
+- BrokerFeeConfig.java
+- FundSellFeeTier.java
 - LedgerTxn.java
 - LedgerPosting.java
 - Order.java
 - OrderFundingLine.java
 - SettlementConfirm.java
+- Nav.java
+- MarketBarDaily.java
+- MarketQuoteRealtime.java
+- IndicatorDaily.java
+- HoldingsSnapshot.java
+- NetWorthSnapshot.java
 
-#### Mapper接口 - 10个
+#### Mapper接口 - 18个
 - UserMapper.java
 - FamilyMapper.java
 - UserFamilyRoleMapper.java
 - ProductMasterMapper.java
 - AccountMapper.java
+- BrokerFeeConfigMapper.java
+- FundSellFeeTierMapper.java
 - LedgerTxnMapper.java
 - LedgerPostingMapper.java
 - OrderMapper.java
 - OrderFundingLineMapper.java
 - SettlementConfirmMapper.java
+- NavMapper.java
+- MarketBarDailyMapper.java
+- MarketQuoteRealtimeMapper.java
+- IndicatorDailyMapper.java
+- HoldingsSnapshotMapper.java
+- NetWorthSnapshotMapper.java
 
-#### Service服务 - 11个
+#### Service服务 - 18个
 - AuthService.java
 - UserService.java
 - FamilyService.java
 - ProductService.java
 - AccountService.java
+- BrokerFeeService.java
 - LedgerService.java
 - QuickEntryService.java
 - OrderService.java
 - SettlementService.java
 - HoldingService.java
+- SnapshotService.java
 - DashboardService.java
+- MarketService.java
+- NavService.java
+- IndicatorService.java
+- MmfSharesService.java
+- PythonScriptService.java
 
-#### Controller控制器 - 10个
+#### Controller控制器 - 15个
 - AuthController.java
 - UserController.java
 - FamilyController.java
@@ -275,22 +308,35 @@ mvn clean compile
 - SettlementController.java
 - HoldingController.java
 - DashboardController.java
+- MarketController.java
+- NavController.java
+- IndicatorController.java
+- BrokerFeeConfigController.java
+- FundSellFeeTierController.java
 
 ---
 
 ### 核心功能支持
 
 - ✅ JWT认证与授权
-- ✅ 用户注册/登录
-- ✅ 家庭管理
-- ✅ 产品管理（CRUD）
-- ✅ 账户管理（CRUD、父子账户、fund_usage校验）
+- ✅ 用户注册/登录、个人资料编辑、密码修改
+- ✅ 家庭管理（创建、成员CRUD、角色管理）
+- ✅ 产品管理（CRUD、筛选、刷新行情、排序）
+- ✅ 账户管理（CRUD、父子账户、fund_usage校验、余额调整）
+- ✅ 券商手续费配置管理
+- ✅ 基金赎回费率阶梯管理
 - ✅ 统一记账（双分录、借贷平衡、支持所有业务类型）
 - ✅ 组合支付（多账户共同支付）
 - ✅ 交易关联（退款/报销关联原交易）
+- ✅ 转托管（持仓从A账户迁到B账户）
 - ✅ 订单管理（创建、取消、支持组合支付）
+- ✅ 券商手续费阶梯计算
 - ✅ 结算确认（支持组合支付、生成真实分录）
-- ✅ 持仓计算（实时计算，基于流水）
+- ✅ 持仓计算（实时计算，基于流水，按券商隔离）
+- ✅ 持仓快照/净资产快照生成（每日定时+手动触发）
+- ✅ 行情数据查询（日K、实时行情、净值）
+- ✅ 技术指标查询（MA、分位、历史指标）
+- ✅ MMF货币基金份额管理
 - ✅ 看板聚合（资产概览、待结算清单）
 
 ---
@@ -307,21 +353,25 @@ mvn clean compile
 
 ## Phase 2 状态
 
-**当前状态**：⚠️ 当前仍处于 Phase 2（2.1 已完成，2.2-2.4 已基本落地，仍有少量增强项待补齐）
+**当前状态**：✅ Phase 2 高优先级闭环已完成；剩余项目已调整为 Phase 3+/可选增强（债券行情、BOLL/KDJ、复盘导出、策略建议等）
 
 ### Phase 2.1：前端开发 ✅
 - ✅ 共享层开发（API Client、Types、Utils、Stores）
 - ✅ PC端所有页面开发（与Phase 1后端API对接）
 - ✅ Mobile端核心页面开发（看板、快速录入、待结算、持仓、设置）
-- ⚠️ Mobile端设置内的账户/产品/流水/订单子页面当前仍为占位页
+- ✅ Mobile端设置内的账户/产品/流水/订单子页面已实现轻量只读版本
 
 **详细进度**：详见 `Phase2-开发进度总结.md`
 
-### Phase 2.2-2.4：行情与指标（已基本落地）
+### Phase 2.2-2.4：行情与指标（已全部落地）
 - ✅ Python行情服务（基金净值、ETF实时行情、ETF日K、历史回补）
-- ✅ 指标查询与持仓详情图表（MA20、MA60、分位展示）
+- ✅ Python指标计算（MA/MACD/RSI，已整合分位/回撤）
 - ✅ 定时任务（Python APScheduler + Java `MarketDataScheduler`）
-- ⚠️ 未完成项：债券行情采集、Java侧指标计算任务/实时行情清理/快照生成
+- ✅ **Java RealtimeQuoteCleanupTask**（每日02:00清理30天前实时行情）
+- ✅ **Java IndicatorCalculationTask**（每日20:30调用Python计算指标）
+- ✅ **Java SnapshotGenerationTask**（每日21:00生成持仓+净资产快照）
+- ✅ **Java MmfInterestCalculationTask**（每日20:00计算MMF收益）
+- ⚠️ 未完成项：债券行情采集、BOLL/KDJ扩展指标
 
 ---
 
