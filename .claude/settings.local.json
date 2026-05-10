@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebSearch",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/anthropics/skills/main/skills/frontend-design/SKILL.md\")",
+      "Bash(mkdir -p \"$HOME/.claude/skills/frontend-design\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/anthropics/skills/main/skills/find-skill/SKILL.md\")",
+      "Bash(npx skills *)",
+      "Bash(npm install *)",
+      "Bash(where opdev *)",
+      "Bash(opdev --version)",
+      "Bash(where opencli *)",
+      "Bash(opencli --version)",
+      "Bash(bash scripts/auto-build.sh)",
+      "Bash(chmod *)"
+    ],
+    "additionalDirectories": [
+      "D:\\Project\\MyDCA-Board\\MyDCA-Board\\__TRACKED_VAR__\\.claude\\skills"
+    ]
+  }
+}
