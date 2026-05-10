@@ -202,20 +202,14 @@ public class HoldingService {
                 // 将账户的 initial_shares 加入持仓
                 holding.setTotalShares(holding.getTotalShares().add(account.getInitialShares()));
                 
-                // 成本计算逻辑：
-                // 1. 优先使用 initialBalance（如果有且大于0）
-                // 2. 否则使用子账户的 balance 总和作为成本
+                // 关联账户产品（如稳利宝）当前金额应按持仓份额 * 最新净值计算。
+                // 子账户 balance 是资金信封/分配口径，不能作为该产品总持仓成本或市值口径。
                 BigDecimal cost = BigDecimal.ZERO;
-                if (account.getInitialBalance() != null && account.getInitialBalance().compareTo(BigDecimal.ZERO) > 0) {
-                    cost = account.getInitialBalance();
-                } else {
-                    // 计算子账户的 balance 总和作为成本
-                    List<Account> children = accountMapper.selectChildren(account.getId());
-                    for (Account child : children) {
-                        if (child.getBalance() != null) {
-                            cost = cost.add(child.getBalance());
-                        }
-                    }
+                Nav latestNav = navMapper.selectLatest(productId);
+                if (latestNav != null && latestNav.getNav() != null) {
+                    cost = account.getInitialShares().multiply(latestNav.getNav()).setScale(2, RoundingMode.HALF_UP);
+                } else if (account.getBalance() != null && account.getBalance().compareTo(BigDecimal.ZERO) > 0) {
+                    cost = account.getBalance();
                 }
                 holding.setTotalCost(holding.getTotalCost().add(cost));
                 
@@ -680,11 +674,7 @@ public class HoldingService {
                     continue;
                 }
                 
-                // 计算所有子账户金额总和（用于按比例分配）
-                BigDecimal totalBalance = children.stream()
-                    .filter(c -> c.getBalance() != null && c.getBalance().compareTo(BigDecimal.ZERO) > 0)
-                    .map(Account::getBalance)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+                BigDecimal totalMarketValue = totalShares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP);
                 
                 if (children.isEmpty()) {
                     // 没有子账户，整个账户就是持仓
@@ -695,19 +685,36 @@ public class HoldingService {
                     info.setMarketValue(totalShares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
                     result.add(info);
                 } else {
-                    // 有子账户，根据子账户金额分配份额
+                    BigDecimal allocatedAmount = BigDecimal.ZERO;
                     for (Account child : children) {
-                        BigDecimal childBalance = child.getBalance();
-                        if (childBalance == null || childBalance.compareTo(BigDecimal.ZERO) <= 0) {
-                            continue; // 跳过余额为0的子账户
+                        if (isUnallocatedAccount(child)) {
+                            continue;
                         }
-                        
-                        // 子账户份额 = 子账户金额 / 总金额 × 总份额
+                        if (Boolean.TRUE.equals(child.getIsFixedAmount()) && child.getFixedAmount() != null) {
+                            allocatedAmount = allocatedAmount.add(child.getFixedAmount());
+                        } else if (child.getBalance() != null && child.getBalance().compareTo(BigDecimal.ZERO) > 0) {
+                            allocatedAmount = allocatedAmount.add(child.getBalance());
+                        }
+                    }
+
+                    // 有子账户，根据子账户金额分配份额；待分配账户使用“总市值 - 已分配金额”
+                    for (Account child : children) {
+                        BigDecimal childAmount = BigDecimal.ZERO;
+                        if (isUnallocatedAccount(child)) {
+                            childAmount = totalMarketValue.subtract(allocatedAmount).max(BigDecimal.ZERO);
+                        } else if (Boolean.TRUE.equals(child.getIsFixedAmount()) && child.getFixedAmount() != null) {
+                            childAmount = child.getFixedAmount();
+                        } else if (child.getBalance() != null && child.getBalance().compareTo(BigDecimal.ZERO) > 0) {
+                            childAmount = child.getBalance();
+                        }
+
+                        if (childAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                            continue;
+                        }
+
                         BigDecimal childShares;
-                        if (totalBalance.compareTo(BigDecimal.ZERO) > 0) {
-                            childShares = childBalance
-                                .divide(totalBalance, 10, RoundingMode.HALF_UP)
-                                .multiply(totalShares);
+                        if (latestNav.compareTo(BigDecimal.ZERO) > 0) {
+                            childShares = childAmount.divide(latestNav, 10, RoundingMode.HALF_UP);
                         } else {
                             childShares = BigDecimal.ZERO;
                         }
@@ -721,7 +728,7 @@ public class HoldingService {
                         info.setAccountName(child.getAccountName());
                         info.setParentAccountName(linkedAccount.getAccountName());
                         info.setShares(childShares.setScale(4, RoundingMode.HALF_UP));
-                        info.setMarketValue(childShares.multiply(latestNav).setScale(2, RoundingMode.HALF_UP));
+                        info.setMarketValue(childAmount.setScale(2, RoundingMode.HALF_UP));
                         result.add(info);
                     }
                 }
@@ -813,6 +820,12 @@ public class HoldingService {
         }
         
         return result;
+    }
+
+    private boolean isUnallocatedAccount(Account account) {
+        String name = account != null && account.getAccountName() != null ? account.getAccountName() : "";
+        String code = account != null && account.getAccountCode() != null ? account.getAccountCode() : "";
+        return name.contains("待分配") || code.contains("待分配");
     }
 }
 

@@ -428,20 +428,31 @@ public class AccountService {
                     .filter(c -> "REAL".equals(c.getAccountKind()))
                     .collect(java.util.stream.Collectors.toList());
             
-            // 计算子账户余额总和（排除信贷账户）
-            // 信贷账户（CREDIT_CARD/HUABEI/BAITIAO/LOAN）不计入余额，因为它们的余额是欠款，不是资产
-            BigDecimal totalBalance = children.stream()
-                    .filter(child -> {
-                        String accountType = child.getAccountType();
-                        return accountType != null && 
-                               !"CREDIT_CARD".equals(accountType) && 
-                               !"HUABEI".equals(accountType) && 
-                               !"BAITIAO".equals(accountType) && 
-                               !"LOAN".equals(accountType);
-                    })
-                    .map(Account::getBalance)
-                    .filter(b -> b != null)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totalBalance;
+            if (parentAccount.getLinkedProductId() != null
+                    && parentAccount.getInitialShares() != null
+                    && parentAccount.getInitialShares().compareTo(BigDecimal.ZERO) > 0) {
+                Nav latestNav = navService.getLatestNav(parentAccount.getLinkedProductId());
+                BigDecimal nav = latestNav != null && latestNav.getNav() != null
+                        ? latestNav.getNav()
+                        : BigDecimal.ONE;
+                totalBalance = parentAccount.getInitialShares().multiply(nav).setScale(2, RoundingMode.HALF_UP);
+            } else {
+                // 计算子账户余额总和（排除信贷账户）
+                // 信贷账户（CREDIT_CARD/HUABEI/BAITIAO/LOAN）不计入余额，因为它们的余额是欠款，不是资产
+                totalBalance = children.stream()
+                        .filter(child -> {
+                            String accountType = child.getAccountType();
+                            return accountType != null &&
+                                   !"CREDIT_CARD".equals(accountType) &&
+                                   !"HUABEI".equals(accountType) &&
+                                   !"BAITIAO".equals(accountType) &&
+                                   !"LOAN".equals(accountType);
+                        })
+                        .map(Account::getBalance)
+                        .filter(b -> b != null)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+            }
             parentAccount.setBalance(totalBalance);
             
             // 计算子账户占用总和
@@ -883,14 +894,14 @@ public class AccountService {
     }
 
     /**
-     * 按净值更新关联产品的账户子账户余额
-     * 
-     * 对于关联了产品的账户（linked_product_id不为空），根据最新净值更新子账户余额
-     * 余额计算公式：子账户余额 = 子账户份额 × 最新净值
-     * 子账户份额 = 父账户initial_shares × (子账户当前余额 / 子账户总余额)
-     * 
+     * 按净值更新无子账户的关联产品账户余额。
+     *
+     * 有子账户的平台账户（如稳利宝）不能在这里重写子账户 balance：
+     * 子账户 balance 是 ledger_posting 推导出的记账余额/资金信封余额，而不是净值市值。
+     * 如果按最新净值把子账户 balance 改写成市值，会破坏流水对账结果。
+     *
      * 执行时机：每日净值更新后（如18:00后）
-     * 
+     *
      * @return 更新的账户数量
      */
     @Transactional
@@ -924,40 +935,9 @@ public class AccountService {
                 accountMapper.updateBalance(linkedAccount.getId(), newBalance);
                 updateCount++;
             } else {
-                // 计算子账户总余额（用于按比例分配份额）
-                BigDecimal totalBalance = children.stream()
-                    .filter(c -> c.getBalance() != null && c.getBalance().compareTo(BigDecimal.ZERO) > 0)
-                    .map(Account::getBalance)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-                
-                if (totalBalance.compareTo(BigDecimal.ZERO) > 0) {
-                    // 按比例分配份额并更新余额
-                    for (Account child : children) {
-                        BigDecimal childBalance = child.getBalance();
-                        if (childBalance == null || childBalance.compareTo(BigDecimal.ZERO) <= 0) {
-                            continue;
-                        }
-                        
-                        // 子账户份额 = 子账户金额 / 总金额 × 总份额
-                        BigDecimal childShares = childBalance
-                            .divide(totalBalance, 10, RoundingMode.HALF_UP)
-                            .multiply(totalShares);
-                        
-                        // 新余额 = 子账户份额 × 最新净值
-                        BigDecimal newBalance = childShares.multiply(nav).setScale(2, RoundingMode.HALF_UP);
-                        accountMapper.updateBalance(child.getId(), newBalance);
-                        updateCount++;
-                    }
-                } else {
-                    // 如果所有子账户余额都为0，按份额平均分配
-                    BigDecimal sharesPerChild = totalShares.divide(
-                        new BigDecimal(children.size()), 6, RoundingMode.HALF_UP);
-                    for (Account child : children) {
-                        BigDecimal newBalance = sharesPerChild.multiply(nav).setScale(2, RoundingMode.HALF_UP);
-                        accountMapper.updateBalance(child.getId(), newBalance);
-                        updateCount++;
-                    }
-                }
+                // 有子账户的平台账户只通过 initial_shares + NAV 计算展示市值；
+                // 不落库改写子账户余额，避免把流水余额污染成净值市值。
+                continue;
             }
         }
         

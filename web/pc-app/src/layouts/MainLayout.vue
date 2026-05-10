@@ -94,7 +94,8 @@ async function handleRefresh() {
   if (refreshingData.value) return
   try {
     refreshingData.value = true
-    // 直接触发后台“历史余额重算”，同时刷新页面数据
+    // 触发后台历史余额重算，同时刷新页面数据。
+    // 如果源流水数据正确，重算应当是幂等的，重复执行也不会改变正确结果。
     ElNotification.info({
       title: '刷新中',
       message: '已触发历史余额重算（后台执行中），页面数据将刷新',

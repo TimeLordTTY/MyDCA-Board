@@ -235,29 +235,29 @@ public class LedgerService {
 
         return txn;
     }
-    
+
     /**
      * 判断是否需要重算历史余额
-     * 
+     *
      * 优化策略：只有当新交易的时间早于相关账户（含兄弟账户）的最新交易时间时，才需要重算。
-     * 
+     *
      * 关键点：父账户余额 = 所有子账户余额之和，因此在计算父账户历史余额时，
      * 需要考虑兄弟账户的历史变化。如果兄弟账户在新交易时间之后有更多posting，
      * 则 insertPostingsWithBalance 用的"当前DB余额"计算的父余额是错误的，
      * 必须触发 recalculateAccountBalanceHistoryForAccounts 来用历史running balance重算。
-     * 
+     *
      * @param accountIds 涉及的账户ID集合
      * @param newTxnTime 新交易的时间
-     * @return true 如果需要重算历史余额
+     * @return true 如果需要重算
      */
     private boolean needsHistoryRecalculation(Set<Long> accountIds, LocalDateTime newTxnTime) {
         if (accountIds == null || accountIds.isEmpty() || newTxnTime == null) {
             return false;
         }
-        
-        // 扩展检查范围：包含所有兄弟账户
-        // 因为父账户余额依赖于所有子账户的历史状态，
-        // 如果任何兄弟账户在新交易时间之后有posting，父余额就需要用历史值重算
+
+        // 扩展检查范围：包含所有兄弟账户。
+        // 父账户余额依赖所有子账户的历史状态，任何兄弟账户在新交易之后还有分录，
+        // 父余额都必须用历史 running balance 重新计算。
         Set<Long> allRelatedIds = new HashSet<>(accountIds);
         for (Long accountId : accountIds) {
             Account account = accountMapper.selectById(accountId);
@@ -268,20 +268,17 @@ public class LedgerService {
                 }
             }
         }
-        
-        // 查询所有相关账户（含兄弟）的最新交易时间
+
         LocalDateTime latestTxnTime = ledgerPostingMapper.selectLatestTxnTimeByAccountIds(
             new ArrayList<>(allRelatedIds));
-        
-        // 如果没有历史交易，不需要重算
+
         if (latestTxnTime == null) {
             return false;
         }
-        
-        // 如果新交易时间早于最新交易时间，说明是插入到历史中间，需要重算
+
         return newTxnTime.isBefore(latestTxnTime);
     }
-
+    
     /**
      * 更新账户余额（根据账户类型和借贷方向自动计算）
      * 
@@ -629,34 +626,22 @@ public class LedgerService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
                 posting.setParentAccountBalanceAfter(parentBalance);
                 
-                // 如果父账户关联了产品，需要同步更新父账户的余额和份额
+                // 如果父账户关联了产品，只同步父账户余额，不在这里改 initial_shares。
+                // initial_shares 是产品持仓总份额，只能由申购/赎回结算等真实产品交易维护；
+                // 子账户内部转移只是资金信封分配变化，不能把金额当作份额写回父账户。
                 Account parentAccount = accountMapper.selectById(accountAfter.getParentAccountId());
                 if (parentAccount != null && parentAccount.getLinkedProductId() != null) {
-                    // 父账户是关联产品的账户（如货币基金账户）
-                    // 当子账户有现金流变化时，需要同步更新父账户的余额和份额
-                    // 注意：使用已计算的 parentBalance（子账户余额之和），而不是数据库中可能过时的值
                     if ("CASH".equals(posting.getAccountType())) {
-                        // 获取父账户在数据库中记录的旧份额（用于日志）
-                        BigDecimal parentOldShares = parentAccount.getInitialShares() != null ? parentAccount.getInitialShares() : BigDecimal.ZERO;
-                        
                         // 父账户的新余额 = 子账户余额之和（已在上面计算为 parentBalance）
-                        // 注意：parentBalance 已经是更新后的子账户余额之和
                         BigDecimal parentNewBalance = parentBalance;
                         if (parentNewBalance.compareTo(BigDecimal.ZERO) < 0) {
                             parentNewBalance = BigDecimal.ZERO;
                         }
-                        
-                        // 更新父账户余额
                         accountMapper.updateBalance(parentAccount.getId(), parentNewBalance);
-                        
-                        // 更新父账户份额
-                        // 对于货币基金账户，份额 ≈ 余额（净值通常接近1.0）
-                        BigDecimal parentNewShares = parentNewBalance;
-                        accountMapper.updateInitialShares(parentAccount.getId(), parentNewShares);
-                        
-                        log.info("同步更新关联产品账户: 账户ID={}, 账户名={}, 旧份额={}, 新余额={}, 新份额={}", 
-                            parentAccount.getId(), parentAccount.getAccountName(), 
-                            parentOldShares, parentNewBalance, parentNewShares);
+
+                        log.info("同步更新关联产品账户余额: 账户ID={}, 账户名={}, 新余额={}, 份额保持={}",
+                            parentAccount.getId(), parentAccount.getAccountName(),
+                            parentNewBalance, parentAccount.getInitialShares());
                     }
                 }
             } else {

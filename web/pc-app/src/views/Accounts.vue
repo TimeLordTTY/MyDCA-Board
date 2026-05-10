@@ -96,15 +96,15 @@
                       金额：<span class="mono">{{ formatCurrency(child.fixedAmount || 0) }}</span>；
                       折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
                     </template>
-                    <template v-else-if="child.balance && child.balance > 0">
-                      金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
-                      折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
-                    </template>
                     <template v-else-if="isUnallocatedAccount(child)">
                       <!-- 待分配账户：显示总份额减去其他子账户折算份额的差额 -->
                       <span class="tag gray tiny">待分配</span>
                       金额：<span class="mono">{{ formatCurrency(getMmfUnallocatedAmount(platform)) }}</span>；
                       份额：<span class="mono">{{ formatNumber(getMmfUnallocatedShares(platform), 2) }}</span>
+                    </template>
+                    <template v-else-if="child.balance && child.balance > 0">
+                      金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
+                      折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
                     </template>
                     <template v-else>
                       金额：<span class="mono">{{ formatCurrency(0) }}</span>；
@@ -267,15 +267,15 @@
                         金额：<span class="mono">{{ formatCurrency(child.fixedAmount || 0) }}</span>；
                         折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
                       </template>
-                      <template v-else-if="child.balance && child.balance > 0">
-                        金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
-                        折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
-                      </template>
                       <template v-else-if="isUnallocatedAccount(child)">
                         <!-- 待分配账户：显示总份额减去其他子账户折算份额的差额 -->
                         <span class="tag gray tiny">待分配</span>
                         金额：<span class="mono">{{ formatCurrency(getMmfUnallocatedAmount(platform)) }}</span>；
                         份额：<span class="mono">{{ formatNumber(getMmfUnallocatedShares(platform), 2) }}</span>
+                      </template>
+                      <template v-else-if="child.balance && child.balance > 0">
+                        金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
+                        折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
                       </template>
                       <template v-else>
                         金额：<span class="mono">{{ formatCurrency(0) }}</span>；

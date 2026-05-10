@@ -41,6 +41,8 @@ urllib3.util.proxy_from_url = lambda url: None
 
 # 4. Monkey patch requests 禁用代理
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # 保存原始函数
 _original_session_init = requests.Session.__init__
@@ -48,12 +50,13 @@ _original_get = requests.get
 _original_post = requests.post
 
 # 浏览器请求头（东方财富服务器可能检测 User-Agent）
+# Connection: close 避免长连接被服务端提前掐断后复用脏连接导致 RemoteDisconnected
 _BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'close',
     'Referer': 'https://quote.eastmoney.com/',
 }
 
@@ -62,6 +65,18 @@ def _patched_session_init(self, *args, **kwargs):
     self.trust_env = False  # 不读取系统代理设置
     self.proxies = {}  # 清空代理
     self.headers.update(_BROWSER_HEADERS)  # 添加浏览器请求头
+    # urllib3 层对瞬断、5xx、429 再补一层重试（与业务层指数退避互补）
+    _retry = Retry(
+        total=4,
+        connect=4,
+        read=4,
+        backoff_factor=0.9,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("HEAD", "GET", "POST", "OPTIONS"),
+    )
+    _adapter = HTTPAdapter(max_retries=_retry, pool_connections=4, pool_maxsize=4)
+    self.mount("https://", _adapter)
+    self.mount("http://", _adapter)
 
 def _patched_get(url, **kwargs):
     kwargs['proxies'] = {}
@@ -125,6 +140,9 @@ try:
 except ImportError:
     AKSHARE_AVAILABLE = False
     logger.warning("akshare 未安装，将使用直接 API 调用")
+
+# 东方财富日 K 接口易出现 RemoteDisconnected / Connection aborted，可通过环境变量调节重试与间隔
+_ETF_HIST_INTER_PRODUCT_SLEEP = float(os.environ.get("ETF_HIST_INTER_PRODUCT_SLEEP_SEC", "2.5"))
 
 
 def get_market_by_code(product_code: str) -> str:
@@ -194,6 +212,7 @@ def fetch_single_quote_direct(product_code: str, market: str) -> Optional[Dict]:
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Connection': 'close',
         'Referer': 'https://quote.eastmoney.com/',
     }
     
@@ -306,6 +325,7 @@ def fetch_batch_quotes_direct(products: List[Dict]) -> Dict[str, Dict]:
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from market.config import DB_CONFIG, COLLECT_CONFIG
+from market.ak_network_retry import retry_ak_call
 
 
 class ETFCollector:
@@ -745,12 +765,14 @@ class ETFCollector:
             
             symbol = product_code
             
-            df = ak.fund_etf_hist_em(
+            df = retry_ak_call(
+                f"fund_etf_hist_em {symbol}",
+                ak.fund_etf_hist_em,
                 symbol=symbol,
-                period='daily',
+                period="daily",
                 start_date=start_date,
                 end_date=end_date,
-                adjust=''
+                adjust="",
             )
             
             if df.empty:
@@ -1033,7 +1055,7 @@ class ETFCollector:
                 print(f"  ⚠ 跳过: {asset_type} 类型暂不支持日K线采集")
                 fail_count += 1
             
-            time.sleep(0.5)
+            time.sleep(_ETF_HIST_INTER_PRODUCT_SLEEP)
         
         print(f"\n日K线采集完成: 成功 {success_count}, 失败 {fail_count}")
     

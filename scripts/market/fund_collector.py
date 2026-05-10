@@ -39,6 +39,8 @@ urllib3.util.proxy_from_url = lambda url: None
 
 # 4. Monkey patch requests 禁用代理
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # 保存原始函数
 _original_session_init = requests.Session.__init__
@@ -50,8 +52,8 @@ _BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
+    'Accept-Encoding': 'gzip, deflate',
+    'Connection': 'close',
     'Referer': 'https://quote.eastmoney.com/',
 }
 
@@ -60,6 +62,17 @@ def _patched_session_init(self, *args, **kwargs):
     self.trust_env = False  # 不读取系统代理设置
     self.proxies = {}  # 清空代理
     self.headers.update(_BROWSER_HEADERS)  # 添加浏览器请求头
+    _retry = Retry(
+        total=4,
+        connect=4,
+        read=4,
+        backoff_factor=0.9,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=("HEAD", "GET", "POST", "OPTIONS"),
+    )
+    _adapter = HTTPAdapter(max_retries=_retry, pool_connections=4, pool_maxsize=4)
+    self.mount("https://", _adapter)
+    self.mount("http://", _adapter)
 
 def _patched_get(url, **kwargs):
     kwargs['proxies'] = {}
@@ -124,6 +137,10 @@ except ImportError:
 # 添加父目录到路径
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from market.config import DB_CONFIG, COLLECT_CONFIG
+from market.ak_network_retry import retry_ak_call
+
+# 与 etf 日 K 共用环境变量，防止东方财富限连
+_FUND_INTER_SLEEP_SEC = float(os.environ.get("ETF_HIST_INTER_PRODUCT_SLEEP_SEC", "2.5"))
 
 
 class FundCollector:
@@ -177,31 +194,53 @@ class FundCollector:
             return []
         
         try:
-            # 使用akshare采集基金净值
+            # 使用akshare采集基金净值（网络错误走 retry_ak_call 指数退避）
             if asset_type == 'MMF':
                 # 货币基金使用货币基金接口
                 # 注意：akshare的货币基金接口返回的是每日收益数据，净值固定为1.0
                 # 参数名是 symbol，不是 fund
                 try:
-                    df = ak.fund_money_fund_info_em(symbol=product_code)
+                    df = retry_ak_call(
+                        f"fund_money_fund_info_em {product_code}",
+                        ak.fund_money_fund_info_em,
+                        symbol=product_code,
+                    )
                 except (AttributeError, TypeError) as e:
                     # 如果函数不存在或参数错误，尝试使用普通基金接口
                     try:
-                        df = ak.fund_open_fund_info_em(symbol=product_code, indicator="单位净值走势")
+                        df = retry_ak_call(
+                            f"fund_open_fund_info_em {product_code}",
+                            ak.fund_open_fund_info_em,
+                            symbol=product_code,
+                            indicator="单位净值走势",
+                        )
                     except Exception:
                         raise e
             else:
                 # 普通基金使用基金净值接口
                 # 参数名是 symbol，不是 fund
                 try:
-                    df = ak.fund_open_fund_info_em(symbol=product_code, indicator="单位净值走势")
+                    df = retry_ak_call(
+                        f"fund_open_fund_info_em {product_code}",
+                        ak.fund_open_fund_info_em,
+                        symbol=product_code,
+                        indicator="单位净值走势",
+                    )
                 except (AttributeError, TypeError):
                     # 兼容旧版本akshare（如果有的话）
                     try:
-                        df = ak.fund_em_open_fund_info(fund=product_code)
+                        df = retry_ak_call(
+                            f"fund_em_open_fund_info {product_code}",
+                            ak.fund_em_open_fund_info,
+                            fund=product_code,
+                        )
                     except (AttributeError, TypeError):
                         # 最后尝试ETF接口
-                        df = ak.fund_etf_fund_info_em(fund=product_code)
+                        df = retry_ak_call(
+                            f"fund_etf_fund_info_em {product_code}",
+                            ak.fund_etf_fund_info_em,
+                            fund=product_code,
+                        )
             
             if df is None or df.empty:
                 print(f"未获取到产品 {product_code} 的净值数据")
@@ -350,8 +389,8 @@ class FundCollector:
                 print(f"  ✗ 失败：无法获取净值数据或没有新数据")
                 fail_count += 1
             
-            # 避免请求过快
-            time.sleep(1)
+            # 避免请求过快（默认与 etf 日 K 一致，可用 ETF_HIST_INTER_PRODUCT_SLEEP_SEC 调节）
+            time.sleep(_FUND_INTER_SLEEP_SEC)
         
         print(f"\n采集完成: 成功 {success_count}, 跳过 {skip_count}（日期未更新）, 失败 {fail_count}")
     

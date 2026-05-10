@@ -463,7 +463,7 @@
             <el-form-item label="券商资金账户" required>
               <el-cascader
                 v-model="selectedAccount"
-                :options="accountCascaderOptions"
+                :options="brokerOnlyCascaderOptions"
                 :props="accountCascaderProps"
                 placeholder="先选择券商-子账户（用于扣款与计算手续费）"
                 style="width: 100%"
@@ -730,39 +730,77 @@
               />
             </el-select>
           </el-form-item>
-          <!-- 产品持仓信息展示 -->
-          <el-form-item v-if="form.productId && productHolding" label="当前持仓">
-            <div style="display: flex; gap: 24px; color: #606266;">
-              <span>
-                <strong style="color: #409eff;">{{ productHolding.totalShares.toFixed(4) }}</strong> 份
-              </span>
-              <span>
-                市值 <strong style="color: #f59e0b;">{{ formatCurrency(productHolding.marketValue) }}</strong>
-              </span>
-            </div>
-            <div v-if="productAccountHoldings.length > 0" style="margin-top: 8px; font-size: 12px; color: #909399;">
-              各账户持仓：
-              <span v-for="(ah, idx) in productAccountHoldings" :key="ah.accountId" style="margin-left: 8px;">
-                {{ ah.parentAccountName ? `${ah.parentAccountName}-` : '' }}{{ ah.accountName }}: {{ ah.shares.toFixed(4) }}份
-                <span v-if="idx < productAccountHoldings.length - 1">; </span>
-              </span>
-            </div>
-          </el-form-item>
-          <el-form-item v-else-if="form.productId && loadingProductHolding" label="当前持仓">
-            <span style="color: #909399;">加载中...</span>
-          </el-form-item>
-          <el-form-item v-else-if="form.productId && !productHolding && !loadingProductHolding" label="当前持仓">
-            <span style="color: #909399;">暂无持仓</span>
-          </el-form-item>
-          <!-- 场内卖出：简化表单 -->
-          <template v-if="form.channel === 'EXCHANGE'">
-            <el-form-item label="券商" required>
-              <el-select v-model="form.brokerAccountId" placeholder="先选择券商（用于计算手续费）" style="width: 100%" filterable clearable>
-                <el-option v-for="b in brokerPlatforms" :key="b.id" :label="b.name" :value="b.id" />
-              </el-select>
-              <div style="color: #909399; font-size: 12px; margin-top: 4px">
-                手续费会按所选券商的费率配置自动计算。
+          <!-- 产品持仓（场外：紧跟产品；场内：见下方 EXCHANGE 模板内，排在券商资金账户之后） -->
+          <template v-if="form.channel !== 'EXCHANGE'">
+            <el-form-item v-if="form.productId && productHolding" label="当前持仓">
+              <div style="display: flex; gap: 24px; color: #606266;">
+                <span>
+                  <strong style="color: #409eff;">{{ productHolding.totalShares.toFixed(4) }}</strong> 份
+                </span>
+                <span>
+                  市值 <strong style="color: #f59e0b;">{{ formatCurrency(productHolding.marketValue) }}</strong>
+                </span>
               </div>
+              <div v-if="productAccountHoldings.length > 0" style="margin-top: 8px; font-size: 12px; color: #909399;">
+                各账户持仓：
+                <span v-for="(ah, idx) in productAccountHoldings" :key="ah.accountId" style="margin-left: 8px;">
+                  {{ ah.parentAccountName ? `${ah.parentAccountName}-` : '' }}{{ ah.accountName }}: {{ ah.shares.toFixed(4) }}份
+                  <span v-if="idx < productAccountHoldings.length - 1">; </span>
+                </span>
+              </div>
+            </el-form-item>
+            <el-form-item v-else-if="form.productId && loadingProductHolding" label="当前持仓">
+              <span style="color: #909399;">加载中...</span>
+            </el-form-item>
+            <el-form-item v-else-if="form.productId && !productHolding && !loadingProductHolding" label="当前持仓">
+              <span style="color: #909399;">暂无持仓</span>
+            </el-form-item>
+          </template>
+          <!-- 场内卖出：与买入一致 — 先选券商资金账户，再填时间/价格/数量 -->
+          <template v-if="form.channel === 'EXCHANGE'">
+            <el-form-item label="券商资金账户" required>
+              <el-cascader
+                v-model="selectedAccount"
+                :options="brokerOnlyCascaderOptions"
+                :props="accountCascaderProps"
+                placeholder="先选择券商-子账户（用于扣款与计算手续费）"
+                style="width: 100%"
+                clearable
+                @change="handleSellAccountCascaderChange"
+              >
+                <template #default="{ node, data }">
+                  <span>{{ data.label }}</span>
+                  <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
+                    {{ data.balanceText }}
+                  </span>
+                </template>
+              </el-cascader>
+              <div style="color: #909399; font-size: 12px; margin-top: 4px">
+                系统会从该账户自动识别券商并按对应费率计算手续费。
+              </div>
+            </el-form-item>
+            <el-form-item v-if="form.productId && productHolding" label="当前持仓">
+              <div style="display: flex; gap: 24px; color: #606266;">
+                <span>
+                  <strong style="color: #409eff;">{{ productHolding.totalShares.toFixed(4) }}</strong> 份
+                </span>
+                <span>
+                  市值 <strong style="color: #f59e0b;">{{ formatCurrency(productHolding.marketValue) }}</strong>
+                </span>
+              </div>
+              <div v-if="productAccountHoldings.length > 0" style="margin-top: 8px; font-size: 12px; color: #909399;">
+                各账户持仓：
+                <span v-for="(ah, idx) in productAccountHoldings" :key="ah.accountId" style="margin-left: 8px;">
+                  {{ ah.parentAccountName ? `${ah.parentAccountName}-` : '' }}{{ ah.accountName }}: {{ ah.shares.toFixed(4) }}份
+                  <span v-if="idx < productAccountHoldings.length - 1">; </span>
+                </span>
+              </div>
+            </el-form-item>
+            <el-form-item v-else-if="form.productId && loadingProductHolding" label="当前持仓">
+              <span style="color: #909399;">加载中...</span>
+            </el-form-item>
+            <el-form-item v-else-if="form.productId && !productHolding && !loadingProductHolding" label="当前持仓">
+              <span style="color: #909399;">暂无持仓</span>
             </el-form-item>
             <el-form-item label="交易时间" required>
               <el-date-picker
@@ -860,8 +898,8 @@
           </el-form-item>
           </template>
           
-          <!-- 到账账户（收到赎回款的账户） -->
-          <el-form-item label="到账账户" required>
+          <!-- 场外赎回：选择赎回款到账账户（场内已在上方选择券商资金账户） -->
+          <el-form-item v-if="form.channel === 'OTC'" label="到账账户" required>
             <div style="display: flex; align-items: center; gap: 12px;">
               <el-cascader
                 v-model="selectedAccount"
@@ -1173,7 +1211,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElNotification } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
-import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi, holdingApi } from '@wealth-hub/shared'
+import { ledgerApi, accountApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi, holdingApi } from '@wealth-hub/shared'
 import type { Account, LedgerTxnDetail } from '@wealth-hub/shared'
 
 // 账户持仓信息类型
@@ -1237,6 +1275,8 @@ const form = ref({
   repoDays: 1,
   repoRate: undefined as number | undefined,
   note: '',
+  /** 场内卖出：所选券商平台账户 id（用于 calculateFee；买入侧由资金级联推断） */
+  brokerAccountId: undefined as number | undefined,
 })
 
 // 买入时的多子账户配置
@@ -1921,11 +1961,6 @@ function calculateMmfChildAmount(parent: Account, child: Account): number {
     return child.fixedAmount
   }
   
-  // 有 balance 的普通账户
-  if (child.balance && child.balance > 0) {
-    return child.balance
-  }
-  
   // "待分配"账户：计算未分配的金额
   if (isUnallocatedAccount(child)) {
     let allocatedShares = 0
@@ -1939,6 +1974,11 @@ function calculateMmfChildAmount(parent: Account, child: Account): number {
     }
     const unallocatedShares = Math.max(0, parent.initialShares - allocatedShares)
     return unallocatedShares * nav
+  }
+
+  // 有 balance 的普通账户
+  if (child.balance && child.balance > 0) {
+    return child.balance
   }
   
   return 0
@@ -1980,6 +2020,9 @@ const accountCascaderOptions = computed(() => {
         options.push({
           value: acc.id,
           label: acc.accountName,
+          // Cascader option 需要带上账户类型，否则场内券商筛选无法识别 BROKER 平台
+          accountType: acc.accountType,
+          accountKind: acc.accountKind,
           balance: isMmf ? parentTotalBalance : parentBalances.balance,
           credit: parentBalances.credit,
           balanceText: balanceText.join(' '),
@@ -1995,6 +2038,8 @@ const accountCascaderOptions = computed(() => {
             return {
               value: child.id,
               label: child.accountName,
+              accountType: child.accountType,
+              accountKind: child.accountKind,
               balance: childAmount,
               isCredit,
               balanceText: `${isCredit ? '欠' : ''}${formatCurrency(childAmount)}`,
@@ -2019,6 +2064,16 @@ const accountCascaderProps = {
   checkStrictly: false,
   expandTrigger: 'hover' as const,
 }
+
+// 场内交易必须选择券商资金账户：只展示 BROKER 平台及其 REAL 子账户
+const brokerOnlyCascaderOptions = computed(() => {
+  return accountCascaderOptions.value
+    .filter((p: any) => p && p.accountType === 'BROKER')
+    .map((p: any) => ({
+      ...p,
+      children: (p.children || []).filter((c: any) => c && c.value != null),
+    }))
+})
 
 // 获取账户选中值（用于cascader的v-model）
 const selectedAccount = computed({
@@ -2151,6 +2206,7 @@ watch(visible, async (val) => {
         repoDays: 1,
         repoRate: undefined,
         note: '',
+        brokerAccountId: undefined,
       }
       buyFundingLines.value = []
       sellFundingLines.value = []
@@ -2437,6 +2493,7 @@ watch(visible, async (val) => {
         repoDays: 1,
         repoRate: undefined,
         note: '',
+        brokerAccountId: undefined,
       }
       buyFundingLines.value = []
       sellFundingLines.value = []
@@ -2493,6 +2550,7 @@ function handleChannelChange() {
   // 切换场内/场外时，清空产品选择
   form.value.productId = undefined
   form.value.nav = undefined
+  form.value.brokerAccountId = undefined
   
   // 根据场内/场外自动设置交易类型
   // 场内 → 买入/卖出，场外 → 申购/赎回
@@ -2607,6 +2665,27 @@ async function loadShareTransferAccountShares() {
 function getChildAccountShares(accountId: number | undefined): number {
   if (!accountId) return 0
   return shareTransferAccountShares.value.get(accountId) || 0
+}
+
+async function syncFixedAmountAfterShareTransfer(fromAccountId: number, toAccountId: number, amount: number) {
+  async function updateFixedAccount(accountId: number, delta: number) {
+    const account = await accountApi.getAccount(accountId)
+    if (!(account as any).isFixedAmount && !((account as any).fixedAmount > 0)) return
+
+    const currentFixed = Number((account as any).fixedAmount || 0)
+    const nextFixed = Math.max(0, currentFixed + delta)
+
+    await accountApi.updateAccount(accountId, {
+      ...(account as any),
+      // 固定账户的分配额由 fixedAmount 承载；余额由流水变化，不再用于展示分配额。
+      balance: 0,
+      isFixedAmount: nextFixed > 0,
+      fixedAmount: nextFixed > 0 ? Number(nextFixed.toFixed(2)) : null,
+    } as any)
+  }
+
+  await updateFixedAccount(fromAccountId, -amount)
+  await updateFixedAccount(toAccountId, amount)
 }
 
 // 获取账户名称
@@ -2975,7 +3054,7 @@ async function calculateExchangeFee() {
     const amount = form.value.shares * form.value.nav
     const orderType = (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') ? 'BUY' : 'SELL'
     
-    // 直接根据“所选资金账户/到账账户”推断券商，不做任何默认
+    // 买入/卖出统一：仅根据所选资金/到账账户推断券商
     const brokerAccountId =
       inferBrokerAccountIdByAccountId(form.value.accountId) ||
       inferBrokerAccountIdByAccountId(form.value.parentAccountId)
@@ -3074,7 +3153,16 @@ async function calculateOTCRedemptionFee() {
 
 // 监听数量和价格变化，自动计算场内手续费
 watch(
-  () => [form.value.channel, form.value.productId, form.value.shares, form.value.nav, form.value.accountId, form.value.parentAccountId, selectedType.value],
+  () => [
+    form.value.channel,
+    form.value.productId,
+    form.value.shares,
+    form.value.nav,
+    form.value.accountId,
+    form.value.parentAccountId,
+    form.value.brokerAccountId,
+    selectedType.value,
+  ],
   () => {
     calculateExchangeFee()
   },
@@ -3545,6 +3633,11 @@ async function handleSubmit() {
           ],
           note: autoNote,
         })
+        await syncFixedAmountAfterShareTransfer(
+          shareTransfer.value.fromAccountId,
+          shareTransfer.value.toAccountId,
+          amount
+        )
         
         const shareTransferMessage = form.value.note 
           ? `份额转移成功：${form.value.note}`
@@ -3560,7 +3653,7 @@ async function handleSubmit() {
         if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.nav || !form.value.requestedAt) {
           ElNotification.error({
         title: '错误',
-        message: '请填写完整信息（产品、数量、价格、资金来源账户）', position: 'bottom-right', duration: 3000 })
+        message: '请填写完整信息（产品、数量、价格、券商子账户）', position: 'bottom-right', duration: 3000 })
         return
         }
         // 场内买入：自动计算金额
@@ -3849,7 +3942,7 @@ async function handleSubmit() {
         if (!form.value.productId || !form.value.parentAccountId || !form.value.accountId || !form.value.shares || !form.value.nav || !form.value.requestedAt) {
           ElNotification.error({
         title: '错误',
-        message: '请填写完整信息（产品、数量、价格、到账账户）', position: 'bottom-right', duration: 3000 })
+        message: '请填写完整信息（产品、数量、价格、券商资金账户）', position: 'bottom-right', duration: 3000 })
         return
         }
       } else {
@@ -3969,7 +4062,7 @@ async function handleSubmit() {
         if (!form.value.accountId) {
           ElNotification.error({
         title: '错误',
-        message: '请选择到账账户', position: 'bottom-right', duration: 3000 })
+        message: form.value.channel === 'EXCHANGE' ? '请选择券商资金账户' : '请选择到账账户', position: 'bottom-right', duration: 3000 })
           return
         }
 
