@@ -62,6 +62,7 @@ replay_pid*
 # Editor/project files
 .vscode/
 .idea/
+.cursor/
 *.iml
 *.iws
 *.ipr
@@ -98,6 +99,13 @@ desktop.ini
 *.log
 logs/
 *.sqlite3
+
+# Local automation / agent artifacts
+.codex-hooks/
+.hermes-browser-shots/
+.hermes-run-logs/
+.claude/.build-running
+.claude/*.local.json
 
 # Build scripts output
 *.bat.bak

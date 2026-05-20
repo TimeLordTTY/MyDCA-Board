@@ -2,7 +2,7 @@
 
 **阶段状态**：✅ Phase 1 后端开发已完成
 
-**当前代码核对时间**：2026-05-10。本文已按当前仓库实现补齐 Phase 2 以来新增的后端能力（行情/指标/快照/MMF/费率配置）和前端落地状态。
+**当前代码核对时间**：2026-05-19。本文已按当前仓库实现补齐 Phase 2 以来新增的后端能力（行情/指标/快照/MMF/费率配置）和前端落地状态。
 
 ## 已完成工作
 
@@ -16,8 +16,8 @@
 - 前端PC端编译通过
 
 ### 2. 编译脚本 ✅
-- 创建了根目录`build-all.bat`，用于编译所有项目（前端、Java、Python）
-- 前端`web/build-all.bat`已存在并可用
+- 创建了根目录`build-all.bat`，用于编译前端与 Java 后端，并可继续启动本地前端开发服务
+- 前端构建脚本为`web/build-web.bat`，负责安装 workspace 依赖、构建 shared/PC/Mobile，并汇总输出到 `web/dist`
 
 ### 3. 代码注释完善 ✅
 - **User.java**：添加了详细的字段说明、业务规则说明
@@ -69,23 +69,29 @@
   - [x] 通过ledger_txn获取productId
   - [x] 持仓市值和未实现盈亏（已结合净值/行情数据计算）
   - [x] 持仓快照生成（SnapshotService + SnapshotGenerationTask，已实现）
+- [x] 持仓列表接口 `/api/v2/holdings`（已实现）
+- [x] 产品分账户持仓接口 `/api/v2/holdings/product/{productId}/by-account`（已实现）
+- 说明：前端持仓详情弹窗当前通过持仓、净值、行情、指标接口组合展示；单独的后端持仓详情端点可作为 Phase 2/后续 API 整理项。
 
 #### Phase 1.6: 看板聚合模块 ✅
 - [x] DashboardService（**已完成**）
   - [x] 资产概览计算（包含现金余额和持仓市值）
   - [x] 待结算清单（已实现）
+  - [x] 今日动作清单（已实现 `SETTLE_ORDER`：聚合当前用户今日应结算或已逾期的待结算订单）
   - [x] 资产配比图表（PC 前端基于账户、持仓、行情/净值本地计算）
-  - [ ] 后端资产配置接口 `/api/v2/dashboard/asset-allocation`（待实现）
-  - [ ] 后端今日盈亏字段（前端已有基于行情的持仓浮盈亏展示，`DashboardService` 暂未计算 todayPnl）
+  - [x] 看板后端接口 `/api/v2/dashboard/asset-overview`
+  - [x] 看板后端接口 `/api/v2/dashboard/pending-settlements`
+  - [x] 看板后端接口 `/api/v2/dashboard/today-actions`
+  - 说明：资产配置、收益统计、今日盈亏等统计/报表能力归入 Phase 2 的统计功能与后续报表阶段。
 
-## 需要完善的内容
+## 可选工程优化（不影响 Phase 1 完成）
 
-### 1. 代码注释（高优先级）
-- [ ] 为所有Model类添加详细注释（参考User和Account的注释格式）
-- [ ] 为所有Service类添加详细注释（参考LedgerService的注释格式）
-- [ ] 为所有Controller类添加详细注释
-- [ ] 为所有Mapper接口添加注释
-- [ ] 为关键方法添加详细的参数说明、返回值说明、异常说明
+### 1. 代码注释
+- 为所有Model类添加详细注释（参考User和Account的注释格式）
+- 为所有Service类添加详细注释（参考LedgerService的注释格式）
+- 为所有Controller类添加详细注释
+- 为所有Mapper接口添加注释
+- 为关键方法添加详细的参数说明、返回值说明、异常说明
 
 ### 2. 功能完善（已完成）✅
 - [x] **SettlementService.confirmSettlement()**：完善结算确认逻辑
@@ -93,21 +99,21 @@
   - [x] 完善生成真实分录的逻辑（根据订单类型BUY/SELL/SUBSCRIPTION/REDEMPTION生成不同分录）
   - [x] POSITION账户的获取或创建（通过AccountService.getOrCreatePositionAccount）
   - [x] FEE账户的获取或创建（通过AccountService.getOrCreateVirtualAccount）
-  - [ ] 添加日志记录（结算金额、释放占用金额、生成的分录等）（中优先级）
+  - 可选优化：添加更细的日志记录（结算金额、释放占用金额、生成的分录等）
   
 - [x] **HoldingService.calculateHoldings()**：完善持仓计算逻辑
   - [x] 从ledger_posting查询所有POSITION类型的账户
   - [x] 通过ledger_txn获取productId
   - [x] 计算每个产品的持仓：总份额、总成本、平均成本
   - [x] 计算市值和未实现盈亏（已结合净值数据实现）
-  - [ ] 添加日志记录（计算的产品数量、总持仓价值等）（中优先级）
+  - 可选优化：添加更细的日志记录（计算的产品数量、总持仓价值等）
 
 - [x] **DashboardService.getAssetOverview()**：完善资产概览计算
   - [x] 加上持仓市值（调用HoldingService）
   - [x] 计算总资产 = 现金余额 + 持仓市值
   - [x] 计算净资产 = 总资产 - 总负债
-  - [ ] 后端计算今日盈亏（前端已基于行情/净值展示持仓浮盈亏，`DashboardService` 暂未回填 todayPnl）
-  - [ ] 添加日志记录（资产总额、负债总额、净资产等）（中优先级）
+  - 统计增强：今日盈亏、资产配置、收益统计归入 Phase 2 统计功能与后续报表阶段
+  - 可选优化：添加更细的日志记录（资产总额、负债总额、净资产等）
 
 - [x] **QuickEntryService**：完善快速录入逻辑
   - [x] 使用正确的虚拟EXPENSE账户（通过AccountService.getOrCreateVirtualAccount）
@@ -117,21 +123,21 @@
   - [x] getOrCreateVirtualAccount方法（获取或创建虚拟账户）
   - [x] getOrCreatePositionAccount方法（获取或创建持仓账户）
 
-### 3. 日志记录（中优先级）
-- [ ] 为所有关键方法添加日志记录
-- [ ] 公式计算时记录输入参数和计算结果
-- [ ] 控制日志大小，只记录关键信息
-- [ ] 使用日志框架（如SLF4J + Logback）
+### 3. 日志记录
+- 为所有关键方法添加日志记录
+- 公式计算时记录输入参数和计算结果
+- 控制日志大小，只记录关键信息
+- 使用日志框架（如SLF4J + Logback）
 
-### 4. 异常处理（中优先级）
-- [ ] 统一异常处理（使用BusinessException）
-- [ ] 为所有异常添加详细的错误信息
-- [ ] 记录异常日志
+### 4. 异常处理
+- 统一异常处理（使用BusinessException）
+- 为所有异常添加详细的错误信息
+- 记录异常日志
 
-### 5. 测试（低优先级，Phase 1后可补充）
-- [ ] 单元测试
-- [ ] 集成测试
-- [ ] API测试
+### 5. 测试
+- 单元测试
+- 集成测试
+- API测试
 
 ## 编译说明
 
@@ -145,7 +151,7 @@ build-all.bat
 ```bash
 # 前端
 cd web
-build-all.bat
+build-web.bat
 
 # Java后端
 cd backend
@@ -220,18 +226,18 @@ mvn clean compile
 - [x] 持仓市值和未实现盈亏（已结合净值/行情数据实现）
 - [x] **持仓快照生成（SnapshotService + SnapshotGenerationTask，已实现）**
 - [x] **净资产快照生成（NetWorthSnapshot，已实现）**
+- 说明：前端已通过净值/行情/指标接口组合实现持仓详情弹窗；单独后端详情端点不计入 Phase 1 验收。
 
 #### ✅ Phase 1.6: 看板聚合模块
 - [x] DashboardService（已完成）
   - [x] 资产概览计算（包含现金余额和持仓市值）
   - [x] 待结算清单（已实现）
-  - [x] 今日建议清单（已实现）
+  - [x] 今日动作清单（当前为 `SETTLE_ORDER` 待结算/逾期订单动作；完整策略建议归入 Phase 3）
 - [x] 看板API（DashboardController）- 3个端点
   - [x] GET `/api/v2/dashboard/asset-overview`
   - [x] GET `/api/v2/dashboard/pending-settlements`
   - [x] GET `/api/v2/dashboard/today-actions`
-- [ ] 后端资产配置接口（待实现；PC 看板当前由前端本地计算资产配比图）
-- [ ] 收益统计（含XIRR，待实现）
+- 说明：资产配置后端接口、收益统计、今日盈亏等属于 Phase 2 统计功能与后续报表阶段，不计入 Phase 1 验收。
 
 ---
 
@@ -353,7 +359,7 @@ mvn clean compile
 
 ## Phase 2 状态
 
-**当前状态**：✅ Phase 2 高优先级闭环已完成；剩余项目已调整为 Phase 3+/可选增强（债券行情、BOLL/KDJ、复盘导出、策略建议等）
+**当前状态**：Phase 2 前端、行情、指标、定时任务高优先级闭环已完成；流水统计功能、债券行情、BOLL/KDJ 等仍在 Phase 2 待完善清单中。
 
 ### Phase 2.1：前端开发 ✅
 - ✅ 共享层开发（API Client、Types、Utils、Stores）
@@ -371,27 +377,27 @@ mvn clean compile
 - ✅ **Java IndicatorCalculationTask**（每日20:30调用Python计算指标）
 - ✅ **Java SnapshotGenerationTask**（每日21:00生成持仓+净资产快照）
 - ✅ **Java MmfInterestCalculationTask**（每日20:00计算MMF收益）
-- ⚠️ 未完成项：债券行情采集、BOLL/KDJ扩展指标
+- Phase 2 待完善项：流水统计、债券行情采集、BOLL/KDJ扩展指标
 
 ---
 
 ## Phase 1 后续优化（可选，不影响Phase 2）
 
 ### 高优先级（可选）
-- [ ] 为所有Model类添加详细注释（部分已完成：User、Account）
-- [ ] 为所有Service类添加详细注释（部分已完成：LedgerService）
-- [ ] 为所有Controller类添加详细注释
-- [ ] 为所有Mapper接口添加注释
+- 为所有Model类添加详细注释（部分已完成：User、Account）
+- 为所有Service类添加详细注释（部分已完成：LedgerService）
+- 为所有Controller类添加详细注释
+- 为所有Mapper接口添加注释
 
 ### 中优先级（可选）
-- [ ] 添加日志记录（SLF4J + Logback）
-- [ ] 统一异常处理（BusinessException）
-- [ ] 为所有异常添加详细的错误信息
+- 添加日志记录（SLF4J + Logback）
+- 统一异常处理（BusinessException）
+- 为所有异常添加详细的错误信息
 
 ### 低优先级（可选）
-- [ ] 单元测试
-- [ ] 集成测试
-- [ ] API测试
+- 单元测试
+- 集成测试
+- API测试
 
 ## 注意事项
 
