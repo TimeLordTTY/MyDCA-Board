@@ -232,7 +232,7 @@ mvn clean compile
 - [x] DashboardService（已完成）
   - [x] 资产概览计算（包含现金余额和持仓市值）
   - [x] 待结算清单（已实现）
-  - [x] 今日动作清单（当前为 `SETTLE_ORDER` 待结算/逾期订单动作；完整策略建议归入 Phase 3）
+  - [x] 今日动作清单（当前为 `SETTLE_ORDER` 待结算/逾期订单动作；完整策略建议归入后续策略阶段）
 - [x] 看板API（DashboardController）- 3个端点
   - [x] GET `/api/v2/dashboard/asset-overview`
   - [x] GET `/api/v2/dashboard/pending-settlements`
@@ -359,13 +359,14 @@ mvn clean compile
 
 ## Phase 2 状态
 
-**当前状态**：Phase 2 前端、行情、指标、定时任务高优先级闭环已完成；流水统计功能、债券行情、BOLL/KDJ 等仍在 Phase 2 待完善清单中。
+**当前状态**：Phase 2 前端、行情、指标、定时任务高优先级闭环已完成；Mobile H5 已作为 Phase2 历史交付完成；流水统计功能、债券行情、BOLL/KDJ 等仍在 Phase 2 待完善清单中。Phase3 起移动端主线调整为 Android 原生 App，原 Mobile H5 不再作为长期主移动端路线。
 
 ### Phase 2.1：前端开发 ✅
 - ✅ 共享层开发（API Client、Types、Utils、Stores）
 - ✅ PC端所有页面开发（与Phase 1后端API对接）
 - ✅ Mobile端核心页面开发（看板、快速录入、待结算、持仓、设置）
 - ✅ Mobile端设置内的账户/产品/流水/订单子页面已实现轻量只读版本
+- 说明：上述 Mobile 端能力指 Phase2 的 Mobile H5 历史交付；Phase3 起由原生 App 承接移动端主线，`web/mobile-app` 可保留为历史兼容入口或实现参考。
 
 **详细进度**：详见 `Phase2-开发进度总结.md`
 
