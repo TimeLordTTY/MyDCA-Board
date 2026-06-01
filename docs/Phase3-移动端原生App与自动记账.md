@@ -1,35 +1,37 @@
-# Phase 3 开发进度总结（移动端原生 App 与自动记账）
+# Phase 3 开发进度总结（对话优先草稿闭环与移动端基础）
 
 ## 阶段定位
 
 - Phase3 是在 Phase2 已完成 PC 端、Mobile H5、行情、指标、定时任务高优先级闭环之后插入的新阶段。
-- Phase3 的目标是用 Android 原生 App 替代原 Mobile H5，未来可评估鸿蒙适配。
-- 原生 App 负责全部移动端功能：看板、快速录入、草稿箱、待结算、持仓、流水、设置。
-- 原生 App 额外负责日常消费、收入、转账等移动端快速记账入口。
+- Phase3 的第一交付物调整为服务端草稿能力 + Hermes 对话式记账 MVP + 影响预览 + 确认入账。
+- Android 原生 App 仍是长期移动端形态，但作为 Phase3 后半段体验承接，不再作为第一交付物。
+- Hermes 负责文本/截图理解，App 负责支付通知监听与移动端确认体验；两者都只生成草稿，不直接写正式账本。
 - 服务端数据库仍是唯一真相源，App 本地数据只作为缓存、重试队列和临时展示状态。
 - Phase2 的 `web/mobile-app` 为 Mobile H5 历史交付，可保留为兼容入口或历史参考；Phase3 起不再作为长期主移动端路线。
 
 ## 核心业务目标
 
-- 用户在手机端记录消费、收入、转账、投资相关流水时，可以进入预填确认页。
-- 如果用户点击“确认入账”，App 调用服务器接口，直接写入财富中枢正式账本。
-- 如果用户点击“存草稿”，App 调用服务器接口，写入服务端草稿表。
-- 草稿后续可以在 App 草稿箱中继续编辑、确认、忽略、批量处理。
+- 用户可以先通过 Hermes 对话、截图或移动端入口记录消费、收入、转账、投资相关流水。
+- 系统先生成服务端草稿和影响预览，不直接写正式账本。
+- 用户确认后，后端 confirm 接口复用既有账本、订单或结算服务正式入账。
+- 草稿后续可以在 Hermes 待办或 App 草稿箱中继续编辑、确认、忽略、批量处理。
 - 不把导入支付宝、微信 CSV 作为主路径，因为导出格式复杂且不适配系统现有账本模型。
 
 ## A+B 双路径
 
-### A. 确认直落账
+### A. 对话 / App 入口生成草稿
 
-- App 调用服务端快速入账接口。
-- 服务端复用现有 `QuickEntryService`、`LedgerService`、`ledger_txn`、`ledger_posting`。
-- 成功后返回正式 `txn_id`。
-- PC 端和 App 端都能立即查询到该流水。
+- Hermes 通过文本或截图解析记账意图。
+- App 通过表单或支付通知监听生成候选记账意图。
+- 服务端统一写入 `draft_ledger_entry`，并生成影响预览。
+- Hermes / App 都不直接写 `ledger_txn` 或 `ledger_posting`。
 
-### B. 服务端草稿入库
+### B. 用户确认后正式入账
 
-- App 调用草稿创建接口。
-- 服务端写入 `draft_ledger_entry`。
+- 用户在 Hermes 或 App 中确认草稿。
+- 服务端复用现有 `QuickEntryService`、`LedgerService`、`OrderService`、`SettlementService`。
+- 成功后返回正式 `txn_id`、订单或结算记录。
+- PC 端、Hermes 和 App 端都能查询到确认结果。
 - 草稿不是手机本地临时数据，而是服务器数据。
 - 换手机、重新登录后仍能看到草稿。
 - 草稿确认后生成正式 `ledger_txn`，并记录 `confirmed_txn_id`。
@@ -71,7 +73,8 @@
 - `id`
 - `user_id` / `family_id`
 - `status`：`DRAFT` / `CONFIRMED` / `IGNORED`
-- `channel`：`ALIPAY` / `WECHAT` / `BANK` / `CASH` / `MANUAL` / `OTHER`
+- `channel`：`ALIPAY` / `WECHAT` / `BANK` / `CASH` / `MANUAL` / `HERMES` / `APP` / `OTHER`
+- `source_type`：`MANUAL_TEXT` / `SCREENSHOT` / `NOTIFICATION` / `HERMES_TEXT` / `HERMES_IMAGE` / `APP_FORM`
 - `direction`：`EXPENSE` / `INCOME` / `TRANSFER`
 - `amount`
 - `currency`
@@ -86,6 +89,9 @@
 - `external_ref`
 - `dedup_key`
 - `raw_payload`
+- `preview_payload`：影响预览 JSON
+- `confidence`：解析置信度
+- `confirm_required`：是否需要确认，默认 true
 - `confirmed_txn_id`
 - `created_at`
 - `updated_at`
@@ -497,33 +503,37 @@ CREATE TABLE `draft_ledger_entry` (
 
 ## 里程碑
 
-### M1
+### M1：服务端草稿与 Hermes 文本 MVP
+
+- `draft_ledger_entry` 规划落地
+- 草稿创建 / 查询 / 编辑 / 忽略 / 确认接口
+- Hermes 文本记账解析
+- 草稿影响预览
+- 确认后正式入账
+
+### M2：截图 / 图片解析与今日待办
+
+- Hermes 图片或截图解析
+- 待确认草稿列表
+- 今日待办查询
+- 单笔确认、批量确认、批量忽略
+- 分类规则学习与缺失字段提示
+
+### M3：Android 原生 App 基础壳
 
 - 原生 App 项目搭建
 - 登录与 Token 管理
 - 首页看板
-- 快速录入
-- 预填确认页
-- 确认直落账
-- 草稿入库
 - 草稿箱基础列表
-
-### M2
-
-- 草稿编辑
-- 单笔确认
-- 批量确认
-- 批量忽略
-- 分类规则学习
-- 失败重试队列
-
-### M3
-
-- 替代 Mobile H5 的全部移动端功能
 - 待结算确认
-- 持仓查看
-- 流水查询
-- 产品、账户轻量管理
+- 持仓、流水、产品、账户轻量查看
+
+### M4：支付通知监听与长期移动端承接
+
+- Android 支付通知监听
+- 弹窗确认
+- 本地失败重试队列
+- 替代 Mobile H5 的全部移动端功能
 - 冻结或下线 `web/mobile-app` 的发布链路
 
 ### M4
