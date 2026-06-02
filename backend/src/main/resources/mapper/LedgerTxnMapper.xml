@@ -189,4 +189,86 @@
         DELETE FROM ledger_txn WHERE txn_id = #{txnId}
     </delete>
 
+    <select id="selectStatsPostings" parameterType="com.timelordtty.dca.dto.LedgerStatsQueryDTO" resultType="com.timelordtty.dca.dto.LedgerStatsPostingDTO">
+        SELECT
+            lt.txn_id AS txnId,
+            lt.txn_type AS txnType,
+            lt.user_id AS userId,
+            lt.family_id AS familyId,
+            lt.product_id AS productId,
+            lt.requested_at AS requestedAt,
+            lt.trade_date AS tradeDate,
+            lt.status AS status,
+            lt.category_id AS categoryId,
+            lt.is_reimbursable AS isReimbursable,
+            lt.is_reimbursed AS isReimbursed,
+            lt.is_reversed AS isReversed,
+            lt.note AS note,
+            lp.id AS postingId,
+            lp.posting_type AS postingType,
+            lp.account_id AS accountId,
+            a.account_name AS accountName,
+            a.account_kind AS accountKind,
+            lp.account_type AS accountType,
+            a.parent_account_id AS parentAccountId,
+            pa.account_name AS parentAccountName,
+            lp.amount AS amount,
+            lp.shares AS shares,
+            lp.currency AS currency
+        FROM ledger_txn lt
+        INNER JOIN ledger_posting lp ON lp.txn_id = lt.txn_id
+        LEFT JOIN accounts a ON a.id = lp.account_id
+        LEFT JOIN accounts pa ON pa.id = a.parent_account_id
+        WHERE lt.status = 'CONFIRMED'
+          AND COALESCE(lt.is_reversed, 0) = 0
+          AND lt.txn_type != 'ADJUST'
+        <choose>
+            <when test="scope != null and scope == 'FAMILY' and familyId != null">
+                AND (lt.family_id = #{familyId} OR lt.user_id = #{userId})
+            </when>
+            <otherwise>
+                AND lt.user_id = #{userId}
+            </otherwise>
+        </choose>
+        <if test="startDate != null">
+            AND lt.trade_date &gt;= #{startDate}
+        </if>
+        <if test="endDate != null">
+            AND lt.trade_date &lt;= #{endDate}
+        </if>
+        <if test="txnTypes != null and txnTypes.size() > 0">
+            AND lt.txn_type IN
+            <foreach collection="txnTypes" item="txnType" open="(" separator="," close=")">
+                #{txnType}
+            </foreach>
+        </if>
+        <if test="includeTransfer == null or includeTransfer == false">
+            AND lt.txn_type NOT IN ('TRANSFER_OUT', 'TRANSFER_IN')
+        </if>
+        <if test="productIds != null and productIds.size() > 0">
+            AND lt.product_id IN
+            <foreach collection="productIds" item="productId" open="(" separator="," close=")">
+                #{productId}
+            </foreach>
+        </if>
+        <if test="categoryIds != null and categoryIds.size() > 0">
+            AND lt.category_id IN
+            <foreach collection="categoryIds" item="categoryId" open="(" separator="," close=")">
+                #{categoryId}
+            </foreach>
+        </if>
+        <if test="effectiveAccountIds != null and effectiveAccountIds.size() > 0">
+            AND EXISTS (
+                SELECT 1
+                FROM ledger_posting fp
+                WHERE fp.txn_id = lt.txn_id
+                  AND fp.account_id IN
+                <foreach collection="effectiveAccountIds" item="accountId" open="(" separator="," close=")">
+                    #{accountId}
+                </foreach>
+            )
+        </if>
+        ORDER BY lt.trade_date DESC, lt.requested_at DESC, lp.id ASC
+    </select>
+
 </mapper>

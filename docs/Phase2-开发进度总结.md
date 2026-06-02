@@ -1,6 +1,6 @@
 # Phase 2 开发进度总结（前端开发与行情增强）
 
-**阶段状态**：进行中。Phase 2 的双端前端、行情、指标、定时任务高优先级闭环已完成；流水统计功能、债券行情、BOLL/KDJ 等仍在 Phase 2 待完善清单中。
+**阶段状态**：进行中。Phase 2 的双端前端、行情、指标、定时任务高优先级闭环已完成；流水统计功能已落地，债券行情、BOLL/KDJ 等仍在 Phase 2 待完善清单中。
 
 **当前代码核对时间**：2026-05-19
 
@@ -46,6 +46,7 @@
 - ✅ **账户API** (`account.ts`): getAccounts, getAccount, createAccount, updateAccount, adjustBalance, getMmfSharesDetail
 - ✅ **券商费率API** (`brokerFee.ts`): get/create/update/deleteFeeConfig
 - ✅ **流水API** (`ledger.ts`): getTransactions, getTransactionDetail, createTransaction, update/deleteTransaction, quickEntry, quickBuyMoneyMarketFund, refund, reimburse, createCustodyTransfer, recalculateAllBalanceHistory
+- ✅ **流水统计API** (`ledgerStats.ts`): getSummary, getTrend, getBreakdown, getTop
 - ✅ **订单API** (`order.ts`): getOrders, getOrder, createOrder, cancelOrder, confirmSettlement, calculateFee
 - ✅ **结算API** (`settlement.ts`): getPendingSettlements, confirmSettlement
 - ✅ **持仓API** (`holding.ts`): getHoldings, importInitialHoldings, getProductHoldingsByAccount；getHoldingDetail 为前端预留包装，后端暂未实现 `/api/v2/holdings/{productId}`
@@ -306,10 +307,10 @@
   - [x] 持仓历史曲线图表（使用ECharts）
   - [ ] 持仓成本分析
   - [ ] 持仓收益统计
-- [ ] **流水统计功能**：
-  - [ ] 按日期、账户、分类、交易类型等多维度统计收入/支出
-  - [ ] 支持账户、分类、交易类型多选筛选
-  - [ ] 提供趋势图、分类占比、账户分布、Top 分类/账户统计
+- [x] **流水统计功能**：
+  - [x] 按日期、账户、分类、交易类型等多维度统计收入/支出
+  - [x] 支持日期、账户、父账户、分类、交易类型、产品和是否包含转账等筛选
+  - [x] 提供汇总、趋势、分类/账户拆分、Top 流水统计
 
 #### 低优先级（可选功能）
 - [x] **用户管理功能**（设置页面）：
@@ -321,26 +322,26 @@
   - [ ] 数据导出
   - [ ] 操作日志查看
 
-## Phase 2 流水统计功能设计（待实现）
+## Phase 2 流水统计功能实现
 
 **目标**：补齐常见记账软件的统计分析能力，让用户可以按时间、账户、分类、交易类型等维度查看收入、支出和净流入。
 
 ### 后端接口设计
 
 #### 1. 统计汇总
-- [ ] `GET /api/v2/ledger/stats/summary`
+- [x] `GET /api/v2/ledger/stats/summary`
 - 返回总收入、总支出、净流入、交易笔数、日均支出、最大单笔支出、可报销支出、已报销金额等。
 
 #### 2. 趋势统计
-- [ ] `GET /api/v2/ledger/stats/trend`
+- [x] `GET /api/v2/ledger/stats/trend`
 - 支持 `groupBy=DAY|WEEK|MONTH`，返回每个周期的收入、支出、净流入和交易笔数。
 
 #### 3. 分类/账户拆分
-- [ ] `GET /api/v2/ledger/stats/breakdown`
+- [x] `GET /api/v2/ledger/stats/breakdown`
 - 支持 `groupBy=CATEGORY_L1|CATEGORY_L2|ACCOUNT|PARENT_ACCOUNT|TXN_TYPE`，返回金额、笔数、占比、同比/环比预留字段。
 
 #### 4. Top 列表
-- [ ] `GET /api/v2/ledger/stats/top`
+- [x] `GET /api/v2/ledger/stats/top`
 - 支持按分类、账户、备注关键词等输出 Top N 支出/收入项。
 
 ### 筛选条件
@@ -359,11 +360,11 @@
 
 ### 统计口径
 
-- [ ] 默认只统计 `status=CONFIRMED` 且未撤销的流水。
-- [ ] 生活收支：默认统计 `EXPENSE`、`INCOME`、`REFUND`、`REIMBURSE_IN` 等，不把普通转账计入收支。
-- [ ] 投资现金流：`BUY`、`SELL`、`SUBSCRIPTION`、`REDEMPTION` 可单独归入“投资现金流”，不与生活消费混算。
-- [ ] 多分录交易按业务流水去重，避免同一交易的借贷两边重复计入。
-- [ ] 父账户统计按其叶子账户分录聚合，父账户本身不参与记账。
+- [x] 默认只统计 `status=CONFIRMED` 且未撤销的流水。
+- [x] 生活收支：默认统计 `EXPENSE`、`INCOME`、`REFUND`、`REIMBURSE_IN` 等，不把普通转账计入收支。
+- [x] 投资现金流：`BUY`、`SELL`、`SUBSCRIPTION`、`REDEMPTION` 可单独归入“投资现金流”，不与生活消费混算。
+- [x] 多分录交易按业务流水去重，避免同一交易的借贷两边重复计入。
+- [x] 父账户统计按其叶子账户分录聚合，父账户本身不参与记账。
 
 ### 分类数据
 
@@ -372,7 +373,7 @@
 
 ### 前端页面
 
-- [ ] PC 端新增“统计”视图或在流水页增加统计 Tab。
+- [x] PC 端在流水页增加“流水统计”区域，展示汇总、趋势、拆分和 Top 流水。
 - [ ] Mobile 端在“我的/设置”或看板入口增加统计概览（迁移至 Phase3 原生 App 统一实现，Mobile H5 不再作为主交付形态）。
 - [ ] 图表：收入支出趋势、分类饼图/条形图、账户分布、Top 分类/账户。
 - [ ] 交互：日期快捷选择（本月/上月/今年/自定义）、账户多选、分类多选、交易类型多选、是否包含转账开关。
@@ -576,7 +577,7 @@ mvn clean compile
 - [x] Java `SnapshotGenerationTask`
 
 ### 当前仍未完成或已移入 Phase 3+ 的项目
-- [ ] 流水统计功能（按日期、账户、分类、交易类型多维统计，支持多选筛选）
+- [x] 流水统计功能（按日期、账户、分类、交易类型多维统计，支持多选筛选）
 - [ ] 债券行情采集
 - [ ] 股票行情独立采集脚本（当前通过 ETF 采集/历史回补逻辑复用）
 - [ ] BOLL / KDJ 等扩展指标

@@ -1,6 +1,12 @@
 package com.timelordtty.dca.service;
 
 import com.timelordtty.dca.dto.AuthResponse;
+import com.timelordtty.dca.dto.LedgerStatsBreakdownDTO;
+import com.timelordtty.dca.dto.LedgerStatsPostingDTO;
+import com.timelordtty.dca.dto.LedgerStatsQueryDTO;
+import com.timelordtty.dca.dto.LedgerStatsSummaryDTO;
+import com.timelordtty.dca.dto.LedgerStatsTopDTO;
+import com.timelordtty.dca.dto.LedgerStatsTrendDTO;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.LedgerPostingMapper;
 import com.timelordtty.dca.mapper.LedgerTxnMapper;
@@ -16,13 +22,19 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.WeekFields;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -70,6 +82,11 @@ import java.util.stream.Collectors;
 public class LedgerService {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LedgerService.class);
+    private static final Set<String> INCOME_TYPES = Set.of("INCOME", "REFUND", "REFUND_IN", "REIMBURSE_IN");
+    private static final Set<String> EXPENSE_TYPES = Set.of("EXPENSE", "REFUND_OUT", "REIMBURSE_OUT", "FEE", "TAX");
+    private static final Set<String> INVESTMENT_IN_TYPES = Set.of("SELL", "REDEMPTION", "REDEMPTION_IN", "DIVIDEND_CASH", "DIVIDEND_REINVEST", "BOND_REPO");
+    private static final Set<String> INVESTMENT_OUT_TYPES = Set.of("BUY", "SUBSCRIPTION", "REDEMPTION_OUT");
+    private static final Set<String> TRANSFER_TYPES = Set.of("TRANSFER_OUT", "TRANSFER_IN");
 
     private final LedgerTxnMapper ledgerTxnMapper;
     private final LedgerPostingMapper ledgerPostingMapper;
@@ -87,6 +104,394 @@ public class LedgerService {
         this.accountService = accountService;
         this.productMasterMapper = productMasterMapper;
         this.userService = userService;
+    }
+
+    public LedgerStatsSummaryDTO getLedgerStatsSummary(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
+        List<StatsTxn> txns = loadStatsTxns(user, query);
+        LedgerStatsSummaryDTO summary = new LedgerStatsSummaryDTO();
+        summary.setTxnCount(txns.size());
+
+        Set<LocalDate> activeDays = new HashSet<>();
+        for (StatsTxn txn : txns) {
+            BigDecimal amount = txn.displayAmount();
+            if (txn.tradeDate != null) {
+                activeDays.add(txn.tradeDate);
+            }
+            if (isIncomeType(txn.txnType)) {
+                summary.setTotalIncome(summary.getTotalIncome().add(amount));
+                summary.setIncomeTxnCount(summary.getIncomeTxnCount() + 1);
+            } else if (isExpenseType(txn.txnType)) {
+                summary.setTotalExpense(summary.getTotalExpense().add(amount));
+                summary.setExpenseTxnCount(summary.getExpenseTxnCount() + 1);
+                if (amount.compareTo(summary.getMaxExpenseAmount()) > 0) {
+                    summary.setMaxExpenseAmount(amount);
+                }
+                if (Boolean.TRUE.equals(txn.isReimbursable) && !Boolean.TRUE.equals(txn.isReimbursed)) {
+                    summary.setReimbursableExpense(summary.getReimbursableExpense().add(amount));
+                }
+            } else if (isInvestmentInType(txn.txnType)) {
+                summary.setInvestmentInflow(summary.getInvestmentInflow().add(amount));
+            } else if (isInvestmentOutType(txn.txnType)) {
+                summary.setInvestmentOutflow(summary.getInvestmentOutflow().add(amount));
+            } else if (isTransferType(txn.txnType)) {
+                summary.setTransferAmount(summary.getTransferAmount().add(amount));
+            }
+            if ("REIMBURSE_IN".equals(txn.txnType)) {
+                summary.setReimbursedAmount(summary.getReimbursedAmount().add(amount));
+            }
+        }
+
+        summary.setNetCashflow(summary.getTotalIncome().subtract(summary.getTotalExpense()));
+        int days = resolveStatsDays(query, activeDays);
+        if (days > 0) {
+            summary.setAvgDailyExpense(summary.getTotalExpense().divide(BigDecimal.valueOf(days), 2, RoundingMode.HALF_UP));
+        }
+        return summary;
+    }
+
+    public List<LedgerStatsTrendDTO> getLedgerStatsTrend(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
+        List<StatsTxn> txns = loadStatsTxns(user, query);
+        Map<String, LedgerStatsTrendDTO> grouped = new TreeMap<>();
+        for (StatsTxn txn : txns) {
+            String period = formatStatsPeriod(txn.tradeDate, query == null ? null : query.getPeriod());
+            LedgerStatsTrendDTO item = grouped.computeIfAbsent(period, key -> {
+                LedgerStatsTrendDTO dto = new LedgerStatsTrendDTO();
+                dto.setPeriod(key);
+                return dto;
+            });
+            BigDecimal amount = txn.displayAmount();
+            item.setTxnCount(item.getTxnCount() + 1);
+            if (isIncomeType(txn.txnType)) {
+                item.setIncome(item.getIncome().add(amount));
+            } else if (isExpenseType(txn.txnType)) {
+                item.setExpense(item.getExpense().add(amount));
+            } else if (isInvestmentInType(txn.txnType)) {
+                item.setInvestmentInflow(item.getInvestmentInflow().add(amount));
+            } else if (isInvestmentOutType(txn.txnType)) {
+                item.setInvestmentOutflow(item.getInvestmentOutflow().add(amount));
+            }
+            item.setNetCashflow(item.getIncome().subtract(item.getExpense()));
+        }
+        return new ArrayList<>(grouped.values());
+    }
+
+    public List<LedgerStatsBreakdownDTO> getLedgerStatsBreakdown(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
+        List<StatsTxn> txns = loadStatsTxns(user, query);
+        String groupBy = normalizeGroupBy(query == null ? null : query.getGroupBy());
+        Map<String, LedgerStatsBreakdownDTO> grouped = new LinkedHashMap<>();
+        for (StatsTxn txn : txns) {
+            for (StatsLine line : buildStatsLines(txn, groupBy)) {
+                LedgerStatsBreakdownDTO item = grouped.computeIfAbsent(line.key, key -> {
+                    LedgerStatsBreakdownDTO dto = new LedgerStatsBreakdownDTO();
+                    dto.setKey(key);
+                    dto.setName(line.name);
+                    dto.setGroupBy(groupBy);
+                    return dto;
+                });
+                item.setTxnCount(item.getTxnCount() + 1);
+                item.setAmount(item.getAmount().add(line.amount));
+                if (isIncomeType(txn.txnType)) {
+                    item.setIncome(item.getIncome().add(line.amount));
+                } else if (isExpenseType(txn.txnType)) {
+                    item.setExpense(item.getExpense().add(line.amount));
+                } else if (isInvestmentInType(txn.txnType)) {
+                    item.setInvestmentInflow(item.getInvestmentInflow().add(line.amount));
+                } else if (isInvestmentOutType(txn.txnType)) {
+                    item.setInvestmentOutflow(item.getInvestmentOutflow().add(line.amount));
+                }
+            }
+        }
+
+        BigDecimal total = grouped.values().stream()
+                .map(dto -> dto.getAmount().abs())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        grouped.values().forEach(dto -> {
+            if (total.compareTo(BigDecimal.ZERO) > 0) {
+                dto.setPercentage(dto.getAmount().abs().multiply(BigDecimal.valueOf(100)).divide(total, 2, RoundingMode.HALF_UP));
+            }
+        });
+
+        return grouped.values().stream()
+                .sorted(Comparator.comparing((LedgerStatsBreakdownDTO dto) -> dto.getAmount().abs()).reversed())
+                .collect(Collectors.toList());
+    }
+
+    public List<LedgerStatsTopDTO> getLedgerStatsTop(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
+        int limit = query == null || query.getLimit() == null || query.getLimit() <= 0 ? 10 : Math.min(query.getLimit(), 50);
+        return loadStatsTxns(user, query).stream()
+                .filter(txn -> isIncomeType(txn.txnType) || isExpenseType(txn.txnType) || isInvestmentInType(txn.txnType) || isInvestmentOutType(txn.txnType))
+                .sorted(Comparator.comparing((StatsTxn txn) -> txn.displayAmount().abs()).reversed())
+                .limit(limit)
+                .map(txn -> {
+                    LedgerStatsTopDTO dto = new LedgerStatsTopDTO();
+                    dto.setTxnId(txn.txnId);
+                    dto.setTxnType(txn.txnType);
+                    dto.setTradeDate(txn.tradeDate == null ? null : txn.tradeDate.toString());
+                    dto.setNote(txn.note);
+                    dto.setCategoryId(txn.categoryId);
+                    StatsPosting posting = txn.mainPosting();
+                    if (posting != null) {
+                        dto.setAccountId(posting.accountId);
+                        dto.setAccountName(posting.displayName());
+                    }
+                    dto.setAmount(txn.displayAmount());
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private List<StatsTxn> loadStatsTxns(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
+        LedgerStatsQueryDTO normalized = normalizeStatsQuery(user, query);
+        List<LedgerStatsPostingDTO> rows = ledgerTxnMapper.selectStatsPostings(normalized);
+        Map<String, StatsTxn> txnMap = new LinkedHashMap<>();
+        for (LedgerStatsPostingDTO row : rows) {
+            StatsTxn txn = txnMap.computeIfAbsent(row.getTxnId(), key -> new StatsTxn(row));
+            txn.postings.add(new StatsPosting(row));
+        }
+        return new ArrayList<>(txnMap.values());
+    }
+
+    private LedgerStatsQueryDTO normalizeStatsQuery(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
+        LedgerStatsQueryDTO normalized = query == null ? new LedgerStatsQueryDTO() : query;
+        normalized.setUserId(user.getId());
+        normalized.setFamilyId(user.getFamilyId());
+        if (normalized.getScope() == null || normalized.getScope().isBlank()) {
+            normalized.setScope("PERSONAL");
+        }
+        if (normalized.getIncludeTransfer() == null) {
+            normalized.setIncludeTransfer(false);
+        }
+        if (normalized.getPeriod() == null || normalized.getPeriod().isBlank()) {
+            normalized.setPeriod("MONTH");
+        }
+        if (normalized.getGroupBy() == null || normalized.getGroupBy().isBlank()) {
+            normalized.setGroupBy("CATEGORY");
+        }
+        if (normalized.getLimit() == null || normalized.getLimit() <= 0) {
+            normalized.setLimit(10);
+        }
+
+        LinkedHashSet<Long> effectiveAccountIds = new LinkedHashSet<>();
+        if (normalized.getAccountIds() != null) {
+            effectiveAccountIds.addAll(normalized.getAccountIds());
+        }
+        if (normalized.getParentAccountIds() != null) {
+            for (Long parentId : normalized.getParentAccountIds()) {
+                collectLeafAccountIds(parentId, effectiveAccountIds);
+            }
+        }
+        normalized.setEffectiveAccountIds(new ArrayList<>(effectiveAccountIds));
+        return normalized;
+    }
+
+    private void collectLeafAccountIds(Long parentId, Set<Long> result) {
+        if (parentId == null) {
+            return;
+        }
+        List<Account> children = accountMapper.selectChildren(parentId);
+        if (children == null || children.isEmpty()) {
+            result.add(parentId);
+            return;
+        }
+        for (Account child : children) {
+            collectLeafAccountIds(child.getId(), result);
+        }
+    }
+
+    private int resolveStatsDays(LedgerStatsQueryDTO query, Set<LocalDate> activeDays) {
+        if (query != null && query.getStartDate() != null && query.getEndDate() != null && !query.getEndDate().isBefore(query.getStartDate())) {
+            return (int) ChronoUnit.DAYS.between(query.getStartDate(), query.getEndDate()) + 1;
+        }
+        return Math.max(activeDays.size(), 1);
+    }
+
+    private String formatStatsPeriod(LocalDate date, String period) {
+        if (date == null) {
+            return "UNKNOWN";
+        }
+        String normalized = period == null ? "MONTH" : period.toUpperCase(Locale.ROOT);
+        if ("DAY".equals(normalized)) {
+            return date.toString();
+        }
+        if ("WEEK".equals(normalized)) {
+            WeekFields weekFields = WeekFields.ISO;
+            return date.get(weekFields.weekBasedYear()) + "-W" + String.format("%02d", date.get(weekFields.weekOfWeekBasedYear()));
+        }
+        return date.getYear() + "-" + String.format("%02d", date.getMonthValue());
+    }
+
+    private String normalizeGroupBy(String groupBy) {
+        if (groupBy == null || groupBy.isBlank()) {
+            return "CATEGORY";
+        }
+        String normalized = groupBy.toUpperCase(Locale.ROOT);
+        if ("CATEGORY_L1".equals(normalized) || "CATEGORY_L2".equals(normalized) || "CATEGORY_ID".equals(normalized)) {
+            return "CATEGORY";
+        }
+        return normalized;
+    }
+
+    private List<StatsLine> buildStatsLines(StatsTxn txn, String groupBy) {
+        if ("ACCOUNT".equals(groupBy) || "PARENT_ACCOUNT".equals(groupBy)) {
+            List<StatsLine> lines = txn.cashPostingsForDisplay().stream()
+                    .map(posting -> new StatsLine(
+                            "PARENT_ACCOUNT".equals(groupBy) ? posting.parentKey() : posting.accountKey(),
+                            "PARENT_ACCOUNT".equals(groupBy) ? posting.parentName() : posting.displayName(),
+                            posting.amount.abs()))
+                    .collect(Collectors.toList());
+            if (!lines.isEmpty()) {
+                return lines;
+            }
+        }
+        if ("TXN_TYPE".equals(groupBy)) {
+            return List.of(new StatsLine(txn.txnType, txn.txnType, txn.displayAmount()));
+        }
+        String categoryKey = txn.categoryId == null ? "UNCATEGORIZED" : String.valueOf(txn.categoryId);
+        String categoryName = txn.categoryId == null ? "未分类" : "分类 " + txn.categoryId;
+        return List.of(new StatsLine(categoryKey, categoryName, txn.displayAmount()));
+    }
+
+    private boolean isIncomeType(String txnType) {
+        return INCOME_TYPES.contains(txnType);
+    }
+
+    private boolean isExpenseType(String txnType) {
+        return EXPENSE_TYPES.contains(txnType);
+    }
+
+    private boolean isInvestmentInType(String txnType) {
+        return INVESTMENT_IN_TYPES.contains(txnType);
+    }
+
+    private boolean isInvestmentOutType(String txnType) {
+        return INVESTMENT_OUT_TYPES.contains(txnType);
+    }
+
+    private boolean isTransferType(String txnType) {
+        return TRANSFER_TYPES.contains(txnType);
+    }
+
+    private static class StatsTxn {
+        private final String txnId;
+        private final String txnType;
+        private final LocalDate tradeDate;
+        private final Long categoryId;
+        private final Boolean isReimbursable;
+        private final Boolean isReimbursed;
+        private final String note;
+        private final List<StatsPosting> postings = new ArrayList<>();
+
+        private StatsTxn(LedgerStatsPostingDTO row) {
+            this.txnId = row.getTxnId();
+            this.txnType = row.getTxnType();
+            this.tradeDate = row.getTradeDate();
+            this.categoryId = row.getCategoryId();
+            this.isReimbursable = row.getIsReimbursable();
+            this.isReimbursed = row.getIsReimbursed();
+            this.note = row.getNote();
+        }
+
+        private BigDecimal displayAmount() {
+            BigDecimal debit = realCashAmount("DEBIT");
+            BigDecimal credit = realCashAmount("CREDIT");
+            if (INCOME_TYPES.contains(txnType) || INVESTMENT_IN_TYPES.contains(txnType)) {
+                return debit.compareTo(BigDecimal.ZERO) > 0 ? debit : maxCashAmount();
+            }
+            if (EXPENSE_TYPES.contains(txnType) || INVESTMENT_OUT_TYPES.contains(txnType)) {
+                return credit.compareTo(BigDecimal.ZERO) > 0 ? credit : maxCashAmount();
+            }
+            if (TRANSFER_TYPES.contains(txnType)) {
+                return debit.max(credit).max(maxCashAmount());
+            }
+            return debit.max(credit).max(maxCashAmount());
+        }
+
+        private BigDecimal realCashAmount(String postingType) {
+            return postings.stream()
+                    .filter(posting -> posting.isRealCash() && postingType.equals(posting.postingType))
+                    .map(posting -> posting.amount.abs())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        private BigDecimal maxCashAmount() {
+            return postings.stream()
+                    .filter(StatsPosting::isRealCash)
+                    .map(posting -> posting.amount.abs())
+                    .max(BigDecimal::compareTo)
+                    .orElse(BigDecimal.ZERO);
+        }
+
+        private List<StatsPosting> cashPostingsForDisplay() {
+            String postingType = (INCOME_TYPES.contains(txnType) || INVESTMENT_IN_TYPES.contains(txnType)) ? "DEBIT" : "CREDIT";
+            List<StatsPosting> selected = postings.stream()
+                    .filter(posting -> posting.isRealCash() && postingType.equals(posting.postingType))
+                    .collect(Collectors.toList());
+            return selected.isEmpty()
+                    ? postings.stream().filter(StatsPosting::isRealCash).collect(Collectors.toList())
+                    : selected;
+        }
+
+        private StatsPosting mainPosting() {
+            List<StatsPosting> cashPostings = cashPostingsForDisplay();
+            return cashPostings.isEmpty() ? null : cashPostings.get(0);
+        }
+    }
+
+    private static class StatsPosting {
+        private final String postingType;
+        private final Long accountId;
+        private final String accountName;
+        private final String accountKind;
+        private final String accountType;
+        private final Long parentAccountId;
+        private final String parentAccountName;
+        private final BigDecimal amount;
+
+        private StatsPosting(LedgerStatsPostingDTO row) {
+            this.postingType = row.getPostingType();
+            this.accountId = row.getAccountId();
+            this.accountName = row.getAccountName();
+            this.accountKind = row.getAccountKind();
+            this.accountType = row.getAccountType();
+            this.parentAccountId = row.getParentAccountId();
+            this.parentAccountName = row.getParentAccountName();
+            this.amount = row.getAmount() == null ? BigDecimal.ZERO : row.getAmount();
+        }
+
+        private boolean isRealCash() {
+            return "REAL".equals(accountKind) && "CASH".equals(accountType);
+        }
+
+        private String accountKey() {
+            return accountId == null ? "UNKNOWN_ACCOUNT" : String.valueOf(accountId);
+        }
+
+        private String parentKey() {
+            return parentAccountId == null ? accountKey() : String.valueOf(parentAccountId);
+        }
+
+        private String displayName() {
+            if (parentAccountName != null && accountName != null) {
+                return parentAccountName + "-" + accountName;
+            }
+            return accountName == null ? "未知账户" : accountName;
+        }
+
+        private String parentName() {
+            return parentAccountName == null ? displayName() : parentAccountName;
+        }
+    }
+
+    private static class StatsLine {
+        private final String key;
+        private final String name;
+        private final BigDecimal amount;
+
+        private StatsLine(String key, String name, BigDecimal amount) {
+            this.key = key;
+            this.name = name;
+            this.amount = amount == null ? BigDecimal.ZERO : amount;
+        }
     }
 
     /**
@@ -1825,4 +2230,3 @@ public class LedgerService {
         return txn;
     }
 }
-

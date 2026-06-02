@@ -1,5 +1,7 @@
 package com.timelordtty.dca.mapper;
 
+import com.timelordtty.dca.dto.LedgerStatsPostingDTO;
+import com.timelordtty.dca.dto.LedgerStatsQueryDTO;
 import com.timelordtty.dca.model.LedgerTxn;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -27,5 +29,6 @@ public interface LedgerTxnMapper {
     int insert(LedgerTxn txn);
     int update(LedgerTxn txn);
     int deleteByTxnId(@Param("txnId") String txnId);
+    List<LedgerStatsPostingDTO> selectStatsPostings(LedgerStatsQueryDTO query);
 }
 

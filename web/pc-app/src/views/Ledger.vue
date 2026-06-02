@@ -237,14 +237,169 @@
         />
       </div>
     </div>
+
+    <div class="card ledger-stats-card">
+      <div class="row-between">
+        <div>
+          <h3>
+            流水统计
+            <span class="tag gray tiny">Phase2</span>
+          </h3>
+          <div class="sub">只统计已确认、未冲销流水；默认不把转账混入生活收支。</div>
+        </div>
+        <el-button size="small" :loading="statsLoading" @click="loadStats">刷新统计</el-button>
+      </div>
+      <div class="divider"></div>
+
+      <div class="row-gap" style="margin-bottom: 16px">
+        <el-select v-model="statsPeriod" placeholder="统计周期" style="width: 120px" size="small" @change="loadStats">
+          <el-option label="按日" value="DAY" />
+          <el-option label="按周" value="WEEK" />
+          <el-option label="按月" value="MONTH" />
+        </el-select>
+        <el-select v-model="statsGroupBy" placeholder="拆分维度" style="width: 140px" size="small" @change="loadStats">
+          <el-option label="分类" value="CATEGORY" />
+          <el-option label="交易类型" value="TXN_TYPE" />
+          <el-option label="子账户" value="ACCOUNT" />
+          <el-option label="父账户" value="PARENT_ACCOUNT" />
+        </el-select>
+        <el-select v-model="statsTxnType" placeholder="交易类型" style="width: 140px" size="small" clearable @change="loadStats">
+          <el-option
+            v-for="option in txnTypeOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+        <el-select v-model="statsCategoryId" placeholder="分类" style="width: 170px" size="small" clearable @change="loadStats">
+          <el-option
+            v-for="option in categoryOptions"
+            :key="option.value"
+            :label="option.label"
+            :value="option.value"
+          />
+        </el-select>
+        <el-switch
+          v-model="statsIncludeTransfer"
+          active-text="包含转账"
+          inactive-text="排除转账"
+          @change="loadStats"
+        />
+      </div>
+
+      <div v-if="statsLoading" class="td-muted" style="padding: 24px; text-align: center">统计加载中...</div>
+      <template v-else>
+        <div class="stats-summary-grid">
+          <div class="stats-card">
+            <div class="stats-label">生活收入</div>
+            <div class="stats-value amount-income">{{ formatCurrency(statsSummary?.totalIncome || 0) }}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">生活支出</div>
+            <div class="stats-value amount-expense">{{ formatCurrency(statsSummary?.totalExpense || 0) }}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">生活净流入</div>
+            <div class="stats-value">{{ formatCurrency(statsSummary?.netCashflow || 0) }}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">投资流入 / 流出</div>
+            <div class="stats-value">{{ formatCurrency(statsSummary?.investmentInflow || 0) }} / {{ formatCurrency(statsSummary?.investmentOutflow || 0) }}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">日均支出</div>
+            <div class="stats-value">{{ formatCurrency(statsSummary?.avgDailyExpense || 0) }}</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-label">交易笔数</div>
+            <div class="stats-value">{{ statsSummary?.txnCount || 0 }}</div>
+          </div>
+        </div>
+
+        <div class="stats-panels">
+          <div class="stats-panel">
+            <h4>趋势</h4>
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>周期</th>
+                  <th class="right">收入</th>
+                  <th class="right">支出</th>
+                  <th class="right">净流入</th>
+                  <th class="right">笔数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in statsTrend" :key="item.period">
+                  <td>{{ item.period }}</td>
+                  <td class="right amount-income">{{ formatCurrency(item.income) }}</td>
+                  <td class="right amount-expense">{{ formatCurrency(item.expense) }}</td>
+                  <td class="right">{{ formatCurrency(item.netCashflow) }}</td>
+                  <td class="right">{{ item.txnCount }}</td>
+                </tr>
+                <tr v-if="statsTrend.length === 0"><td colspan="5" class="td-muted">暂无趋势数据</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="stats-panel">
+            <h4>拆分</h4>
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>维度</th>
+                  <th class="right">金额</th>
+                  <th class="right">占比</th>
+                  <th class="right">笔数</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in statsBreakdown" :key="item.key">
+                  <td>{{ formatBreakdownName(item.name) }}</td>
+                  <td class="right">{{ formatCurrency(item.amount) }}</td>
+                  <td class="right">{{ item.percentage }}%</td>
+                  <td class="right">{{ item.txnCount }}</td>
+                </tr>
+                <tr v-if="statsBreakdown.length === 0"><td colspan="4" class="td-muted">暂无拆分数据</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="stats-panel stats-panel-wide">
+            <h4>Top 流水</h4>
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>类型</th>
+                  <th>账户</th>
+                  <th>备注</th>
+                  <th class="right">金额</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in statsTop" :key="item.txnId">
+                  <td>{{ item.tradeDate || '-' }}</td>
+                  <td>{{ getTxnTypeLabel(item.txnType) }}</td>
+                  <td>{{ item.accountName || '-' }}</td>
+                  <td class="td-muted">{{ item.note || '' }}</td>
+                  <td class="right">{{ formatCurrency(item.amount) }}</td>
+                </tr>
+                <tr v-if="statsTop.length === 0"><td colspan="5" class="td-muted">暂无 Top 数据</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElNotification, ElPagination, ElMessageBox } from 'element-plus'
-import { ledgerApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
-import type { LedgerTxn, LedgerTxnDetail, LedgerPosting } from '@wealth-hub/shared'
+import { ledgerApi, ledgerStatsApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
+import type { LedgerTxn, LedgerTxnDetail, LedgerPosting, LedgerStatsBreakdown, LedgerStatsGroupBy, LedgerStatsPeriod, LedgerStatsSummary, LedgerStatsTop, LedgerStatsTrend } from '@wealth-hub/shared'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
 import RefundModal from '../components/RefundModal.vue'
 import ReimburseModal from '../components/ReimburseModal.vue'
@@ -265,6 +420,16 @@ const selectedExpenseTxn = ref<LedgerTxn | null>(null)
 const unifiedEntryVisible = ref(false)
 const editVisible = ref(false)
 const editingTxn = ref<LedgerTxnDetail | null>(null)
+const statsLoading = ref(false)
+const statsPeriod = ref<LedgerStatsPeriod>('MONTH')
+const statsGroupBy = ref<LedgerStatsGroupBy>('CATEGORY')
+const statsTxnType = ref<string | undefined>()
+const statsCategoryId = ref<number | undefined>()
+const statsIncludeTransfer = ref(false)
+const statsSummary = ref<LedgerStatsSummary | null>(null)
+const statsTrend = ref<LedgerStatsTrend[]>([])
+const statsBreakdown = ref<LedgerStatsBreakdown[]>([])
+const statsTop = ref<LedgerStatsTop[]>([])
 
 const pagination = reactive({
   page: 1,
@@ -326,6 +491,16 @@ const availableChildAccounts = computed(() => {
   return parentAccount.children.filter((acc: any) => acc.accountKind === 'REAL')
 })
 
+const txnTypeOptions = computed(() => Object.entries(txnTypeMap).map(([value, label]) => ({ value, label })))
+
+const categoryOptions = computed(() => {
+  const merged = [...expenseCategories, ...incomeCategories]
+  return merged.map(category => ({
+    value: category.id,
+    label: category.categoryL2 ? `${category.categoryL1} - ${category.categoryL2}` : category.categoryL1,
+  }))
+})
+
 function handleParentAccountChange() {
   filters.accountId = undefined
   handleFilterChange()
@@ -345,6 +520,7 @@ function handleDateRangeChange() {
 function handleFilterChange() {
   pagination.page = 1 // 重置到第一页
   loadTransactions()
+  loadStats()
 }
 
 async function loadTransactions() {
@@ -369,6 +545,42 @@ async function loadTransactions() {
     ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
   } finally {
     loading.value = false
+  }
+}
+
+function buildStatsQuery() {
+  return {
+    startDate: filters.startDate || undefined,
+    endDate: filters.endDate || undefined,
+    accountIds: filters.accountId ? [filters.accountId] : undefined,
+    parentAccountIds: filters.parentAccountId && !filters.accountId ? [filters.parentAccountId] : undefined,
+    txnTypes: statsTxnType.value ? [statsTxnType.value] : undefined,
+    categoryIds: statsCategoryId.value ? [statsCategoryId.value] : undefined,
+    includeTransfer: statsIncludeTransfer.value,
+    period: statsPeriod.value,
+    groupBy: statsGroupBy.value,
+    limit: 10,
+  }
+}
+
+async function loadStats() {
+  statsLoading.value = true
+  try {
+    const query = buildStatsQuery()
+    const [summary, trend, breakdown, top] = await Promise.all([
+      ledgerStatsApi.getSummary(query),
+      ledgerStatsApi.getTrend(query),
+      ledgerStatsApi.getBreakdown(query),
+      ledgerStatsApi.getTop(query),
+    ])
+    statsSummary.value = summary
+    statsTrend.value = trend
+    statsBreakdown.value = breakdown
+    statsTop.value = top
+  } catch (error: any) {
+    ElNotification.error({ title: '错误', message: error.message || '统计加载失败', position: 'bottom-right' })
+  } finally {
+    statsLoading.value = false
   }
 }
 
@@ -590,6 +802,28 @@ function getCategoryChild(txn: LedgerTxn): string {
   return category.categoryL2
 }
 
+function formatBreakdownName(name: string): string {
+  if (!name || !name.startsWith('分类 ')) {
+    return name || '-'
+  }
+  const categoryId = Number(name.replace('分类 ', ''))
+  if (!categoryId) {
+    return name
+  }
+  const expenseCategory = findCategoryById(expenseCategories, categoryId)
+  const incomeCategory = findCategoryById(incomeCategories, categoryId)
+  const category = expenseCategory || incomeCategory
+  if (!category) {
+    return name
+  }
+  return category.categoryL2 ? `${category.categoryL1} - ${category.categoryL2}` : category.categoryL1
+}
+
+function refreshLedgerPage() {
+  loadTransactions()
+  loadStats()
+}
+
 /**
  * 根据交易类型获取金额显示的颜色类
  * 颜色约定：
@@ -780,9 +1014,10 @@ onMounted(async () => {
   localAccounts.value = accountStore.accounts || []
   
   loadTransactions()
+  loadStats()
   
   // 监听全局数据刷新事件
-  window.addEventListener('data-refresh', loadTransactions)
+  window.addEventListener('data-refresh', refreshLedgerPage)
 })
 </script>
 
@@ -794,6 +1029,76 @@ onMounted(async () => {
   max-height: calc(100vh - 310px); /* 调整高度避免外层滚动，同时尽量多显示记录 */
   min-height: 300px;
   position: relative;
+}
+
+.ledger-stats-card {
+  margin-top: 16px;
+}
+
+.stats-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.stats-card {
+  padding: 14px;
+  border: 1px solid rgba(78, 164, 255, 0.16);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(78, 164, 255, 0.08), rgba(255, 255, 255, 0.8));
+}
+
+.stats-label {
+  color: #64748b;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.stats-value {
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.stats-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stats-panel {
+  min-width: 0;
+}
+
+.stats-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.mini-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.mini-table th {
+  padding: 10px;
+  background: rgba(78, 164, 255, 0.08);
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+}
+
+.mini-table td {
+  padding: 10px;
+  border-bottom: 1px solid rgba(230, 238, 247, 0.7);
+}
+
+@media (max-width: 900px) {
+  .stats-panels {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* 流水表格样式 - 更大、更美观 */

@@ -1,6 +1,11 @@
  package com.timelordtty.dca.controller;
 
 import com.timelordtty.dca.dto.AuthResponse;
+import com.timelordtty.dca.dto.LedgerStatsBreakdownDTO;
+import com.timelordtty.dca.dto.LedgerStatsQueryDTO;
+import com.timelordtty.dca.dto.LedgerStatsSummaryDTO;
+import com.timelordtty.dca.dto.LedgerStatsTopDTO;
+import com.timelordtty.dca.dto.LedgerStatsTrendDTO;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.LedgerPosting;
 import com.timelordtty.dca.model.LedgerTxn;
@@ -18,6 +23,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 记账控制器（LedgerController）
@@ -293,6 +299,30 @@ public class LedgerController {
         response.put("totalPages", (int) Math.ceil((double) total / pageSize));
         
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/stats/summary")
+    public ResponseEntity<LedgerStatsSummaryDTO> getLedgerStatsSummary(@RequestParam Map<String, String> params) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(ledgerService.getLedgerStatsSummary(currentUser, buildStatsQuery(params)));
+    }
+
+    @GetMapping("/stats/trend")
+    public ResponseEntity<List<LedgerStatsTrendDTO>> getLedgerStatsTrend(@RequestParam Map<String, String> params) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(ledgerService.getLedgerStatsTrend(currentUser, buildStatsQuery(params)));
+    }
+
+    @GetMapping("/stats/breakdown")
+    public ResponseEntity<List<LedgerStatsBreakdownDTO>> getLedgerStatsBreakdown(@RequestParam Map<String, String> params) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(ledgerService.getLedgerStatsBreakdown(currentUser, buildStatsQuery(params)));
+    }
+
+    @GetMapping("/stats/top")
+    public ResponseEntity<List<LedgerStatsTopDTO>> getLedgerStatsTop(@RequestParam Map<String, String> params) {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        return ResponseEntity.ok(ledgerService.getLedgerStatsTop(currentUser, buildStatsQuery(params)));
     }
 
     @GetMapping("/txns/{txnId}")
@@ -769,6 +799,52 @@ public class LedgerController {
             currentUser.getId(), currentUser.getFamilyId(), productId, transferShares, transferPrice, transferDate, note);
         return ResponseEntity.ok(transferTxn);
     }
+
+    private LedgerStatsQueryDTO buildStatsQuery(Map<String, String> params) {
+        LedgerStatsQueryDTO query = new LedgerStatsQueryDTO();
+        query.setScope(params.getOrDefault("scope", "PERSONAL"));
+        query.setStartDate(parseLocalDate(params.get("startDate")));
+        query.setEndDate(parseLocalDate(params.get("endDate")));
+        query.setTxnTypes(parseStringList(params.get("txnTypes")));
+        query.setAccountIds(parseLongList(params.get("accountIds")));
+        query.setParentAccountIds(parseLongList(params.get("parentAccountIds")));
+        query.setCategoryIds(parseLongList(params.get("categoryIds")));
+        query.setCategoryL1(params.get("categoryL1"));
+        query.setCategoryL2(params.get("categoryL2"));
+        query.setProductIds(parseLongList(params.get("productIds")));
+        query.setIncludeTransfer(Boolean.parseBoolean(params.getOrDefault("includeTransfer", "false")));
+        query.setPeriod(params.getOrDefault("period", "MONTH"));
+        query.setGroupBy(params.getOrDefault("groupBy", "CATEGORY"));
+        if (params.get("limit") != null && !params.get("limit").isBlank()) {
+            query.setLimit(Integer.valueOf(params.get("limit")));
+        }
+        return query;
+    }
+
+    private LocalDate parseLocalDate(String value) {
+        return value == null || value.isBlank() ? null : LocalDate.parse(value);
+    }
+
+    private List<String> parseStringList(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .collect(Collectors.toList());
+    }
+
+    private List<Long> parseLongList(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return java.util.Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isEmpty())
+                .map(Long::valueOf)
+                .collect(Collectors.toList());
+    }
     
     /**
      * 为转账交易构建显示记录
@@ -1072,4 +1148,3 @@ public class LedgerController {
         return ResponseEntity.ok(result);
     }
 }
-
