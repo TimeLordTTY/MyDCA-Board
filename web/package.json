@@ -16,5 +16,8 @@
     "dev:pc": "npm -w wealth-hub-pc-app run dev",
     "dev:mobile": "npm -w wealth-hub-mobile-app run dev",
     "clean": "rimraf shared/dist pc-app/dist mobile-app/dist"
+  },
+  "devDependencies": {
+    "typescript": "5.3.3"
   }
 }

@@ -609,15 +609,6 @@ async function handleViewDetail(txn: LedgerTxn) {
   }
 }
 
-function getAccountName(accountId: number): string {
-  const account = accountStore.accountTree.find((a) => a.id === accountId)
-  if (!account) return `账户ID: ${accountId}`
-  const parent = account.parentAccountId
-    ? accountStore.accountTree.find((a) => a.id === account.parentAccountId)
-    : null
-  return parent ? `${parent.accountName} / ${account.accountName}` : account.accountName
-}
-
 function getLeafAccountName(accountId: number): string {
   // 显示规则：父账户名称-叶子账户名称
   const account = findAccountInTree(accountId)
@@ -710,46 +701,6 @@ function getParentAccountBalance(accountId: number): number | null {
     }, 0)
   }
   return parent.balance || 0
-}
-
-function getSummaryText(txn: LedgerTxn): string {
-  const txnAny = txn as any
-  if (txn.note) {
-    return txn.note
-  }
-  // 如果有主要账户ID，显示账户名称
-  if (txnAny.mainAccountId) {
-    const accountName = getAccountName(txnAny.mainAccountId)
-    return accountName
-  }
-  return '—'
-}
-
-function getCategoryDisplayText(txn: LedgerTxn): string {
-  // 确保 categoryId 是数字类型
-  const categoryId = txn.categoryId ? Number(txn.categoryId) : undefined
-  if (!categoryId) {
-    return '—'
-  }
-  
-  // 根据交易类型选择分类列表
-  const categories = txn.txnType === 'EXPENSE' ? expenseCategories : incomeCategories
-  const category = findCategoryById(categories, categoryId)
-  
-  if (!category) {
-    // 如果找不到分类，输出调试信息
-    console.warn(`分类未找到: categoryId=${categoryId}, txnType=${txn.txnType}`, {
-      availableIds: categories.map(c => c.id),
-      txnData: txn
-    })
-    return '—'
-  }
-  
-  // 如果有二级分类，显示"一级分类 - 二级分类"，否则只显示一级分类
-  if (category.categoryL2) {
-    return `${category.categoryL1} - ${category.categoryL2}`
-  }
-  return category.categoryL1
 }
 
 function formatDate(dateTimeStr: string): string {
@@ -920,12 +871,6 @@ function formatAmountWithSign(txnType: string, amount: number): string {
   return `${sign}${formatCurrency(Math.abs(amount))}`
 }
 
-function isReimbursable(txn: LedgerTxn): boolean {
-  // 检查isReimbursable字段，且未报销
-  const txnAny = txn as any
-  return txnAny.isReimbursable === true && txnAny.isReimbursed !== true
-}
-
 async function handleRefund(txn: LedgerTxn) {
   try {
     // 获取完整的交易详情（包含postings）
@@ -952,10 +897,6 @@ async function handleRefundSuccess() {
   // 退款成功后自动刷新账户数据和流水列表
   await accountStore.fetchAccounts()
   loadTransactions()
-}
-
-function handleUnifiedEntry() {
-  unifiedEntryVisible.value = true
 }
 
 async function handleEntrySuccess() {

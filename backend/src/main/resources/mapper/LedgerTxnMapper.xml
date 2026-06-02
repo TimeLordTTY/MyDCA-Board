@@ -223,7 +223,7 @@
           AND COALESCE(lt.is_reversed, 0) = 0
           AND lt.txn_type != 'ADJUST'
         <choose>
-            <when test="scope != null and scope == 'FAMILY' and familyId != null">
+            <when test="scope != null and scope.equals('FAMILY') and familyId != null">
                 AND (lt.family_id = #{familyId} OR lt.user_id = #{userId})
             </when>
             <otherwise>

@@ -252,7 +252,7 @@ public class LedgerService {
     }
 
     private LedgerStatsQueryDTO normalizeStatsQuery(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
-        LedgerStatsQueryDTO normalized = query == null ? new LedgerStatsQueryDTO() : query;
+        LedgerStatsQueryDTO normalized = copyStatsQuery(query);
         normalized.setUserId(user.getId());
         normalized.setFamilyId(user.getFamilyId());
         if (normalized.getScope() == null || normalized.getScope().isBlank()) {
@@ -347,8 +347,30 @@ public class LedgerService {
             return List.of(new StatsLine(txn.txnType, txn.txnType, txn.displayAmount()));
         }
         String categoryKey = txn.categoryId == null ? "UNCATEGORIZED" : String.valueOf(txn.categoryId);
-        String categoryName = txn.categoryId == null ? "未分类" : "分类 " + txn.categoryId;
+        String categoryName = txn.categoryId == null ? "\u672a\u5206\u7c7b" : "\u5206\u7c7b " + txn.categoryId;
         return List.of(new StatsLine(categoryKey, categoryName, txn.displayAmount()));
+    }
+
+    private LedgerStatsQueryDTO copyStatsQuery(LedgerStatsQueryDTO query) {
+        LedgerStatsQueryDTO copied = new LedgerStatsQueryDTO();
+        if (query == null) {
+            return copied;
+        }
+        copied.setScope(query.getScope());
+        copied.setStartDate(query.getStartDate());
+        copied.setEndDate(query.getEndDate());
+        copied.setTxnTypes(query.getTxnTypes());
+        copied.setAccountIds(query.getAccountIds());
+        copied.setParentAccountIds(query.getParentAccountIds());
+        copied.setCategoryIds(query.getCategoryIds());
+        copied.setCategoryL1(query.getCategoryL1());
+        copied.setCategoryL2(query.getCategoryL2());
+        copied.setProductIds(query.getProductIds());
+        copied.setIncludeTransfer(query.getIncludeTransfer());
+        copied.setPeriod(query.getPeriod());
+        copied.setGroupBy(query.getGroupBy());
+        copied.setLimit(query.getLimit());
+        return copied;
     }
 
     private boolean isIncomeType(String txnType) {

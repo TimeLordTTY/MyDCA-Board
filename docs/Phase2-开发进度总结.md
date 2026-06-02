@@ -353,7 +353,7 @@
 - `accountIds`：账户多选，支持叶子账户。
 - `parentAccountIds`：父账户多选，后端展开为子账户后统计。
 - `categoryIds`：分类多选。
-- `categoryL1` / `categoryL2`：一级/二级分类多选。
+- `categoryL1` / `categoryL2`：预留参数；首版以后端 `categoryIds` 筛选为主，一级/二级分类筛选待分类主数据后端化后完善。
 - `productIds`：产品多选，用于投资现金流统计。
 - `includeTransfer`：是否包含转账，默认不包含。
 - `scope`：`PERSONAL|FAMILY`，复用当前用户/家庭权限模型。
