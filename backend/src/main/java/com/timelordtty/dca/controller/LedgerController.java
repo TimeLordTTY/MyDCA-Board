@@ -49,12 +49,34 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/api/v2/ledger")
+/**
+ * 业务注释规范化: LedgerController 控制器，负责接收前端请求、读取用户上下文，并将业务处理委托给服务层。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class LedgerController {
 
+    /**
+     * 业务注释规范化: ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
 
+    /**
+     * 业务注释规范化: 处理 LedgerController 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param ledgerService ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public LedgerController(LedgerService ledgerService, UserService userService, AccountService accountService) {
         this.ledgerService = ledgerService;
         this.userService = userService;
@@ -62,6 +84,13 @@ public class LedgerController {
     }
 
     @GetMapping("/txns")
+    /**
+     * 业务注释规范化: 查询 getTransactions 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param false false 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> getTransactions(
             @RequestParam(required = false) String txnType,
             @RequestParam(required = false) LocalDate startDate,
@@ -302,30 +331,65 @@ public class LedgerController {
     }
 
     @GetMapping("/stats/summary")
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsSummary 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param params params 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerStatsSummaryDTO> getLedgerStatsSummary(@RequestParam Map<String, String> params) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(ledgerService.getLedgerStatsSummary(currentUser, buildStatsQuery(params)));
     }
 
     @GetMapping("/stats/trend")
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsTrend 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param params params 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<LedgerStatsTrendDTO>> getLedgerStatsTrend(@RequestParam Map<String, String> params) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(ledgerService.getLedgerStatsTrend(currentUser, buildStatsQuery(params)));
     }
 
     @GetMapping("/stats/breakdown")
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsBreakdown 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param params params 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<LedgerStatsBreakdownDTO>> getLedgerStatsBreakdown(@RequestParam Map<String, String> params) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(ledgerService.getLedgerStatsBreakdown(currentUser, buildStatsQuery(params)));
     }
 
     @GetMapping("/stats/top")
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsTop 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param params params 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<LedgerStatsTopDTO>> getLedgerStatsTop(@RequestParam Map<String, String> params) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(ledgerService.getLedgerStatsTop(currentUser, buildStatsQuery(params)));
     }
 
     @GetMapping("/txns/{txnId}")
+    /**
+     * 业务注释规范化: 查询 getTransactionDetail 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> getTransactionDetail(@PathVariable String txnId) {
         LedgerTxn txn = ledgerService.getTransactionDetail(txnId);
         List<LedgerPosting> postings = ledgerService.getPostingsByTxnId(txnId);
@@ -471,6 +535,13 @@ public class LedgerController {
     }
 
     @PostMapping("/txns")
+    /**
+     * 业务注释规范化: 创建 createTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> createTransaction(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         String txnType = request.get("txnType").toString();
@@ -510,6 +581,14 @@ public class LedgerController {
      * 用途：个人纠错，例如修改付款账户、金额、备注等。
      */
     @PutMapping("/txns/{txnId}")
+    /**
+     * 业务注释规范化: 更新 updateTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> updateTransaction(@PathVariable String txnId,
                                                        @RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -587,6 +666,13 @@ public class LedgerController {
      * 删除一笔流水交易。
      */
     @DeleteMapping("/txns/{txnId}")
+    /**
+     * 业务注释规范化: 删除 deleteTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Void> deleteTransaction(@PathVariable String txnId) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         LedgerTxn existing = ledgerService.getTransactionDetail(txnId);
@@ -598,6 +684,13 @@ public class LedgerController {
     }
 
     @PostMapping("/quick-entry")
+    /**
+     * 业务注释规范化: 处理 quickEntry 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> quickEntry(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         String type = request.get("type").toString(); // EXPENSE or INCOME
@@ -681,6 +774,13 @@ public class LedgerController {
      * @return 创建的交易记录
      */
     @PostMapping("/quick-buy-mmf")
+    /**
+     * 业务注释规范化: 处理 quickBuyMoneyMarketFund 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> quickBuyMoneyMarketFund(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         
@@ -719,6 +819,14 @@ public class LedgerController {
      * @return 退款交易记录
      */
     @PostMapping("/txns/{txnId}/refund")
+    /**
+     * 业务注释规范化: 创建 createRefund 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> createRefund(@PathVariable String txnId, 
                                                    @RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -751,6 +859,14 @@ public class LedgerController {
      * @return 报销交易记录
      */
     @PostMapping("/txns/{txnId}/reimburse")
+    /**
+     * 业务注释规范化: 创建 createReimburse 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> createReimburse(@PathVariable String txnId, 
                                                      @RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -780,6 +896,13 @@ public class LedgerController {
      * @return 转托管交易记录
      */
     @PostMapping("/txns/custody-transfer")
+    /**
+     * 业务注释规范化: 创建 createCustodyTransfer 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<LedgerTxn> createCustodyTransfer(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         Long productId = Long.valueOf(request.get("productId").toString());
@@ -800,6 +923,13 @@ public class LedgerController {
         return ResponseEntity.ok(transferTxn);
     }
 
+    /**
+     * 业务注释规范化: 构建 buildStatsQuery 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param params params 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private LedgerStatsQueryDTO buildStatsQuery(Map<String, String> params) {
         LedgerStatsQueryDTO query = new LedgerStatsQueryDTO();
         query.setScope(params.getOrDefault("scope", "PERSONAL"));
@@ -821,10 +951,24 @@ public class LedgerController {
         return query;
     }
 
+    /**
+     * 业务注释规范化: 解析 parseLocalDate 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param value value 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private LocalDate parseLocalDate(String value) {
         return value == null || value.isBlank() ? null : LocalDate.parse(value);
     }
 
+    /**
+     * 业务注释规范化: 解析 parseStringList 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param value value 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private List<String> parseStringList(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -835,6 +979,13 @@ public class LedgerController {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 业务注释规范化: 解析 parseLongList 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param value value 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private List<Long> parseLongList(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -854,6 +1005,17 @@ public class LedgerController {
      * @param isOut 是否为转出（用于金额正负号）
      * @param accountMap 账户Map（批量查询的结果，避免N+1查询）
      * @return 构建的Map
+     */
+    /**
+     * 业务注释规范化: 构建 buildTxnMap 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txn txn 业务字段，承载该对象在后端流程中的核心属性。
+     * @param posting posting 业务字段，承载该对象在后端流程中的核心属性。
+     * @param displayTxnType displayTxnType 类型字段，用于区分不同业务分类并驱动处理分支。
+     * @param isOut isOut 布尔标记，用于控制该记录在业务流程中的特殊状态。
+     * @param accountMap accountMap 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private Map<String, Object> buildTxnMap(LedgerTxn txn, LedgerPosting posting, String displayTxnType, boolean isOut, Map<Long, Account> accountMap) {
         Map<String, Object> txnMap = new HashMap<>();
@@ -950,6 +1112,16 @@ public class LedgerController {
      * 填充账户信息到 txnMap
      * @param accountMap 账户Map（批量查询的结果，避免N+1查询）
      */
+    /**
+     * 业务注释规范化: 补充 populateAccountInfo 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnMap txnMap 业务字段，承载该对象在后端流程中的核心属性。
+     * @param mainAccountId mainAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountMap accountMap 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private void populateAccountInfo(Map<String, Object> txnMap, Long mainAccountId, List<LedgerPosting> postings, Map<Long, Account> accountMap) {
         if (mainAccountId != null) {
             Account account = accountMap.get(mainAccountId);
@@ -1020,6 +1192,16 @@ public class LedgerController {
     /**
      * 添加普通交易记录到结果列表（用于非转账、非赎回的交易）
      * @param accountMap 账户Map（批量查询的结果，避免N+1查询）
+     */
+    /**
+     * 业务注释规范化: 追加 addNormalTxnMap 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param result result 业务字段，承载该对象在后端流程中的核心属性。
+     * @param txn txn 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountMap accountMap 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private void addNormalTxnMap(List<Map<String, Object>> result, LedgerTxn txn, List<LedgerPosting> postings, Map<Long, Account> accountMap) {
         Map<String, Object> txnMap = new HashMap<>();
@@ -1137,6 +1319,12 @@ public class LedgerController {
      * @return 操作结果
      */
     @PostMapping("/recalculate-all-balance-history")
+    /**
+     * 业务注释规范化: 重新计算 recalculateAllBalanceHistory 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> recalculateAllBalanceHistory() {
         long startTime = System.currentTimeMillis();
         ledgerService.recalculateAllAccountBalanceHistory();

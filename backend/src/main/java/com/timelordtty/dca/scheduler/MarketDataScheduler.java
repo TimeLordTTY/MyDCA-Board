@@ -22,25 +22,67 @@ import java.util.concurrent.atomic.AtomicLong;
  * - 场内产品日K线：每日15:30采集（收盘后）
  */
 @Component
+/**
+ * 业务注释规范化: MarketDataScheduler 调度任务，负责按计划触发行情、指标、快照或派生数据处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class MarketDataScheduler {
 
+    /**
+     * 业务注释规范化: logger 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final Logger logger = LoggerFactory.getLogger(MarketDataScheduler.class);
 
+    /**
+     * 业务注释规范化: pythonScriptService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final PythonScriptService pythonScriptService;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
 
     // 避免重复/并发执行（启动时 + 定时任务可能重叠）
+    /**
+     * 业务注释规范化: exchangeRealtimeRunning 时间字段，用于记录业务动作发生或审计时间。
+     */
     private final AtomicBoolean exchangeRealtimeRunning = new AtomicBoolean(false);
+    /**
+     * 业务注释规范化: lastExchangeRealtimeRunAtMs 时间字段，用于记录业务动作发生或审计时间。
+     */
     private final AtomicLong lastExchangeRealtimeRunAtMs = new AtomicLong(0);
     // 冷却窗口：防止短时间重复采集（单位：毫秒）
+    /**
+     * 业务注释规范化: EXCHANGE_REALTIME_COOLDOWN_MS 时间字段，用于记录业务动作发生或审计时间。
+     */
     private static final long EXCHANGE_REALTIME_COOLDOWN_MS = 90_000L;
 
     // 交易时间：上午 9:30-11:30，下午 13:00-15:00
+    /**
+     * 业务注释规范化: MARKET_OPEN_MORNING 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final LocalTime MARKET_OPEN_MORNING = LocalTime.of(9, 30);
+    /**
+     * 业务注释规范化: MARKET_CLOSE_MORNING 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final LocalTime MARKET_CLOSE_MORNING = LocalTime.of(11, 30);
+    /**
+     * 业务注释规范化: MARKET_OPEN_AFTERNOON 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final LocalTime MARKET_OPEN_AFTERNOON = LocalTime.of(13, 0);
+    /**
+     * 业务注释规范化: MARKET_CLOSE_AFTERNOON 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final LocalTime MARKET_CLOSE_AFTERNOON = LocalTime.of(15, 0);
 
+    /**
+     * 业务注释规范化: 处理 MarketDataScheduler 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param pythonScriptService pythonScriptService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public MarketDataScheduler(PythonScriptService pythonScriptService, AccountService accountService) {
         this.pythonScriptService = pythonScriptService;
         this.accountService = accountService;
@@ -56,6 +98,12 @@ public class MarketDataScheduler {
      * Cron表达式：每分钟的第0秒执行（仅在交易时间内）
      */
     @Scheduled(cron = "0 * * * * ?")
+    /**
+     * 业务注释规范化: 处理 collectExchangeRealtime 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void collectExchangeRealtime() {
         LocalDateTime now = LocalDateTime.now();
         LocalTime currentTime = now.toLocalTime();
@@ -97,6 +145,13 @@ public class MarketDataScheduler {
     /**
      * 启动时/定时任务共用的门禁：并发锁 + 冷却窗口
      */
+    /**
+     * 业务注释规范化: 处理 tryEnterExchangeRealtime 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param source source 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean tryEnterExchangeRealtime(String source) {
         long nowMs = System.currentTimeMillis();
         long last = lastExchangeRealtimeRunAtMs.get();
@@ -113,6 +168,12 @@ public class MarketDataScheduler {
         return true;
     }
 
+    /**
+     * 业务注释规范化: 处理 exitExchangeRealtime 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private void exitExchangeRealtime() {
         exchangeRealtimeRunning.set(false);
     }
@@ -122,6 +183,12 @@ public class MarketDataScheduler {
      * 每日18:00执行（T+1日净值通常在18:00更新）
      */
     @Scheduled(cron = "0 0 18 * * ?")
+    /**
+     * 业务注释规范化: 处理 collectOTCNav 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void collectOTCNav() {
         LocalDateTime now = LocalDateTime.now();
         logger.info("========== 定时任务触发：场外产品净值采集 ==========");
@@ -147,6 +214,12 @@ public class MarketDataScheduler {
      * 每日15:30执行（收盘后）
      */
     @Scheduled(cron = "0 30 15 * * ?")
+    /**
+     * 业务注释规范化: 处理 collectExchangeDaily 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void collectExchangeDaily() {
         try {
             logger.info("开始采集场内产品日K线...");
@@ -165,6 +238,12 @@ public class MarketDataScheduler {
      * 如需恢复自动启动，取消下面 @PostConstruct 的注释
      */
     // @PostConstruct  // 禁用启动时自动执行
+    /**
+     * 业务注释规范化: 处理 backfillHistoryOnStartup 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void backfillHistoryOnStartup() {
         try {
             logger.info("服务启动，开始补齐历史行情数据...");

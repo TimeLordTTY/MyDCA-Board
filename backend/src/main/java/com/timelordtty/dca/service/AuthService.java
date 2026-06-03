@@ -22,13 +22,39 @@ import java.time.LocalDateTime;
  * - 注册时需保证 username 唯一性并为用户设置默认元数据
  */
 @Service
+/**
+ * 业务注释规范化: AuthService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class AuthService {
 
+    /**
+     * 业务注释规范化: userMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserMapper userMapper;
+    /**
+     * 业务注释规范化: passwordEncoder 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final PasswordEncoder passwordEncoder;
+    /**
+     * 业务注释规范化: jwtTokenProvider 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final JwtTokenProvider jwtTokenProvider;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
 
+    /**
+     * 业务注释规范化: 处理 AuthService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userMapper userMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param passwordEncoder passwordEncoder 业务字段，承载该对象在后端流程中的核心属性。
+     * @param jwtTokenProvider jwtTokenProvider 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider, AccountService accountService) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
@@ -44,6 +70,13 @@ public class AuthService {
      *
      * @param request 注册请求（包含 username/password 等）
      * @return 包含 JWT 与用户基础信息的响应
+     */
+    /**
+     * 业务注释规范化: 处理 register 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public AuthResponse register(AuthRequest request) {
         // 检查用户名是否已存在
@@ -99,6 +132,13 @@ public class AuthService {
      *
      * @param request 登录请求（username/password）
      * @return 包含 JWT 与用户基础信息的响应
+     */
+    /**
+     * 业务注释规范化: 处理 login 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public AuthResponse login(AuthRequest request) {
         User user = userMapper.selectByUsername(request.getUsername());

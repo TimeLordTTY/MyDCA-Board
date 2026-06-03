@@ -63,18 +63,64 @@ import java.util.List;
  * @since 1.0.0
  */
 @Service
+/**
+ * 业务注释规范化: SettlementService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class SettlementService {
 
+    /**
+     * 业务注释规范化: orderMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderMapper orderMapper;
+    /**
+     * 业务注释规范化: settlementConfirmMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final SettlementConfirmMapper settlementConfirmMapper;
+    /**
+     * 业务注释规范化: accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 业务注释规范化: ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 业务注释规范化: orderFundingLineMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderFundingLineMapper orderFundingLineMapper;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
+    /**
+     * 业务注释规范化: productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 业务注释规范化: brokerFeeService 金额字段，用于表达该场景下的资金规模或费用口径。
+     */
     private final BrokerFeeService brokerFeeService;
 
+    /**
+     * 业务注释规范化: 处理 SettlementService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderMapper orderMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param settlementConfirmMapper settlementConfirmMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountMapper accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerService ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param orderFundingLineMapper orderFundingLineMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param productMasterMapper productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param brokerFeeService brokerFeeService 金额字段，用于表达该场景下的资金规模或费用口径。
+     */
     public SettlementService(OrderMapper orderMapper, SettlementConfirmMapper settlementConfirmMapper,
                             AccountMapper accountMapper, LedgerService ledgerService,
                             OrderFundingLineMapper orderFundingLineMapper, UserService userService,
@@ -121,6 +167,19 @@ public class SettlementService {
      * 返回：创建的 SettlementConfirm 对象
      */
     @Transactional
+    /**
+     * 业务注释规范化: 处理 confirmSettlement 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @param confirmDate confirmDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param navDate navDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param confirmNav confirmNav 业务字段，承载该对象在后端流程中的核心属性。
+     * @param confirmShares confirmShares 业务字段，承载该对象在后端流程中的核心属性。
+     * @param confirmAmount confirmAmount 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @param confirmFee confirmFee 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public SettlementConfirm confirmSettlement(String orderId, LocalDate confirmDate, LocalDate navDate,
                                                BigDecimal confirmNav, BigDecimal confirmShares, 
                                                BigDecimal confirmAmount, BigDecimal confirmFee) {
@@ -872,6 +931,13 @@ public class SettlementService {
     
     /**
      * 计算固定金额账户的总固定金额
+     */
+    /**
+     * 业务注释规范化: 查询 getTotalFixedAmount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param sourceLines sourceLines 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private BigDecimal getTotalFixedAmount(List<OrderFundingLine> sourceLines) {
         BigDecimal total = BigDecimal.ZERO;

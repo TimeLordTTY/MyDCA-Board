@@ -44,34 +44,69 @@ import java.time.LocalDateTime;
  * @since 1.0.0
  */
 @Data
+/**
+ * 业务注释规范化: OrderFundingLine 实体模型，对应后端数据库中的核心业务记录。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class OrderFundingLine {
     /** 资金来源行ID，主键，自增 */
+    /**
+     * 业务注释规范化: 主键 ID，用于在后端内部唯一定位该业务记录。
+     */
     private Long id;
     
     /** 订单ID，外键关联orders.order_id，ON DELETE CASCADE */
+    /**
+     * 业务注释规范化: 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     */
     private String orderId;
     
     /** 行号，同一订单内从1开始递增，与orderId组成唯一约束 */
+    /**
+     * 业务注释规范化: lineNo 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private Integer lineNo;
     
     /** 资金来源账户ID，外键关联accounts.id，必须是叶子账户 */
+    /**
+     * 业务注释规范化: 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     */
     private Long accountId;
     
     /** 出资金额，该账户为此订单出资的金额 */
+    /**
+     * 业务注释规范化: 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     */
     private BigDecimal amount;
     
     /** 卖出份额（卖出/赎回时使用，买入/申购时为NULL） */
+    /**
+     * 业务注释规范化: 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+     */
     private BigDecimal shares;
     
     /** 货币，CNY/USD/HKD，默认CNY */
+    /**
+     * 业务注释规范化: currency 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private String currency;
     
     /** 行类型：SOURCE=出金来源（买入扣款/卖出份额来源），TARGET=到账目标（卖出/赎回资金到账账户） */
+    /**
+     * 业务注释规范化: lineType 类型字段，用于区分不同业务分类并驱动处理分支。
+     */
     private String lineType;
     
     /** 创建时间 */
+    /**
+     * 业务注释规范化: 记录创建时间，用于审计和排序。
+     */
     private LocalDateTime createdAt;
     
     /** 更新时间，自动更新 */
+    /**
+     * 业务注释规范化: 记录最后更新时间，用于审计和增量同步。
+     */
     private LocalDateTime updatedAt;
 }

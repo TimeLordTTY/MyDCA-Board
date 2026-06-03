@@ -18,13 +18,39 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/v2/accounts")
+/**
+ * 业务注释规范化: AccountController 控制器，负责接收前端请求、读取用户上下文，并将业务处理委托给服务层。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class AccountController {
 
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
+    /**
+     * 业务注释规范化: mmfSharesService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final MmfSharesService mmfSharesService;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
+    /**
+     * 业务注释规范化: familyService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final FamilyService familyService;
 
+    /**
+     * 业务注释规范化: 处理 AccountController 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param mmfSharesService mmfSharesService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param familyService familyService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public AccountController(AccountService accountService, MmfSharesService mmfSharesService, UserService userService, FamilyService familyService) {
         this.accountService = accountService;
         this.mmfSharesService = mmfSharesService;
@@ -33,6 +59,13 @@ public class AccountController {
     }
 
     @GetMapping
+    /**
+     * 业务注释规范化: 查询 getAccounts 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param false false 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<Account>> getAccounts(
             @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
             @RequestParam(required = false) Long memberUserId) {
@@ -43,12 +76,26 @@ public class AccountController {
     }
 
     @GetMapping("/{id}")
+    /**
+     * 业务注释规范化: 查询 getAccount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param id 主键 ID，用于在后端内部唯一定位该业务记录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Account> getAccount(@PathVariable Long id) {
         Account account = accountService.getAccount(id);
         return ResponseEntity.ok(account);
     }
 
     @PostMapping
+    /**
+     * 业务注释规范化: 创建 createAccount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Account> createAccount(@RequestBody Account account) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         // 设置归属
@@ -72,6 +119,14 @@ public class AccountController {
     }
 
     @PutMapping("/{id}")
+    /**
+     * 业务注释规范化: 更新 updateAccount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param id 主键 ID，用于在后端内部唯一定位该业务记录。
+     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Account> updateAccount(@PathVariable Long id, @RequestBody Account account) {
         account.setId(id);
         Account updated = accountService.updateAccount(account);
@@ -79,6 +134,14 @@ public class AccountController {
     }
 
     @PutMapping("/{id}/balance")
+    /**
+     * 业务注释规范化: 处理 adjustBalance 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param id 主键 ID，用于在后端内部唯一定位该业务记录。
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Void> adjustBalance(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         BigDecimal newBalance = new BigDecimal(request.get("balance").toString());
         accountService.adjustBalance(id, newBalance);
@@ -94,6 +157,13 @@ public class AccountController {
      * @return 重新计算后的余额
      */
     @PostMapping("/{id}/recalculate-balance")
+    /**
+     * 业务注释规范化: 重新计算 recalculateBalance 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param id 主键 ID，用于在后端内部唯一定位该业务记录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> recalculateBalance(@PathVariable Long id) {
         BigDecimal newBalance = accountService.recalculateBalance(id);
         return ResponseEntity.ok(Map.of("accountId", id, "balance", newBalance));
@@ -107,6 +177,12 @@ public class AccountController {
      * @return 重新计算的账户数量
      */
     @PostMapping("/recalculate-all-balances")
+    /**
+     * 业务注释规范化: 重新计算 recalculateAllBalances 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> recalculateAllBalances() {
         int count = accountService.recalculateAllBalances();
         return ResponseEntity.ok(Map.of("recalculatedCount", count));
@@ -119,6 +195,13 @@ public class AccountController {
      * @return 份额分配详情
      */
     @GetMapping("/{id}/mmf-shares")
+    /**
+     * 业务注释规范化: 查询 getMmfSharesDetail 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param id 主键 ID，用于在后端内部唯一定位该业务记录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<MmfSharesService.MmfSharesDetail> getMmfSharesDetail(@PathVariable Long id) {
         MmfSharesService.MmfSharesDetail detail = mmfSharesService.calculateShares(id);
         if (detail == null) {
@@ -136,6 +219,15 @@ public class AccountController {
         }
     }
 
+    /**
+     * 业务注释规范化: 处理 resolveScopeOwner 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param currentUser currentUser 业务字段，承载该对象在后端流程中的核心属性。
+     * @param scope scope 业务字段，承载该对象在后端流程中的核心属性。
+     * @param memberUserId memberUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private ScopeOwner resolveScopeOwner(AuthResponse.UserInfo currentUser, String scope, Long memberUserId) {
         String normalized = scope != null ? scope.trim().toUpperCase() : "PERSONAL";
         if ("PERSONAL".equals(normalized)) {

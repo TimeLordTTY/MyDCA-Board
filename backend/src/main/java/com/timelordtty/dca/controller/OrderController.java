@@ -25,16 +25,54 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/v2/orders")
+/**
+ * 业务注释规范化: OrderController 控制器，负责接收前端请求、读取用户上下文，并将业务处理委托给服务层。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class OrderController {
 
+    /**
+     * 业务注释规范化: orderService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderService orderService;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
+    /**
+     * 业务注释规范化: settlementService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final SettlementService settlementService;
+    /**
+     * 业务注释规范化: ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 业务注释规范化: ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 业务注释规范化: brokerFeeService 金额字段，用于表达该场景下的资金规模或费用口径。
+     */
     private final BrokerFeeService brokerFeeService;
+    /**
+     * 业务注释规范化: productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final ProductMasterMapper productMasterMapper;
 
+    /**
+     * 业务注释规范化: 处理 OrderController 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderService orderService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param settlementService settlementService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerTxnMapper ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerPostingMapper ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param brokerFeeService brokerFeeService 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @param productMasterMapper productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public OrderController(OrderService orderService, UserService userService, SettlementService settlementService,
                           LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
                           BrokerFeeService brokerFeeService, ProductMasterMapper productMasterMapper) {
@@ -48,6 +86,13 @@ public class OrderController {
     }
 
     @GetMapping
+    /**
+     * 业务注释规范化: 查询 getOrders 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param status 业务状态，表示记录当前所处的创建、确认、取消或完成阶段。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<Order>> getOrders(@RequestParam(required = false) String status) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         if (status != null && !status.isEmpty()) {
@@ -59,6 +104,13 @@ public class OrderController {
     }
 
     @GetMapping("/{orderId}")
+    /**
+     * 业务注释规范化: 查询 getOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> getOrder(@PathVariable String orderId) {
         Order order = orderService.getOrderByOrderId(orderId);
         if (order == null) {
@@ -121,6 +173,13 @@ public class OrderController {
     }
 
     @PostMapping
+    /**
+     * 业务注释规范化: 创建 createOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Order> createOrder(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         Long productId = Long.valueOf(request.get("productId").toString());
@@ -187,12 +246,27 @@ public class OrderController {
     }
 
     @PostMapping("/{orderId}/cancel")
+    /**
+     * 业务注释规范化: 处理 cancelOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Void> cancelOrder(@PathVariable String orderId) {
         orderService.cancelOrder(orderId);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/{orderId}/settle")
+    /**
+     * 业务注释规范化: 处理 settleOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> settleOrder(@PathVariable String orderId, @RequestBody Map<String, Object> request) {
         LocalDate confirmDate = LocalDate.parse(request.get("confirmDate").toString());
         LocalDate navDate = LocalDate.parse(request.get("navDate").toString());
@@ -222,6 +296,13 @@ public class OrderController {
      * @return 计算后的手续费
      */
     @PostMapping("/calculate-fee")
+    /**
+     * 业务注释规范化: 计算 calculateFee 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param request request 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Map<String, Object>> calculateFee(@RequestBody Map<String, Object> request) {
         Long productId = Long.valueOf(request.get("productId").toString());
         Long accountId = request.containsKey("accountId") && request.get("accountId") != null 

@@ -15,11 +15,29 @@ import java.util.List;
  * 指标服务
  */
 @Service
+/**
+ * 业务注释规范化: IndicatorService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class IndicatorService {
 
+    /**
+     * 业务注释规范化: indicatorDailyMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final IndicatorDailyMapper indicatorDailyMapper;
+    /**
+     * 业务注释规范化: marketService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final MarketService marketService;
 
+    /**
+     * 业务注释规范化: 处理 IndicatorService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param indicatorDailyMapper indicatorDailyMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param marketService marketService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public IndicatorService(IndicatorDailyMapper indicatorDailyMapper, MarketService marketService) {
         this.indicatorDailyMapper = indicatorDailyMapper;
         this.marketService = marketService;
@@ -27,6 +45,16 @@ public class IndicatorService {
 
     /**
      * 获取历史指标数据
+     */
+    /**
+     * 业务注释规范化: 查询 getHistoryIndicators 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param startDate startDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param endDate endDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param windowDays windowDays 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<IndicatorDaily> getHistoryIndicators(Long productId, LocalDate startDate, LocalDate endDate, Integer windowDays) {
         List<IndicatorDaily> indicators = indicatorDailyMapper.selectByProductId(productId, startDate, endDate, windowDays);
@@ -74,6 +102,14 @@ public class IndicatorService {
     /**
      * 获取最新指标数据
      */
+    /**
+     * 业务注释规范化: 查询 getLatestIndicator 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param windowDays windowDays 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public IndicatorDaily getLatestIndicator(Long productId, Integer windowDays) {
         IndicatorDaily latest = indicatorDailyMapper.selectLatest(productId, windowDays);
         if (latest != null) {
@@ -86,6 +122,15 @@ public class IndicatorService {
         return list.isEmpty() ? null : list.get(0); // list 已按倒序
     }
 
+    /**
+     * 业务注释规范化: 处理 calcMA 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param closes closes 业务字段，承载该对象在后端流程中的核心属性。
+     * @param idx idx 业务字段，承载该对象在后端流程中的核心属性。
+     * @param window window 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private BigDecimal calcMA(List<BigDecimal> closes, int idx, int window) {
         if (idx + 1 < window) return null;
         BigDecimal sum = BigDecimal.ZERO;
@@ -95,6 +140,15 @@ public class IndicatorService {
         return sum.divide(BigDecimal.valueOf(window), 6, RoundingMode.HALF_UP);
     }
 
+    /**
+     * 业务注释规范化: 处理 calcPctRank 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param closes closes 业务字段，承载该对象在后端流程中的核心属性。
+     * @param idx idx 业务字段，承载该对象在后端流程中的核心属性。
+     * @param windowDays windowDays 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private BigDecimal calcPctRank(List<BigDecimal> closes, int idx, Integer windowDays) {
         int w = (windowDays != null && windowDays > 0) ? windowDays : 20;
         int start = Math.max(0, idx - w + 1);

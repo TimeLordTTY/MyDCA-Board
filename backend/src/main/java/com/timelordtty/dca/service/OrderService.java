@@ -46,19 +46,69 @@ import java.util.UUID;
  * @since 1.0.0
  */
 @Service
+/**
+ * 业务注释规范化: OrderService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class OrderService {
 
+    /**
+     * 业务注释规范化: orderMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderMapper orderMapper;
+    /**
+     * 业务注释规范化: accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
+    /**
+     * 业务注释规范化: orderFundingLineMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderFundingLineMapper orderFundingLineMapper;
+    /**
+     * 业务注释规范化: settlementConfirmMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final SettlementConfirmMapper settlementConfirmMapper;
+    /**
+     * 业务注释规范化: ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 业务注释规范化: ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 业务注释规范化: ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
+    /**
+     * 业务注释规范化: productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final ProductMasterMapper productMasterMapper;
 
+    /**
+     * 业务注释规范化: 处理 OrderService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderMapper orderMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountMapper accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param orderFundingLineMapper orderFundingLineMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param settlementConfirmMapper settlementConfirmMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerTxnMapper ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerPostingMapper ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerService ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param productMasterMapper productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public OrderService(OrderMapper orderMapper, AccountMapper accountMapper, AccountService accountService,
                        OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper,
                        com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper,
@@ -111,6 +161,23 @@ public class OrderService {
      * @return 创建的 Order 实体
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
+     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     * @param shares 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param fundingLines fundingLines 业务字段，承载该对象在后端流程中的核心属性。
+     * @param expectedNavDate expectedNavDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param expectedConfirmDate expectedConfirmDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param requestedAt requestedAt 时间字段，用于记录业务动作发生或审计时间。
+     * @param feeEstimate feeEstimate 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines,
                              LocalDate expectedNavDate, LocalDate expectedConfirmDate, LocalDateTime requestedAt, BigDecimal feeEstimate) {
@@ -306,6 +373,19 @@ public class OrderService {
      * 创建订单（兼容旧接口，带 fundingLines）
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
+     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     * @param shares 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param fundingLines fundingLines 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId, List<OrderFundingLine> fundingLines) {
         return createOrder(userId, productId, orderType, amount, shares, accountId, fundingLines, null, null, null, null);
@@ -323,6 +403,18 @@ public class OrderService {
      * @return 创建的 Order 实体
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
+     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     * @param shares 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public Order createOrder(Long userId, Long productId, String orderType, BigDecimal amount, 
                              BigDecimal shares, Long accountId) {
         return createOrder(userId, productId, orderType, amount, shares, accountId, null, null, null, null, null);
@@ -339,6 +431,15 @@ public class OrderService {
      * - RECEIVABLE CREDIT（待结算应收清零）
      * - POSITION DEBIT / 关联账户 CASH DEBIT（持仓/余额增加）
      * - FEE DEBIT（手续费）
+     */
+    /**
+     * 业务注释规范化: 生成 generateBuyOrderLedger 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param order order 业务字段，承载该对象在后端流程中的核心属性。
+     * @param fundingLines fundingLines 业务字段，承载该对象在后端流程中的核心属性。
+     * @param totalAmount totalAmount 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private void generateBuyOrderLedger(Order order, List<OrderFundingLine> fundingLines, BigDecimal totalAmount) {
         // 获取用户信息
@@ -413,6 +514,13 @@ public class OrderService {
      * @param orderId 系统订单ID
      */
     @Transactional
+    /**
+     * 业务注释规范化: 处理 cancelOrder 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void cancelOrder(String orderId) {
         Order order = orderMapper.selectByOrderId(orderId);
         if (order == null) {
@@ -493,26 +601,67 @@ public class OrderService {
         orderMapper.update(order);
     }
 
+    /**
+     * 业务注释规范化: 查询 getPendingOrders 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<Order> getPendingOrders() {
         return orderMapper.selectByStatus("PENDING");
     }
 
+    /**
+     * 业务注释规范化: 查询 getOrdersByStatus 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param status 业务状态，表示记录当前所处的创建、确认、取消或完成阶段。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<Order> getOrdersByStatus(String status) {
         return orderMapper.selectByStatus(status);
     }
 
+    /**
+     * 业务注释规范化: 查询 getOrdersByUserId 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<Order> getOrdersByUserId(Long userId) {
         return orderMapper.selectByUserId(userId);
     }
 
+    /**
+     * 业务注释规范化: 查询 getOrderByOrderId 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public Order getOrderByOrderId(String orderId) {
         return orderMapper.selectByOrderId(orderId);
     }
 
+    /**
+     * 业务注释规范化: 查询 getOrderFundingLines 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<OrderFundingLine> getOrderFundingLines(String orderId) {
         return orderFundingLineMapper.selectByOrderId(orderId);
     }
 
+    /**
+     * 业务注释规范化: 查询 getSettlementByOrderId 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public SettlementConfirm getSettlementByOrderId(String orderId) {
         return settlementConfirmMapper.selectByOrderId(orderId);
     }

@@ -52,20 +52,74 @@ import java.util.Map;
  * @since 1.0.0
  */
 @Service
+/**
+ * 业务注释规范化: HoldingService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class HoldingService {
 
+    /**
+     * 业务注释规范化: ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 业务注释规范化: ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 业务注释规范化: productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 业务注释规范化: productService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final ProductService productService;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
+    /**
+     * 业务注释规范化: ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 业务注释规范化: orderMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderMapper orderMapper;
+    /**
+     * 业务注释规范化: orderFundingLineMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final OrderFundingLineMapper orderFundingLineMapper;
+    /**
+     * 业务注释规范化: settlementConfirmMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final SettlementConfirmMapper settlementConfirmMapper;
+    /**
+     * 业务注释规范化: accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 业务注释规范化: navMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final NavMapper navMapper;
 
+    /**
+     * 业务注释规范化: 处理 HoldingService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param ledgerPostingMapper ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerTxnMapper ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param productMasterMapper productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param productService productService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerService ledgerService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param orderMapper orderMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param orderFundingLineMapper orderFundingLineMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param settlementConfirmMapper settlementConfirmMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountMapper accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param navMapper navMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
                           ProductMasterMapper productMasterMapper,
                           ProductService productService, @Lazy AccountService accountService, LedgerService ledgerService,
@@ -106,6 +160,14 @@ public class HoldingService {
      * @param userId 用户ID
      * @param familyId 家庭ID，可为空
      * @return 持仓信息列表（同一产品在不同券商会有多条）
+     */
+    /**
+     * 业务注释规范化: 计算 calculateHoldings 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<HoldingInfo> calculateHoldings(Long userId, Long familyId) {
         // 直接查询所有POSITION类型的分录（属于该用户或家庭的）
@@ -339,49 +401,250 @@ public class HoldingService {
      * @param familyId 家庭ID，可为空
      * @return 持仓信息，如果不存在则返回null
      */
+    /**
+     * 业务注释规范化: 查询 getHolding 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public HoldingInfo getHolding(Long productId, Long userId, Long familyId) {
         List<HoldingInfo> holdings = calculateHoldings(userId, familyId);
         return holdings.stream().filter(h -> h != null && productId.equals(h.getProductId())).findFirst().orElse(null);
     }
 
     public static class HoldingInfo {
+        /**
+         * 业务注释规范化: brokerAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+         */
         private Long brokerAccountId;
+        /**
+         * 业务注释规范化: brokerAccountName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String brokerAccountName;
+        /**
+         * 业务注释规范化: 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+         */
         private Long productId;
+        /**
+         * 业务注释规范化: productCode 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String productCode;
+        /**
+         * 业务注释规范化: productName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String productName;
+        /**
+         * 业务注释规范化: channel 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String channel;
+        /**
+         * 业务注释规范化: assetType 类型字段，用于区分不同业务分类并驱动处理分支。
+         */
         private String assetType;
+        /**
+         * 业务注释规范化: totalShares 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private BigDecimal totalShares;
+        /**
+         * 业务注释规范化: totalCost 金额字段，用于表达该场景下的资金规模或费用口径。
+         */
         private BigDecimal totalCost;
+        /**
+         * 业务注释规范化: avgCost 金额字段，用于表达该场景下的资金规模或费用口径。
+         */
         private BigDecimal avgCost;
+        /**
+         * 业务注释规范化: marketValue 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private BigDecimal marketValue;
+        /**
+         * 业务注释规范化: unrealizedPnl 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private BigDecimal unrealizedPnl;
 
         // Getters and setters
+        /**
+         * 业务注释规范化: 查询 getBrokerAccountId 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public Long getBrokerAccountId() { return brokerAccountId; }
+        /**
+         * 业务注释规范化: 处理 setBrokerAccountId 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param brokerAccountId brokerAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setBrokerAccountId(Long brokerAccountId) { this.brokerAccountId = brokerAccountId; }
+        /**
+         * 业务注释规范化: 查询 getBrokerAccountName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getBrokerAccountName() { return brokerAccountName; }
+        /**
+         * 业务注释规范化: 处理 setBrokerAccountName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param brokerAccountName brokerAccountName 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setBrokerAccountName(String brokerAccountName) { this.brokerAccountName = brokerAccountName; }
+        /**
+         * 业务注释规范化: 查询 getProductId 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public Long getProductId() { return productId; }
+        /**
+         * 业务注释规范化: 处理 setProductId 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setProductId(Long productId) { this.productId = productId; }
+        /**
+         * 业务注释规范化: 查询 getProductCode 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getProductCode() { return productCode; }
+        /**
+         * 业务注释规范化: 处理 setProductCode 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param productCode productCode 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setProductCode(String productCode) { this.productCode = productCode; }
+        /**
+         * 业务注释规范化: 查询 getProductName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getProductName() { return productName; }
+        /**
+         * 业务注释规范化: 处理 setProductName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param productName productName 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setProductName(String productName) { this.productName = productName; }
+        /**
+         * 业务注释规范化: 查询 getChannel 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getChannel() { return channel; }
+        /**
+         * 业务注释规范化: 处理 setChannel 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param channel channel 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setChannel(String channel) { this.channel = channel; }
+        /**
+         * 业务注释规范化: 查询 getAssetType 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getAssetType() { return assetType; }
+        /**
+         * 业务注释规范化: 处理 setAssetType 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param assetType assetType 类型字段，用于区分不同业务分类并驱动处理分支。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setAssetType(String assetType) { this.assetType = assetType; }
+        /**
+         * 业务注释规范化: 查询 getTotalShares 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getTotalShares() { return totalShares; }
+        /**
+         * 业务注释规范化: 处理 setTotalShares 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param totalShares totalShares 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setTotalShares(BigDecimal totalShares) { this.totalShares = totalShares; }
+        /**
+         * 业务注释规范化: 查询 getTotalCost 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getTotalCost() { return totalCost; }
+        /**
+         * 业务注释规范化: 处理 setTotalCost 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param totalCost totalCost 金额字段，用于表达该场景下的资金规模或费用口径。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setTotalCost(BigDecimal totalCost) { this.totalCost = totalCost; }
+        /**
+         * 业务注释规范化: 查询 getAvgCost 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getAvgCost() { return avgCost; }
+        /**
+         * 业务注释规范化: 处理 setAvgCost 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param avgCost avgCost 金额字段，用于表达该场景下的资金规模或费用口径。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setAvgCost(BigDecimal avgCost) { this.avgCost = avgCost; }
+        /**
+         * 业务注释规范化: 查询 getMarketValue 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getMarketValue() { return marketValue; }
+        /**
+         * 业务注释规范化: 处理 setMarketValue 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param marketValue marketValue 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setMarketValue(BigDecimal marketValue) { this.marketValue = marketValue; }
+        /**
+         * 业务注释规范化: 查询 getUnrealizedPnl 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getUnrealizedPnl() { return unrealizedPnl; }
+        /**
+         * 业务注释规范化: 处理 setUnrealizedPnl 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param unrealizedPnl unrealizedPnl 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setUnrealizedPnl(BigDecimal unrealizedPnl) { this.unrealizedPnl = unrealizedPnl; }
     }
 
@@ -389,25 +652,118 @@ public class HoldingService {
      * 初始持仓导入DTO
      */
     public static class InitialHoldingImport {
+        /**
+         * 业务注释规范化: productCode 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String productCode;
+        /**
+         * 业务注释规范化: productName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String productName;
         private String channel; // EXCHANGE or OTC
+        /**
+         * 业务注释规范化: 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+         */
         private BigDecimal shares;
+        /**
+         * 业务注释规范化: costPrice 金额字段，用于表达该场景下的资金规模或费用口径。
+         */
         private BigDecimal costPrice;
+        /**
+         * 业务注释规范化: note 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String note;
 
         // Getters and setters
+        /**
+         * 业务注释规范化: 查询 getProductCode 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getProductCode() { return productCode; }
+        /**
+         * 业务注释规范化: 处理 setProductCode 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param productCode productCode 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setProductCode(String productCode) { this.productCode = productCode; }
+        /**
+         * 业务注释规范化: 查询 getProductName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getProductName() { return productName; }
+        /**
+         * 业务注释规范化: 处理 setProductName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param productName productName 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setProductName(String productName) { this.productName = productName; }
+        /**
+         * 业务注释规范化: 查询 getChannel 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getChannel() { return channel; }
+        /**
+         * 业务注释规范化: 处理 setChannel 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param channel channel 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setChannel(String channel) { this.channel = channel; }
+        /**
+         * 业务注释规范化: 查询 getShares 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getShares() { return shares; }
+        /**
+         * 业务注释规范化: 处理 setShares 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param shares 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setShares(BigDecimal shares) { this.shares = shares; }
+        /**
+         * 业务注释规范化: 查询 getCostPrice 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getCostPrice() { return costPrice; }
+        /**
+         * 业务注释规范化: 处理 setCostPrice 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param costPrice costPrice 金额字段，用于表达该场景下的资金规模或费用口径。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setCostPrice(BigDecimal costPrice) { this.costPrice = costPrice; }
+        /**
+         * 业务注释规范化: 查询 getNote 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getNote() { return note; }
+        /**
+         * 业务注释规范化: 处理 setNote 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setNote(String note) { this.note = note; }
     }
 
@@ -429,6 +785,15 @@ public class HoldingService {
      * @param holdings 初始持仓列表
      */
     @Transactional
+    /**
+     * 业务注释规范化: 处理 importInitialHoldings 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param holdings holdings 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void importInitialHoldings(Long userId, Long familyId, List<InitialHoldingImport> holdings) {
         for (InitialHoldingImport holding : holdings) {
             // 1. 查找或创建产品
@@ -500,6 +865,13 @@ public class HoldingService {
      * @param holding 初始持仓信息
      * @return 产品实体
      */
+    /**
+     * 业务注释规范化: 查找 findOrCreateProduct 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param holding holding 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private ProductMaster findOrCreateProduct(InitialHoldingImport holding) {
         // 先尝试查找产品（只按产品代码查找，不限制市场，避免重复创建）
         ProductMaster product = productMasterMapper.selectByCodeOnly(holding.getProductCode());
@@ -556,22 +928,102 @@ public class HoldingService {
      * 账户持仓信息 DTO
      */
     public static class AccountHoldingInfo {
+        /**
+         * 业务注释规范化: 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+         */
         private Long accountId;
+        /**
+         * 业务注释规范化: accountName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String accountName;
+        /**
+         * 业务注释规范化: parentAccountName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private String parentAccountName;
+        /**
+         * 业务注释规范化: 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+         */
         private BigDecimal shares;
+        /**
+         * 业务注释规范化: marketValue 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private BigDecimal marketValue;
 
         // Getters and setters
+        /**
+         * 业务注释规范化: 查询 getAccountId 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public Long getAccountId() { return accountId; }
+        /**
+         * 业务注释规范化: 处理 setAccountId 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setAccountId(Long accountId) { this.accountId = accountId; }
+        /**
+         * 业务注释规范化: 查询 getAccountName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getAccountName() { return accountName; }
+        /**
+         * 业务注释规范化: 处理 setAccountName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param accountName accountName 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setAccountName(String accountName) { this.accountName = accountName; }
+        /**
+         * 业务注释规范化: 查询 getParentAccountName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public String getParentAccountName() { return parentAccountName; }
+        /**
+         * 业务注释规范化: 处理 setParentAccountName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param parentAccountName parentAccountName 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setParentAccountName(String parentAccountName) { this.parentAccountName = parentAccountName; }
+        /**
+         * 业务注释规范化: 查询 getShares 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getShares() { return shares; }
+        /**
+         * 业务注释规范化: 处理 setShares 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param shares 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setShares(BigDecimal shares) { this.shares = shares; }
+        /**
+         * 业务注释规范化: 查询 getMarketValue 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public BigDecimal getMarketValue() { return marketValue; }
+        /**
+         * 业务注释规范化: 处理 setMarketValue 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+         * @param marketValue marketValue 业务字段，承载该对象在后端流程中的核心属性。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         public void setMarketValue(BigDecimal marketValue) { this.marketValue = marketValue; }
     }
 
@@ -589,6 +1041,15 @@ public class HoldingService {
      * @param userId 用户ID
      * @param familyId 家庭ID，可为空
      * @return 账户持仓明细列表
+     */
+    /**
+     * 业务注释规范化: 查询 getProductHoldingsByAccount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<AccountHoldingInfo> getProductHoldingsByAccount(Long productId, Long userId, Long familyId) {
         List<AccountHoldingInfo> result = new ArrayList<>();
@@ -822,6 +1283,13 @@ public class HoldingService {
         return result;
     }
 
+    /**
+     * 业务注释规范化: 判断 isUnallocatedAccount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean isUnallocatedAccount(Account account) {
         String name = account != null && account.getAccountName() != null ? account.getAccountName() : "";
         String code = account != null && account.getAccountCode() != null ? account.getAccountCode() : "";

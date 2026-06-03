@@ -79,22 +79,74 @@ import java.util.stream.Collectors;
  * @since 1.0.0
  */
 @Service
+/**
+ * 业务注释规范化: LedgerService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class LedgerService {
 
+    /**
+     * 业务注释规范化: log 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LedgerService.class);
+    /**
+     * 业务注释规范化: INCOME_TYPES 类型字段，用于区分不同业务分类并驱动处理分支。
+     */
     private static final Set<String> INCOME_TYPES = Set.of("INCOME", "REFUND", "REFUND_IN", "REIMBURSE_IN");
+    /**
+     * 业务注释规范化: EXPENSE_TYPES 类型字段，用于区分不同业务分类并驱动处理分支。
+     */
     private static final Set<String> EXPENSE_TYPES = Set.of("EXPENSE", "REFUND_OUT", "REIMBURSE_OUT", "FEE", "TAX");
+    /**
+     * 业务注释规范化: INVESTMENT_IN_TYPES 类型字段，用于区分不同业务分类并驱动处理分支。
+     */
     private static final Set<String> INVESTMENT_IN_TYPES = Set.of("SELL", "REDEMPTION", "REDEMPTION_IN", "DIVIDEND_CASH", "DIVIDEND_REINVEST", "BOND_REPO");
+    /**
+     * 业务注释规范化: INVESTMENT_OUT_TYPES 类型字段，用于区分不同业务分类并驱动处理分支。
+     */
     private static final Set<String> INVESTMENT_OUT_TYPES = Set.of("BUY", "SUBSCRIPTION", "REDEMPTION_OUT");
+    /**
+     * 业务注释规范化: TRANSFER_TYPES 类型字段，用于区分不同业务分类并驱动处理分支。
+     */
     private static final Set<String> TRANSFER_TYPES = Set.of("TRANSFER_OUT", "TRANSFER_IN");
 
+    /**
+     * 业务注释规范化: ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 业务注释规范化: ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 业务注释规范化: accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 业务注释规范化: accountService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final AccountService accountService;
+    /**
+     * 业务注释规范化: productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
 
+    /**
+     * 业务注释规范化: 处理 LedgerService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param ledgerTxnMapper ledgerTxnMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param ledgerPostingMapper ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountMapper accountMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param accountService accountService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param productMasterMapper productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public LedgerService(LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
                         AccountMapper accountMapper, AccountService accountService, ProductMasterMapper productMasterMapper,
                         UserService userService) {
@@ -106,6 +158,14 @@ public class LedgerService {
         this.userService = userService;
     }
 
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsSummary 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param user user 业务字段，承载该对象在后端流程中的核心属性。
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerStatsSummaryDTO getLedgerStatsSummary(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
         List<StatsTxn> txns = loadStatsTxns(user, query);
         LedgerStatsSummaryDTO summary = new LedgerStatsSummaryDTO();
@@ -149,6 +209,14 @@ public class LedgerService {
         return summary;
     }
 
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsTrend 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param user user 业务字段，承载该对象在后端流程中的核心属性。
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<LedgerStatsTrendDTO> getLedgerStatsTrend(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
         List<StatsTxn> txns = loadStatsTxns(user, query);
         Map<String, LedgerStatsTrendDTO> grouped = new TreeMap<>();
@@ -175,6 +243,14 @@ public class LedgerService {
         return new ArrayList<>(grouped.values());
     }
 
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsBreakdown 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param user user 业务字段，承载该对象在后端流程中的核心属性。
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<LedgerStatsBreakdownDTO> getLedgerStatsBreakdown(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
         List<StatsTxn> txns = loadStatsTxns(user, query);
         String groupBy = normalizeGroupBy(query == null ? null : query.getGroupBy());
@@ -216,6 +292,14 @@ public class LedgerService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 业务注释规范化: 查询 getLedgerStatsTop 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param user user 业务字段，承载该对象在后端流程中的核心属性。
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<LedgerStatsTopDTO> getLedgerStatsTop(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
         int limit = query == null || query.getLimit() == null || query.getLimit() <= 0 ? 10 : Math.min(query.getLimit(), 50);
         return loadStatsTxns(user, query).stream()
@@ -240,6 +324,14 @@ public class LedgerService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 业务注释规范化: 处理 loadStatsTxns 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param user user 业务字段，承载该对象在后端流程中的核心属性。
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private List<StatsTxn> loadStatsTxns(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
         LedgerStatsQueryDTO normalized = normalizeStatsQuery(user, query);
         List<LedgerStatsPostingDTO> rows = ledgerTxnMapper.selectStatsPostings(normalized);
@@ -251,6 +343,14 @@ public class LedgerService {
         return new ArrayList<>(txnMap.values());
     }
 
+    /**
+     * 业务注释规范化: 标准化 normalizeStatsQuery 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param user user 业务字段，承载该对象在后端流程中的核心属性。
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private LedgerStatsQueryDTO normalizeStatsQuery(AuthResponse.UserInfo user, LedgerStatsQueryDTO query) {
         LedgerStatsQueryDTO normalized = copyStatsQuery(query);
         normalized.setUserId(user.getId());
@@ -284,6 +384,14 @@ public class LedgerService {
         return normalized;
     }
 
+    /**
+     * 业务注释规范化: 处理 collectLeafAccountIds 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param parentId parentId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param result result 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private void collectLeafAccountIds(Long parentId, Set<Long> result) {
         if (parentId == null) {
             return;
@@ -298,6 +406,14 @@ public class LedgerService {
         }
     }
 
+    /**
+     * 业务注释规范化: 处理 resolveStatsDays 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @param activeDays activeDays 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private int resolveStatsDays(LedgerStatsQueryDTO query, Set<LocalDate> activeDays) {
         if (query != null && query.getStartDate() != null && query.getEndDate() != null && !query.getEndDate().isBefore(query.getStartDate())) {
             return (int) ChronoUnit.DAYS.between(query.getStartDate(), query.getEndDate()) + 1;
@@ -305,6 +421,14 @@ public class LedgerService {
         return Math.max(activeDays.size(), 1);
     }
 
+    /**
+     * 业务注释规范化: 处理 formatStatsPeriod 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param date date 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param period period 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private String formatStatsPeriod(LocalDate date, String period) {
         if (date == null) {
             return "UNKNOWN";
@@ -320,6 +444,13 @@ public class LedgerService {
         return date.getYear() + "-" + String.format("%02d", date.getMonthValue());
     }
 
+    /**
+     * 业务注释规范化: 标准化 normalizeGroupBy 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param groupBy groupBy 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private String normalizeGroupBy(String groupBy) {
         if (groupBy == null || groupBy.isBlank()) {
             return "CATEGORY";
@@ -331,6 +462,14 @@ public class LedgerService {
         return normalized;
     }
 
+    /**
+     * 业务注释规范化: 构建 buildStatsLines 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txn txn 业务字段，承载该对象在后端流程中的核心属性。
+     * @param groupBy groupBy 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private List<StatsLine> buildStatsLines(StatsTxn txn, String groupBy) {
         if ("ACCOUNT".equals(groupBy) || "PARENT_ACCOUNT".equals(groupBy)) {
             List<StatsLine> lines = txn.cashPostingsForDisplay().stream()
@@ -351,6 +490,13 @@ public class LedgerService {
         return List.of(new StatsLine(categoryKey, categoryName, txn.displayAmount()));
     }
 
+    /**
+     * 业务注释规范化: 处理 copyStatsQuery 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private LedgerStatsQueryDTO copyStatsQuery(LedgerStatsQueryDTO query) {
         LedgerStatsQueryDTO copied = new LedgerStatsQueryDTO();
         if (query == null) {
@@ -373,36 +519,101 @@ public class LedgerService {
         return copied;
     }
 
+    /**
+     * 业务注释规范化: 判断 isIncomeType 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean isIncomeType(String txnType) {
         return INCOME_TYPES.contains(txnType);
     }
 
+    /**
+     * 业务注释规范化: 判断 isExpenseType 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean isExpenseType(String txnType) {
         return EXPENSE_TYPES.contains(txnType);
     }
 
+    /**
+     * 业务注释规范化: 判断 isInvestmentInType 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean isInvestmentInType(String txnType) {
         return INVESTMENT_IN_TYPES.contains(txnType);
     }
 
+    /**
+     * 业务注释规范化: 判断 isInvestmentOutType 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean isInvestmentOutType(String txnType) {
         return INVESTMENT_OUT_TYPES.contains(txnType);
     }
 
+    /**
+     * 业务注释规范化: 判断 isTransferType 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean isTransferType(String txnType) {
         return TRANSFER_TYPES.contains(txnType);
     }
 
     private static class StatsTxn {
+        /**
+         * 业务注释规范化: 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+         */
         private final String txnId;
+        /**
+         * 业务注释规范化: 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+         */
         private final String txnType;
+        /**
+         * 业务注释规范化: tradeDate 日期字段，用于交易、确认、净值或统计周期口径。
+         */
         private final LocalDate tradeDate;
+        /**
+         * 业务注释规范化: categoryId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+         */
         private final Long categoryId;
+        /**
+         * 业务注释规范化: isReimbursable 布尔标记，用于控制该记录在业务流程中的特殊状态。
+         */
         private final Boolean isReimbursable;
+        /**
+         * 业务注释规范化: isReimbursed 布尔标记，用于控制该记录在业务流程中的特殊状态。
+         */
         private final Boolean isReimbursed;
+        /**
+         * 业务注释规范化: note 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private final String note;
+        /**
+         * 业务注释规范化: postings 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private final List<StatsPosting> postings = new ArrayList<>();
 
+        /**
+         * 业务注释规范化: 处理 StatsTxn 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @param row row 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private StatsTxn(LedgerStatsPostingDTO row) {
             this.txnId = row.getTxnId();
             this.txnType = row.getTxnType();
@@ -413,6 +624,12 @@ public class LedgerService {
             this.note = row.getNote();
         }
 
+        /**
+         * 业务注释规范化: 处理 displayAmount 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private BigDecimal displayAmount() {
             BigDecimal debit = realCashAmount("DEBIT");
             BigDecimal credit = realCashAmount("CREDIT");
@@ -428,6 +645,13 @@ public class LedgerService {
             return debit.max(credit).max(maxCashAmount());
         }
 
+        /**
+         * 业务注释规范化: 处理 realCashAmount 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @param postingType 分录方向，DEBIT/CREDIT 决定账户余额在复式记账中的增减方向。
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private BigDecimal realCashAmount(String postingType) {
             return postings.stream()
                     .filter(posting -> posting.isRealCash() && postingType.equals(posting.postingType))
@@ -435,6 +659,12 @@ public class LedgerService {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
+        /**
+         * 业务注释规范化: 处理 maxCashAmount 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private BigDecimal maxCashAmount() {
             return postings.stream()
                     .filter(StatsPosting::isRealCash)
@@ -443,6 +673,12 @@ public class LedgerService {
                     .orElse(BigDecimal.ZERO);
         }
 
+        /**
+         * 业务注释规范化: 处理 cashPostingsForDisplay 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private List<StatsPosting> cashPostingsForDisplay() {
             String postingType = (INCOME_TYPES.contains(txnType) || INVESTMENT_IN_TYPES.contains(txnType)) ? "DEBIT" : "CREDIT";
             List<StatsPosting> selected = postings.stream()
@@ -453,6 +689,12 @@ public class LedgerService {
                     : selected;
         }
 
+        /**
+         * 业务注释规范化: 处理 mainPosting 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private StatsPosting mainPosting() {
             List<StatsPosting> cashPostings = cashPostingsForDisplay();
             return cashPostings.isEmpty() ? null : cashPostings.get(0);
@@ -460,15 +702,45 @@ public class LedgerService {
     }
 
     private static class StatsPosting {
+        /**
+         * 业务注释规范化: 分录方向，DEBIT/CREDIT 决定账户余额在复式记账中的增减方向。
+         */
         private final String postingType;
+        /**
+         * 业务注释规范化: 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+         */
         private final Long accountId;
+        /**
+         * 业务注释规范化: accountName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private final String accountName;
+        /**
+         * 业务注释规范化: accountKind 类型字段，用于区分不同业务分类并驱动处理分支。
+         */
         private final String accountKind;
+        /**
+         * 业务注释规范化: accountType 类型字段，用于区分不同业务分类并驱动处理分支。
+         */
         private final String accountType;
+        /**
+         * 业务注释规范化: 父级账户 ID，用于表达平台账户与资金分区的层级关系。
+         */
         private final Long parentAccountId;
+        /**
+         * 业务注释规范化: parentAccountName 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private final String parentAccountName;
+        /**
+         * 业务注释规范化: 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+         */
         private final BigDecimal amount;
 
+        /**
+         * 业务注释规范化: 处理 StatsPosting 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @param row row 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private StatsPosting(LedgerStatsPostingDTO row) {
             this.postingType = row.getPostingType();
             this.accountId = row.getAccountId();
@@ -480,18 +752,42 @@ public class LedgerService {
             this.amount = row.getAmount() == null ? BigDecimal.ZERO : row.getAmount();
         }
 
+        /**
+         * 业务注释规范化: 判断 isRealCash 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private boolean isRealCash() {
             return "REAL".equals(accountKind) && "CASH".equals(accountType);
         }
 
+        /**
+         * 业务注释规范化: 处理 accountKey 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private String accountKey() {
             return accountId == null ? "UNKNOWN_ACCOUNT" : String.valueOf(accountId);
         }
 
+        /**
+         * 业务注释规范化: 处理 parentKey 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private String parentKey() {
             return parentAccountId == null ? accountKey() : String.valueOf(parentAccountId);
         }
 
+        /**
+         * 业务注释规范化: 处理 displayName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private String displayName() {
             if (parentAccountName != null && accountName != null) {
                 return parentAccountName + "-" + accountName;
@@ -499,16 +795,39 @@ public class LedgerService {
             return accountName == null ? "未知账户" : accountName;
         }
 
+        /**
+         * 业务注释规范化: 处理 parentName 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @return 处理后的业务结果，具体结构保持现有契约不变。
+         */
         private String parentName() {
             return parentAccountName == null ? displayName() : parentAccountName;
         }
     }
 
     private static class StatsLine {
+        /**
+         * 业务注释规范化: key 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private final String key;
+        /**
+         * 业务注释规范化: name 业务字段，承载该对象在后端流程中的核心属性。
+         */
         private final String name;
+        /**
+         * 业务注释规范化: 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+         */
         private final BigDecimal amount;
 
+        /**
+         * 业务注释规范化: 处理 StatsLine 相关业务，保持现有接口路径、请求和响应字段不变。
+         *
+         * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+         * @param key key 业务字段，承载该对象在后端流程中的核心属性。
+         * @param name name 业务字段，承载该对象在后端流程中的核心属性。
+         * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+         */
         private StatsLine(String key, String name, BigDecimal amount) {
             this.key = key;
             this.name = name;
@@ -541,24 +860,80 @@ public class LedgerService {
      * @throws RuntimeException 如果借贷不平衡或账户不是叶子账户
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note) {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, null, null, false);
     }
 
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAtStr requestedAtStr 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr) {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, null, false);
     }
 
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAtStr requestedAtStr 业务字段，承载该对象在后端流程中的核心属性。
+     * @param categoryId categoryId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param isReimbursable isReimbursable 布尔标记，用于控制该记录在业务流程中的特殊状态。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable) {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable, null);
     }
 
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAtStr requestedAtStr 业务字段，承载该对象在后端流程中的核心属性。
+     * @param categoryId categoryId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param isReimbursable isReimbursable 布尔标记，用于控制该记录在业务流程中的特殊状态。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable, Long productId) {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable, productId, null);
@@ -568,6 +943,23 @@ public class LedgerService {
      * 创建交易记录（完整版，支持 orderId 关联）
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAtStr requestedAtStr 业务字段，承载该对象在后端流程中的核心属性。
+     * @param categoryId categoryId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param isReimbursable isReimbursable 布尔标记，用于控制该记录在业务流程中的特殊状态。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, 
                                       Long categoryId, Boolean isReimbursable, Long productId, String orderId) {
@@ -677,6 +1069,14 @@ public class LedgerService {
      * @param newTxnTime 新交易的时间
      * @return true 如果需要重算
      */
+    /**
+     * 业务注释规范化: 处理 needsHistoryRecalculation 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param accountIds accountIds 业务字段，承载该对象在后端流程中的核心属性。
+     * @param newTxnTime newTxnTime 时间字段，用于记录业务动作发生或审计时间。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private boolean needsHistoryRecalculation(Set<Long> accountIds, LocalDateTime newTxnTime) {
         if (accountIds == null || accountIds.isEmpty() || newTxnTime == null) {
             return false;
@@ -737,6 +1137,15 @@ public class LedgerService {
      * @param accountId 账户ID
      * @param postingType 借贷方向：DEBIT或CREDIT
      * @param amount 金额，必须大于0
+     */
+    /**
+     * 业务注释规范化: 更新 updateAccountBalance 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param postingType 分录方向，DEBIT/CREDIT 决定账户余额在复式记账中的增减方向。
+     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private void updateAccountBalance(Long accountId, String postingType, BigDecimal amount) {
         Account account = accountMapper.selectById(accountId);
@@ -855,6 +1264,14 @@ public class LedgerService {
      * 
      * @param postings 分录列表
      * @param productId 产品ID（仅POSITION账户需要）
+     */
+    /**
+     * 业务注释规范化: 处理 fixVirtualAccountIds 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private void fixVirtualAccountIds(List<LedgerPosting> postings, Long productId) {
         for (LedgerPosting posting : postings) {
@@ -983,6 +1400,14 @@ public class LedgerService {
      * 
      * @param txnId 交易ID
      * @param postings 分录列表
+     */
+    /**
+     * 业务注释规范化: 写入 insertPostingsWithBalance 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private void insertPostingsWithBalance(String txnId, List<LedgerPosting> postings) {
         for (LedgerPosting posting : postings) {
@@ -1116,6 +1541,22 @@ public class LedgerService {
         }
     }
 
+    /**
+     * 业务注释规范化: 查询 getTransactions 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param startDate startDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param endDate endDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param parentAccountId 父级账户 ID，用于表达平台账户与资金分区的层级关系。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param page page 业务字段，承载该对象在后端流程中的核心属性。
+     * @param pageSize pageSize 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<LedgerTxn> getTransactions(Long userId, String txnType, LocalDate startDate, 
                                           LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note, Integer page, Integer pageSize) {
         Integer offset = null;
@@ -1140,6 +1581,20 @@ public class LedgerService {
         return ledgerTxnMapper.selectByCondition(userId, txnType, startDate, endDate, productId, accountId, childAccountIds, note, offset, limit);
     }
     
+    /**
+     * 业务注释规范化: 统计 countTransactions 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param startDate startDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param endDate endDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param parentAccountId 父级账户 ID，用于表达平台账户与资金分区的层级关系。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public int countTransactions(Long userId, String txnType, LocalDate startDate, 
                                 LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note) {
         // 如果指定了父账户但没有指定子账户，获取该父账户下所有子账户的ID
@@ -1157,10 +1612,24 @@ public class LedgerService {
         return ledgerTxnMapper.countByCondition(userId, txnType, startDate, endDate, productId, accountId, childAccountIds, note);
     }
 
+    /**
+     * 业务注释规范化: 查询 getTransactionDetail 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn getTransactionDetail(String txnId) {
         return ledgerTxnMapper.selectByTxnId(txnId);
     }
 
+    /**
+     * 业务注释规范化: 查询 getPostingsByTxnId 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<LedgerPosting> getPostingsByTxnId(String txnId) {
         return ledgerPostingMapper.selectByTxnId(txnId);
     }
@@ -1169,6 +1638,13 @@ public class LedgerService {
      * 批量查询多个交易的postings
      * @param txnIds 交易ID列表
      * @return 所有交易的postings列表
+     */
+    /**
+     * 业务注释规范化: 查询 getPostingsByTxnIds 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnIds txnIds 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<LedgerPosting> getPostingsByTxnIds(List<String> txnIds) {
         if (txnIds == null || txnIds.isEmpty()) {
@@ -1209,6 +1685,19 @@ public class LedgerService {
      * @return 创建的退款交易记录
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createRefund 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param relatedTxnId relatedTxnId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param refundAmount refundAmount 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAt requestedAt 时间字段，用于记录业务动作发生或审计时间。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createRefund(Long userId, Long familyId, String relatedTxnId, 
                                   BigDecimal refundAmount, Long accountId, String note, LocalDateTime requestedAt) {
         // 验证原交易存在且为EXPENSE类型
@@ -1288,6 +1777,13 @@ public class LedgerService {
     /**
      * 更新原交易的报销状态（在note中添加isReimbursed标记）
      */
+    /**
+     * 业务注释规范化: 处理 markTransactionAsReimbursed 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private void markTransactionAsReimbursed(String txnId) {
         LedgerTxn txn = ledgerTxnMapper.selectByTxnId(txnId);
         if (txn != null) {
@@ -1331,6 +1827,19 @@ public class LedgerService {
      * @return 创建的报销交易记录
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createReimburse 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param relatedTxnId relatedTxnId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param reimburseAmount reimburseAmount 金额字段，用于表达该场景下的资金规模或费用口径。
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAt requestedAt 时间字段，用于记录业务动作发生或审计时间。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createReimburse(Long userId, Long familyId, String relatedTxnId, 
                                      BigDecimal reimburseAmount, Long accountId, String note, LocalDateTime requestedAt) {
         // 验证原交易存在且为EXPENSE类型
@@ -1440,6 +1949,19 @@ public class LedgerService {
      * @return 创建的转托管交易记录
      */
     @Transactional
+    /**
+     * 业务注释规范化: 创建 createCustodyTransfer 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param transferShares transferShares 业务字段，承载该对象在后端流程中的核心属性。
+     * @param transferPrice transferPrice 业务字段，承载该对象在后端流程中的核心属性。
+     * @param transferDate transferDate 日期字段，用于交易、确认、净值或统计周期口径。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn createCustodyTransfer(Long userId, Long familyId, Long productId,
                                            BigDecimal transferShares, BigDecimal transferPrice,
                                            LocalDate transferDate, String note) {
@@ -1610,6 +2132,15 @@ public class LedgerService {
      * @param amount 金额
      * @return 余额变化量（正数表示增加，负数表示减少）
      */
+    /**
+     * 业务注释规范化: 计算 calculateBalanceDelta 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postingType 分录方向，DEBIT/CREDIT 决定账户余额在复式记账中的增减方向。
+     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private BigDecimal calculateBalanceDelta(Account account, String postingType, BigDecimal amount) {
         // 对于虚拟账户，使用 virtual_subtype 作为账户类型
         // 对于 REAL 账户，使用 account_type
@@ -1651,6 +2182,13 @@ public class LedgerService {
      * 5. 批量更新有变化的分录
      * 
      * @param accountId 需要重算的账户ID
+     */
+    /**
+     * 业务注释规范化: 重新计算 recalculateAccountBalanceHistory 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public void recalculateAccountBalanceHistory(Long accountId) {
         // 1. 获取账户当前余额
@@ -1725,6 +2263,13 @@ public class LedgerService {
      * 4. 在计算每个分录时，同时计算该时刻的父账户余额（使用历史时刻的兄弟账户余额）
      * 
      * @param accountIds 需要重算的账户ID集合
+     */
+    /**
+     * 业务注释规范化: 重新计算 recalculateAccountBalanceHistoryForAccounts 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param accountIds accountIds 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public void recalculateAccountBalanceHistoryForAccounts(Set<Long> accountIds) {
         if (accountIds == null || accountIds.isEmpty()) return;
@@ -1946,6 +2491,12 @@ public class LedgerService {
      * 注意：这个操作可能比较耗时，建议在低峰期执行
      */
     @Transactional
+    /**
+     * 业务注释规范化: 重新计算 recalculateAllAccountBalanceHistory 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void recalculateAllAccountBalanceHistory() {
         // 查询所有有分录的账户ID
         List<Long> allAccountIds = ledgerPostingMapper.selectDistinctAccountIds();
@@ -1965,6 +2516,13 @@ public class LedgerService {
      *   与订单、报销等业务关联的交易不允许直接删除。
      */
     @Transactional
+    /**
+     * 业务注释规范化: 删除 deleteTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void deleteTransaction(String txnId) {
         LedgerTxn txn = ledgerTxnMapper.selectByTxnId(txnId);
         if (txn == null) {
@@ -2013,6 +2571,21 @@ public class LedgerService {
      * @return 更新后的交易记录
      */
     @Transactional
+    /**
+     * 业务注释规范化: 更新 updateTransaction 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param oldTxnId oldTxnId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param txnType 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
+     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
+     * @param postings postings 业务字段，承载该对象在后端流程中的核心属性。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAtStr requestedAtStr 业务字段，承载该对象在后端流程中的核心属性。
+     * @param categoryId categoryId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param isReimbursable isReimbursable 布尔标记，用于控制该记录在业务流程中的特殊状态。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public LedgerTxn updateTransaction(String oldTxnId,
                                        String txnType,
                                        String bizGroupKey,
@@ -2145,6 +2718,21 @@ public class LedgerService {
      * @param note 备注（可选）
      * @param requestedAt 交易时间（可为空则使用当前时间）
      * @return 创建的交易记录
+     */
+    /**
+     * 业务注释规范化: 处理 quickBuyMoneyMarketFund 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param sourceAccountId sourceAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param targetAccountId targetAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
+     * @param nav 产品净值，用于按份额折算市值、收益或确认金额。
+     * @param note note 业务字段，承载该对象在后端流程中的核心属性。
+     * @param requestedAt requestedAt 时间字段，用于记录业务动作发生或审计时间。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public LedgerTxn quickBuyMoneyMarketFund(Long userId, Long familyId, Long productId, 
                                             Long sourceAccountId, Long targetAccountId,

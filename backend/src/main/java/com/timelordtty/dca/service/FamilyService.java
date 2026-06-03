@@ -24,12 +24,34 @@ import java.util.UUID;
  * - 家庭成员管理通过 user_family_roles 表维护，角色由应用层约束权限
  */
 @Service
+/**
+ * 业务注释规范化: FamilyService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class FamilyService {
 
+    /**
+     * 业务注释规范化: familyMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final FamilyMapper familyMapper;
+    /**
+     * 业务注释规范化: userFamilyRoleMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserFamilyRoleMapper userFamilyRoleMapper;
+    /**
+     * 业务注释规范化: userMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserMapper userMapper;
 
+    /**
+     * 业务注释规范化: 处理 FamilyService 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param familyMapper familyMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userFamilyRoleMapper userFamilyRoleMapper 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userMapper userMapper 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public FamilyService(FamilyMapper familyMapper, UserFamilyRoleMapper userFamilyRoleMapper, UserMapper userMapper) {
         this.familyMapper = familyMapper;
         this.userFamilyRoleMapper = userFamilyRoleMapper;
@@ -43,6 +65,14 @@ public class FamilyService {
      * @param adminUserId 管理员用户ID
      * @param familyName 家庭名称
      * @return 创建的 Family 实体
+     */
+    /**
+     * 业务注释规范化: 创建 createFamily 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param adminUserId adminUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param familyName familyName 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public Family createFamily(Long adminUserId, String familyName) {
         // 生成唯一家庭代码
@@ -79,10 +109,24 @@ public class FamilyService {
      * @param familyId 家庭ID
      * @return Family 实体或 null
      */
+    /**
+     * 业务注释规范化: 查询 getFamily 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public Family getFamily(Long familyId) {
         return familyMapper.selectById(familyId);
     }
 
+    /**
+     * 业务注释规范化: 查询 getMembers 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public List<FamilyMemberDto> getMembers(Long familyId) {
         List<UserFamilyRole> roles = userFamilyRoleMapper.selectByFamilyId(familyId);
         List<FamilyMemberDto> result = new ArrayList<>();
@@ -103,6 +147,14 @@ public class FamilyService {
         return result;
     }
 
+    /**
+     * 业务注释规范化: 处理 assertAdmin 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param operatorUserId operatorUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void assertAdmin(Long operatorUserId, Long familyId) {
         String role = userFamilyRoleMapper.selectRole(operatorUserId, familyId);
         if (!"ADMIN".equals(role)) {
@@ -110,6 +162,13 @@ public class FamilyService {
         }
     }
 
+    /**
+     * 业务注释规范化: 查找 findUserIdByUsername 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param username username 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public Long findUserIdByUsername(String username) {
         if (username == null || username.trim().isEmpty()) {
             throw new RuntimeException("用户名不能为空");
@@ -129,6 +188,15 @@ public class FamilyService {
      * @param role 角色，若为空则默认为 MEMBER
      */
     @Transactional
+    /**
+     * 业务注释规范化: 追加 addMember 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param role role 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void addMember(Long familyId, Long userId, String role) {
         // 检查是否已经是家庭成员
         UserFamilyRole existing = userFamilyRoleMapper.selectByUserId(userId).stream()
@@ -156,6 +224,14 @@ public class FamilyService {
     }
 
     @Transactional
+    /**
+     * 业务注释规范化: 处理 removeMember 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void removeMember(Long familyId, Long userId) {
         // 不能移除最后一个 ADMIN
         String targetRole = userFamilyRoleMapper.selectRole(userId, familyId);
@@ -177,6 +253,15 @@ public class FamilyService {
     }
 
     @Transactional
+    /**
+     * 业务注释规范化: 更新 updateMemberRole 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param familyId 所属家庭 ID，用于家庭视角下的数据隔离。
+     * @param userId 所属用户 ID，用于限定个人数据权限和查询范围。
+     * @param role role 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void updateMemberRole(Long familyId, Long userId, String role) {
         if (role == null || role.trim().isEmpty()) {
             throw new RuntimeException("角色不能为空");

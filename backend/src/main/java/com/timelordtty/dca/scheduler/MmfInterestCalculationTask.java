@@ -19,12 +19,29 @@ import org.springframework.stereotype.Component;
  * 这样可以保证：先有净值，再有收益，再做指标与快照。
  */
 @Component
+/**
+ * 业务注释规范化: MmfInterestCalculationTask 调度任务，负责按计划触发行情、指标、快照或派生数据处理。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class MmfInterestCalculationTask {
 
+    /**
+     * 业务注释规范化: logger 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private static final Logger logger = LoggerFactory.getLogger(MmfInterestCalculationTask.class);
 
+    /**
+     * 业务注释规范化: pythonScriptService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final PythonScriptService pythonScriptService;
 
+    /**
+     * 业务注释规范化: 处理 MmfInterestCalculationTask 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param pythonScriptService pythonScriptService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public MmfInterestCalculationTask(PythonScriptService pythonScriptService) {
         this.pythonScriptService = pythonScriptService;
     }
@@ -40,6 +57,12 @@ public class MmfInterestCalculationTask {
      * </ul>
      */
     @Scheduled(cron = "0 0 20 * * ?")
+    /**
+     * 业务注释规范化: 计算 calculateMmfInterestDaily 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public void calculateMmfInterestDaily() {
         try {
             logger.info("开始执行小荷包 MMF 日收益计算任务...");

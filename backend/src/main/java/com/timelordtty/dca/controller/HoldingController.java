@@ -14,12 +14,34 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v2/holdings")
+/**
+ * 业务注释规范化: HoldingController 控制器，负责接收前端请求、读取用户上下文，并将业务处理委托给服务层。
+ *
+ * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ */
 public class HoldingController {
 
+    /**
+     * 业务注释规范化: holdingService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final HoldingService holdingService;
+    /**
+     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final UserService userService;
+    /**
+     * 业务注释规范化: familyService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     private final FamilyService familyService;
 
+    /**
+     * 业务注释规范化: 处理 HoldingController 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param holdingService holdingService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
+     * @param familyService familyService 业务字段，承载该对象在后端流程中的核心属性。
+     */
     public HoldingController(HoldingService holdingService, UserService userService, FamilyService familyService) {
         this.holdingService = holdingService;
         this.userService = userService;
@@ -27,6 +49,13 @@ public class HoldingController {
     }
 
     @GetMapping
+    /**
+     * 业务注释规范化: 查询 getHoldings 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param false false 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<HoldingService.HoldingInfo>> getHoldings(
             @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
             @RequestParam(required = false) Long memberUserId) {
@@ -40,6 +69,13 @@ public class HoldingController {
      * 导入初始持仓
      */
     @PostMapping("/import-initial")
+    /**
+     * 业务注释规范化: 处理 importInitialHoldings 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param holdings holdings 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<Void> importInitialHoldings(@RequestBody List<HoldingService.InitialHoldingImport> holdings) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         holdingService.importInitialHoldings(currentUser.getId(), currentUser.getFamilyId(), holdings);
@@ -54,6 +90,14 @@ public class HoldingController {
      * @return 账户持仓明细列表
      */
     @GetMapping("/product/{productId}/by-account")
+    /**
+     * 业务注释规范化: 查询 getProductHoldingsByAccount 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
+     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
+     * @param false false 业务字段，承载该对象在后端流程中的核心属性。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     public ResponseEntity<List<HoldingService.AccountHoldingInfo>> getProductHoldingsByAccount(
             @PathVariable Long productId,
             @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
@@ -74,6 +118,15 @@ public class HoldingController {
         }
     }
 
+    /**
+     * 业务注释规范化: 处理 resolveScopeOwner 相关业务，保持现有接口路径、请求和响应字段不变。
+     *
+     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
+     * @param currentUser currentUser 业务字段，承载该对象在后端流程中的核心属性。
+     * @param scope scope 业务字段，承载该对象在后端流程中的核心属性。
+     * @param memberUserId memberUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
+     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     */
     private ScopeOwner resolveScopeOwner(AuthResponse.UserInfo currentUser, String scope, Long memberUserId) {
         String normalized = scope != null ? scope.trim().toUpperCase() : "PERSONAL";
         if ("PERSONAL".equals(normalized)) {
