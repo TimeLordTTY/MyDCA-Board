@@ -15,6 +15,9 @@ import java.util.Map;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
+    /**
+     * 执行 handleRuntimeException 相关后端逻辑，保持既有业务契约不变。
+     */
     public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
         Map<String, Object> response = new HashMap<>();
         response.put("error", e.getMessage());
@@ -23,6 +26,9 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(Exception.class)
+    /**
+     * 执行 handleException 相关后端逻辑，保持既有业务契约不变。
+     */
     public ResponseEntity<Map<String, Object>> handleException(Exception e) {
         Map<String, Object> response = new HashMap<>();
         response.put("error", "服务器内部错误");

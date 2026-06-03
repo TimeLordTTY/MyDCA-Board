@@ -20,11 +20,27 @@ import java.util.Map;
 @RequestMapping("/api/v2/accounts")
 public class AccountController {
 
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
+    /**
+     * 依赖的 MmfSharesService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final MmfSharesService mmfSharesService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final FamilyService familyService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public AccountController(AccountService accountService, MmfSharesService mmfSharesService, UserService userService, FamilyService familyService) {
         this.accountService = accountService;
         this.mmfSharesService = mmfSharesService;
@@ -32,6 +48,9 @@ public class AccountController {
         this.familyService = familyService;
     }
 
+    /**
+     * 处理只读查询 API，按当前用户和请求参数返回对应资源，不写入账本或修改持仓。
+     */
     @GetMapping
     public ResponseEntity<List<Account>> getAccounts(
             @RequestParam(required = false, defaultValue = "PERSONAL") String scope,
@@ -42,12 +61,19 @@ public class AccountController {
         return ResponseEntity.ok(accounts);
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping("/{id}")
     public ResponseEntity<Account> getAccount(@PathVariable Long id) {
         Account account = accountService.getAccount(id);
         return ResponseEntity.ok(account);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping
     public ResponseEntity<Account> createAccount(@RequestBody Account account) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -71,6 +97,10 @@ public class AccountController {
         return ResponseEntity.ok(created);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PutMapping("/{id}")
     public ResponseEntity<Account> updateAccount(@PathVariable Long id, @RequestBody Account account) {
         account.setId(id);
@@ -78,6 +108,10 @@ public class AccountController {
         return ResponseEntity.ok(updated);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PutMapping("/{id}/balance")
     public ResponseEntity<Void> adjustBalance(@PathVariable Long id, @RequestBody Map<String, Object> request) {
         BigDecimal newBalance = new BigDecimal(request.get("balance").toString());

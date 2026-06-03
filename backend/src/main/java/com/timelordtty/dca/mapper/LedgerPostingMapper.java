@@ -7,6 +7,9 @@ import org.apache.ibatis.annotations.Param;
 import java.math.BigDecimal;
 import java.util.List;
 
+/**
+ * LedgerPostingMapper 组件，定义 MyBatis SQL 映射，返回持久化对象或统计视图。
+ */
 @Mapper
 public interface LedgerPostingMapper {
     List<LedgerPosting> selectByTxnId(@Param("txnId") String txnId);

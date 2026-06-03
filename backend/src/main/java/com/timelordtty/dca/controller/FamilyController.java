@@ -19,14 +19,27 @@ import java.util.Map;
 @RequestMapping("/api/v2/families")
 public class FamilyController {
 
+    /**
+     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final FamilyService familyService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public FamilyController(FamilyService familyService, UserService userService) {
         this.familyService = familyService;
         this.userService = userService;
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping
     public ResponseEntity<Family> getFamily() {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -37,6 +50,10 @@ public class FamilyController {
         return ResponseEntity.ok(family);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping
     public ResponseEntity<Family> createFamily(@RequestBody Map<String, String> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -48,6 +65,10 @@ public class FamilyController {
         return ResponseEntity.ok(family);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping("/members")
     public ResponseEntity<Void> addMember(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -76,6 +97,9 @@ public class FamilyController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping("/members")
     public ResponseEntity<List<FamilyMemberDto>> getMembers() {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -87,6 +111,10 @@ public class FamilyController {
         return ResponseEntity.ok(members);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @DeleteMapping("/members/{userId}")
     public ResponseEntity<Map<String, Object>> removeMember(@PathVariable Long userId) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -101,6 +129,10 @@ public class FamilyController {
         return ResponseEntity.ok(resp);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PutMapping("/members/{userId}/role")
     public ResponseEntity<Map<String, Object>> updateMemberRole(@PathVariable Long userId, @RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();

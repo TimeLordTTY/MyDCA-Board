@@ -18,8 +18,15 @@ import java.util.List;
 @RequestMapping("/api/v2/market")
 public class MarketController {
 
+    /**
+     * 依赖的 MarketService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final MarketService marketService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public MarketController(MarketService marketService) {
         this.marketService = marketService;
     }

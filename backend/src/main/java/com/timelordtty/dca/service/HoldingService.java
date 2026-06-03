@@ -54,18 +54,54 @@ import java.util.Map;
 @Service
 public class HoldingService {
 
+    /**
+     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 依赖的 LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 依赖的 ProductService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final ProductService productService;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
+    /**
+     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 依赖的 OrderMapper Mapper，用于读写对应持久化数据。
+     */
     private final OrderMapper orderMapper;
+    /**
+     * 依赖的 OrderFundingLineMapper Mapper，用于读写对应持久化数据。
+     */
     private final OrderFundingLineMapper orderFundingLineMapper;
+    /**
+     * 依赖的 SettlementConfirmMapper Mapper，用于读写对应持久化数据。
+     */
     private final SettlementConfirmMapper settlementConfirmMapper;
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     */
     private final NavMapper navMapper;
 
+    /**
+     * 注入 HoldingService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
                           ProductMasterMapper productMasterMapper,
                           ProductService productService, @Lazy AccountService accountService, LedgerService ledgerService,
@@ -345,43 +381,151 @@ public class HoldingService {
     }
 
     public static class HoldingInfo {
+        /**
+         * 关联 ID，用于与对应业务对象建立引用关系。
+         */
         private Long brokerAccountId;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String brokerAccountName;
+        /**
+         * 关联产品 ID，指向基金、ETF 或其他投资产品。
+         */
         private Long productId;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String productCode;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String productName;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private String channel;
+        /**
+         * 类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         private String assetType;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private BigDecimal totalShares;
+        /**
+         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         private BigDecimal totalCost;
+        /**
+         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         private BigDecimal avgCost;
+        /**
+         * 持仓市值，通常等于份额乘以最新净值或价格。
+         */
         private BigDecimal marketValue;
+        /**
+         * 未实现盈亏，用于衡量当前市值与成本的差额。
+         */
         private BigDecimal unrealizedPnl;
 
         // Getters and setters
+        /**
+         * 返回关联 ID，用于与对应业务对象建立引用关系。
+         */
         public Long getBrokerAccountId() { return brokerAccountId; }
+        /**
+         * 设置关联 ID，用于与对应业务对象建立引用关系。
+         */
         public void setBrokerAccountId(Long brokerAccountId) { this.brokerAccountId = brokerAccountId; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getBrokerAccountName() { return brokerAccountName; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setBrokerAccountName(String brokerAccountName) { this.brokerAccountName = brokerAccountName; }
+        /**
+         * 返回关联产品 ID，指向基金、ETF 或其他投资产品。
+         */
         public Long getProductId() { return productId; }
+        /**
+         * 设置关联产品 ID，指向基金、ETF 或其他投资产品。
+         */
         public void setProductId(Long productId) { this.productId = productId; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getProductCode() { return productCode; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setProductCode(String productCode) { this.productCode = productCode; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getProductName() { return productName; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setProductName(String productName) { this.productName = productName; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public String getChannel() { return channel; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setChannel(String channel) { this.channel = channel; }
+        /**
+         * 返回类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         public String getAssetType() { return assetType; }
+        /**
+         * 设置类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         public void setAssetType(String assetType) { this.assetType = assetType; }
+        /**
+         * 返回份额或数量字段，用于持仓、订单或货币基金分配计算。
+         */
         public BigDecimal getTotalShares() { return totalShares; }
+        /**
+         * 设置份额或数量字段，用于持仓、订单或货币基金分配计算。
+         */
         public void setTotalShares(BigDecimal totalShares) { this.totalShares = totalShares; }
+        /**
+         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public BigDecimal getTotalCost() { return totalCost; }
+        /**
+         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public void setTotalCost(BigDecimal totalCost) { this.totalCost = totalCost; }
+        /**
+         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public BigDecimal getAvgCost() { return avgCost; }
+        /**
+         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public void setAvgCost(BigDecimal avgCost) { this.avgCost = avgCost; }
+        /**
+         * 返回持仓市值，通常等于份额乘以最新净值或价格。
+         */
         public BigDecimal getMarketValue() { return marketValue; }
+        /**
+         * 设置持仓市值，通常等于份额乘以最新净值或价格。
+         */
         public void setMarketValue(BigDecimal marketValue) { this.marketValue = marketValue; }
+        /**
+         * 返回未实现盈亏，用于衡量当前市值与成本的差额。
+         */
         public BigDecimal getUnrealizedPnl() { return unrealizedPnl; }
+        /**
+         * 设置未实现盈亏，用于衡量当前市值与成本的差额。
+         */
         public void setUnrealizedPnl(BigDecimal unrealizedPnl) { this.unrealizedPnl = unrealizedPnl; }
     }
 
@@ -389,25 +533,79 @@ public class HoldingService {
      * 初始持仓导入DTO
      */
     public static class InitialHoldingImport {
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String productCode;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String productName;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private String channel; // EXCHANGE or OTC
+        /**
+         * 持有份额，用于基金、ETF 或货币基金持仓计算。
+         */
         private BigDecimal shares;
+        /**
+         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         private BigDecimal costPrice;
+        /**
+         * 备注，用于人工核对流水或订单背景。
+         */
         private String note;
 
         // Getters and setters
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getProductCode() { return productCode; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setProductCode(String productCode) { this.productCode = productCode; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getProductName() { return productName; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setProductName(String productName) { this.productName = productName; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public String getChannel() { return channel; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setChannel(String channel) { this.channel = channel; }
+        /**
+         * 返回持有份额，用于基金、ETF 或货币基金持仓计算。
+         */
         public BigDecimal getShares() { return shares; }
+        /**
+         * 设置持有份额，用于基金、ETF 或货币基金持仓计算。
+         */
         public void setShares(BigDecimal shares) { this.shares = shares; }
+        /**
+         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public BigDecimal getCostPrice() { return costPrice; }
+        /**
+         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public void setCostPrice(BigDecimal costPrice) { this.costPrice = costPrice; }
+        /**
+         * 返回备注，用于人工核对流水或订单背景。
+         */
         public String getNote() { return note; }
+        /**
+         * 设置备注，用于人工核对流水或订单背景。
+         */
         public void setNote(String note) { this.note = note; }
     }
 
@@ -556,22 +754,67 @@ public class HoldingService {
      * 账户持仓信息 DTO
      */
     public static class AccountHoldingInfo {
+        /**
+         * 关联账户 ID，指向资金、持仓或虚拟统计账户。
+         */
         private Long accountId;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String accountName;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String parentAccountName;
+        /**
+         * 持有份额，用于基金、ETF 或货币基金持仓计算。
+         */
         private BigDecimal shares;
+        /**
+         * 持仓市值，通常等于份额乘以最新净值或价格。
+         */
         private BigDecimal marketValue;
 
         // Getters and setters
+        /**
+         * 返回关联账户 ID，指向资金、持仓或虚拟统计账户。
+         */
         public Long getAccountId() { return accountId; }
+        /**
+         * 设置关联账户 ID，指向资金、持仓或虚拟统计账户。
+         */
         public void setAccountId(Long accountId) { this.accountId = accountId; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getAccountName() { return accountName; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setAccountName(String accountName) { this.accountName = accountName; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getParentAccountName() { return parentAccountName; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setParentAccountName(String parentAccountName) { this.parentAccountName = parentAccountName; }
+        /**
+         * 返回持有份额，用于基金、ETF 或货币基金持仓计算。
+         */
         public BigDecimal getShares() { return shares; }
+        /**
+         * 设置持有份额，用于基金、ETF 或货币基金持仓计算。
+         */
         public void setShares(BigDecimal shares) { this.shares = shares; }
+        /**
+         * 返回持仓市值，通常等于份额乘以最新净值或价格。
+         */
         public BigDecimal getMarketValue() { return marketValue; }
+        /**
+         * 设置持仓市值，通常等于份额乘以最新净值或价格。
+         */
         public void setMarketValue(BigDecimal marketValue) { this.marketValue = marketValue; }
     }
 

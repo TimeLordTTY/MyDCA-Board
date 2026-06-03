@@ -16,10 +16,23 @@ import java.util.List;
 @RequestMapping("/api/v2/holdings")
 public class HoldingController {
 
+    /**
+     * 依赖的 HoldingService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final HoldingService holdingService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final FamilyService familyService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public HoldingController(HoldingService holdingService, UserService userService, FamilyService familyService) {
         this.holdingService = holdingService;
         this.userService = userService;

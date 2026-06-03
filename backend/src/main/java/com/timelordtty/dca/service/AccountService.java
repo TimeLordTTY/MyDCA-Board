@@ -33,13 +33,34 @@ import java.util.UUID;
 @Service
 public class AccountService {
 
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 依赖的 NavService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final NavService navService;
+    /**
+     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
 
+    /**
+     * 注入 AccountService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper,
                          ProductMasterMapper productMasterMapper, NavService navService,
                          @Lazy LedgerService ledgerService, UserService userService) {

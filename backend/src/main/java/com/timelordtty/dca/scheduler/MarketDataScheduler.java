@@ -24,23 +24,56 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 public class MarketDataScheduler {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(MarketDataScheduler.class);
 
+    /**
+     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final PythonScriptService pythonScriptService;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
 
     // 避免重复/并发执行（启动时 + 定时任务可能重叠）
+    /**
+     * 时间戳，用于记录业务发生或系统审计时间。
+     */
     private final AtomicBoolean exchangeRealtimeRunning = new AtomicBoolean(false);
+    /**
+     * 时间戳，用于记录业务发生或系统审计时间。
+     */
     private final AtomicLong lastExchangeRealtimeRunAtMs = new AtomicLong(0);
     // 冷却窗口：防止短时间重复采集（单位：毫秒）
+    /**
+     * 时间戳，用于记录业务发生或系统审计时间。
+     */
     private static final long EXCHANGE_REALTIME_COOLDOWN_MS = 90_000L;
 
     // 交易时间：上午 9:30-11:30，下午 13:00-15:00
+    /**
+     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     */
     private static final LocalTime MARKET_OPEN_MORNING = LocalTime.of(9, 30);
+    /**
+     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     */
     private static final LocalTime MARKET_CLOSE_MORNING = LocalTime.of(11, 30);
+    /**
+     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     */
     private static final LocalTime MARKET_OPEN_AFTERNOON = LocalTime.of(13, 0);
+    /**
+     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     */
     private static final LocalTime MARKET_CLOSE_AFTERNOON = LocalTime.of(15, 0);
 
+    /**
+     * 执行 MarketDataScheduler 相关后端逻辑，保持既有业务契约不变。
+     */
     public MarketDataScheduler(PythonScriptService pythonScriptService, AccountService accountService) {
         this.pythonScriptService = pythonScriptService;
         this.accountService = accountService;
@@ -165,6 +198,9 @@ public class MarketDataScheduler {
      * 如需恢复自动启动，取消下面 @PostConstruct 的注释
      */
     // @PostConstruct  // 禁用启动时自动执行
+    /**
+     * 执行 backfillHistoryOnStartup 相关后端逻辑，保持既有业务契约不变。
+     */
     public void backfillHistoryOnStartup() {
         try {
             logger.info("服务启动，开始补齐历史行情数据...");

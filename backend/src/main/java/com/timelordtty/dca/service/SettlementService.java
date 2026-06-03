@@ -65,16 +65,46 @@ import java.util.List;
 @Service
 public class SettlementService {
 
+    /**
+     * 依赖的 OrderMapper Mapper，用于读写对应持久化数据。
+     */
     private final OrderMapper orderMapper;
+    /**
+     * 依赖的 SettlementConfirmMapper Mapper，用于读写对应持久化数据。
+     */
     private final SettlementConfirmMapper settlementConfirmMapper;
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 依赖的 OrderFundingLineMapper Mapper，用于读写对应持久化数据。
+     */
     private final OrderFundingLineMapper orderFundingLineMapper;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private final BrokerFeeService brokerFeeService;
 
+    /**
+     * 注入 SettlementService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public SettlementService(OrderMapper orderMapper, SettlementConfirmMapper settlementConfirmMapper,
                             AccountMapper accountMapper, LedgerService ledgerService,
                             OrderFundingLineMapper orderFundingLineMapper, UserService userService,

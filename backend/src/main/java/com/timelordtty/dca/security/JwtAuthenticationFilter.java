@@ -19,12 +19,21 @@ import java.util.ArrayList;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    /**
+     * 认证相关字段，仅用于当次请求或安全校验，不应在日志中明文输出。
+     */
     private final JwtTokenProvider jwtTokenProvider;
 
+    /**
+     * 执行 JwtAuthenticationFilter 相关后端逻辑，保持既有业务契约不变。
+     */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
+    /**
+     * 执行 doFilterInternal 相关后端逻辑，保持既有业务契约不变。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {

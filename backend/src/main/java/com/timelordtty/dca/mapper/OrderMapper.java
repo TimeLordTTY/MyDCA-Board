@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * OrderMapper 组件，定义 MyBatis SQL 映射，返回持久化对象或统计视图。
+ */
 @Mapper
 public interface OrderMapper {
     Order selectById(@Param("id") Long id);

@@ -17,9 +17,19 @@ import java.util.List;
 @Service
 public class IndicatorService {
 
+    /**
+     * 依赖的 IndicatorDailyMapper Mapper，用于读写对应持久化数据。
+     */
     private final IndicatorDailyMapper indicatorDailyMapper;
+    /**
+     * 依赖的 MarketService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final MarketService marketService;
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public IndicatorService(IndicatorDailyMapper indicatorDailyMapper, MarketService marketService) {
         this.indicatorDailyMapper = indicatorDailyMapper;
         this.marketService = marketService;

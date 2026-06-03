@@ -21,10 +21,19 @@ import org.springframework.stereotype.Component;
 @Component
 public class MmfInterestCalculationTask {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(MmfInterestCalculationTask.class);
 
+    /**
+     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final PythonScriptService pythonScriptService;
 
+    /**
+     * 执行 MmfInterestCalculationTask 相关后端逻辑，保持既有业务契约不变。
+     */
     public MmfInterestCalculationTask(PythonScriptService pythonScriptService) {
         this.pythonScriptService = pythonScriptService;
     }

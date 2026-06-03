@@ -18,9 +18,19 @@ import org.springframework.stereotype.Service;
 @Service
 public class UserService {
 
+    /**
+     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     */
     private final UserMapper userMapper;
+    /**
+     * 展示或唯一标识字段，用于人工识别和业务查找。
+     */
     private final PasswordEncoder passwordEncoder;
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public UserService(UserMapper userMapper, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
@@ -51,6 +61,10 @@ public class UserService {
         return userInfo;
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public AuthResponse.UserInfo updateCurrentUserProfile(String nickname, String email, String phone) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
@@ -67,6 +81,10 @@ public class UserService {
         return getCurrentUser();
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public void changePassword(String oldPassword, String newPassword) {
         if (oldPassword == null || newPassword == null) {
             throw new IllegalArgumentException("密码不能为空");

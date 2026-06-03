@@ -20,10 +20,22 @@ import java.util.List;
 @Service
 public class MarketService {
 
+    /**
+     * 依赖的 MarketBarDailyMapper Mapper，用于读写对应持久化数据。
+     */
     private final MarketBarDailyMapper marketBarDailyMapper;
+    /**
+     * 时间戳，用于记录业务发生或系统审计时间。
+     */
     private final MarketQuoteRealtimeMapper marketQuoteRealtimeMapper;
+    /**
+     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     */
     private final NavMapper navMapper;
 
+    /**
+     * 注入 MarketService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public MarketService(MarketBarDailyMapper marketBarDailyMapper, 
                         MarketQuoteRealtimeMapper marketQuoteRealtimeMapper,
                         NavMapper navMapper) {

@@ -26,9 +26,19 @@ import java.util.List;
 @Service
 public class MmfSharesService {
 
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     */
     private final NavMapper navMapper;
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public MmfSharesService(AccountMapper accountMapper, NavMapper navMapper) {
         this.accountMapper = accountMapper;
         this.navMapper = navMapper;

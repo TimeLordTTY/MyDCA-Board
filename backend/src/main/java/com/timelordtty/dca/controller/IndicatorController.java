@@ -19,9 +19,19 @@ import java.util.Map;
 @RequestMapping("/api/v2/indicators")
 public class IndicatorController {
 
+    /**
+     * 依赖的 IndicatorService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final IndicatorService indicatorService;
+    /**
+     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final PythonScriptService pythonScriptService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public IndicatorController(IndicatorService indicatorService, PythonScriptService pythonScriptService) {
         this.indicatorService = indicatorService;
         this.pythonScriptService = pythonScriptService;

@@ -51,16 +51,32 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v2/ledger")
 public class LedgerController {
 
+    /**
+     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public LedgerController(LedgerService ledgerService, UserService userService, AccountService accountService) {
         this.ledgerService = ledgerService;
         this.userService = userService;
         this.accountService = accountService;
     }
 
+    /**
+     * 处理只读查询 API，按当前用户和请求参数返回对应资源，不写入账本或修改持仓。
+     */
     @GetMapping("/txns")
     public ResponseEntity<Map<String, Object>> getTransactions(
             @RequestParam(required = false) String txnType,
@@ -345,6 +361,9 @@ public class LedgerController {
         return ResponseEntity.ok(ledgerService.getLedgerStatsTop(currentUser, buildStatsQuery(params)));
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping("/txns/{txnId}")
     public ResponseEntity<Map<String, Object>> getTransactionDetail(@PathVariable String txnId) {
         LedgerTxn txn = ledgerService.getTransactionDetail(txnId);
@@ -490,6 +509,10 @@ public class LedgerController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping("/txns")
     public ResponseEntity<LedgerTxn> createTransaction(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -617,6 +640,10 @@ public class LedgerController {
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping("/quick-entry")
     public ResponseEntity<LedgerTxn> quickEntry(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();

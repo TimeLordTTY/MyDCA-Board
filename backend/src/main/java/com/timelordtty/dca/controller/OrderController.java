@@ -27,14 +27,38 @@ import java.util.Map;
 @RequestMapping("/api/v2/orders")
 public class OrderController {
 
+    /**
+     * 依赖的 OrderService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final OrderService orderService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 SettlementService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final SettlementService settlementService;
+    /**
+     * 依赖的 LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private final BrokerFeeService brokerFeeService;
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
 
+    /**
+     * 注入 OrderController 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public OrderController(OrderService orderService, UserService userService, SettlementService settlementService,
                           LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
                           BrokerFeeService brokerFeeService, ProductMasterMapper productMasterMapper) {
@@ -47,6 +71,9 @@ public class OrderController {
         this.productMasterMapper = productMasterMapper;
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping
     public ResponseEntity<List<Order>> getOrders(@RequestParam(required = false) String status) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -58,6 +85,9 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrdersByUserId(currentUser.getId()));
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping("/{orderId}")
     public ResponseEntity<Map<String, Object>> getOrder(@PathVariable String orderId) {
         Order order = orderService.getOrderByOrderId(orderId);
@@ -120,6 +150,10 @@ public class OrderController {
         return ResponseEntity.ok(result);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody Map<String, Object> request) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
@@ -186,12 +220,19 @@ public class OrderController {
         return ResponseEntity.ok(order);
     }
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     @PostMapping("/{orderId}/cancel")
     public ResponseEntity<Void> cancelOrder(@PathVariable String orderId) {
         orderService.cancelOrder(orderId);
         return ResponseEntity.ok().build();
     }
 
+    /**
+     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @PostMapping("/{orderId}/settle")
     public ResponseEntity<Map<String, Object>> settleOrder(@PathVariable String orderId, @RequestBody Map<String, Object> request) {
         LocalDate confirmDate = LocalDate.parse(request.get("confirmDate").toString());

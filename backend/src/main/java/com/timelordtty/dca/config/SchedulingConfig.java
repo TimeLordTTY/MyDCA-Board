@@ -16,8 +16,14 @@ import java.util.TimeZone;
 @Configuration
 public class SchedulingConfig implements SchedulingConfigurer {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(SchedulingConfig.class);
 
+    /**
+     * 执行 configureTasks 相关后端逻辑，保持既有业务契约不变。
+     */
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {
         // 设置定时任务使用的时区为 Asia/Shanghai

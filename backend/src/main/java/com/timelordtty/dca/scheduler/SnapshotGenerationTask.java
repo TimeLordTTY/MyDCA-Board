@@ -14,10 +14,19 @@ import java.time.LocalDate;
 @Component
 public class SnapshotGenerationTask {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(SnapshotGenerationTask.class);
 
+    /**
+     * 依赖的 SnapshotService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final SnapshotService snapshotService;
 
+    /**
+     * 执行 SnapshotGenerationTask 相关后端逻辑，保持既有业务契约不变。
+     */
     public SnapshotGenerationTask(SnapshotService snapshotService) {
         this.snapshotService = snapshotService;
     }

@@ -21,10 +21,19 @@ import java.util.List;
 @Service
 public class PythonScriptService {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(PythonScriptService.class);
 
     // 项目根目录（相对于jar包或工作目录）
+    /**
+     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     */
     private static final String PROJECT_ROOT = detectProjectRoot();
+    /**
+     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     */
     private static final String PYTHON_CMD = detectPythonCommand(); // 自动检测python或python3
 
     /**

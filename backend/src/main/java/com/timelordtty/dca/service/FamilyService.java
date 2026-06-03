@@ -26,10 +26,23 @@ import java.util.UUID;
 @Service
 public class FamilyService {
 
+    /**
+     * 依赖的 FamilyMapper Mapper，用于读写对应持久化数据。
+     */
     private final FamilyMapper familyMapper;
+    /**
+     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     */
     private final UserFamilyRoleMapper userFamilyRoleMapper;
+    /**
+     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     */
     private final UserMapper userMapper;
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public FamilyService(FamilyMapper familyMapper, UserFamilyRoleMapper userFamilyRoleMapper, UserMapper userMapper) {
         this.familyMapper = familyMapper;
         this.userFamilyRoleMapper = userFamilyRoleMapper;
@@ -83,6 +96,9 @@ public class FamilyService {
         return familyMapper.selectById(familyId);
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     public List<FamilyMemberDto> getMembers(Long familyId) {
         List<UserFamilyRole> roles = userFamilyRoleMapper.selectByFamilyId(familyId);
         List<FamilyMemberDto> result = new ArrayList<>();
@@ -103,6 +119,10 @@ public class FamilyService {
         return result;
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public void assertAdmin(Long operatorUserId, Long familyId) {
         String role = userFamilyRoleMapper.selectRole(operatorUserId, familyId);
         if (!"ADMIN".equals(role)) {
@@ -110,6 +130,10 @@ public class FamilyService {
         }
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public Long findUserIdByUsername(String username) {
         if (username == null || username.trim().isEmpty()) {
             throw new RuntimeException("用户名不能为空");
@@ -155,6 +179,10 @@ public class FamilyService {
         }
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     @Transactional
     public void removeMember(Long familyId, Long userId) {
         // 不能移除最后一个 ADMIN
@@ -176,6 +204,10 @@ public class FamilyService {
         }
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     @Transactional
     public void updateMemberRole(Long familyId, Long userId, String role) {
         if (role == null || role.trim().isEmpty()) {

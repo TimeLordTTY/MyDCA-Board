@@ -7,6 +7,9 @@ import org.apache.ibatis.annotations.Param;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * NavMapper 组件，定义 MyBatis SQL 映射，返回持久化对象或统计视图。
+ */
 @Mapper
 public interface NavMapper {
     List<Nav> selectByProductId(@Param("productId") Long productId, 

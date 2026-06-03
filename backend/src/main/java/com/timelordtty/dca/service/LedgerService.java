@@ -81,20 +81,59 @@ import java.util.stream.Collectors;
 @Service
 public class LedgerService {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LedgerService.class);
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private static final Set<String> INCOME_TYPES = Set.of("INCOME", "REFUND", "REFUND_IN", "REIMBURSE_IN");
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private static final Set<String> EXPENSE_TYPES = Set.of("EXPENSE", "REFUND_OUT", "REIMBURSE_OUT", "FEE", "TAX");
+    /**
+     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     */
     private static final Set<String> INVESTMENT_IN_TYPES = Set.of("SELL", "REDEMPTION", "REDEMPTION_IN", "DIVIDEND_CASH", "DIVIDEND_REINVEST", "BOND_REPO");
+    /**
+     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     */
     private static final Set<String> INVESTMENT_OUT_TYPES = Set.of("BUY", "SUBSCRIPTION", "REDEMPTION_OUT");
+    /**
+     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     */
     private static final Set<String> TRANSFER_TYPES = Set.of("TRANSFER_OUT", "TRANSFER_IN");
 
+    /**
+     * 依赖的 LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     */
     private final LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
 
+    /**
+     * 注入 LedgerService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public LedgerService(LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
                         AccountMapper accountMapper, AccountService accountService, ProductMasterMapper productMasterMapper,
                         UserService userService) {
@@ -447,13 +486,37 @@ public class LedgerService {
      * <p>它把同一 txnId 下的多条借贷分录合并到一起，后续统计以该对象为单位计算一笔业务。</p>
      */
     private static class StatsTxn {
+        /**
+         * 业务流水号，用于聚合同一笔复式记账分录。
+         */
         private final String txnId;
+        /**
+         * 类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         private final String txnType;
+        /**
+         * 业务日期，用于交易归属、确认或统计周期判定。
+         */
         private final LocalDate tradeDate;
+        /**
+         * 关联 ID，用于与对应业务对象建立引用关系。
+         */
         private final Long categoryId;
+        /**
+         * 布尔标记，用于表示该记录在业务流程中的开关状态。
+         */
         private final Boolean isReimbursable;
+        /**
+         * 布尔标记，用于表示该记录在业务流程中的开关状态。
+         */
         private final Boolean isReimbursed;
+        /**
+         * 备注，用于人工核对流水或订单背景。
+         */
         private final String note;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private final List<StatsPosting> postings = new ArrayList<>();
 
         private StatsTxn(LedgerStatsPostingDTO row) {
@@ -527,13 +590,37 @@ public class LedgerService {
 
     /** 统计过程中使用的轻量分录对象。 */
     private static class StatsPosting {
+        /**
+         * 分录借贷方向，DEBIT/CREDIT 决定账户增减口径。
+         */
         private final String postingType;
+        /**
+         * 关联账户 ID，指向资金、持仓或虚拟统计账户。
+         */
         private final Long accountId;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private final String accountName;
+        /**
+         * 账户性质，区分真实账户与虚拟统计账户。
+         */
         private final String accountKind;
+        /**
+         * 账户类型，区分现金、持仓、收入、支出等记账口径。
+         */
         private final String accountType;
+        /**
+         * 关联 ID，用于与对应业务对象建立引用关系。
+         */
         private final Long parentAccountId;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private final String parentAccountName;
+        /**
+         * 金额，单位为该账户或流水的币种。
+         */
         private final BigDecimal amount;
 
         private StatsPosting(LedgerStatsPostingDTO row) {
@@ -573,8 +660,17 @@ public class LedgerService {
     }
 
     private static class StatsLine {
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private final String key;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private final String name;
+        /**
+         * 金额，单位为该账户或流水的币种。
+         */
         private final BigDecimal amount;
 
         private StatsLine(String key, String name, BigDecimal amount) {
@@ -614,18 +710,27 @@ public class LedgerService {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, null, null, false);
     }
 
+    /**
+     * 执行写入或状态推进逻辑，由服务层校验和事务边界保证数据一致性。
+     */
     @Transactional
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr) {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, null, false);
     }
 
+    /**
+     * 执行写入或状态推进逻辑，由服务层校验和事务边界保证数据一致性。
+     */
     @Transactional
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable) {
         return createTransaction(userId, familyId, txnType, bizGroupKey, postings, note, requestedAtStr, categoryId, isReimbursable, null);
     }
 
+    /**
+     * 执行写入或状态推进逻辑，由服务层校验和事务边界保证数据一致性。
+     */
     @Transactional
     public LedgerTxn createTransaction(Long userId, Long familyId, String txnType, String bizGroupKey,
                                       List<LedgerPosting> postings, String note, String requestedAtStr, Long categoryId, Boolean isReimbursable, Long productId) {
@@ -1184,6 +1289,9 @@ public class LedgerService {
         }
     }
 
+    /**
+     * 执行只读查询或统计，返回符合条件的业务数据。
+     */
     public List<LedgerTxn> getTransactions(Long userId, String txnType, LocalDate startDate, 
                                           LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note, Integer page, Integer pageSize) {
         Integer offset = null;
@@ -1208,6 +1316,9 @@ public class LedgerService {
         return ledgerTxnMapper.selectByCondition(userId, txnType, startDate, endDate, productId, accountId, childAccountIds, note, offset, limit);
     }
     
+    /**
+     * 执行只读查询或统计，返回符合条件的业务数据。
+     */
     public int countTransactions(Long userId, String txnType, LocalDate startDate, 
                                 LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note) {
         // 如果指定了父账户但没有指定子账户，获取该父账户下所有子账户的ID
@@ -1225,10 +1336,16 @@ public class LedgerService {
         return ledgerTxnMapper.countByCondition(userId, txnType, startDate, endDate, productId, accountId, childAccountIds, note);
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     public LedgerTxn getTransactionDetail(String txnId) {
         return ledgerTxnMapper.selectByTxnId(txnId);
     }
 
+    /**
+     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     */
     public List<LedgerPosting> getPostingsByTxnId(String txnId) {
         return ledgerPostingMapper.selectByTxnId(txnId);
     }

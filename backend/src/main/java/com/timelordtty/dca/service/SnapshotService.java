@@ -22,14 +22,35 @@ import java.util.List;
 @Service
 public class SnapshotService {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(SnapshotService.class);
 
+    /**
+     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     */
     private final UserMapper userMapper;
+    /**
+     * 依赖的 HoldingService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final HoldingService holdingService;
+    /**
+     * 依赖的 DashboardService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final DashboardService dashboardService;
+    /**
+     * 依赖的 HoldingsSnapshotMapper Mapper，用于读写对应持久化数据。
+     */
     private final HoldingsSnapshotMapper holdingsSnapshotMapper;
+    /**
+     * 依赖的 NetWorthSnapshotMapper Mapper，用于读写对应持久化数据。
+     */
     private final NetWorthSnapshotMapper netWorthSnapshotMapper;
 
+    /**
+     * 注入 SnapshotService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public SnapshotService(UserMapper userMapper,
                            HoldingService holdingService,
                            DashboardService dashboardService,
@@ -42,6 +63,10 @@ public class SnapshotService {
         this.netWorthSnapshotMapper = netWorthSnapshotMapper;
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public void generateAllSnapshotsForDate(LocalDate snapshotDate) {
         List<Long> userIds = userMapper.selectActiveUserIds();
         logger.info("开始生成快照：snapshotDate={}，activeUsers={}", snapshotDate, userIds.size());

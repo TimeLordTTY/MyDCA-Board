@@ -48,17 +48,50 @@ import java.util.UUID;
 @Service
 public class OrderService {
 
+    /**
+     * 依赖的 OrderMapper Mapper，用于读写对应持久化数据。
+     */
     private final OrderMapper orderMapper;
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
+    /**
+     * 依赖的 OrderFundingLineMapper Mapper，用于读写对应持久化数据。
+     */
     private final OrderFundingLineMapper orderFundingLineMapper;
+    /**
+     * 依赖的 SettlementConfirmMapper Mapper，用于读写对应持久化数据。
+     */
     private final SettlementConfirmMapper settlementConfirmMapper;
+    /**
+     * 依赖的 com.timelordtty.dca.mapper.LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     */
     private final com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper;
+    /**
+     * 依赖的 com.timelordtty.dca.mapper.LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     */
     private final com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper;
+    /**
+     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final LedgerService ledgerService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
 
+    /**
+     * 注入 OrderService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public OrderService(OrderMapper orderMapper, AccountMapper accountMapper, AccountService accountService,
                        OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper,
                        com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper,
@@ -493,26 +526,44 @@ public class OrderService {
         orderMapper.update(order);
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     public List<Order> getPendingOrders() {
         return orderMapper.selectByStatus("PENDING");
     }
 
+    /**
+     * 返回日期或时间字段，用于业务归属、确认或审计排序。
+     */
     public List<Order> getOrdersByStatus(String status) {
         return orderMapper.selectByStatus(status);
     }
 
+    /**
+     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     */
     public List<Order> getOrdersByUserId(Long userId) {
         return orderMapper.selectByUserId(userId);
     }
 
+    /**
+     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     */
     public Order getOrderByOrderId(String orderId) {
         return orderMapper.selectByOrderId(orderId);
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     public List<OrderFundingLine> getOrderFundingLines(String orderId) {
         return orderFundingLineMapper.selectByOrderId(orderId);
     }
 
+    /**
+     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     */
     public SettlementConfirm getSettlementByOrderId(String orderId) {
         return settlementConfirmMapper.selectByOrderId(orderId);
     }

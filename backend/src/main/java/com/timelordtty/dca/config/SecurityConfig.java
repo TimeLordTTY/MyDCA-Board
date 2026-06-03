@@ -18,17 +18,29 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
+    /**
+     * 日期或时间字段，用于业务归属、确认或审计排序。
+     */
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /**
+     * 执行 SecurityConfig 相关后端逻辑，保持既有业务契约不变。
+     */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
+    /**
+     * 执行 passwordEncoder 相关后端逻辑，保持既有业务契约不变。
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * 执行 securityFilterChain 相关后端逻辑，保持既有业务契约不变。
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http

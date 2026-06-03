@@ -14,8 +14,14 @@ import java.time.LocalDateTime;
 @Component
 public class RealtimeQuoteCleanupTask {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(RealtimeQuoteCleanupTask.class);
 
+    /**
+     * 时间戳，用于记录业务发生或系统审计时间。
+     */
     private final MarketQuoteRealtimeMapper marketQuoteRealtimeMapper;
 
     /**
@@ -23,6 +29,9 @@ public class RealtimeQuoteCleanupTask {
      */
     private static final int RETENTION_DAYS = 30;
 
+    /**
+     * 执行 RealtimeQuoteCleanupTask 相关后端逻辑，保持既有业务契约不变。
+     */
     public RealtimeQuoteCleanupTask(MarketQuoteRealtimeMapper marketQuoteRealtimeMapper) {
         this.marketQuoteRealtimeMapper = marketQuoteRealtimeMapper;
     }

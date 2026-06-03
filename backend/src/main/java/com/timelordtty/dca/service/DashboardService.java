@@ -32,10 +32,23 @@ import java.util.stream.Collectors;
 @Service
 public class DashboardService {
 
+    /**
+     * 依赖的 OrderService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final OrderService orderService;
+    /**
+     * 依赖的 HoldingService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final HoldingService holdingService;
+    /**
+     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final AccountService accountService;
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public DashboardService(OrderService orderService, HoldingService holdingService, AccountService accountService) {
         this.orderService = orderService;
         this.holdingService = holdingService;
@@ -232,23 +245,68 @@ public class DashboardService {
     }
 
     public static class AssetOverview {
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private BigDecimal totalAssets;
         @JsonProperty("liability")
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private BigDecimal totalLiabilities;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private BigDecimal netWorth;
+        /**
+         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         private BigDecimal cashBalance;
+        /**
+         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         private BigDecimal positionValue; // 持仓市值
 
         // Getters and setters
+        /**
+         * 返回金额字段，按所属账户、持仓或统计口径计量。
+         */
         public BigDecimal getTotalAssets() { return totalAssets; }
+        /**
+         * 设置金额字段，按所属账户、持仓或统计口径计量。
+         */
         public void setTotalAssets(BigDecimal totalAssets) { this.totalAssets = totalAssets; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public BigDecimal getTotalLiabilities() { return totalLiabilities; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setTotalLiabilities(BigDecimal totalLiabilities) { this.totalLiabilities = totalLiabilities; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public BigDecimal getNetWorth() { return netWorth; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setNetWorth(BigDecimal netWorth) { this.netWorth = netWorth; }
+        /**
+         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public BigDecimal getCashBalance() { return cashBalance; }
+        /**
+         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public void setCashBalance(BigDecimal cashBalance) { this.cashBalance = cashBalance; }
+        /**
+         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public BigDecimal getPositionValue() { return positionValue; }
+        /**
+         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         */
         public void setPositionValue(BigDecimal positionValue) { this.positionValue = positionValue; }
     }
 
@@ -259,24 +317,78 @@ public class DashboardService {
      * Phase 3阶段：会实现策略引擎和建议生成
      */
     public static class TodayAction {
+        /**
+         * 主键 ID，用于数据库内部唯一定位记录。
+         */
         private String id;
+        /**
+         * 类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         private String type;
+        /**
+         * 展示或唯一标识字段，用于人工识别和业务查找。
+         */
         private String title;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private String description;
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private String priority; // HIGH/MEDIUM/LOW
+        /**
+         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         */
         private String actionUrl;
 
+        /**
+         * 返回主键 ID，用于数据库内部唯一定位记录。
+         */
         public String getId() { return id; }
+        /**
+         * 设置主键 ID，用于数据库内部唯一定位记录。
+         */
         public void setId(String id) { this.id = id; }
+        /**
+         * 返回类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         public String getType() { return type; }
+        /**
+         * 设置类型或分组口径，用于驱动后端业务分支和前端展示。
+         */
         public void setType(String type) { this.type = type; }
+        /**
+         * 返回展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public String getTitle() { return title; }
+        /**
+         * 设置展示或唯一标识字段，用于人工识别和业务查找。
+         */
         public void setTitle(String title) { this.title = title; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public String getDescription() { return description; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setDescription(String description) { this.description = description; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public String getPriority() { return priority; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setPriority(String priority) { this.priority = priority; }
+        /**
+         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public String getActionUrl() { return actionUrl; }
+        /**
+         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         */
         public void setActionUrl(String actionUrl) { this.actionUrl = actionUrl; }
     }
 }

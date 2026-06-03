@@ -18,24 +18,47 @@ import java.util.List;
 @Service
 public class ProductService {
 
+    /**
+     * 日志记录器，用于输出后端运行、调度或异常诊断信息。
+     */
     private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
 
+    /**
+     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     */
     private final ProductMasterMapper productMasterMapper;
+    /**
+     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final PythonScriptService pythonScriptService;
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public ProductService(ProductMasterMapper productMasterMapper, PythonScriptService pythonScriptService) {
         this.productMasterMapper = productMasterMapper;
         this.pythonScriptService = pythonScriptService;
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     public List<ProductMaster> getProducts(String keyword, String assetType, String channel) {
         return productMasterMapper.selectByCondition(keyword, assetType, channel);
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     public ProductMaster getProduct(Long id) {
         return productMasterMapper.selectById(id);
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public ProductMaster createProduct(ProductMaster product) {
         productMasterMapper.insert(product);
         
@@ -91,6 +114,10 @@ public class ProductService {
         }, "MarketDataCollector-" + product.getProductCode()).start();
     }
 
+    /**
+     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
+     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     */
     public ProductMaster updateProduct(ProductMaster product) {
         productMasterMapper.update(product);
         return productMasterMapper.selectById(product.getId());

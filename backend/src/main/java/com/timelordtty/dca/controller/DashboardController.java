@@ -18,16 +18,32 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v2/dashboard")
 public class DashboardController {
 
+    /**
+     * 依赖的 DashboardService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final DashboardService dashboardService;
+    /**
+     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final UserService userService;
+    /**
+     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     */
     private final FamilyService familyService;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public DashboardController(DashboardService dashboardService, UserService userService, FamilyService familyService) {
         this.dashboardService = dashboardService;
         this.userService = userService;
         this.familyService = familyService;
     }
 
+    /**
+     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     */
     @GetMapping("/pending-settlements")
     public ResponseEntity<List<Order>> getPendingSettlements() {
         // 只返回当前用户的待结算订单

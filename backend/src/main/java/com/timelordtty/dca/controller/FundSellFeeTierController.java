@@ -18,8 +18,15 @@ import java.util.Map;
 @RequestMapping("/api/v2/products/{productId}/sell-fee-tiers")
 public class FundSellFeeTierController {
 
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private final FundSellFeeTierMapper fundSellFeeTierMapper;
 
+    /**
+     * 处理写入类 API，将请求参数校验后委托给 Service 层。
+     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     */
     public FundSellFeeTierController(FundSellFeeTierMapper fundSellFeeTierMapper) {
         this.fundSellFeeTierMapper = fundSellFeeTierMapper;
     }

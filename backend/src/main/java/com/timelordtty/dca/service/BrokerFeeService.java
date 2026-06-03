@@ -29,10 +29,22 @@ import java.math.RoundingMode;
 @Service
 public class BrokerFeeService {
 
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private final BrokerFeeConfigMapper brokerFeeConfigMapper;
+    /**
+     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     */
     private final AccountMapper accountMapper;
+    /**
+     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     */
     private final FundSellFeeTierMapper fundSellFeeTierMapper;
 
+    /**
+     * 注入 BrokerFeeService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     */
     public BrokerFeeService(BrokerFeeConfigMapper brokerFeeConfigMapper,
                            AccountMapper accountMapper,
                            FundSellFeeTierMapper fundSellFeeTierMapper) {

@@ -6,6 +6,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * UserFamilyRoleMapper 组件，定义 MyBatis SQL 映射，返回持久化对象或统计视图。
+ */
 @Mapper
 public interface UserFamilyRoleMapper {
     List<UserFamilyRole> selectByUserId(@Param("userId") Long userId);
