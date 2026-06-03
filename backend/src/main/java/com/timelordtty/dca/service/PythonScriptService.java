@@ -19,40 +19,17 @@ import java.util.List;
  * 用于调用Python脚本执行行情数据采集等任务
  */
 @Service
-/**
- * 业务注释规范化: PythonScriptService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
- *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
- */
 public class PythonScriptService {
 
-    /**
-     * 业务注释规范化: logger 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private static final Logger logger = LoggerFactory.getLogger(PythonScriptService.class);
 
     // 项目根目录（相对于jar包或工作目录）
-    /**
-     * 业务注释规范化: PROJECT_ROOT 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private static final String PROJECT_ROOT = detectProjectRoot();
-    /**
-     * 业务注释规范化: 处理 detectPythonCommand 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     private static final String PYTHON_CMD = detectPythonCommand(); // 自动检测python或python3
 
     /**
      * 检测项目根目录
      * 通过检查 scripts 目录是否存在来定位项目根目录
-     */
-    /**
-     * 业务注释规范化: 处理 detectProjectRoot 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private static String detectProjectRoot() {
         String userDir = System.getProperty("user.dir");
@@ -91,12 +68,6 @@ public class PythonScriptService {
      * 检测Python命令
      * 优先尝试python3，如果不存在则尝试python
      */
-    /**
-     * 业务注释规范化: 处理 detectPythonCommand 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     private static String detectPythonCommand() {
         String[] commands = {"python3", "python"};
         for (String cmd : commands) {
@@ -125,14 +96,6 @@ public class PythonScriptService {
      * @param args 脚本参数
      * @return 执行结果（标准输出）
      * @throws IOException 执行失败
-     */
-    /**
-     * 业务注释规范化: 处理 executeScript 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param scriptPath scriptPath 业务字段，承载该对象在后端流程中的核心属性。
-     * @param args args 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public String executeScript(String scriptPath, String... args) throws IOException {
         Path fullPath = Paths.get(PROJECT_ROOT, scriptPath);
@@ -188,12 +151,6 @@ public class PythonScriptService {
      *
      * @return 执行结果
      */
-    /**
-     * 业务注释规范化: 处理 backfillMarketHistory 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public String backfillMarketHistory() {
         try {
             return executeScript("scripts/market/backfill_fund_nav_history.py");
@@ -207,12 +164,6 @@ public class PythonScriptService {
      * 执行基金净值采集脚本
      *
      * @return 执行结果
-     */
-    /**
-     * 业务注释规范化: 处理 collectFundNav 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public String collectFundNav() {
         try {
@@ -228,12 +179,6 @@ public class PythonScriptService {
      *
      * @return 执行结果
      */
-    /**
-     * 业务注释规范化: 处理 collectETFRealtime 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public String collectETFRealtime() {
         try {
             return executeScript("scripts/market/etf_collector.py", "--type", "realtime");
@@ -248,12 +193,6 @@ public class PythonScriptService {
      *
      * @return 执行结果
      */
-    /**
-     * 业务注释规范化: 处理 collectETFDaily 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public String collectETFDaily() {
         try {
             return executeScript("scripts/market/etf_collector.py", "--type", "daily");
@@ -265,12 +204,6 @@ public class PythonScriptService {
 
     /**
      * 执行指标计算脚本（全量产品）
-     */
-    /**
-     * 业务注释规范化: 处理 runIndicatorCalculator 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public String runIndicatorCalculator() {
         try {
@@ -286,14 +219,6 @@ public class PythonScriptService {
      *
      * @param productId 产品ID（可为null，null表示全量）
      * @param endDate 截止日期（可为null，null表示今天）
-     */
-    /**
-     * 业务注释规范化: 处理 runIndicatorCalculator 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     * @param endDate endDate 日期字段，用于交易、确认、净值或统计周期口径。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public String runIndicatorCalculator(Long productId, LocalDate endDate) {
         try {
@@ -320,12 +245,6 @@ public class PythonScriptService {
      * - 使用 mmf_interest_backfill.py 作为统一的计算入口
      * - 平台账户固定为 17，子账户固定为 16（小荷包）
      * - start 固定为 2026-02-11，脚本内部会根据 existing interest 做幂等处理
-     */
-    /**
-     * 业务注释规范化: 处理 runMmfDailyInterestForXiaoHeBao 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public String runMmfDailyInterestForXiaoHeBao() {
         try {

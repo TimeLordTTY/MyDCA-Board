@@ -6,107 +6,59 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Data
 /**
- * 业务注释规范化: LedgerStatsPostingDTO DTO 数据传输对象，用于承载请求参数或响应结果，属于前后端契约。
+ * 流水统计查询的扁平化分录视图。
  *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ * <p>该对象由 Mapper 从 ledger_txn、ledger_posting、account 等表联查得到，服务层基于它做聚合，不能作为写入账本的命令对象。</p>
  */
+@Data
 public class LedgerStatsPostingDTO {
-    /**
-     * 业务注释规范化: 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
-     */
+    /** 交易流水号，用于把同一笔复式记账下的多条分录重新聚合。 */
     private String txnId;
-    /**
-     * 业务注释规范化: 流水类型，决定该笔交易在收入、支出、投资、转账等统计口径中的归类。
-     */
+    /** 流水类型，决定该分录进入收入、支出、投资或转账统计口径。 */
     private String txnType;
-    /**
-     * 业务注释规范化: 所属用户 ID，用于限定个人数据权限和查询范围。
-     */
+    /** 流水所属用户 ID，用于个人视角的数据隔离。 */
     private Long userId;
-    /**
-     * 业务注释规范化: 所属家庭 ID，用于家庭视角下的数据隔离。
-     */
+    /** 流水所属家庭 ID，用于家庭视角聚合。 */
     private Long familyId;
-    /**
-     * 业务注释规范化: 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     */
+    /** 关联投资产品 ID，非产品类生活流水可为空。 */
     private Long productId;
-    /**
-     * 业务注释规范化: requestedAt 时间字段，用于记录业务动作发生或审计时间。
-     */
+    /** 用户发起或系统记录该流水的时间。 */
     private LocalDateTime requestedAt;
-    /**
-     * 业务注释规范化: tradeDate 日期字段，用于交易、确认、净值或统计周期口径。
-     */
+    /** 交易归属日，统计区间按该日期过滤。 */
     private LocalDate tradeDate;
-    /**
-     * 业务注释规范化: 业务状态，表示记录当前所处的创建、确认、取消或完成阶段。
-     */
+    /** 流水状态，已撤销或取消的记录由服务层决定是否纳入统计。 */
     private String status;
-    /**
-     * 业务注释规范化: categoryId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     */
+    /** 收入/支出分类 ID，用于分类统计。 */
     private Long categoryId;
-    /**
-     * 业务注释规范化: isReimbursable 布尔标记，用于控制该记录在业务流程中的特殊状态。
-     */
+    /** 支出是否具备报销属性。 */
     private Boolean isReimbursable;
-    /**
-     * 业务注释规范化: isReimbursed 布尔标记，用于控制该记录在业务流程中的特殊状态。
-     */
+    /** 支出是否已经被报销流水覆盖。 */
     private Boolean isReimbursed;
-    /**
-     * 业务注释规范化: isReversed 布尔标记，用于控制该记录在业务流程中的特殊状态。
-     */
+    /** 流水是否已经撤销。 */
     private Boolean isReversed;
-    /**
-     * 业务注释规范化: note 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 流水备注，用于明细展示和人工核对。 */
     private String note;
-    /**
-     * 业务注释规范化: postingId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     */
+    /** 分录主键 ID，对应 ledger_posting 的单条借贷记录。 */
     private Long postingId;
-    /**
-     * 业务注释规范化: 分录方向，DEBIT/CREDIT 决定账户余额在复式记账中的增减方向。
-     */
+    /** 分录方向，DEBIT/CREDIT 决定账户余额增减方向。 */
     private String postingType;
-    /**
-     * 业务注释规范化: 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     */
+    /** 分录关联账户 ID。 */
     private Long accountId;
-    /**
-     * 业务注释规范化: accountName 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 分录关联账户名称，用于统计结果展示。 */
     private String accountName;
-    /**
-     * 业务注释规范化: accountKind 类型字段，用于区分不同业务分类并驱动处理分支。
-     */
+    /** 账户性质，例如 REAL、VIRTUAL，用于区分真实账户与统计账户。 */
     private String accountKind;
-    /**
-     * 业务注释规范化: accountType 类型字段，用于区分不同业务分类并驱动处理分支。
-     */
+    /** 账户类型，例如 CASH、POSITION、EXPENSE、INCOME。 */
     private String accountType;
-    /**
-     * 业务注释规范化: 父级账户 ID，用于表达平台账户与资金分区的层级关系。
-     */
+    /** 父账户 ID，用于按账户树汇总。 */
     private Long parentAccountId;
-    /**
-     * 业务注释规范化: parentAccountName 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 父账户名称，用于父账户筛选后的展示。 */
     private String parentAccountName;
-    /**
-     * 业务注释规范化: 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
-     */
+    /** 分录金额，统计时按流水类型和分录方向转换为展示金额。 */
     private BigDecimal amount;
-    /**
-     * 业务注释规范化: 产品份额，适用于基金、ETF、货币基金等按份额管理的资产。
-     */
+    /** 持仓份额，仅投资产品分录有意义。 */
     private BigDecimal shares;
-    /**
-     * 业务注释规范化: currency 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 币种代码，当前主要用于人民币金额展示，保留多币种扩展口径。 */
     private String currency;
 }

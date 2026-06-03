@@ -5,79 +5,45 @@ import lombok.Data;
 import java.time.LocalDate;
 import java.util.List;
 
-@Data
 /**
- * 业务注释规范化: LedgerStatsQueryDTO DTO 数据传输对象，用于承载请求参数或响应结果，属于前后端契约。
+ * 流水统计查询条件。
  *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ * <p>该 DTO 只承载统计筛选口径，不代表账本入账指令，也不会触发账户余额、持仓成本或订单状态变更。</p>
  */
+@Data
 public class LedgerStatsQueryDTO {
-    /**
-     * 业务注释规范化: 所属用户 ID，用于限定个人数据权限和查询范围。
-     */
+    /** 当前统计所属用户 ID；后端会结合 scope 决定个人或家庭视角。 */
     private Long userId;
-    /**
-     * 业务注释规范化: 所属家庭 ID，用于家庭视角下的数据隔离。
-     */
+    /** 家庭统计视角下的家庭 ID，个人视角为空。 */
     private Long familyId;
-    /**
-     * 业务注释规范化: scope 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 统计范围，默认 PERSONAL；家庭视角由服务层填充 familyId 并做权限校验。 */
     private String scope = "PERSONAL";
-    /**
-     * 业务注释规范化: startDate 日期字段，用于交易、确认、净值或统计周期口径。
-     */
+    /** 统计开始日，按流水 tradeDate 过滤，包含当天。 */
     private LocalDate startDate;
-    /**
-     * 业务注释规范化: endDate 日期字段，用于交易、确认、净值或统计周期口径。
-     */
+    /** 统计结束日，按流水 tradeDate 过滤，包含当天。 */
     private LocalDate endDate;
-    /**
-     * 业务注释规范化: txnTypes 类型字段，用于区分不同业务分类并驱动处理分支。
-     */
+    /** 需要纳入统计的流水类型集合，例如 EXPENSE、INCOME、BUY、SELL。 */
     private List<String> txnTypes;
-    /**
-     * 业务注释规范化: accountIds 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 直接选择的账户 ID，用于限定某些具体账户的流水分录。 */
     private List<Long> accountIds;
-    /**
-     * 业务注释规范化: parentAccountIds 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 父账户 ID 集合，服务层会展开为叶子账户后再进入统计。 */
     private List<Long> parentAccountIds;
-    /**
-     * 业务注释规范化: effectiveAccountIds 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** accountIds 与 parentAccountIds 展开后的实际账户集合，供 Mapper 查询使用。 */
     private List<Long> effectiveAccountIds;
-    /**
-     * 业务注释规范化: categoryIds 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 收入/支出分类 ID 集合，用于分类维度过滤。 */
     private List<Long> categoryIds;
-    /**
-     * 业务注释规范化: categoryL1 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 一级分类名称筛选，仅用于统计展示口径，不改变分类主数据。 */
     private String categoryL1;
-    /**
-     * 业务注释规范化: categoryL2 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 二级分类名称筛选，仅用于统计展示口径，不改变分类主数据。 */
     private String categoryL2;
-    /**
-     * 业务注释规范化: productIds 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 产品 ID 集合，用于限定与基金、ETF 等投资产品相关的流水。 */
     private List<Long> productIds;
-    /**
-     * 业务注释规范化: includeTransfer 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 是否把转账流水纳入统计；默认排除，避免把内部账户搬移误算成收支。 */
     private Boolean includeTransfer = false;
-    /**
-     * 业务注释规范化: period 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 趋势统计周期，默认 MONTH，可由服务层归一化为日、周、月等展示粒度。 */
     private String period = "MONTH";
-    /**
-     * 业务注释规范化: groupBy 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** 分组维度，默认 CATEGORY；可按账户、产品、流水类型等维度聚合。 */
     private String groupBy = "CATEGORY";
-    /**
-     * 业务注释规范化: limit 业务字段，承载该对象在后端流程中的核心属性。
-     */
+    /** TopN 或明细限制数量，默认 10，避免统计接口返回过大列表。 */
     private Integer limit = 10;
 }

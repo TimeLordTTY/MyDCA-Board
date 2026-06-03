@@ -27,34 +27,12 @@ import java.math.RoundingMode;
  * @since 1.0.0
  */
 @Service
-/**
- * 业务注释规范化: BrokerFeeService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
- *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
- */
 public class BrokerFeeService {
 
-    /**
-     * 业务注释规范化: brokerFeeConfigMapper 金额字段，用于表达该场景下的资金规模或费用口径。
-     */
     private final BrokerFeeConfigMapper brokerFeeConfigMapper;
-    /**
-     * 业务注释规范化: accountMapper 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final AccountMapper accountMapper;
-    /**
-     * 业务注释规范化: fundSellFeeTierMapper 金额字段，用于表达该场景下的资金规模或费用口径。
-     */
     private final FundSellFeeTierMapper fundSellFeeTierMapper;
 
-    /**
-     * 业务注释规范化: 处理 BrokerFeeService 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param brokerFeeConfigMapper brokerFeeConfigMapper 金额字段，用于表达该场景下的资金规模或费用口径。
-     * @param accountMapper accountMapper 业务字段，承载该对象在后端流程中的核心属性。
-     * @param fundSellFeeTierMapper fundSellFeeTierMapper 金额字段，用于表达该场景下的资金规模或费用口径。
-     */
     public BrokerFeeService(BrokerFeeConfigMapper brokerFeeConfigMapper,
                            AccountMapper accountMapper,
                            FundSellFeeTierMapper fundSellFeeTierMapper) {
@@ -69,14 +47,6 @@ public class BrokerFeeService {
      * @param product 产品对象
      * @param orderType 订单类型：BUY/SELL/SUBSCRIPTION/REDEMPTION
      * @return 费率规则类型
-     */
-    /**
-     * 业务注释规范化: 处理 determineFeeRuleType 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @param product product 业务字段，承载该对象在后端流程中的核心属性。
-     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     private String determineFeeRuleType(ProductMaster product, String orderType) {
         if (product == null) {
@@ -137,14 +107,6 @@ public class BrokerFeeService {
      * @param feeRuleType 费率规则类型
      * @return 费率配置对象，如果不存在则返回null
      */
-    /**
-     * 业务注释规范化: 查询 getFeeConfig 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param feeRuleType feeRuleType 金额字段，用于表达该场景下的资金规模或费用口径。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public BrokerFeeConfig getFeeConfig(Long accountId, String feeRuleType) {
         if (accountId == null || feeRuleType == null) {
             return null;
@@ -160,16 +122,6 @@ public class BrokerFeeService {
      * @param orderType 订单类型：BUY/SUBSCRIPTION
      * @param amount 交易金额
      * @return 手续费金额
-     */
-    /**
-     * 业务注释规范化: 计算 calculateBuyFee 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param product product 业务字段，承载该对象在后端流程中的核心属性。
-     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public BigDecimal calculateBuyFee(Long accountId, ProductMaster product, String orderType, BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -238,17 +190,6 @@ public class BrokerFeeService {
      * @param amount 交易金额
      * @param holdingDays 持有天数（场外基金需要，用于分段费率计算）
      * @return 手续费金额
-     */
-    /**
-     * 业务注释规范化: 计算 calculateSellFee 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param product product 业务字段，承载该对象在后端流程中的核心属性。
-     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
-     * @param holdingDays holdingDays 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public BigDecimal calculateSellFee(Long accountId, ProductMaster product, String orderType, BigDecimal amount, Integer holdingDays) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -327,16 +268,6 @@ public class BrokerFeeService {
      * @param amount 交易金额
      * @return 手续费金额
      */
-    /**
-     * 业务注释规范化: 计算 calculateSellFee 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param product product 业务字段，承载该对象在后端流程中的核心属性。
-     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public BigDecimal calculateSellFee(Long accountId, ProductMaster product, String orderType, BigDecimal amount) {
         return calculateSellFee(accountId, product, orderType, amount, null);
     }
@@ -350,17 +281,6 @@ public class BrokerFeeService {
      * @param amount 交易金额
      * @param holdingDays 持有天数（卖出/赎回时需要，用于场外基金分段费率计算）
      * @return 手续费金额
-     */
-    /**
-     * 业务注释规范化: 计算 calculateFee 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param product product 业务字段，承载该对象在后端流程中的核心属性。
-     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
-     * @param holdingDays holdingDays 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public BigDecimal calculateFee(Long accountId, ProductMaster product, String orderType, BigDecimal amount, Integer holdingDays) {
         if ("BUY".equals(orderType) || "SUBSCRIPTION".equals(orderType)) {
@@ -380,16 +300,6 @@ public class BrokerFeeService {
      * @param amount 交易金额
      * @return 手续费金额
      */
-    /**
-     * 业务注释规范化: 计算 calculateFee 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param product product 业务字段，承载该对象在后端流程中的核心属性。
-     * @param orderType orderType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param amount 业务金额，通常以账户币种计价，正负含义由交易类型和分录方向决定。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public BigDecimal calculateFee(Long accountId, ProductMaster product, String orderType, BigDecimal amount) {
         return calculateFee(accountId, product, orderType, amount, null);
     }
@@ -399,13 +309,6 @@ public class BrokerFeeService {
      * 
      * @param fundingAccountIds 资金来源账户ID列表
      * @return 券商账户ID，如果找不到则返回null
-     */
-    /**
-     * 业务注释规范化: 查找 findBrokerAccountId 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param fundingAccountIds fundingAccountIds 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public Long findBrokerAccountId(java.util.List<Long> fundingAccountIds) {
         if (fundingAccountIds == null || fundingAccountIds.isEmpty()) {

@@ -9,87 +9,48 @@ import org.apache.ibatis.annotations.Param;
 import java.time.LocalDate;
 import java.util.List;
 
-@Mapper
 /**
- * 业务注释规范化: LedgerTxnMapper Mapper 接口，负责 MyBatis SQL 映射和持久化访问，真实业务规则由服务层保证。
+ * 交易流水 Mapper。
  *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
+ * <p>负责 ledger_txn 的基础读写以及流水统计所需的只读联查；统计查询方法不产生账本、账户或持仓变更。</p>
  */
+@Mapper
 public interface LedgerTxnMapper {
-    /**
-     * 业务注释规范化: 读取 selectById 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param id 主键 ID，用于在后端内部唯一定位该业务记录。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 按数据库主键查询单条流水记录。 */
     LedgerTxn selectById(@Param("id") Long id);
-    /**
-     * 业务注释规范化: 读取 selectByTxnId 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 按业务流水号查询单条流水记录。 */
     LedgerTxn selectByTxnId(@Param("txnId") String txnId);
-    /**
-     * 业务注释规范化: 读取 selectByOrderId 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param orderId 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 查询指定订单关联的所有流水，用于订单和结算追踪。 */
     List<LedgerTxn> selectByOrderId(@Param("orderId") String orderId);
-    /**
-     * 业务注释规范化: 读取 selectByBizGroupKey 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param bizGroupKey bizGroupKey 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 查询同一业务分组下的流水，例如转账成对记录。 */
     List<LedgerTxn> selectByBizGroupKey(@Param("bizGroupKey") String bizGroupKey);
+    /**
+     * 按流水列表页条件分页查询交易事件。
+     *
+     * <p>该查询只返回交易事件主表，不直接返回复式分录；账户维度过滤由调用方传入的账户集合控制。</p>
+     */
     List<LedgerTxn> selectByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
                                        @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,
                                        @Param("productId") Long productId, @Param("accountId") Long accountId,
                                        @Param("childAccountIds") List<Long> childAccountIds,
                                        @Param("note") String note,
                                        @Param("offset") Integer offset, @Param("limit") Integer limit);
+    /** 统计列表页条件下的流水总数，口径需与 selectByCondition 保持一致。 */
     int countByCondition(@Param("userId") Long userId, @Param("txnType") String txnType, 
                          @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate,
                          @Param("productId") Long productId, @Param("accountId") Long accountId,
                          @Param("childAccountIds") List<Long> childAccountIds,
                          @Param("note") String note);
-    /**
-     * 业务注释规范化: 写入 insert 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param txn txn 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 插入新的交易事件，实际账本平衡性由服务层负责校验。 */
     int insert(LedgerTxn txn);
-    /**
-     * 业务注释规范化: 更新 update 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param txn txn 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 更新交易事件状态或关联信息，不负责直接写入分录。 */
     int update(LedgerTxn txn);
-    /**
-     * 业务注释规范化: 删除 deleteByTxnId 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param txnId 流水业务 ID，用于聚合一笔复式记账交易下的所有分录。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    /** 按业务流水号删除交易事件，调用方必须保证相关分录处理已完成。 */
     int deleteByTxnId(@Param("txnId") String txnId);
     /**
-     * 业务注释规范化: 读取 selectStatsPostings 相关业务，保持现有接口路径、请求和响应字段不变。
+     * 查询流水统计需要的扁平化分录数据。
      *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param query query 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
+     * <p>该方法只读 ledger_txn、ledger_posting 与账户相关字段，服务层再按类型、账户、分类和周期做聚合，避免重复计算同一笔流水。</p>
      */
     List<LedgerStatsPostingDTO> selectStatsPostings(LedgerStatsQueryDTO query);
 }
-

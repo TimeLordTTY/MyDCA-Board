@@ -31,49 +31,15 @@ import java.util.UUID;
  * 该服务提供的操作会结合数据库查询与应用层校验；余额的正式变更应通过记账流程完成，手工调整应记录 ADJUST 类型流水。
  */
 @Service
-/**
- * 业务注释规范化: AccountService 服务类，负责业务规则、账户、账本流水、订单或持仓数据的组合处理。
- *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
- */
 public class AccountService {
 
-    /**
-     * 业务注释规范化: accountMapper 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final AccountMapper accountMapper;
-    /**
-     * 业务注释规范化: ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final LedgerPostingMapper ledgerPostingMapper;
-    /**
-     * 业务注释规范化: productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final ProductMasterMapper productMasterMapper;
-    /**
-     * 业务注释规范化: navService 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final NavService navService;
-    /**
-     * 业务注释规范化: ledgerService 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final LedgerService ledgerService;
-    /**
-     * 业务注释规范化: userService 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private final UserService userService;
 
-    /**
-     * 业务注释规范化: 处理 AccountService 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountMapper accountMapper 业务字段，承载该对象在后端流程中的核心属性。
-     * @param ledgerPostingMapper ledgerPostingMapper 业务字段，承载该对象在后端流程中的核心属性。
-     * @param productMasterMapper productMasterMapper 业务字段，承载该对象在后端流程中的核心属性。
-     * @param navService navService 业务字段，承载该对象在后端流程中的核心属性。
-     * @param ledgerService ledgerService 业务字段，承载该对象在后端流程中的核心属性。
-     * @param userService userService 业务字段，承载该对象在后端流程中的核心属性。
-     */
     public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper,
                          ProductMasterMapper productMasterMapper, NavService navService,
                          @Lazy LedgerService ledgerService, UserService userService) {
@@ -85,7 +51,6 @@ public class AccountService {
         this.userService = userService;
     }
 
-    @Transactional
     /**
      * 创建账户并设置默认值
      *
@@ -99,13 +64,7 @@ public class AccountService {
      * @param account 待创建的账户实体
      * @return 创建后的账户实体（包含自增ID）
      */
-    /**
-     * 业务注释规范化: 创建 createAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
+    @Transactional
     public Account createAccount(Account account) {
         // 应用层校验规则
         validateAccountCreation(account);
@@ -186,13 +145,6 @@ public class AccountService {
      * - 子账户必须为 REAL
      * - 父账户可以是 BANK/PAYMENT/BROKER/CASH 等平台容器，子账户类型可独立选择（如支付宝下的花呗、余额宝等）
      */
-    /**
-     * 业务注释规范化: 校验 validateAccountCreation 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     private void validateAccountCreation(Account account) {
         // 券商平台下允许的虚拟子账户类型（用于持仓隔离/汇总）
         boolean isAllowedBrokerVirtualChild =
@@ -233,13 +185,6 @@ public class AccountService {
      * @param accountId 账户ID
      * @return Account 实体或 null
      */
-    /**
-     * 业务注释规范化: 查询 getAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public Account getAccount(Long accountId) {
         return accountMapper.selectById(accountId);
     }
@@ -248,13 +193,6 @@ public class AccountService {
      * 批量查询账户
      * @param accountIds 账户ID列表
      * @return 账户Map，key为accountId，value为Account实体
-     */
-    /**
-     * 业务注释规范化: 查询 getAccountsByIds 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountIds accountIds 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public java.util.Map<Long, Account> getAccountsByIds(List<Long> accountIds) {
         if (accountIds == null || accountIds.isEmpty()) {
@@ -275,13 +213,6 @@ public class AccountService {
      * @return 更新后的账户实体
      */
     @Transactional
-    /**
-     * 业务注释规范化: 更新 updateAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param account account 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public Account updateAccount(Account account) {
         if (account.getId() == null) {
             throw new RuntimeException("账户ID不能为空");
@@ -381,15 +312,6 @@ public class AccountService {
      * @param initialBalance 初始余额
      */
     @Transactional
-    /**
-     * 业务注释规范化: 同步 syncInitialHoldingFromAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     * @param initialBalance initialBalance 金额字段，用于表达该场景下的资金规模或费用口径。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     private void syncInitialHoldingFromAccount(Long accountId, Long productId, BigDecimal initialBalance) {
         try {
             Account account = accountMapper.selectById(accountId);
@@ -472,13 +394,6 @@ public class AccountService {
     /**
      * 判断是否为信贷账户
      */
-    /**
-     * 业务注释规范化: 判断 isCreditAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该私有方法封装局部复杂逻辑，用于保持统计、展示或校验口径一致。</p>
-     * @param accountType accountType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     private boolean isCreditAccount(String accountType) {
         return "CREDIT_CARD".equals(accountType) || 
                "HUABEI".equals(accountType) || 
@@ -492,14 +407,6 @@ public class AccountService {
      * @param ownerUserId 归属用户ID（个人视图），可为空
      * @param ownerFamilyId 归属家庭ID（家庭视图），可为空
      * @return 账户列表（包含父账户及其子账户），父账户的 balance 为子账户总和
-     */
-    /**
-     * 业务注释规范化: 查询 getAccountTree 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param ownerUserId ownerUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param ownerFamilyId ownerFamilyId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<Account> getAccountTree(Long ownerUserId, Long ownerFamilyId) {
         List<Account> allAccounts = accountMapper.selectByOwner(ownerUserId, ownerFamilyId);
@@ -568,13 +475,6 @@ public class AccountService {
      * @param accountId 账户ID
      * @return true 如果没有子账户
      */
-    /**
-     * 业务注释规范化: 判断 isLeafAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public boolean isLeafAccount(Long accountId) {
         List<Account> children = accountMapper.selectChildren(accountId);
         return children.isEmpty();
@@ -584,13 +484,6 @@ public class AccountService {
      * 获取账户的子账户列表
      * @param parentAccountId 父账户ID
      * @return 子账户列表
-     */
-    /**
-     * 业务注释规范化: 查询 getAccountChildren 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param parentAccountId 父级账户 ID，用于表达平台账户与资金分区的层级关系。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<Account> getAccountChildren(Long parentAccountId) {
         return accountMapper.selectChildren(parentAccountId);
@@ -602,15 +495,6 @@ public class AccountService {
      * @param ownerUserId 用户ID，可为空
      * @param ownerFamilyId 家庭ID，可为空
      * @return 绑定该产品的账户列表
-     */
-    /**
-     * 业务注释规范化: 查询 getAccountsByLinkedProduct 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     * @param ownerUserId ownerUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param ownerFamilyId ownerFamilyId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
      */
     public List<Account> getAccountsByLinkedProduct(Long productId, Long ownerUserId, Long ownerFamilyId) {
         return accountMapper.selectByLinkedProduct(productId, ownerUserId, ownerFamilyId);
@@ -640,19 +524,6 @@ public class AccountService {
      * @return 虚拟账户实体
      */
     @Transactional
-    /**
-     * 业务注释规范化: 查询 getOrCreateVirtualAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param virtualSubtype virtualSubtype 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param accountType accountType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param ownerType ownerType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param ownerUserId ownerUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param ownerFamilyId ownerFamilyId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     * @param productName productName 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public Account getOrCreateVirtualAccount(String virtualSubtype, String accountType, 
                                               String ownerType, Long ownerUserId, Long ownerFamilyId,
                                               Long productId, String productName) {
@@ -748,17 +619,6 @@ public class AccountService {
      * @return 持仓账户实体
      */
     @Transactional
-    /**
-     * 业务注释规范化: 查询 getOrCreatePositionAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     * @param productName productName 业务字段，承载该对象在后端流程中的核心属性。
-     * @param ownerType ownerType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param ownerUserId ownerUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param ownerFamilyId ownerFamilyId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public Account getOrCreatePositionAccount(Long productId, String productName,
                                              String ownerType, Long ownerUserId, Long ownerFamilyId) {
         return getOrCreateVirtualAccount("POSITION", "POSITION", ownerType, ownerUserId, ownerFamilyId, 
@@ -778,18 +638,6 @@ public class AccountService {
      * - account_code = BROKER-POS-{brokerAccountId}-{productId}（唯一）
      */
     @Transactional
-    /**
-     * 业务注释规范化: 查询 getOrCreateBrokerPositionAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param brokerAccountId brokerAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param productId 关联产品 ID，用于把流水、订单、持仓或行情绑定到具体投资产品。
-     * @param productName productName 业务字段，承载该对象在后端流程中的核心属性。
-     * @param ownerType ownerType 类型字段，用于区分不同业务分类并驱动处理分支。
-     * @param ownerUserId ownerUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param ownerFamilyId ownerFamilyId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public Account getOrCreateBrokerPositionAccount(Long brokerAccountId,
                                                     Long productId,
                                                     String productName,
@@ -853,13 +701,6 @@ public class AccountService {
      * @return 持仓市值汇总账户实体
      */
     @Transactional
-    /**
-     * 业务注释规范化: 查询 getOrCreateBrokerPositionValueAccount 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param brokerAccountId brokerAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public Account getOrCreateBrokerPositionValueAccount(Long brokerAccountId) {
         Account brokerAccount = accountMapper.selectById(brokerAccountId);
         if (brokerAccount == null) {
@@ -912,14 +753,6 @@ public class AccountService {
      * @param totalMarketValue 持仓市值总和
      */
     @Transactional
-    /**
-     * 业务注释规范化: 更新 updateBrokerPositionValue 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param brokerAccountId brokerAccountId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     * @param totalMarketValue totalMarketValue 业务字段，承载该对象在后端流程中的核心属性。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public void updateBrokerPositionValue(Long brokerAccountId, BigDecimal totalMarketValue) {
         Account positionValueAccount = getOrCreateBrokerPositionValueAccount(brokerAccountId);
         // 直接更新余额（虚拟账户的余额更新不需要生成流水，因为这是汇总值）
@@ -934,14 +767,6 @@ public class AccountService {
      * @param newBalance 调整后的余额
      */
     @Transactional
-    /**
-     * 业务注释规范化: 处理 adjustBalance 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @param newBalance newBalance 金额字段，用于表达该场景下的资金规模或费用口径。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public void adjustBalance(Long accountId, BigDecimal newBalance) {
         Account account = accountMapper.selectById(accountId);
         if (account == null) {
@@ -971,13 +796,6 @@ public class AccountService {
      * @return 重新计算后的余额
      */
     @Transactional
-    /**
-     * 业务注释规范化: 重新计算 recalculateBalance 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @param accountId 关联账户 ID，指向承载资金、持仓或虚拟科目的账户。
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public BigDecimal recalculateBalance(Long accountId) {
         Account account = accountMapper.selectById(accountId);
         if (account == null) {
@@ -1057,12 +875,6 @@ public class AccountService {
      * @return 重新计算的账户数量
      */
     @Transactional
-    /**
-     * 业务注释规范化: 重新计算 recalculateAllBalances 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public int recalculateAllBalances() {
         // 获取所有账户
         List<Account> allAccounts = accountMapper.selectByOwner(null, null);
@@ -1093,12 +905,6 @@ public class AccountService {
      * @return 更新的账户数量
      */
     @Transactional
-    /**
-     * 业务注释规范化: 更新 updateLinkedAccountBalancesByNav 相关业务，保持现有接口路径、请求和响应字段不变。
-     *
-     * <p>该方法属于对外或可继承调用边界，调用方应遵循既有权限、账本和数据一致性约束。</p>
-     * @return 处理后的业务结果，具体结构保持现有契约不变。
-     */
     public int updateLinkedAccountBalancesByNav() {
         // 查找所有关联了产品的账户
         List<Account> linkedAccounts = accountMapper.selectAllLinkedAccounts();

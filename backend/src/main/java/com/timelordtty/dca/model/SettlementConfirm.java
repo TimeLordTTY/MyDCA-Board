@@ -47,99 +47,49 @@ import java.time.LocalDateTime;
  * @since 1.0.0
  */
 @Data
-/**
- * 业务注释规范化: SettlementConfirm 实体模型，对应后端数据库中的核心业务记录。
- *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
- */
 public class SettlementConfirm {
     /** 结算确认ID，主键，自增 */
-    /**
-     * 业务注释规范化: 主键 ID，用于在后端内部唯一定位该业务记录。
-     */
     private Long id;
     
     /** 关联订单ID，外键关联orders.order_id，唯一约束 */
-    /**
-     * 业务注释规范化: 关联订单 ID，用于串联订单创建、资金冻结、结算确认和流水入账。
-     */
     private String orderId;
     
     /** 实际确认日期，实际到账的日期，可人工覆盖 */
-    /**
-     * 业务注释规范化: confirmDate 日期字段，用于交易、确认、净值或统计周期口径。
-     */
     private LocalDate confirmDate;
     
     /** 实际确认时间，实际到账的时间，精确到秒 */
-    /**
-     * 业务注释规范化: confirmDatetime 日期字段，用于交易、确认、净值或统计周期口径。
-     */
     private LocalDateTime confirmDatetime;
     
     /** 实际使用的净值日期，实际计算份额时用的净值日期，可人工覆盖 */
-    /**
-     * 业务注释规范化: navDate 日期字段，用于交易、确认、净值或统计周期口径。
-     */
     private LocalDate navDate;
     
     /** 实际确认净值，实际使用的净值，可人工覆盖 */
-    /**
-     * 业务注释规范化: confirmNav 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private BigDecimal confirmNav;
     
     /** 实际确认份额，实际到账的份额，买入/申购时使用 */
-    /**
-     * 业务注释规范化: confirmShares 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private BigDecimal confirmShares;
     
     /** 实际确认金额，实际到账的金额，卖出/赎回时使用 */
-    /**
-     * 业务注释规范化: confirmAmount 金额字段，用于表达该场景下的资金规模或费用口径。
-     */
     private BigDecimal confirmAmount;
     
     /** 实际手续费，实际支付的手续费 */
-    /**
-     * 业务注释规范化: confirmFee 金额字段，用于表达该场景下的资金规模或费用口径。
-     */
     private BigDecimal confirmFee;
     
     /** 是否人工覆盖，用户是否手动修正了系统计算的值，用于标记用户手动修正 */
-    /**
-     * 业务注释规范化: isManualOverride 布尔标记，用于控制该记录在业务流程中的特殊状态。
-     */
     private Boolean isManualOverride;
     
     /** 确认人用户ID，操作人 */
-    /**
-     * 业务注释规范化: confirmedByUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     */
     private Long confirmedByUserId;
     
     /** 确认时间，操作时间 */
-    /**
-     * 业务注释规范化: confirmedAt 时间字段，用于记录业务动作发生或审计时间。
-     */
     private LocalDateTime confirmedAt;
     
     /** 备注，用户自定义说明 */
-    /**
-     * 业务注释规范化: note 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private String note;
     
     /** 创建时间 */
-    /**
-     * 业务注释规范化: 记录创建时间，用于审计和排序。
-     */
     private LocalDateTime createdAt;
     
     /** 更新时间，自动更新 */
-    /**
-     * 业务注释规范化: 记录最后更新时间，用于审计和增量同步。
-     */
     private LocalDateTime updatedAt;
 }

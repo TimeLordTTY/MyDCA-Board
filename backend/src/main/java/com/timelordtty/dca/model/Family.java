@@ -32,52 +32,26 @@ import java.time.LocalDateTime;
  * @since 1.0.0
  */
 @Data
-/**
- * 业务注释规范化: Family 实体模型，对应后端数据库中的核心业务记录。
- *
- * <p>不改变原有接口、数据库结构、账本入账规则或持仓成本逻辑。</p>
- */
 public class Family {
     /** 家庭ID，主键，自增 */
-    /**
-     * 业务注释规范化: 主键 ID，用于在后端内部唯一定位该业务记录。
-     */
     private Long id;
     
     /** 家庭代码，唯一标识，格式如：FAM-20240101-001 */
-    /**
-     * 业务注释规范化: familyCode 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private String familyCode;
     
     /** 家庭名称，用户自定义名称 */
-    /**
-     * 业务注释规范化: familyName 业务字段，承载该对象在后端流程中的核心属性。
-     */
     private String familyName;
     
     /** 管理员用户ID，外键关联users表，家庭创建者/管理员 */
-    /**
-     * 业务注释规范化: adminUserId 关联 ID，用于连接对应业务对象并保持数据引用关系。
-     */
     private Long adminUserId;
     
     /** 是否启用，true=启用，false=禁用（软删除），默认true */
-    /**
-     * 业务注释规范化: isActive 布尔标记，用于控制该记录在业务流程中的特殊状态。
-     */
     private Boolean isActive;
     
     /** 创建时间，记录家庭创建时间 */
-    /**
-     * 业务注释规范化: 记录创建时间，用于审计和排序。
-     */
     private LocalDateTime createdAt;
     
     /** 更新时间，记录最后修改时间，自动更新 */
-    /**
-     * 业务注释规范化: 记录最后更新时间，用于审计和增量同步。
-     */
     private LocalDateTime updatedAt;
 }
 
