@@ -19,21 +19,20 @@ import java.util.stream.Collectors;
 public class DashboardController {
 
     /**
-     * 依赖的 DashboardService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 总览服务入口，负责聚合订单、持仓、账户等数据形成首页看板指标。
      */
     private final DashboardService dashboardService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 家庭服务入口，用于校验家庭归属、管理员权限和成员范围。
      */
     private final FamilyService familyService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配看板、用户和家庭服务，按当前登录上下文返回首页聚合数据。
      */
     public DashboardController(DashboardService dashboardService, UserService userService, FamilyService familyService) {
         this.dashboardService = dashboardService;
@@ -42,7 +41,7 @@ public class DashboardController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 查询待结算订单列表，供首页或结算页提醒需要确认成交的订单。
      */
     @GetMapping("/pending-settlements")
     public ResponseEntity<List<Order>> getPendingSettlements() {

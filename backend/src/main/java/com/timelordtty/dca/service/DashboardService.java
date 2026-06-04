@@ -33,21 +33,20 @@ import java.util.stream.Collectors;
 public class DashboardService {
 
     /**
-     * 依赖的 OrderService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 订单服务入口，负责订单查询、创建、取消以及与结算流程的衔接。
      */
     private final OrderService orderService;
     /**
-     * 依赖的 HoldingService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 持仓服务入口，负责按账户和产品汇总持仓、成本、市值与盈亏口径。
      */
     private final HoldingService holdingService;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配订单、持仓和账户服务，用于聚合首页资产、待办和收益概览。
      */
     public DashboardService(OrderService orderService, HoldingService holdingService, AccountService accountService) {
         this.orderService = orderService;
@@ -246,24 +245,24 @@ public class DashboardService {
 
     public static class AssetOverview {
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 资产总额，汇总现金、持仓市值和其他资产项目。
          */
         private BigDecimal totalAssets;
         @JsonProperty("liability")
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 负债总额，用于从总资产中扣除后计算净资产。
          */
         private BigDecimal totalLiabilities;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 净资产，表示总资产扣除负债后的家庭或个人资产结果。
          */
         private BigDecimal netWorth;
         /**
-         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 现金余额，表示统计时点账户或总览口径下可用现金资产金额。
          */
         private BigDecimal cashBalance;
         /**
-         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 持仓市值，表示统计时点基金、股票或其他持仓按当前价格折算后的资产金额。
          */
         private BigDecimal positionValue; // 持仓市值
 
@@ -277,35 +276,35 @@ public class DashboardService {
          */
         public void setTotalAssets(BigDecimal totalAssets) { this.totalAssets = totalAssets; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取总负债金额，用于计算家庭或个人净资产。
          */
         public BigDecimal getTotalLiabilities() { return totalLiabilities; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置总负债金额，用于净资产快照计算。
          */
         public void setTotalLiabilities(BigDecimal totalLiabilities) { this.totalLiabilities = totalLiabilities; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取净资产金额，等于资产扣除负债后的统计结果。
          */
         public BigDecimal getNetWorth() { return netWorth; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置净资产金额，保存总资产扣除负债后的结果。
          */
         public void setNetWorth(BigDecimal netWorth) { this.netWorth = netWorth; }
         /**
-         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 读取现金余额，表示统计时点可用现金资产。
          */
         public BigDecimal getCashBalance() { return cashBalance; }
         /**
-         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 设置现金余额，用于保存净值快照或首页资产汇总结果。
          */
         public void setCashBalance(BigDecimal cashBalance) { this.cashBalance = cashBalance; }
         /**
-         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 读取持仓市值，表示统计时点证券或基金持仓折算金额。
          */
         public BigDecimal getPositionValue() { return positionValue; }
         /**
-         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 设置持仓市值，用于保存按最新价格计算出的资产金额。
          */
         public void setPositionValue(BigDecimal positionValue) { this.positionValue = positionValue; }
     }
@@ -322,7 +321,7 @@ public class DashboardService {
          */
         private String id;
         /**
-         * 类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 首页待办类型，用于区分结算提醒、异常提示或其他操作卡片。
          */
         private String type;
         /**
@@ -330,15 +329,15 @@ public class DashboardService {
          */
         private String title;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 首页待办说明文字，描述主人需要关注的事项。
          */
         private String description;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 首页待办优先级，通常为 HIGH、MEDIUM 或 LOW。
          */
         private String priority; // HIGH/MEDIUM/LOW
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 首页待办跳转地址，指向可处理该事项的前端页面。
          */
         private String actionUrl;
 
@@ -351,11 +350,11 @@ public class DashboardService {
          */
         public void setId(String id) { this.id = id; }
         /**
-         * 返回类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 读取首页待办类型，供前端选择图标、颜色和处理入口。
          */
         public String getType() { return type; }
         /**
-         * 设置类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 设置首页待办类型，标记该卡片属于结算、风险或其他提醒。
          */
         public void setType(String type) { this.type = type; }
         /**
@@ -367,27 +366,27 @@ public class DashboardService {
          */
         public void setTitle(String title) { this.title = title; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取首页待办卡片的描述、优先级或跳转地址，供前端渲染操作提示。
          */
         public String getDescription() { return description; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置首页待办说明文字，描述需要主人处理或关注的事项。
          */
         public void setDescription(String description) { this.description = description; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取首页待办卡片的描述、优先级或跳转地址，供前端渲染操作提示。
          */
         public String getPriority() { return priority; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置首页待办优先级，影响前端排序和视觉强调。
          */
         public void setPriority(String priority) { this.priority = priority; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取首页待办卡片的描述、优先级或跳转地址，供前端渲染操作提示。
          */
         public String getActionUrl() { return actionUrl; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置首页待办跳转地址，指向可完成处理的页面。
          */
         public void setActionUrl(String actionUrl) { this.actionUrl = actionUrl; }
     }

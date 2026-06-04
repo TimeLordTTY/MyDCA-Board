@@ -28,11 +28,11 @@ public class PythonScriptService {
 
     // 项目根目录（相对于jar包或工作目录）
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 执行 detectProjectRoot 方法的具体业务处理。
      */
     private static final String PROJECT_ROOT = detectProjectRoot();
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 执行 detectPythonCommand 方法的具体业务处理。
      */
     private static final String PYTHON_CMD = detectPythonCommand(); // 自动检测python或python3
 

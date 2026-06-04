@@ -17,21 +17,20 @@ import java.util.List;
 public class HoldingController {
 
     /**
-     * 依赖的 HoldingService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 持仓服务入口，负责按账户和产品汇总持仓、成本、市值与盈亏口径。
      */
     private final HoldingService holdingService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 家庭服务入口，用于校验家庭归属、管理员权限和成员范围。
      */
     private final FamilyService familyService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配持仓、用户和家庭服务，按个人或家庭范围查询持仓详情。
      */
     public HoldingController(HoldingService holdingService, UserService userService, FamilyService familyService) {
         this.holdingService = holdingService;

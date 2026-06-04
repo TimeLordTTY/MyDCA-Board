@@ -25,7 +25,7 @@ public class FamilyMemberDto {
      */
     private String phone;
     /**
-     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 家庭成员角色，通常为 ADMIN 或 MEMBER，用于决定成员管理和家庭资产查看权限。
      */
     private String role;
 
@@ -70,11 +70,11 @@ public class FamilyMemberDto {
      */
     public void setPhone(String phone) { this.phone = phone; }
     /**
-     * 返回类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 读取家庭成员角色，供前端展示 ADMIN/MEMBER 权限。
      */
     public String getRole() { return role; }
     /**
-     * 设置类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 设置家庭成员角色，保存成员在家庭中的权限级别。
      */
     public void setRole(String role) { this.role = role; }
 }

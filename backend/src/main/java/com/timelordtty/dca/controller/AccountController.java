@@ -21,25 +21,24 @@ import java.util.Map;
 public class AccountController {
 
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
     /**
-     * 依赖的 MmfSharesService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 货币基金份额服务，用于在账户查询和同步场景中维护货币基金份额展示口径。
      */
     private final MmfSharesService mmfSharesService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 家庭服务入口，用于校验家庭归属、管理员权限和成员范围。
      */
     private final FamilyService familyService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配账户、货币基金份额、用户和家庭服务，支撑账户管理接口的身份与权限判断。
      */
     public AccountController(AccountService accountService, MmfSharesService mmfSharesService, UserService userService, FamilyService familyService) {
         this.accountService = accountService;
@@ -49,7 +48,7 @@ public class AccountController {
     }
 
     /**
-     * 处理只读查询 API，按当前用户和请求参数返回对应资源，不写入账本或修改持仓。
+     * 查询账户树：PERSONAL 返回当前用户账户，FAMILY_ALL 返回家庭账户并要求管理员权限，MEMBER 返回指定成员账户；该接口只读，不创建流水也不改余额。
      */
     @GetMapping
     public ResponseEntity<List<Account>> getAccounts(
@@ -62,7 +61,7 @@ public class AccountController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 按账户 ID 查询单个账户详情，用于编辑页和余额展示前的只读加载。
      */
     @GetMapping("/{id}")
     public ResponseEntity<Account> getAccount(@PathVariable Long id) {
@@ -71,8 +70,7 @@ public class AccountController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 创建账户并补齐 ownerUserId 或 ownerFamilyId；个人账户在存在 familyId 时也保留家庭归属，便于家庭视图展示；该操作新增账户记录但不直接生成账本分录。
      */
     @PostMapping
     public ResponseEntity<Account> createAccount(@RequestBody Account account) {
@@ -98,8 +96,7 @@ public class AccountController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 更新账户名称、类型、币种、所属范围等基础资料，不直接重算历史流水或持仓成本。
      */
     @PutMapping("/{id}")
     public ResponseEntity<Account> updateAccount(@PathVariable Long id, @RequestBody Account account) {
@@ -109,8 +106,7 @@ public class AccountController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 执行账户余额调整入口，将调整金额和原因交由账户服务生成受控账本影响，避免直接在 Controller 修改余额。
      */
     @PutMapping("/{id}/balance")
     public ResponseEntity<Void> adjustBalance(@PathVariable Long id, @RequestBody Map<String, Object> request) {

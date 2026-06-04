@@ -5,14 +5,14 @@ package com.timelordtty.dca.exception;
  */
 public class BusinessException extends RuntimeException {
     /**
-     * 执行 BusinessException 相关后端逻辑，保持既有业务契约不变。
+     * 创建业务异常并携带可展示错误信息，用于服务层主动阻断非法操作。
      */
     public BusinessException(String message) {
         super(message);
     }
 
     /**
-     * 执行 BusinessException 相关后端逻辑，保持既有业务契约不变。
+     * 创建业务异常并携带可展示错误信息，用于服务层主动阻断非法操作。
      */
     public BusinessException(String message, Throwable cause) {
         super(message, cause);

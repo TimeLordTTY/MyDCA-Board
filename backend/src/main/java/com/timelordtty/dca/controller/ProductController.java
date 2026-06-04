@@ -16,20 +16,19 @@ import java.util.List;
 public class ProductController {
 
     /**
-     * 依赖的 ProductService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 产品服务入口，负责场内基金、货币基金等产品资料的查询和同步。
      */
     private final ProductService productService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配产品服务，处理产品主数据的查询和维护接口。
      */
     public ProductController(ProductService productService) {
         this.productService = productService;
     }
 
     /**
-     * 处理只读查询 API，按当前用户和请求参数返回对应资源，不写入账本或修改持仓。
+     * 按关键字、资产类型和渠道查询产品主数据列表，用于产品管理页和订单录入下拉选择。
      */
     @GetMapping
     public ResponseEntity<List<ProductMaster>> getProducts(
@@ -41,7 +40,7 @@ public class ProductController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 按产品 ID 读取产品主数据，用于订单录入、持仓展示和产品编辑。
      */
     @GetMapping("/{id}")
     public ResponseEntity<ProductMaster> getProduct(@PathVariable Long id) {
@@ -50,8 +49,7 @@ public class ProductController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 新增产品主数据记录，保存代码、市场、名称和产品分类等基础资料。
      */
     @PostMapping
     public ResponseEntity<ProductMaster> createProduct(@RequestBody ProductMaster product) {
@@ -60,8 +58,7 @@ public class ProductController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 更新产品主数据展示信息，不修改历史订单和持仓流水。
      */
     @PutMapping("/{id}")
     public ResponseEntity<ProductMaster> updateProduct(@PathVariable Long id, @RequestBody ProductMaster product) {
@@ -129,7 +126,7 @@ public class ProductController {
          */
         private Long id;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 产品展示顺序，数值越小越靠前，用于产品列表和下拉选择排序。
          */
         private Integer sortOrder;
         
@@ -148,14 +145,14 @@ public class ProductController {
         }
         
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取产品排序权重，数值越小越靠前展示。
          */
         public Integer getSortOrder() {
             return sortOrder;
         }
         
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置产品展示顺序，用于保存拖拽排序或批量排序后的前端展示位置。
          */
         public void setSortOrder(Integer sortOrder) {
             this.sortOrder = sortOrder;

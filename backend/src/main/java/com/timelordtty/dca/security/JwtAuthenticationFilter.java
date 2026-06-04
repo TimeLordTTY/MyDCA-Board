@@ -25,14 +25,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
 
     /**
-     * 执行 JwtAuthenticationFilter 相关后端逻辑，保持既有业务契约不变。
+     * 装配 JWT 工具类，供过滤器解析和校验请求令牌。
      */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
     /**
-     * 执行 doFilterInternal 相关后端逻辑，保持既有业务契约不变。
+     * 从 Authorization 请求头提取 Bearer Token，校验通过后设置当前用户认证信息，再继续后续过滤链。
      */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)

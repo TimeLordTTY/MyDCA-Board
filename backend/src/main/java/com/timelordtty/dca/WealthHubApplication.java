@@ -16,7 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class WealthHubApplication {
 
     /**
-     * 执行 main 相关后端逻辑，保持既有业务契约不变。
+     * 启动 WealthHub Spring Boot 应用，加载后端配置、Controller、Service 与定时任务 Bean。
      */
     public static void main(String[] args) {
         SpringApplication.run(WealthHubApplication.class, args);

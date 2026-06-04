@@ -30,11 +30,11 @@ public class MarketDataScheduler {
     private static final Logger logger = LoggerFactory.getLogger(MarketDataScheduler.class);
 
     /**
-     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     * Python 脚本执行网关，用于触发已接入的行情、指标或产品同步脚本并收集执行结果。
      */
     private final PythonScriptService pythonScriptService;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
 
@@ -55,24 +55,24 @@ public class MarketDataScheduler {
 
     // 交易时间：上午 9:30-11:30，下午 13:00-15:00
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 执行 of 方法的具体业务处理。
      */
     private static final LocalTime MARKET_OPEN_MORNING = LocalTime.of(9, 30);
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 执行 of 方法的具体业务处理。
      */
     private static final LocalTime MARKET_CLOSE_MORNING = LocalTime.of(11, 30);
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 执行 of 方法的具体业务处理。
      */
     private static final LocalTime MARKET_OPEN_AFTERNOON = LocalTime.of(13, 0);
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 执行 of 方法的具体业务处理。
      */
     private static final LocalTime MARKET_CLOSE_AFTERNOON = LocalTime.of(15, 0);
 
     /**
-     * 执行 MarketDataScheduler 相关后端逻辑，保持既有业务契约不变。
+     * 装配脚本执行网关和账户服务，供行情定时刷新和历史补齐任务使用。
      */
     public MarketDataScheduler(PythonScriptService pythonScriptService, AccountService accountService) {
         this.pythonScriptService = pythonScriptService;
@@ -199,7 +199,7 @@ public class MarketDataScheduler {
      */
     // @PostConstruct  // 禁用启动时自动执行
     /**
-     * 执行 backfillHistoryOnStartup 相关后端逻辑，保持既有业务契约不变。
+     * 应用启动后按配置尝试补齐历史行情数据，避免新环境缺少基础 K 线。
      */
     public void backfillHistoryOnStartup() {
         try {

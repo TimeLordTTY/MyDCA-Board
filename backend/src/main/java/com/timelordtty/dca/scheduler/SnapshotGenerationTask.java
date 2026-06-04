@@ -20,12 +20,12 @@ public class SnapshotGenerationTask {
     private static final Logger logger = LoggerFactory.getLogger(SnapshotGenerationTask.class);
 
     /**
-     * 依赖的 SnapshotService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 快照服务入口，负责每日持仓与净值快照生成，供看板和复盘使用。
      */
     private final SnapshotService snapshotService;
 
     /**
-     * 执行 SnapshotGenerationTask 相关后端逻辑，保持既有业务契约不变。
+     * 装配快照服务，供每日快照任务生成持仓和净值统计。
      */
     public SnapshotGenerationTask(SnapshotService snapshotService) {
         this.snapshotService = snapshotService;

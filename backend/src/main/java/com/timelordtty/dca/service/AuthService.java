@@ -25,7 +25,7 @@ import java.time.LocalDateTime;
 public class AuthService {
 
     /**
-     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     * 用户持久化 Mapper，负责登录用户名、密码哈希和用户基础资料的读写。
      */
     private final UserMapper userMapper;
     /**
@@ -37,13 +37,12 @@ public class AuthService {
      */
     private final JwtTokenProvider jwtTokenProvider;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配用户、密码、JWT 和账户组件，串联注册登录与默认账户初始化流程。
      */
     public AuthService(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtTokenProvider jwtTokenProvider, AccountService accountService) {
         this.userMapper = userMapper;

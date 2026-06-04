@@ -52,21 +52,20 @@ import java.util.stream.Collectors;
 public class LedgerController {
 
     /**
-     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账本服务入口，负责流水事务、分录、余额影响和快速记账编排。
      */
     private final LedgerService ledgerService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配账本、用户和账户服务，处理流水查询、事务详情和手工记账入口。
      */
     public LedgerController(LedgerService ledgerService, UserService userService, AccountService accountService) {
         this.ledgerService = ledgerService;
@@ -75,7 +74,7 @@ public class LedgerController {
     }
 
     /**
-     * 处理只读查询 API，按当前用户和请求参数返回对应资源，不写入账本或修改持仓。
+     * 分页查询账本流水列表，支持类型、账户、金额和日期筛选；该接口只读，不新增分录也不重算余额。
      */
     @GetMapping("/txns")
     public ResponseEntity<Map<String, Object>> getTransactions(
@@ -362,7 +361,7 @@ public class LedgerController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取账本事务详情及分录明细，用于流水详情弹窗核对账户、金额和业务来源。
      */
     @GetMapping("/txns/{txnId}")
     public ResponseEntity<Map<String, Object>> getTransactionDetail(@PathVariable String txnId) {
@@ -510,8 +509,7 @@ public class LedgerController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 根据请求创建手工账本事务和对应分录，影响账户余额但不执行任何证券交易。
      */
     @PostMapping("/txns")
     public ResponseEntity<LedgerTxn> createTransaction(@RequestBody Map<String, Object> request) {
@@ -641,8 +639,7 @@ public class LedgerController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 处理快速记账入口，将常用收入、支出或转账参数转换为标准账本事务。
      */
     @PostMapping("/quick-entry")
     public ResponseEntity<LedgerTxn> quickEntry(@RequestBody Map<String, Object> request) {

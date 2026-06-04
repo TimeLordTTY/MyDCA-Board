@@ -20,17 +20,16 @@ import java.util.Map;
 public class FamilyController {
 
     /**
-     * 依赖的 FamilyService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 家庭服务入口，用于校验家庭归属、管理员权限和成员范围。
      */
     private final FamilyService familyService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配家庭和用户服务，处理家庭资料、成员和角色管理接口。
      */
     public FamilyController(FamilyService familyService, UserService userService) {
         this.familyService = familyService;
@@ -38,7 +37,7 @@ public class FamilyController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取当前用户所属家庭资料，用于家庭页初始化和权限展示。
      */
     @GetMapping
     public ResponseEntity<Family> getFamily() {
@@ -51,8 +50,7 @@ public class FamilyController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 为当前用户创建家庭并建立管理员成员关系，供家庭资产视图聚合使用。
      */
     @PostMapping
     public ResponseEntity<Family> createFamily(@RequestBody Map<String, String> request) {
@@ -66,8 +64,7 @@ public class FamilyController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 将指定用户加入当前家庭，并写入成员角色；调用前需要校验当前用户管理权限。
      */
     @PostMapping("/members")
     public ResponseEntity<Void> addMember(@RequestBody Map<String, Object> request) {
@@ -98,7 +95,7 @@ public class FamilyController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 查询当前家庭成员列表及角色信息，用于家庭成员管理页面展示。
      */
     @GetMapping("/members")
     public ResponseEntity<List<FamilyMemberDto>> getMembers() {
@@ -112,8 +109,7 @@ public class FamilyController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 从当前家庭移除指定成员，返回受影响账户或权限处理结果。
      */
     @DeleteMapping("/members/{userId}")
     public ResponseEntity<Map<String, Object>> removeMember(@PathVariable Long userId) {
@@ -130,8 +126,7 @@ public class FamilyController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 更新家庭成员角色，用于管理员授权或降级成员权限。
      */
     @PutMapping("/members/{userId}/role")
     public ResponseEntity<Map<String, Object>> updateMemberRole(@PathVariable Long userId, @RequestBody Map<String, Object> request) {

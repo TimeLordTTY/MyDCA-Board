@@ -27,21 +27,20 @@ import java.util.UUID;
 public class FamilyService {
 
     /**
-     * 依赖的 FamilyMapper Mapper，用于读写对应持久化数据。
+     * 家庭关系 Mapper，负责家庭、成员角色和家庭管理员关系的读写。
      */
     private final FamilyMapper familyMapper;
     /**
-     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 用户家庭角色 Mapper，负责读取和维护用户在家庭中的 ADMIN/MEMBER 权限。
      */
     private final UserFamilyRoleMapper userFamilyRoleMapper;
     /**
-     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     * 用户持久化 Mapper，负责登录用户名、密码哈希和用户基础资料的读写。
      */
     private final UserMapper userMapper;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配家庭、成员角色和用户 Mapper，用于家庭创建、成员管理和管理员权限校验。
      */
     public FamilyService(FamilyMapper familyMapper, UserFamilyRoleMapper userFamilyRoleMapper, UserMapper userMapper) {
         this.familyMapper = familyMapper;
@@ -97,7 +96,7 @@ public class FamilyService {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 查询当前家庭成员列表及角色信息，用于家庭成员管理页面展示。
      */
     public List<FamilyMemberDto> getMembers(Long familyId) {
         List<UserFamilyRole> roles = userFamilyRoleMapper.selectByFamilyId(familyId);
@@ -120,8 +119,7 @@ public class FamilyService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 校验操作者是否为指定家庭的管理员；不满足时抛出异常，阻止成员、账户或家庭范围数据被越权操作。
      */
     public void assertAdmin(Long operatorUserId, Long familyId) {
         String role = userFamilyRoleMapper.selectRole(operatorUserId, familyId);
@@ -131,8 +129,7 @@ public class FamilyService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 按用户名查找用户 ID，供家庭成员添加时把前端输入的登录名转换为系统用户主键。
      */
     public Long findUserIdByUsername(String username) {
         if (username == null || username.trim().isEmpty()) {
@@ -180,8 +177,7 @@ public class FamilyService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 从当前家庭移除指定成员，返回受影响账户或权限处理结果。
      */
     @Transactional
     public void removeMember(Long familyId, Long userId) {
@@ -205,8 +201,7 @@ public class FamilyService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 更新家庭成员角色，用于管理员授权或降级成员权限。
      */
     @Transactional
     public void updateMemberRole(Long familyId, Long userId, String role) {

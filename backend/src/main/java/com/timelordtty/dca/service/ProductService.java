@@ -24,17 +24,16 @@ public class ProductService {
     private static final Logger logger = LoggerFactory.getLogger(ProductService.class);
 
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
     /**
-     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     * Python 脚本执行网关，用于触发已接入的行情、指标或产品同步脚本并收集执行结果。
      */
     private final PythonScriptService pythonScriptService;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配产品 Mapper 和脚本执行网关，用于产品主数据维护以及行情同步触发。
      */
     public ProductService(ProductMasterMapper productMasterMapper, PythonScriptService pythonScriptService) {
         this.productMasterMapper = productMasterMapper;
@@ -42,22 +41,21 @@ public class ProductService {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 按关键字、资产类型和渠道筛选产品主数据，供产品管理和订单录入选择。
      */
     public List<ProductMaster> getProducts(String keyword, String assetType, String channel) {
         return productMasterMapper.selectByCondition(keyword, assetType, channel);
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 按产品 ID 读取产品主数据，用于订单录入、持仓展示和产品编辑。
      */
     public ProductMaster getProduct(Long id) {
         return productMasterMapper.selectById(id);
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 新增产品主数据记录，保存代码、市场、名称和产品分类等基础资料。
      */
     public ProductMaster createProduct(ProductMaster product) {
         productMasterMapper.insert(product);
@@ -115,8 +113,7 @@ public class ProductService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 更新产品主数据展示信息，不修改历史订单和持仓流水。
      */
     public ProductMaster updateProduct(ProductMaster product) {
         productMasterMapper.update(product);

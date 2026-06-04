@@ -30,20 +30,20 @@ import java.math.RoundingMode;
 public class BrokerFeeService {
 
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 券商费率配置 Mapper，负责账户维度交易费率规则的读取。
      */
     private final BrokerFeeConfigMapper brokerFeeConfigMapper;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 基金卖出费率 Mapper，负责按持有天数匹配分层赎回费规则。
      */
     private final FundSellFeeTierMapper fundSellFeeTierMapper;
 
     /**
-     * 注入 BrokerFeeService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配券商费率、账户和基金分层费率 Mapper，用于订单录入时估算交易费用。
      */
     public BrokerFeeService(BrokerFeeConfigMapper brokerFeeConfigMapper,
                            AccountMapper accountMapper,

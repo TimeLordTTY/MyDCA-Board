@@ -17,13 +17,12 @@ import java.util.List;
 public class NavController {
 
     /**
-     * 依赖的 NavService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 净值服务入口，负责基金净值记录的导入、查询和按日期维护。
      */
     private final NavService navService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配净值服务，提供基金净值导入和查询接口。
      */
     public NavController(NavService navService) {
         this.navService = navService;

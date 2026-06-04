@@ -28,28 +28,28 @@ public class SnapshotService {
     private static final Logger logger = LoggerFactory.getLogger(SnapshotService.class);
 
     /**
-     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     * 用户持久化 Mapper，负责登录用户名、密码哈希和用户基础资料的读写。
      */
     private final UserMapper userMapper;
     /**
-     * 依赖的 HoldingService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 持仓服务入口，负责按账户和产品汇总持仓、成本、市值与盈亏口径。
      */
     private final HoldingService holdingService;
     /**
-     * 依赖的 DashboardService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 总览服务入口，负责聚合订单、持仓、账户等数据形成首页看板指标。
      */
     private final DashboardService dashboardService;
     /**
-     * 依赖的 HoldingsSnapshotMapper Mapper，用于读写对应持久化数据。
+     * 持仓快照 Mapper，负责每日持仓数量、市值、成本和盈亏快照读写。
      */
     private final HoldingsSnapshotMapper holdingsSnapshotMapper;
     /**
-     * 依赖的 NetWorthSnapshotMapper Mapper，用于读写对应持久化数据。
+     * 净值快照 Mapper，负责资产、负债和净值时间序列持久化访问。
      */
     private final NetWorthSnapshotMapper netWorthSnapshotMapper;
 
     /**
-     * 注入 SnapshotService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配持仓、看板、快照和用户组件，用于按日期生成用户资产与持仓快照。
      */
     public SnapshotService(UserMapper userMapper,
                            HoldingService holdingService,
@@ -64,8 +64,7 @@ public class SnapshotService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 为指定快照日期遍历活跃用户并生成持仓、净值等日终快照；该方法写入快照表，不修改原始流水。
      */
     public void generateAllSnapshotsForDate(LocalDate snapshotDate) {
         List<Long> userIds = userMapper.selectActiveUserIds();

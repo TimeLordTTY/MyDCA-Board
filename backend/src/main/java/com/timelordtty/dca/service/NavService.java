@@ -14,13 +14,12 @@ import java.util.List;
 public class NavService {
 
     /**
-     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     * 基金净值 Mapper，负责按产品和日期维护净值、分红和日收益率。
      */
     private final NavMapper navMapper;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配净值 Mapper，用于基金净值记录的新增、更新和按产品日期查询。
      */
     public NavService(NavMapper navMapper) {
         this.navMapper = navMapper;

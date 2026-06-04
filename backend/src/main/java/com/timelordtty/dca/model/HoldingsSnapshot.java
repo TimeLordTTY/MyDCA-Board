@@ -33,7 +33,7 @@ public class HoldingsSnapshot {
      */
     private BigDecimal cost;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 持仓成本计算方式，当前用于区分平均成本或 FIFO 等成本归集口径。
      */
     private String costMethod; // AVERAGE/FIFO
     /**
@@ -126,11 +126,11 @@ public class HoldingsSnapshot {
      */
     public void setCost(BigDecimal cost) { this.cost = cost; }
     /**
-     * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 读取持仓快照的成本计算方式，用于解释成本价和浮动盈亏口径。
      */
     public String getCostMethod() { return costMethod; }
     /**
-     * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 设置持仓快照的成本计算方式，标记本条快照采用平均成本或 FIFO 等口径。
      */
     public void setCostMethod(String costMethod) { this.costMethod = costMethod; }
     /**

@@ -16,7 +16,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RuntimeException.class)
     /**
-     * 执行 handleRuntimeException 相关后端逻辑，保持既有业务契约不变。
+     * 创建全局异常处理器，统一转换后端异常为前端可识别的错误响应。
      */
     public ResponseEntity<Map<String, Object>> handleRuntimeException(RuntimeException e) {
         Map<String, Object> response = new HashMap<>();
@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     /**
-     * 执行 handleException 相关后端逻辑，保持既有业务契约不变。
+     * 创建全局异常处理器，统一转换后端异常为前端可识别的错误响应。
      */
     public ResponseEntity<Map<String, Object>> handleException(Exception e) {
         Map<String, Object> response = new HashMap<>();

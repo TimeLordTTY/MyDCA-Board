@@ -66,44 +66,44 @@ import java.util.List;
 public class SettlementService {
 
     /**
-     * 依赖的 OrderMapper Mapper，用于读写对应持久化数据。
+     * 订单 Mapper，负责订单主记录的查询、创建、状态更新和结算筛选。
      */
     private final OrderMapper orderMapper;
     /**
-     * 依赖的 SettlementConfirmMapper Mapper，用于读写对应持久化数据。
+     * 结算确认 Mapper，负责保存订单成交确认和结算金额明细。
      */
     private final SettlementConfirmMapper settlementConfirmMapper;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账本服务入口，负责流水事务、分录、余额影响和快速记账编排。
      */
     private final LedgerService ledgerService;
     /**
-     * 依赖的 OrderFundingLineMapper Mapper，用于读写对应持久化数据。
+     * 订单资金来源 Mapper，负责订单创建和结算时读取各账户出资明细。
      */
     private final OrderFundingLineMapper orderFundingLineMapper;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 券商费率服务，用于根据账户、产品和交易方向计算佣金、平台费、印花税等费用。
      */
     private final BrokerFeeService brokerFeeService;
 
     /**
-     * 注入 SettlementService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配订单、结算、账本、账户和产品组件，用于成交确认后生成费用、持仓和现金分录。
      */
     public SettlementService(OrderMapper orderMapper, SettlementConfirmMapper settlementConfirmMapper,
                             AccountMapper accountMapper, LedgerService ledgerService,

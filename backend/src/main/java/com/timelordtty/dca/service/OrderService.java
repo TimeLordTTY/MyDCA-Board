@@ -49,48 +49,48 @@ import java.util.UUID;
 public class OrderService {
 
     /**
-     * 依赖的 OrderMapper Mapper，用于读写对应持久化数据。
+     * 订单 Mapper，负责订单主记录的查询、创建、状态更新和结算筛选。
      */
     private final OrderMapper orderMapper;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
     /**
-     * 依赖的 OrderFundingLineMapper Mapper，用于读写对应持久化数据。
+     * 订单资金来源 Mapper，负责订单创建和结算时读取各账户出资明细。
      */
     private final OrderFundingLineMapper orderFundingLineMapper;
     /**
-     * 依赖的 SettlementConfirmMapper Mapper，用于读写对应持久化数据。
+     * 结算确认 Mapper，负责保存订单成交确认和结算金额明细。
      */
     private final SettlementConfirmMapper settlementConfirmMapper;
     /**
-     * 依赖的 com.timelordtty.dca.mapper.LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     * 账本事务 Mapper，用于订单详情中读取由订单结算生成的账本主事务。
      */
     private final com.timelordtty.dca.mapper.LedgerTxnMapper ledgerTxnMapper;
     /**
-     * 依赖的 com.timelordtty.dca.mapper.LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     * 账本分录 Mapper，用于订单详情中读取成交确认后生成的借贷分录。
      */
     private final com.timelordtty.dca.mapper.LedgerPostingMapper ledgerPostingMapper;
     /**
-     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账本服务入口，负责流水事务、分录、余额影响和快速记账编排。
      */
     private final LedgerService ledgerService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
 
     /**
-     * 注入 OrderService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配订单、资金来源、结算、账户、产品和账本组件，串联订单创建、取消与成交确认流程。
      */
     public OrderService(OrderMapper orderMapper, AccountMapper accountMapper, AccountService accountService,
                        OrderFundingLineMapper orderFundingLineMapper, SettlementConfirmMapper settlementConfirmMapper,
@@ -527,42 +527,42 @@ public class OrderService {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取订单相关列表或明细，供订单台账、结算确认和资金来源展示使用。
      */
     public List<Order> getPendingOrders() {
         return orderMapper.selectByStatus("PENDING");
     }
 
     /**
-     * 返回日期或时间字段，用于业务归属、确认或审计排序。
+     * 读取订单相关列表或明细，供订单台账、结算确认和资金来源展示使用。
      */
     public List<Order> getOrdersByStatus(String status) {
         return orderMapper.selectByStatus(status);
     }
 
     /**
-     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public List<Order> getOrdersByUserId(Long userId) {
         return orderMapper.selectByUserId(userId);
     }
 
     /**
-     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public Order getOrderByOrderId(String orderId) {
         return orderMapper.selectByOrderId(orderId);
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取订单相关列表或明细，供订单台账、结算确认和资金来源展示使用。
      */
     public List<OrderFundingLine> getOrderFundingLines(String orderId) {
         return orderFundingLineMapper.selectByOrderId(orderId);
     }
 
     /**
-     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public SettlementConfirm getSettlementByOrderId(String orderId) {
         return settlementConfirmMapper.selectByOrderId(orderId);

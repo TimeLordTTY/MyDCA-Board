@@ -25,27 +25,27 @@ public class NetWorthSnapshot {
      */
     private LocalDate snapshotDate;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 资产总额，汇总现金、持仓市值和其他资产项目。
      */
     private BigDecimal totalAssets;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 负债总额，用于从总资产中扣除后计算净资产。
      */
     private BigDecimal totalLiabilities;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 净资产，表示总资产扣除负债后的家庭或个人资产结果。
      */
     private BigDecimal netWorth;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 现金余额，表示统计时点账户或总览口径下可用现金资产金额。
      */
     private BigDecimal cashBalance;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 持仓市值，表示统计时点基金、股票或其他持仓按当前价格折算后的资产金额。
      */
     private BigDecimal positionValue;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 已实现盈亏，表示卖出、结算或分红等已落账事项形成的盈亏金额。
      */
     private BigDecimal realizedPnl;
     /**
@@ -53,7 +53,7 @@ public class NetWorthSnapshot {
      */
     private BigDecimal unrealizedPnl;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 收益类盈亏，表示利息、分红或货币基金收益等收入项目形成的金额。
      */
     private BigDecimal incomePnl;
     /**
@@ -118,43 +118,43 @@ public class NetWorthSnapshot {
      */
     public void setTotalAssets(BigDecimal totalAssets) { this.totalAssets = totalAssets; }
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取总负债金额，用于计算家庭或个人净资产。
      */
     public BigDecimal getTotalLiabilities() { return totalLiabilities; }
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置总负债金额，用于净资产快照计算。
      */
     public void setTotalLiabilities(BigDecimal totalLiabilities) { this.totalLiabilities = totalLiabilities; }
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取净资产金额，等于资产扣除负债后的统计结果。
      */
     public BigDecimal getNetWorth() { return netWorth; }
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置净资产金额，保存总资产扣除负债后的结果。
      */
     public void setNetWorth(BigDecimal netWorth) { this.netWorth = netWorth; }
     /**
-     * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 读取现金余额，表示统计时点可用现金资产。
      */
     public BigDecimal getCashBalance() { return cashBalance; }
     /**
-     * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 设置现金余额，用于保存净值快照或首页资产汇总结果。
      */
     public void setCashBalance(BigDecimal cashBalance) { this.cashBalance = cashBalance; }
     /**
-     * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 读取持仓市值，表示统计时点证券或基金持仓折算金额。
      */
     public BigDecimal getPositionValue() { return positionValue; }
     /**
-     * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 设置持仓市值，用于保存按最新价格计算出的资产金额。
      */
     public void setPositionValue(BigDecimal positionValue) { this.positionValue = positionValue; }
     /**
-     * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 读取已实现盈亏，表示已卖出或已结算事项带来的收益结果。
      */
     public BigDecimal getRealizedPnl() { return realizedPnl; }
     /**
-     * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 设置已实现盈亏，用于快照或看板保存已落账收益。
      */
     public void setRealizedPnl(BigDecimal realizedPnl) { this.realizedPnl = realizedPnl; }
     /**
@@ -166,11 +166,11 @@ public class NetWorthSnapshot {
      */
     public void setUnrealizedPnl(BigDecimal unrealizedPnl) { this.unrealizedPnl = unrealizedPnl; }
     /**
-     * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 读取收入类盈亏，表示利息、分红或货币基金收益金额。
      */
     public BigDecimal getIncomePnl() { return incomePnl; }
     /**
-     * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 设置收入类盈亏，用于净值快照保留非交易收益。
      */
     public void setIncomePnl(BigDecimal incomePnl) { this.incomePnl = incomePnl; }
     /**

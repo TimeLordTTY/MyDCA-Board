@@ -21,7 +21,7 @@ import java.util.List;
 public class MarketService {
 
     /**
-     * 依赖的 MarketBarDailyMapper Mapper，用于读写对应持久化数据。
+     * 日 K Mapper，负责按日期范围读取历史行情 OHLCV 数据。
      */
     private final MarketBarDailyMapper marketBarDailyMapper;
     /**
@@ -29,12 +29,12 @@ public class MarketService {
      */
     private final MarketQuoteRealtimeMapper marketQuoteRealtimeMapper;
     /**
-     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     * 基金净值 Mapper，负责按产品和日期维护净值、分红和日收益率。
      */
     private final NavMapper navMapper;
 
     /**
-     * 注入 MarketService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配实时行情、日 K、净值和指标 Mapper，用于行情查询、刷新结果落库和指标联动。
      */
     public MarketService(MarketBarDailyMapper marketBarDailyMapper, 
                         MarketQuoteRealtimeMapper marketQuoteRealtimeMapper,

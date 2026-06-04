@@ -30,12 +30,12 @@ public interface ProductMasterMapper {
          */
         private Long id;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 产品展示顺序，数值越小越靠前，用于产品列表和下拉选择排序。
          */
         private Integer sortOrder;
         
         /**
-         * 注入 ProductSortOrderUpdate 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+         * 创建产品排序更新请求对象，保存产品 ID 与新的展示顺序。
          */
         public ProductSortOrderUpdate(Long id, Integer sortOrder) {
             this.id = id;
@@ -57,14 +57,14 @@ public interface ProductMasterMapper {
         }
         
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取产品排序权重，数值越小越靠前展示。
          */
         public Integer getSortOrder() {
             return sortOrder;
         }
         
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置产品展示顺序，用于保存拖拽排序或批量排序后的前端展示位置。
          */
         public void setSortOrder(Integer sortOrder) {
             this.sortOrder = sortOrder;

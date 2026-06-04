@@ -30,7 +30,7 @@ public class RealtimeQuoteCleanupTask {
     private static final int RETENTION_DAYS = 30;
 
     /**
-     * 执行 RealtimeQuoteCleanupTask 相关后端逻辑，保持既有业务契约不变。
+     * 装配实时行情 Mapper，供清理任务删除过期行情快照。
      */
     public RealtimeQuoteCleanupTask(MarketQuoteRealtimeMapper marketQuoteRealtimeMapper) {
         this.marketQuoteRealtimeMapper = marketQuoteRealtimeMapper;

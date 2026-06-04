@@ -24,19 +24,19 @@ public class Nav {
      */
     private BigDecimal nav;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 累计净值，用于基金长期收益和分红复权展示。
      */
     private BigDecimal accNav;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 单日收益率，表示基金当日净值变化比例。
      */
     private BigDecimal dailyReturn;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 基金分红金额，用于净值复权和收益统计。
      */
     private BigDecimal dividend;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 数据来源标识，用于区分脚本采集、人工导入或第三方行情来源。
      */
     private String source;
 
@@ -112,42 +112,42 @@ public class Nav {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取基金单日收益率，用于净值曲线和收益统计。
      */
     public BigDecimal getDailyReturn() {
         return dailyReturn;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置基金单日收益率，保存净值变化比例。
      */
     public void setDailyReturn(BigDecimal dailyReturn) {
         this.dailyReturn = dailyReturn;
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取基金分红金额，用于净值复权和收益展示。
      */
     public BigDecimal getDividend() {
         return dividend;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置基金分红金额，用于净值复权和收益统计。
      */
     public void setDividend(BigDecimal dividend) {
         this.dividend = dividend;
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取数据来源标识，用于区分脚本、手工导入或第三方行情来源。
      */
     public String getSource() {
         return source;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置数据来源标识，记录本条行情或净值来自脚本、导入或外部源。
      */
     public void setSource(String source) {
         this.source = source;

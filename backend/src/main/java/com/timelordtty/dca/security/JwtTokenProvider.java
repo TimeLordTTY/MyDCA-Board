@@ -25,7 +25,7 @@ public class JwtTokenProvider {
 
     @Value("${jwt.expiration:86400000}") // 24小时
     /**
-     * 日期或时间字段，用于业务归属、确认或审计排序。
+     * JWT 过期时长配置，单位为毫秒，用于生成访问令牌的失效时间。
      */
     private long expiration;
 
@@ -34,7 +34,7 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 执行 generateToken 相关后端逻辑，保持既有业务契约不变。
+     * 根据登录用户名生成 JWT，并写入签发时间和过期时间供后续请求认证。
      */
     public String generateToken(String username) {
         Date now = new Date();
@@ -61,7 +61,7 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 执行 validateToken 相关后端逻辑，保持既有业务契约不变。
+     * 校验 JWT 签名和过期时间，失败时返回 false 而不是让异常穿透到业务接口。
      */
     public boolean validateToken(String token) {
         try {

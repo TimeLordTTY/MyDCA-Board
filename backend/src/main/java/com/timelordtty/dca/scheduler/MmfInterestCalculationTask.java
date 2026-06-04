@@ -27,12 +27,12 @@ public class MmfInterestCalculationTask {
     private static final Logger logger = LoggerFactory.getLogger(MmfInterestCalculationTask.class);
 
     /**
-     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     * Python 脚本执行网关，用于触发已接入的行情、指标或产品同步脚本并收集执行结果。
      */
     private final PythonScriptService pythonScriptService;
 
     /**
-     * 执行 MmfInterestCalculationTask 相关后端逻辑，保持既有业务契约不变。
+     * 装配脚本执行网关，供货币基金收益计算任务调用白名单脚本。
      */
     public MmfInterestCalculationTask(PythonScriptService pythonScriptService) {
         this.pythonScriptService = pythonScriptService;

@@ -86,53 +86,53 @@ public class LedgerService {
      */
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LedgerService.class);
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 收入类事务类型集合，统计流水时按现金借方识别收入、退款入账和报销入账。
      */
     private static final Set<String> INCOME_TYPES = Set.of("INCOME", "REFUND", "REFUND_IN", "REIMBURSE_IN");
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 支出类事务类型集合，统计流水时按现金贷方识别支出、退款出账、费用和税费。
      */
     private static final Set<String> EXPENSE_TYPES = Set.of("EXPENSE", "REFUND_OUT", "REIMBURSE_OUT", "FEE", "TAX");
     /**
-     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 执行 of 方法的具体业务处理。
      */
     private static final Set<String> INVESTMENT_IN_TYPES = Set.of("SELL", "REDEMPTION", "REDEMPTION_IN", "DIVIDEND_CASH", "DIVIDEND_REINVEST", "BOND_REPO");
     /**
-     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 执行 of 方法的具体业务处理。
      */
     private static final Set<String> INVESTMENT_OUT_TYPES = Set.of("BUY", "SUBSCRIPTION", "REDEMPTION_OUT");
     /**
-     * 类型或分组口径，用于驱动后端业务分支和前端展示。
+     * 执行 of 方法的具体业务处理。
      */
     private static final Set<String> TRANSFER_TYPES = Set.of("TRANSFER_OUT", "TRANSFER_IN");
 
     /**
-     * 依赖的 LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     * 账本事务 Mapper，负责账本主事务记录的创建、查询和状态维护。
      */
     private final LedgerTxnMapper ledgerTxnMapper;
     /**
-     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     * 账本分录 Mapper，负责读取影响账户余额和持仓成本的借贷分录。
      */
     private final LedgerPostingMapper ledgerPostingMapper;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
 
     /**
-     * 注入 LedgerService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配账本事务、分录、账户、订单、产品和用户组件，统一处理流水落账、余额影响和统计口径。
      */
     public LedgerService(LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
                         AccountMapper accountMapper, AccountService accountService, ProductMasterMapper productMasterMapper,
@@ -491,7 +491,7 @@ public class LedgerService {
          */
         private final String txnId;
         /**
-         * 类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 账本事务类型，决定统计展示时按收入、支出、投资或转账口径归类。
          */
         private final String txnType;
         /**
@@ -499,7 +499,7 @@ public class LedgerService {
          */
         private final LocalDate tradeDate;
         /**
-         * 关联 ID，用于与对应业务对象建立引用关系。
+         * 流水分类 ID，关联收入、支出或投资分类，用于统计分组。
          */
         private final Long categoryId;
         /**
@@ -515,7 +515,7 @@ public class LedgerService {
          */
         private final String note;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 执行  方法的具体业务处理。
          */
         private final List<StatsPosting> postings = new ArrayList<>();
 
@@ -611,7 +611,7 @@ public class LedgerService {
          */
         private final String accountType;
         /**
-         * 关联 ID，用于与对应业务对象建立引用关系。
+         * 父账户 ID，用于在账户树中定位当前账户的上级节点。
          */
         private final Long parentAccountId;
         /**
@@ -1290,7 +1290,7 @@ public class LedgerService {
     }
 
     /**
-     * 执行只读查询或统计，返回符合条件的业务数据。
+     * 按用户、类型、账户、金额和日期条件分页查询账本流水，用于流水列表筛选展示。
      */
     public List<LedgerTxn> getTransactions(Long userId, String txnType, LocalDate startDate, 
                                           LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note, Integer page, Integer pageSize) {
@@ -1317,7 +1317,7 @@ public class LedgerService {
     }
     
     /**
-     * 执行只读查询或统计，返回符合条件的业务数据。
+     * 统计符合筛选条件的账本流水数量，用于分页总数计算。
      */
     public int countTransactions(Long userId, String txnType, LocalDate startDate, 
                                 LocalDate endDate, Long productId, Long parentAccountId, Long accountId, String note) {
@@ -1337,14 +1337,14 @@ public class LedgerService {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取账本事务详情及分录明细，用于流水详情弹窗核对账户、金额和业务来源。
      */
     public LedgerTxn getTransactionDetail(String txnId) {
         return ledgerTxnMapper.selectByTxnId(txnId);
     }
 
     /**
-     * 返回关联 ID，用于与对应业务对象建立引用关系。
+     * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public List<LedgerPosting> getPostingsByTxnId(String txnId) {
         return ledgerPostingMapper.selectByTxnId(txnId);

@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service;
 public class UserService {
 
     /**
-     * 依赖的 UserMapper Mapper，用于读写对应持久化数据。
+     * 用户持久化 Mapper，负责登录用户名、密码哈希和用户基础资料的读写。
      */
     private final UserMapper userMapper;
     /**
@@ -28,8 +28,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配用户 Mapper 和密码编码器，用于当前用户查询、用户创建和密码修改。
      */
     public UserService(UserMapper userMapper, PasswordEncoder passwordEncoder) {
         this.userMapper = userMapper;
@@ -62,8 +61,7 @@ public class UserService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 更新 UserService 领域记录，保持历史流水和已结算数据的可追溯性。
      */
     public AuthResponse.UserInfo updateCurrentUserProfile(String nickname, String email, String phone) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -82,8 +80,7 @@ public class UserService {
     }
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 校验当前登录用户旧密码后写入新密码哈希，用于账号安全设置，不影响账户资产数据。
      */
     public void changePassword(String oldPassword, String newPassword) {
         if (oldPassword == null || newPassword == null) {

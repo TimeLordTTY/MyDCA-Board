@@ -19,13 +19,12 @@ import java.util.Map;
 public class FundSellFeeTierController {
 
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 基金卖出费率 Mapper，负责按持有天数匹配分层赎回费规则。
      */
     private final FundSellFeeTierMapper fundSellFeeTierMapper;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配基金卖出费率 Mapper，提供按产品和持有天数维护分层费率的接口。
      */
     public FundSellFeeTierController(FundSellFeeTierMapper fundSellFeeTierMapper) {
         this.fundSellFeeTierMapper = fundSellFeeTierMapper;

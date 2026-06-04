@@ -20,17 +20,16 @@ import java.util.Map;
 public class SettlementController {
 
     /**
-     * 依赖的 OrderService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 订单服务入口，负责订单查询、创建、取消以及与结算流程的衔接。
      */
     private final OrderService orderService;
     /**
-     * 依赖的 SettlementService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 结算服务入口，负责订单成交确认、费用拆分和账本落账编排。
      */
     private final SettlementService settlementService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配订单与结算服务，处理待结算订单查询和成交确认入口。
      */
     public SettlementController(OrderService orderService, SettlementService settlementService) {
         this.orderService = orderService;
@@ -38,7 +37,7 @@ public class SettlementController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 查询待结算订单列表，供首页或结算页提醒需要确认成交的订单。
      */
     @GetMapping("/pending")
     public ResponseEntity<List<Order>> getPendingSettlements() {
@@ -47,8 +46,7 @@ public class SettlementController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 确认订单成交结算，写入结算明细并交由服务层生成账本影响。
      */
     @PostMapping("/confirm")
     public ResponseEntity<SettlementConfirm> confirmSettlement(@RequestBody Map<String, Object> request) {

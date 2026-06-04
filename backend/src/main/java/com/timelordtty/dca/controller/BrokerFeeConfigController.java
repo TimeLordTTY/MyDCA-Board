@@ -21,16 +21,16 @@ import java.util.Map;
 public class BrokerFeeConfigController {
 
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 券商费率配置 Mapper，负责账户维度交易费率规则的读取。
      */
     private final BrokerFeeConfigMapper brokerFeeConfigMapper;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
 
     /**
-     * 注入 BrokerFeeConfigController 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配券商费率配置和账户 Mapper，用于按账户读取交易佣金、平台费和基金卖出费率规则。
      */
     public BrokerFeeConfigController(BrokerFeeConfigMapper brokerFeeConfigMapper,
                                     AccountMapper accountMapper) {

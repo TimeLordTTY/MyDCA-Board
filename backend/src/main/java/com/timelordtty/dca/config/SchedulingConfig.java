@@ -22,7 +22,7 @@ public class SchedulingConfig implements SchedulingConfigurer {
     private static final Logger logger = LoggerFactory.getLogger(SchedulingConfig.class);
 
     /**
-     * 执行 configureTasks 相关后端逻辑，保持既有业务契约不变。
+     * 配置定时任务调度线程池大小，避免行情、快照和指标任务共用单线程造成阻塞。
      */
     @Override
     public void configureTasks(ScheduledTaskRegistrar taskRegistrar) {

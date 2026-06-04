@@ -27,17 +27,16 @@ import java.util.List;
 public class MmfSharesService {
 
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     * 基金净值 Mapper，负责按产品和日期维护净值、分红和日收益率。
      */
     private final NavMapper navMapper;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配账户和产品 Mapper，用于根据货币基金账户余额拆分可展示份额。
      */
     public MmfSharesService(AccountMapper accountMapper, NavMapper navMapper) {
         this.accountMapper = accountMapper;

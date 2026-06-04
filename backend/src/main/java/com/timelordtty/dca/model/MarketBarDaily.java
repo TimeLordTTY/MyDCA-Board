@@ -20,23 +20,23 @@ public class MarketBarDaily {
      */
     private LocalDate tradeDate;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 交易日开盘价，用于 K 线展示和涨跌幅计算。
      */
     private BigDecimal openPrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 交易日最高价，用于 K 线展示和波动区间计算。
      */
     private BigDecimal highPrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 交易日最低价，用于 K 线展示和波动区间计算。
      */
     private BigDecimal lowPrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 交易日收盘价，用于净值、指标和收益率计算。
      */
     private BigDecimal closePrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 成交量，记录当前行情周期内的成交规模。
      */
     private BigDecimal volume;
     /**
@@ -44,11 +44,11 @@ public class MarketBarDaily {
      */
     private BigDecimal amount;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 前一交易日收盘价，用于计算涨跌幅和价格变动。
      */
     private BigDecimal prevClose;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 数据来源标识，用于区分脚本采集、人工导入或第三方行情来源。
      */
     private String source;
 
@@ -152,14 +152,14 @@ public class MarketBarDaily {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取成交量字段，表示当前行情周期内的成交规模。
      */
     public BigDecimal getVolume() {
         return volume;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置成交量，保存行情源返回的成交规模。
      */
     public void setVolume(BigDecimal volume) {
         this.volume = volume;
@@ -194,14 +194,14 @@ public class MarketBarDaily {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取数据来源标识，用于区分脚本、手工导入或第三方行情来源。
      */
     public String getSource() {
         return source;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置数据来源标识，记录本条行情或净值来自脚本、导入或外部源。
      */
     public void setSource(String source) {
         this.source = source;

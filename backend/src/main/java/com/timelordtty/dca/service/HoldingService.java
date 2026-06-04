@@ -55,52 +55,52 @@ import java.util.Map;
 public class HoldingService {
 
     /**
-     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     * 账本分录 Mapper，负责读取影响账户余额和持仓成本的借贷分录。
      */
     private final LedgerPostingMapper ledgerPostingMapper;
     /**
-     * 依赖的 LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     * 账本事务 Mapper，负责账本主事务记录的创建、查询和状态维护。
      */
     private final LedgerTxnMapper ledgerTxnMapper;
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
     /**
-     * 依赖的 ProductService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 产品服务入口，负责场内基金、货币基金等产品资料的查询和同步。
      */
     private final ProductService productService;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
     /**
-     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账本服务入口，负责流水事务、分录、余额影响和快速记账编排。
      */
     private final LedgerService ledgerService;
     /**
-     * 依赖的 OrderMapper Mapper，用于读写对应持久化数据。
+     * 订单 Mapper，负责订单主记录的查询、创建、状态更新和结算筛选。
      */
     private final OrderMapper orderMapper;
     /**
-     * 依赖的 OrderFundingLineMapper Mapper，用于读写对应持久化数据。
+     * 订单资金来源 Mapper，负责订单创建和结算时读取各账户出资明细。
      */
     private final OrderFundingLineMapper orderFundingLineMapper;
     /**
-     * 依赖的 SettlementConfirmMapper Mapper，用于读写对应持久化数据。
+     * 结算确认 Mapper，负责保存订单成交确认和结算金额明细。
      */
     private final SettlementConfirmMapper settlementConfirmMapper;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 NavMapper Mapper，用于读写对应持久化数据。
+     * 基金净值 Mapper，负责按产品和日期维护净值、分红和日收益率。
      */
     private final NavMapper navMapper;
 
     /**
-     * 注入 HoldingService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配持仓分录、产品、账户和账本组件，用于按分录重建持仓份额、成本和市值展示。
      */
     public HoldingService(LedgerPostingMapper ledgerPostingMapper, LedgerTxnMapper ledgerTxnMapper,
                           ProductMasterMapper productMasterMapper,
@@ -382,7 +382,7 @@ public class HoldingService {
 
     public static class HoldingInfo {
         /**
-         * 关联 ID，用于与对应业务对象建立引用关系。
+         * 券商账户 ID，标识该持仓归属的场内或场外账户。
          */
         private Long brokerAccountId;
         /**
@@ -402,23 +402,23 @@ public class HoldingService {
          */
         private String productName;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 交易渠道，区分 EXCHANGE 场内产品和 OTC 场外产品。
          */
         private String channel;
         /**
-         * 类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 资产类型，用于区分 ETF、基金、现金类产品等持仓分类。
          */
         private String assetType;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 持仓总份额，按分录借贷方向累计买入、卖出或导入后的剩余数量。
          */
         private BigDecimal totalShares;
         /**
-         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 持仓总成本，按分录借贷方向累计买入、卖出和费用后的成本余额。
          */
         private BigDecimal totalCost;
         /**
-         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 平均持仓成本，由总成本除以当前份额得到，用于前端展示成本价。
          */
         private BigDecimal avgCost;
         /**
@@ -432,11 +432,11 @@ public class HoldingService {
 
         // Getters and setters
         /**
-         * 返回关联 ID，用于与对应业务对象建立引用关系。
+         * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
          */
         public Long getBrokerAccountId() { return brokerAccountId; }
         /**
-         * 设置关联 ID，用于与对应业务对象建立引用关系。
+         * 设置券商账户 ID，标记持仓归属的场内或场外账户。
          */
         public void setBrokerAccountId(Long brokerAccountId) { this.brokerAccountId = brokerAccountId; }
         /**
@@ -472,19 +472,19 @@ public class HoldingService {
          */
         public void setProductName(String productName) { this.productName = productName; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取持仓计算结果字段，供持仓列表和初始持仓导入结果返回给前端。
          */
         public String getChannel() { return channel; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置交易渠道，区分场内 EXCHANGE 和场外 OTC 产品。
          */
         public void setChannel(String channel) { this.channel = channel; }
         /**
-         * 返回类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 读取资产类型，供持仓列表按 ETF、基金或现金类资产筛选展示。
          */
         public String getAssetType() { return assetType; }
         /**
-         * 设置类型或分组口径，用于驱动后端业务分支和前端展示。
+         * 设置资产类型，保存持仓所属的产品分类。
          */
         public void setAssetType(String assetType) { this.assetType = assetType; }
         /**
@@ -496,19 +496,19 @@ public class HoldingService {
          */
         public void setTotalShares(BigDecimal totalShares) { this.totalShares = totalShares; }
         /**
-         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 读取持仓计算结果字段，供持仓列表和初始持仓导入结果返回给前端。
          */
         public BigDecimal getTotalCost() { return totalCost; }
         /**
-         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 设置持仓总成本，保存由账本分录累计得到的成本余额。
          */
         public void setTotalCost(BigDecimal totalCost) { this.totalCost = totalCost; }
         /**
-         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 读取持仓计算结果字段，供持仓列表和初始持仓导入结果返回给前端。
          */
         public BigDecimal getAvgCost() { return avgCost; }
         /**
-         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 设置平均持仓成本，保存总成本除以份额后的展示成本价。
          */
         public void setAvgCost(BigDecimal avgCost) { this.avgCost = avgCost; }
         /**
@@ -542,7 +542,7 @@ public class HoldingService {
          */
         private String productName;
         /**
-         * 请求或响应字段，用于前后端传递该场景的业务信息。
+         * 交易渠道，区分 EXCHANGE 场内产品和 OTC 场外产品。
          */
         private String channel; // EXCHANGE or OTC
         /**
@@ -550,7 +550,7 @@ public class HoldingService {
          */
         private BigDecimal shares;
         /**
-         * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 初始持仓导入时填写的成本价，用于计算导入分录的总成本。
          */
         private BigDecimal costPrice;
         /**
@@ -576,11 +576,11 @@ public class HoldingService {
          */
         public void setProductName(String productName) { this.productName = productName; }
         /**
-         * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+         * 读取持仓计算结果字段，供持仓列表和初始持仓导入结果返回给前端。
          */
         public String getChannel() { return channel; }
         /**
-         * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+         * 设置交易渠道，区分场内 EXCHANGE 和场外 OTC 产品。
          */
         public void setChannel(String channel) { this.channel = channel; }
         /**
@@ -592,11 +592,11 @@ public class HoldingService {
          */
         public void setShares(BigDecimal shares) { this.shares = shares; }
         /**
-         * 返回金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 读取持仓计算结果字段，供持仓列表和初始持仓导入结果返回给前端。
          */
         public BigDecimal getCostPrice() { return costPrice; }
         /**
-         * 设置金额类字段，用于资金、费用、盈亏或统计结果表达。
+         * 设置初始导入成本价，用于生成初始持仓调整分录的金额。
          */
         public void setCostPrice(BigDecimal costPrice) { this.costPrice = costPrice; }
         /**

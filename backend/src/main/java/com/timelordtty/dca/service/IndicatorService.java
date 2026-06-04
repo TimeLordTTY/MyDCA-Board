@@ -18,17 +18,16 @@ import java.util.List;
 public class IndicatorService {
 
     /**
-     * 依赖的 IndicatorDailyMapper Mapper，用于读写对应持久化数据。
+     * 日指标 Mapper，负责技术指标结果的按标的和日期持久化访问。
      */
     private final IndicatorDailyMapper indicatorDailyMapper;
     /**
-     * 依赖的 MarketService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 行情服务入口，负责行情、K 线和实时价格数据的查询与刷新。
      */
     private final MarketService marketService;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配指标和行情 Mapper，用于保存技术指标并读取指标计算所需的行情序列。
      */
     public IndicatorService(IndicatorDailyMapper indicatorDailyMapper, MarketService marketService) {
         this.indicatorDailyMapper = indicatorDailyMapper;

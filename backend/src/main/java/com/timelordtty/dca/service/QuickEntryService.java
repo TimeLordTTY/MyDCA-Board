@@ -22,21 +22,20 @@ import java.util.List;
 public class QuickEntryService {
 
     /**
-     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账本服务入口，负责流水事务、分录、余额影响和快速记账编排。
      */
     private final LedgerService ledgerService;
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 AccountService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账户服务入口，负责账户树查询、账户归属校验、账户创建更新以及余额调整编排。
      */
     private final AccountService accountService;
 
     /**
-     * 执行业务写入或状态推进，必须在服务层校验和事务边界内运行。
-     * 涉及账本、账户、持仓或订单时，以既有业务规则和事务一致性为准。
+     * 装配账本、账户和用户组件，用于把快速记账表单转换为标准账本事务。
      */
     public QuickEntryService(LedgerService ledgerService, AccountMapper accountMapper, AccountService accountService) {
         this.ledgerService = ledgerService;

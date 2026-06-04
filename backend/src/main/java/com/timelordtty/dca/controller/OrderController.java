@@ -28,36 +28,36 @@ import java.util.Map;
 public class OrderController {
 
     /**
-     * 依赖的 OrderService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 订单服务入口，负责订单查询、创建、取消以及与结算流程的衔接。
      */
     private final OrderService orderService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
     /**
-     * 依赖的 SettlementService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 结算服务入口，负责订单成交确认、费用拆分和账本落账编排。
      */
     private final SettlementService settlementService;
     /**
-     * 依赖的 LedgerTxnMapper Mapper，用于读写对应持久化数据。
+     * 账本事务 Mapper，负责账本主事务记录的创建、查询和状态维护。
      */
     private final LedgerTxnMapper ledgerTxnMapper;
     /**
-     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     * 账本分录 Mapper，负责读取影响账户余额和持仓成本的借贷分录。
      */
     private final LedgerPostingMapper ledgerPostingMapper;
     /**
-     * 金额类字段，用于资金、费用、盈亏或统计结果表达。
+     * 券商费率服务，用于根据账户、产品和交易方向计算佣金、平台费、印花税等费用。
      */
     private final BrokerFeeService brokerFeeService;
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
 
     /**
-     * 注入 OrderController 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配订单、结算、账本、产品和费率组件，处理订单列表、订单详情、创建和取消接口。
      */
     public OrderController(OrderService orderService, UserService userService, SettlementService settlementService,
                           LedgerTxnMapper ledgerTxnMapper, LedgerPostingMapper ledgerPostingMapper,
@@ -72,7 +72,7 @@ public class OrderController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 按可选状态查询订单列表，用于订单台账和结算流程筛选。
      */
     @GetMapping
     public ResponseEntity<List<Order>> getOrders(@RequestParam(required = false) String status) {
@@ -86,7 +86,7 @@ public class OrderController {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取单个订单及关联流水、分录或结算信息，用于订单详情页核对。
      */
     @GetMapping("/{orderId}")
     public ResponseEntity<Map<String, Object>> getOrder(@PathVariable String orderId) {
@@ -151,8 +151,7 @@ public class OrderController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 创建手工订单记录，保存产品、方向、数量、金额和费用估算；该操作只记录订单，不调用交易接口。
      */
     @PostMapping
     public ResponseEntity<Order> createOrder(@RequestBody Map<String, Object> request) {
@@ -221,8 +220,7 @@ public class OrderController {
     }
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 取消尚未结算或允许撤销的订单记录，不触发真实证券撤单。
      */
     @PostMapping("/{orderId}/cancel")
     public ResponseEntity<Void> cancelOrder(@PathVariable String orderId) {
@@ -231,7 +229,7 @@ public class OrderController {
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 按订单 ID 写入成交结算信息，确认金额、份额和费用后交由结算服务生成系统内账本影响；不调用真实交易接口。
      */
     @PostMapping("/{orderId}/settle")
     public ResponseEntity<Map<String, Object>> settleOrder(@PathVariable String orderId, @RequestBody Map<String, Object> request) {

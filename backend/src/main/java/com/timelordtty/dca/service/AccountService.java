@@ -34,32 +34,32 @@ import java.util.UUID;
 public class AccountService {
 
     /**
-     * 依赖的 AccountMapper Mapper，用于读写对应持久化数据。
+     * 账户持久化 Mapper，负责账户主表的查询、插入、更新和账户树读取。
      */
     private final AccountMapper accountMapper;
     /**
-     * 依赖的 LedgerPostingMapper Mapper，用于读写对应持久化数据。
+     * 账本分录 Mapper，负责读取影响账户余额和持仓成本的借贷分录。
      */
     private final LedgerPostingMapper ledgerPostingMapper;
     /**
-     * 依赖的 ProductMasterMapper Mapper，用于读写对应持久化数据。
+     * 产品主数据 Mapper，负责产品代码、名称、市场类型和展示顺序的持久化访问。
      */
     private final ProductMasterMapper productMasterMapper;
     /**
-     * 依赖的 NavService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 净值服务入口，负责基金净值记录的导入、查询和按日期维护。
      */
     private final NavService navService;
     /**
-     * 依赖的 LedgerService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 账本服务入口，负责流水事务、分录、余额影响和快速记账编排。
      */
     private final LedgerService ledgerService;
     /**
-     * 依赖的 UserService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 用户身份服务，用于根据当前登录名定位用户、家庭和角色权限上下文。
      */
     private final UserService userService;
 
     /**
-     * 注入 AccountService 所需的 Mapper 和 Service 依赖，建立对应业务协作关系。
+     * 装配账户、账本分录、产品、净值和用户组件，支撑账户树、余额重算和货币基金份额计算。
      */
     public AccountService(AccountMapper accountMapper, LedgerPostingMapper ledgerPostingMapper,
                          ProductMasterMapper productMasterMapper, NavService navService,

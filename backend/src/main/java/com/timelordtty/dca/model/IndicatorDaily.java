@@ -20,39 +20,39 @@ public class IndicatorDaily {
      */
     private LocalDate tradeDate;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 指标回看窗口天数，用于计算百分位、均线或回撤等时间序列指标。
      */
     private Integer windowDays;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 价格或净值在回看窗口中的百分位排名，用于判断当前估值所处区间。
      */
     private BigDecimal pctRank;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 买入分位参考价，来自指标计算结果，用于策略页面展示低位买入区间。
      */
     private BigDecimal qBuyPrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 中位分位参考价，来自指标计算结果，用于估值中枢展示。
      */
     private BigDecimal qMidPrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 高位分位参考价，来自指标计算结果，用于提示相对高估区间。
      */
     private BigDecimal qHighPrice;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 回看窗口内最高收盘价，用于计算从阶段高点以来的回撤比例。
      */
     private BigDecimal peakClose;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 从阶段高点回撤比例，用于衡量当前价格相对近期高点的下跌幅度。
      */
     private BigDecimal drawdownFromPeak;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 20 日移动平均值，用于短周期趋势判断。
      */
     private BigDecimal ma20;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 60 日移动平均值，用于中周期趋势判断。
      */
     private BigDecimal ma60;
 
@@ -100,28 +100,28 @@ public class IndicatorDaily {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取指标计算窗口天数，例如百分位或均线统计使用的回看区间。
      */
     public Integer getWindowDays() {
         return windowDays;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置指标回看窗口天数，决定百分位和均线等计算使用的历史范围。
      */
     public void setWindowDays(Integer windowDays) {
         this.windowDays = windowDays;
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取当前指标值在回看窗口中的百分位排名。
      */
     public BigDecimal getPctRank() {
         return pctRank;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置百分位排名，保存指标计算得到的估值位置。
      */
     public void setPctRank(BigDecimal pctRank) {
         this.pctRank = pctRank;
@@ -184,42 +184,42 @@ public class IndicatorDaily {
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取从阶段高点回撤的比例，用于衡量标的下跌幅度。
      */
     public BigDecimal getDrawdownFromPeak() {
         return drawdownFromPeak;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置阶段回撤比例，保存当前价格相对窗口高点的下跌幅度。
      */
     public void setDrawdownFromPeak(BigDecimal drawdownFromPeak) {
         this.drawdownFromPeak = drawdownFromPeak;
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取 20 日移动平均值，用于短周期趋势判断。
      */
     public BigDecimal getMa20() {
         return ma20;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置 20 日移动平均值，保存短周期趋势指标。
      */
     public void setMa20(BigDecimal ma20) {
         this.ma20 = ma20;
     }
 
     /**
-     * 返回当前场景的业务数据，用于前后端传递或服务层计算。
+     * 读取 60 日移动平均值，用于中周期趋势判断。
      */
     public BigDecimal getMa60() {
         return ma60;
     }
 
     /**
-     * 设置当前场景的业务数据，用于前后端传递或服务层计算。
+     * 设置 60 日移动平均值，保存中周期趋势指标。
      */
     public void setMa60(BigDecimal ma60) {
         this.ma60 = ma60;

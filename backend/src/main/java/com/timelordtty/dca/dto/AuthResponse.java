@@ -12,7 +12,7 @@ public class AuthResponse {
      */
     private String token;
     /**
-     * 请求或响应字段，用于前后端传递该场景的业务信息。
+     * 认证响应中的用户信息对象，包含用户 ID、用户名、昵称和家庭归属等前端会话资料。
      */
     private UserInfo user;
 

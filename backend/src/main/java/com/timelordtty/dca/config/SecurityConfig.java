@@ -19,19 +19,19 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     /**
-     * 日期或时间字段，用于业务归属、确认或审计排序。
+     * JWT 认证过滤器，在请求进入 Controller 前解析 Bearer Token，并把通过校验的用户身份写入 Spring Security 上下文。
      */
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     /**
-     * 执行 SecurityConfig 相关后端逻辑，保持既有业务契约不变。
+     * 注入 JWT 认证过滤器，供安全过滤链在请求进入业务接口前完成身份解析。
      */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
     /**
-     * 执行 passwordEncoder 相关后端逻辑，保持既有业务契约不变。
+     * 创建 BCrypt 密码编码器，用于注册入库密码哈希和登录密码校验。
      */
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -39,7 +39,7 @@ public class SecurityConfig {
     }
 
     /**
-     * 执行 securityFilterChain 相关后端逻辑，保持既有业务契约不变。
+     * 定义后端安全过滤链：关闭 CSRF，使用无状态 Session，放行登录注册与健康检查，并在用户名密码过滤器前接入 JWT 过滤器。
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {

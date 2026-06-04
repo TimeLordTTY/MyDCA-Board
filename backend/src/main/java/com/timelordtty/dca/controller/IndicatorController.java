@@ -20,17 +20,16 @@ import java.util.Map;
 public class IndicatorController {
 
     /**
-     * 依赖的 IndicatorService 服务，用于复用该领域的业务校验和事务逻辑。
+     * 指标服务入口，负责按标的和交易日查询或刷新技术指标结果。
      */
     private final IndicatorService indicatorService;
     /**
-     * 依赖的 PythonScriptService 服务，用于复用该领域的业务校验和事务逻辑。
+     * Python 脚本执行网关，用于触发已接入的行情、指标或产品同步脚本并收集执行结果。
      */
     private final PythonScriptService pythonScriptService;
 
     /**
-     * 处理写入类 API，将请求参数校验后委托给 Service 层。
-     * 是否产生账本、账户或订单变更由对应 Service 事务边界决定。
+     * 装配指标服务和脚本执行网关，支持指标查询和手动刷新入口。
      */
     public IndicatorController(IndicatorService indicatorService, PythonScriptService pythonScriptService) {
         this.indicatorService = indicatorService;
