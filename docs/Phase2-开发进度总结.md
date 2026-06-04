@@ -1,6 +1,6 @@
 # Phase 2 开发进度总结（前端开发与行情增强）
 
-**阶段状态**：进行中。Phase 2 的双端前端、行情、指标、定时任务高优先级闭环已完成；流水统计功能已落地，债券行情、BOLL/KDJ 等仍在 Phase 2 待完善清单中。
+**阶段状态**：进行中。Phase 2 的双端前端、行情、指标、定时任务高优先级闭环已完成；流水统计功能已落地，BOLL/KDJ 扩展指标首版已完成，债券行情仍在 Phase 2 待完善清单中。
 
 **当前代码核对时间**：2026-05-19
 
@@ -196,7 +196,7 @@
   - 调用`/api/v2/holdings`
 - ✅ **持仓详情**（HoldingDetailModal.vue）：
   - ✅ 显示持仓历史曲线（历史净值曲线图表、历史行情K线图）
-  - ✅ 显示技术指标图表（MA20、MA60、分位）
+  - ✅ 显示技术指标图表（MA20、MA60、BOLL、KDJ、分位）
   - ✅ 标签页切换（净值曲线、K线图、技术指标）
 - ✅ 所有金额格式化显示
 
@@ -380,7 +380,7 @@
 
 ## Phase 2.2-2.4 开发进度（行情与指标模块）
 
-**当前状态**：✅ Phase 2.2-2.4 高优先级能力已落地；剩余为增强项（债券行情、BOLL/KDJ 等）
+**当前状态**：✅ Phase 2.2-2.4 高优先级能力已落地；BOLL/KDJ 扩展指标首版已完成；剩余增强项以债券行情等为主。
 
 **完成时间**：2024年1月
 
@@ -424,8 +424,10 @@ scripts/market/
   - ✅ MA（移动平均线）计算（`ma_calculator.py`）
   - ✅ MACD指标计算（`macd_calculator.py`）
   - ✅ RSI指标计算（`rsi_calculator.py`）
-  - ✅ 前端当前使用的 MA20 / MA60 / 分位查询已可用（数据库结果优先，缺失时后端临时派生）
-  - ⚠️ BOLL / KDJ 等更多技术指标待扩展
+  - ✅ BOLL 指标计算（`boll_calculator.py`，20/60 日窗口，写入中轨、上轨、下轨、标准差）
+  - ✅ KDJ 指标计算（`kdj_calculator.py`，9 日 RSV 与 K/D/J 递推）
+  - ✅ 前端当前使用的 MA20 / MA60 / BOLL / KDJ / 分位查询已可用（数据库结果优先，缺失时后端临时派生）
+  - ⚠️ CCI、DMI、OBV 等更多技术指标待后续扩展
 - ✅ **指标数据存储**：
   - ✅ indicator_daily表数据写入
   - ✅ 指标数据更新策略（覆盖更新）
@@ -441,7 +443,9 @@ scripts/indicator/
 ├── calculator.py          # 指标计算主程序 ✅
 ├── ma_calculator.py      # 移动平均线计算 ✅
 ├── macd_calculator.py    # MACD指标计算 ✅
-└── rsi_calculator.py     # RSI指标计算 ✅
+├── rsi_calculator.py     # RSI指标计算 ✅
+├── boll_calculator.py    # BOLL指标计算 ✅
+└── kdj_calculator.py     # KDJ指标计算 ✅
 ```
 
 ### Phase 2.4：定时任务 ✅
@@ -515,8 +519,8 @@ scripts/scheduler/
   - [ ] 债券行情采集
   - [ ] 错误处理和重试机制优化
 - [ ] **扩展指标计算**：
-  - [ ] 布林带（BOLL）指标
-  - [ ] KDJ指标
+  - [x] 布林带（BOLL）指标
+  - [x] KDJ指标
   - [ ] 其他常用技术指标
 
 #### 低优先级
@@ -580,7 +584,7 @@ mvn clean compile
 - [x] 流水统计功能（按日期、账户、分类、交易类型多维统计，支持多选筛选）
 - [ ] 债券行情采集
 - [ ] 股票行情独立采集脚本（当前通过 ETF 采集/历史回补逻辑复用）
-- [ ] BOLL / KDJ 等扩展指标
+- [x] BOLL / KDJ 扩展指标首版
 - [ ] 持仓成本分析 / 持仓收益统计
 - [ ] 完整策略建议闭环（顺延至 Phase 4 策略建议闭环）
 - [ ] 复盘导出与回测实验室（Phase 5/6）
@@ -614,7 +618,7 @@ mvn clean compile
 - [x] **持仓详情页面（HoldingDetailModal.vue）**：
   - [x] 历史净值曲线图表（使用ECharts） ✅
   - [x] 历史行情K线图（使用ECharts） ✅
-  - [x] 技术指标图表（MA20、MA60、分位） ✅
+  - [x] 技术指标图表（MA20、MA60、BOLL、KDJ、分位） ✅
   - [x] 标签页切换（净值曲线、K线图、技术指标） ✅
 - [x] **看板页面（Dashboard.vue）**：
   - [x] 持仓市值基于实时行情计算 ✅
@@ -637,8 +641,8 @@ mvn clean compile
 - [x] 数据源切换支持（AKSHARE、FUND等）（配置已存在，但切换逻辑待完善）
 
 #### 6. 指标计算扩展（计划放入 Phase 4“策略建议闭环”或 Phase2 增强项）
-- [ ] 布林带（BOLL）指标
-- [ ] KDJ指标
+- [x] 布林带（BOLL）指标首版
+- [x] KDJ指标首版
 - [ ] 其他常用技术指标（CCI、DMI、OBV等）
 
 #### 7. 前端功能增强（移动端增强迁移至 Phase3 对话优先草稿闭环与原生 App 基础，策略/导出类能力顺延至 Phase4+）

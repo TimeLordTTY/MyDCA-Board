@@ -23,6 +23,8 @@ except ImportError:
 from indicator.ma_calculator import MACalculator
 from indicator.macd_calculator import MACDCalculator
 from indicator.rsi_calculator import RSICalculator
+from indicator.boll_calculator import BOLLCalculator
+from indicator.kdj_calculator import KDJCalculator
 
 
 class IndicatorCalculator:
@@ -34,6 +36,8 @@ class IndicatorCalculator:
         self.ma_calc = MACalculator(self.conn)
         self.macd_calc = MACDCalculator(self.conn)
         self.rsi_calc = RSICalculator(self.conn)
+        self.boll_calc = BOLLCalculator(self.conn)
+        self.kdj_calc = KDJCalculator(self.conn)
     
     def connect_db(self):
         """连接数据库"""
@@ -67,14 +71,19 @@ class IndicatorCalculator:
         
         print(f"计算产品 {product_id} 的指标（截止日期: {end_date}）...")
         
-        # 计算MA
-        self.ma_calc.calculate(product_id, end_date)
-        
-        # 计算MACD
-        self.macd_calc.calculate(product_id, end_date)
-        
-        # 计算RSI
-        self.rsi_calc.calculate(product_id, end_date)
+        self._run_calculator('MA', self.ma_calc.calculate, product_id, end_date)
+        self._run_calculator('MACD', self.macd_calc.calculate, product_id, end_date)
+        self._run_calculator('RSI', self.rsi_calc.calculate, product_id, end_date)
+        self._run_calculator('BOLL20', self.boll_calc.calculate, product_id, end_date, 20)
+        self._run_calculator('BOLL60', self.boll_calc.calculate, product_id, end_date, 60)
+        self._run_calculator('KDJ', self.kdj_calc.calculate, product_id, end_date, 9, [20, 60])
+
+    def _run_calculator(self, name: str, func, *args):
+        """执行单个指标计算器，单项失败不阻断同产品的其他指标。"""
+        try:
+            func(*args)
+        except Exception as e:
+            print(f"  指标 {name} 计算失败，已跳过并继续后续指标: {e}")
     
     def calculate_all_products(self, end_date: date = None):
         """计算所有产品的指标"""

@@ -15,6 +15,16 @@
         <result column="drawdown_from_peak" property="drawdownFromPeak"/>
         <result column="ma20" property="ma20"/>
         <result column="ma60" property="ma60"/>
+        <result column="boll_middle" property="bollMiddle"/>
+        <result column="boll_upper" property="bollUpper"/>
+        <result column="boll_lower" property="bollLower"/>
+        <result column="boll_std" property="bollStd"/>
+        <result column="boll_window" property="bollWindow"/>
+        <result column="kdj_k" property="kdjK"/>
+        <result column="kdj_d" property="kdjD"/>
+        <result column="kdj_j" property="kdjJ"/>
+        <result column="kdj_rsv" property="kdjRsv"/>
+        <result column="kdj_window" property="kdjWindow"/>
     </resultMap>
 
     <select id="selectByProductId" resultMap="BaseResultMap">
@@ -46,11 +56,13 @@
         INSERT INTO indicator_daily (
             product_id, trade_date, window_days, pct_rank, q_buy_price,
             q_mid_price, q_high_price, peak_close, drawdown_from_peak,
-            ma20, ma60, created_at
+            ma20, ma60, boll_middle, boll_upper, boll_lower, boll_std, boll_window,
+            kdj_k, kdj_d, kdj_j, kdj_rsv, kdj_window, created_at
         ) VALUES (
             #{productId}, #{tradeDate}, #{windowDays}, #{pctRank}, #{qBuyPrice},
             #{qMidPrice}, #{qHighPrice}, #{peakClose}, #{drawdownFromPeak},
-            #{ma20}, #{ma60}, NOW()
+            #{ma20}, #{ma60}, #{bollMiddle}, #{bollUpper}, #{bollLower}, #{bollStd}, #{bollWindow},
+            #{kdjK}, #{kdjD}, #{kdjJ}, #{kdjRsv}, #{kdjWindow}, NOW()
         )
         ON DUPLICATE KEY UPDATE
             pct_rank = VALUES(pct_rank),
@@ -60,7 +72,17 @@
             peak_close = VALUES(peak_close),
             drawdown_from_peak = VALUES(drawdown_from_peak),
             ma20 = VALUES(ma20),
-            ma60 = VALUES(ma60)
+            ma60 = VALUES(ma60),
+            boll_middle = VALUES(boll_middle),
+            boll_upper = VALUES(boll_upper),
+            boll_lower = VALUES(boll_lower),
+            boll_std = VALUES(boll_std),
+            boll_window = VALUES(boll_window),
+            kdj_k = VALUES(kdj_k),
+            kdj_d = VALUES(kdj_d),
+            kdj_j = VALUES(kdj_j),
+            kdj_rsv = VALUES(kdj_rsv),
+            kdj_window = VALUES(kdj_window)
     </insert>
 
     <update id="update">
@@ -72,7 +94,17 @@
             peak_close = #{peakClose},
             drawdown_from_peak = #{drawdownFromPeak},
             ma20 = #{ma20},
-            ma60 = #{ma60}
+            ma60 = #{ma60},
+            boll_middle = #{bollMiddle},
+            boll_upper = #{bollUpper},
+            boll_lower = #{bollLower},
+            boll_std = #{bollStd},
+            boll_window = #{bollWindow},
+            kdj_k = #{kdjK},
+            kdj_d = #{kdjD},
+            kdj_j = #{kdjJ},
+            kdj_rsv = #{kdjRsv},
+            kdj_window = #{kdjWindow}
         WHERE id = #{id}
     </update>
 

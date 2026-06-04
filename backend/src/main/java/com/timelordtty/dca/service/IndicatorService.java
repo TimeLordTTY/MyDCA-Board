@@ -57,8 +57,16 @@ public class IndicatorService {
         List<BigDecimal> closes = asc.stream()
                 .map(b -> b.getClosePrice() != null ? b.getClosePrice() : BigDecimal.ZERO)
                 .toList();
+        List<IndicatorMath.KdjBar> kdjBars = asc.stream()
+                .map(b -> new IndicatorMath.KdjBar(
+                        b.getHighPrice() != null ? b.getHighPrice() : b.getClosePrice(),
+                        b.getLowPrice() != null ? b.getLowPrice() : b.getClosePrice(),
+                        b.getClosePrice()))
+                .toList();
 
         List<IndicatorDaily> derived = new ArrayList<>(asc.size());
+        BigDecimal previousK = null;
+        BigDecimal previousD = null;
         for (int i = 0; i < asc.size(); i++) {
             IndicatorDaily d = new IndicatorDaily();
             d.setProductId(productId);
@@ -68,6 +76,27 @@ public class IndicatorService {
             // MA20/MA60（若不足窗口则置null）
             d.setMa20(calcMA(closes, i, 20));
             d.setMa60(calcMA(closes, i, 60));
+
+            int bollWindow = normalizeWindow(windowDays, 20);
+            IndicatorMath.BollValue boll = IndicatorMath.calculateBoll(closes, i, bollWindow);
+            if (boll != null) {
+                d.setBollMiddle(boll.middle());
+                d.setBollUpper(boll.upper());
+                d.setBollLower(boll.lower());
+                d.setBollStd(boll.std());
+                d.setBollWindow(bollWindow);
+            }
+
+            IndicatorMath.KdjValue kdj = IndicatorMath.calculateKdj(kdjBars, i, 9, previousK, previousD);
+            if (kdj != null) {
+                d.setKdjK(kdj.k());
+                d.setKdjD(kdj.d());
+                d.setKdjJ(kdj.j());
+                d.setKdjRsv(kdj.rsv());
+                d.setKdjWindow(9);
+                previousK = kdj.k();
+                previousD = kdj.d();
+            }
 
             // 分位：以 windowDays 作为滚动窗口，计算当前 close 在窗口内的经验分位 [0,1]
             d.setPctRank(calcPctRank(closes, i, windowDays));
@@ -93,6 +122,10 @@ public class IndicatorService {
         LocalDate start = end.minusDays(90);
         List<IndicatorDaily> list = getHistoryIndicators(productId, start, end, windowDays);
         return list.isEmpty() ? null : list.get(0); // list 已按倒序
+    }
+
+    private int normalizeWindow(Integer windowDays, int defaultWindow) {
+        return windowDays != null && windowDays > 0 ? windowDays : defaultWindow;
     }
 
     private BigDecimal calcMA(List<BigDecimal> closes, int idx, int window) {

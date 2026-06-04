@@ -284,15 +284,6 @@ function formatTxnType(type: string): string {
   return typeMap[type] || type
 }
 
-function getTxnTypeColor(type: string): string {
-  if (['BUY', 'SUBSCRIPTION', 'TRANSFER_IN', 'INCOME', 'ADJUST'].includes(type)) {
-    return '#ef4444' // 红色 - 买入/收入/调整
-  } else if (['SELL', 'REDEMPTION', 'TRANSFER_OUT', 'EXPENSE'].includes(type)) {
-    return '#16a34a' // 绿色 - 卖出/支出
-  }
-  return '#64748b'
-}
-
 /**
  * 格式化金额，根据交易类型添加正负号
  * 买入/申购应该显示为正数（表示投入的金额）
@@ -477,14 +468,20 @@ function renderIndicatorChart() {
   const dates = indicatorData.value.map(i => i.tradeDate)
   const ma20 = indicatorData.value.map(i => i.ma20 || null)
   const ma60 = indicatorData.value.map(i => i.ma60 || null)
-  const pctRank = indicatorData.value.map(i => i.pctRank || null)
+  const bollMiddle = indicatorData.value.map(i => i.bollMiddle || null)
+  const bollUpper = indicatorData.value.map(i => i.bollUpper || null)
+  const bollLower = indicatorData.value.map(i => i.bollLower || null)
+  const pctRank = indicatorData.value.map(i => i.pctRank != null ? i.pctRank * 100 : null)
+  const kdjK = indicatorData.value.map(i => i.kdjK || null)
+  const kdjD = indicatorData.value.map(i => i.kdjD || null)
+  const kdjJ = indicatorData.value.map(i => i.kdjJ || null)
 
   indicatorChart.setOption({
     tooltip: {
       trigger: 'axis',
     },
     legend: {
-      data: ['MA20', 'MA60', '分位']
+      data: ['MA20', 'MA60', 'BOLL中轨', 'BOLL上轨', 'BOLL下轨', '分位%', 'K', 'D', 'J']
     },
     xAxis: {
       type: 'category',
@@ -498,9 +495,9 @@ function renderIndicatorChart() {
       },
       {
         type: 'value',
-        name: '分位',
+        name: '分位/KDJ',
         min: 0,
-        max: 1,
+        max: 100,
         position: 'right',
       }
     ],
@@ -520,12 +517,66 @@ function renderIndicatorChart() {
         itemStyle: { color: '#67C23A' }
       },
       {
-        name: '分位',
+        name: 'BOLL中轨',
+        type: 'line',
+        data: bollMiddle,
+        smooth: true,
+        symbol: 'none',
+        itemStyle: { color: '#909399' },
+        lineStyle: { type: 'dashed' }
+      },
+      {
+        name: 'BOLL上轨',
+        type: 'line',
+        data: bollUpper,
+        smooth: true,
+        symbol: 'none',
+        itemStyle: { color: '#F56C6C' },
+        lineStyle: { type: 'dotted' }
+      },
+      {
+        name: 'BOLL下轨',
+        type: 'line',
+        data: bollLower,
+        smooth: true,
+        symbol: 'none',
+        itemStyle: { color: '#67C23A' },
+        lineStyle: { type: 'dotted' }
+      },
+      {
+        name: '分位%',
         type: 'line',
         yAxisIndex: 1,
         data: pctRank,
         smooth: true,
         itemStyle: { color: '#E6A23C' }
+      },
+      {
+        name: 'K',
+        type: 'line',
+        yAxisIndex: 1,
+        data: kdjK,
+        smooth: true,
+        symbol: 'none',
+        itemStyle: { color: '#9B59B6' }
+      },
+      {
+        name: 'D',
+        type: 'line',
+        yAxisIndex: 1,
+        data: kdjD,
+        smooth: true,
+        symbol: 'none',
+        itemStyle: { color: '#16A085' }
+      },
+      {
+        name: 'J',
+        type: 'line',
+        yAxisIndex: 1,
+        data: kdjJ,
+        smooth: true,
+        symbol: 'none',
+        itemStyle: { color: '#D35400' }
       }
     ]
   })

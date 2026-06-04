@@ -55,6 +55,46 @@ public class IndicatorDaily {
      * 60 日移动平均值，用于中周期趋势判断。
      */
     private BigDecimal ma60;
+    /**
+     * BOLL 中轨，通常为窗口内收盘价移动平均值。
+     */
+    private BigDecimal bollMiddle;
+    /**
+     * BOLL 上轨，通常为中轨加两倍标准差。
+     */
+    private BigDecimal bollUpper;
+    /**
+     * BOLL 下轨，通常为中轨减两倍标准差。
+     */
+    private BigDecimal bollLower;
+    /**
+     * BOLL 标准差，衡量窗口内价格波动幅度。
+     */
+    private BigDecimal bollStd;
+    /**
+     * BOLL 计算窗口天数，首版默认与 windowDays 保持一致。
+     */
+    private Integer bollWindow;
+    /**
+     * KDJ 的 K 值，反映短期价格位置变化。
+     */
+    private BigDecimal kdjK;
+    /**
+     * KDJ 的 D 值，是 K 值的平滑结果。
+     */
+    private BigDecimal kdjD;
+    /**
+     * KDJ 的 J 值，用于放大 K 与 D 的背离。
+     */
+    private BigDecimal kdjJ;
+    /**
+     * KDJ 的 RSV 值，表示当前收盘价在窗口高低区间中的位置。
+     */
+    private BigDecimal kdjRsv;
+    /**
+     * KDJ 计算窗口天数，首版默认使用 9 日。
+     */
+    private Integer kdjWindow;
 
     // Getters and Setters
     /**
@@ -224,4 +264,144 @@ public class IndicatorDaily {
     public void setMa60(BigDecimal ma60) {
         this.ma60 = ma60;
     }
+    /**
+     * 读取 BOLL 中轨。
+     */
+    public BigDecimal getBollMiddle() {
+        return bollMiddle;
+    }
+
+    /**
+     * 设置 BOLL 中轨。
+     */
+    public void setBollMiddle(BigDecimal bollMiddle) {
+        this.bollMiddle = bollMiddle;
+    }
+
+    /**
+     * 读取 BOLL 上轨。
+     */
+    public BigDecimal getBollUpper() {
+        return bollUpper;
+    }
+
+    /**
+     * 设置 BOLL 上轨。
+     */
+    public void setBollUpper(BigDecimal bollUpper) {
+        this.bollUpper = bollUpper;
+    }
+
+    /**
+     * 读取 BOLL 下轨。
+     */
+    public BigDecimal getBollLower() {
+        return bollLower;
+    }
+
+    /**
+     * 设置 BOLL 下轨。
+     */
+    public void setBollLower(BigDecimal bollLower) {
+        this.bollLower = bollLower;
+    }
+
+    /**
+     * 读取 BOLL 标准差。
+     */
+    public BigDecimal getBollStd() {
+        return bollStd;
+    }
+
+    /**
+     * 设置 BOLL 标准差。
+     */
+    public void setBollStd(BigDecimal bollStd) {
+        this.bollStd = bollStd;
+    }
+
+    /**
+     * 读取 BOLL 窗口天数。
+     */
+    public Integer getBollWindow() {
+        return bollWindow;
+    }
+
+    /**
+     * 设置 BOLL 窗口天数。
+     */
+    public void setBollWindow(Integer bollWindow) {
+        this.bollWindow = bollWindow;
+    }
+
+    /**
+     * 读取 KDJ 的 K 值。
+     */
+    public BigDecimal getKdjK() {
+        return kdjK;
+    }
+
+    /**
+     * 设置 KDJ 的 K 值。
+     */
+    public void setKdjK(BigDecimal kdjK) {
+        this.kdjK = kdjK;
+    }
+
+    /**
+     * 读取 KDJ 的 D 值。
+     */
+    public BigDecimal getKdjD() {
+        return kdjD;
+    }
+
+    /**
+     * 设置 KDJ 的 D 值。
+     */
+    public void setKdjD(BigDecimal kdjD) {
+        this.kdjD = kdjD;
+    }
+
+    /**
+     * 读取 KDJ 的 J 值。
+     */
+    public BigDecimal getKdjJ() {
+        return kdjJ;
+    }
+
+    /**
+     * 设置 KDJ 的 J 值。
+     */
+    public void setKdjJ(BigDecimal kdjJ) {
+        this.kdjJ = kdjJ;
+    }
+
+    /**
+     * 读取 KDJ 的 RSV 值。
+     */
+    public BigDecimal getKdjRsv() {
+        return kdjRsv;
+    }
+
+    /**
+     * 设置 KDJ 的 RSV 值。
+     */
+    public void setKdjRsv(BigDecimal kdjRsv) {
+        this.kdjRsv = kdjRsv;
+    }
+
+    /**
+     * 读取 KDJ 窗口天数。
+     */
+    public Integer getKdjWindow() {
+        return kdjWindow;
+    }
+
+    /**
+     * 设置 KDJ 窗口天数。
+     */
+    public void setKdjWindow(Integer kdjWindow) {
+        this.kdjWindow = kdjWindow;
+    }
+
 }
