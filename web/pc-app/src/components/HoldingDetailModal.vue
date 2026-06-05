@@ -37,11 +37,32 @@
           <div id="navChart" style="width: 100%; height: 400px"></div>
         </el-tab-pane>
 
-        <!-- 场内：IOPV/估值与溢价 -->
-        <el-tab-pane v-if="isExchange" label="IOPV/估值" name="iopv">
+        <!-- 场内：IOPV/估值与溢价；BOND_REPO 使用同一行情接口展示债券行情 -->
+        <el-tab-pane v-if="isExchange" :label="isBondRepo ? '债券行情' : 'IOPV/估值'" name="iopv">
+          <div v-if="isBondRepo" class="bond-quote-summary">
+            <div>
+              <span class="td-muted">最新价/年化收益率</span>
+              <strong>{{ formatNumber(latestQuote?.price || 0, 4) }}</strong>
+            </div>
+            <div>
+              <span class="td-muted">涨跌幅</span>
+              <strong>{{ formatRatioPercent(latestQuote?.pctChg) }}</strong>
+            </div>
+            <div>
+              <span class="td-muted">成交量</span>
+              <strong>{{ latestQuote?.volume != null ? formatNumber(latestQuote.volume, 2) : '-' }}</strong>
+            </div>
+            <div>
+              <span class="td-muted">成交额</span>
+              <strong>{{ latestQuote?.amount != null ? formatCurrency(latestQuote.amount) : '-' }}</strong>
+            </div>
+          </div>
           <div id="iopvChart" style="width: 100%; height: 400px"></div>
-          <div class="td-muted" style="margin-top: 8px; font-size: 12px">
+          <div v-if="!isBondRepo" class="td-muted" style="margin-top: 8px; font-size: 12px">
             注：IOPV来自实时行情采集；历史范围仅覆盖系统开始采集后的数据。
+          </div>
+          <div v-else class="td-muted" style="margin-top: 8px; font-size: 12px">
+            注：债券/国债逆回购行情来自实时行情采集；价格字段按行情源返回值展示，不作为基金净值使用。
           </div>
         </el-tab-pane>
 
@@ -198,7 +219,9 @@ const transactionLoading = ref(false)
 
 const isExchange = computed(() => props.holding?.channel === 'EXCHANGE')
 const isOtc = computed(() => props.holding?.channel === 'OTC')
+const isBondRepo = computed(() => props.holding?.assetType === 'BOND_REPO')
 const latestIndicator = computed(() => indicatorData.value.length > 0 ? indicatorData.value[indicatorData.value.length - 1] : null)
+const latestQuote = computed(() => quoteHistory.value.length > 0 ? quoteHistory.value[quoteHistory.value.length - 1] : null)
 
 watch([visible, activeTab], async ([newVisible, newTab]) => {
   if (newVisible && props.holding) {
@@ -333,6 +356,11 @@ function formatIndicatorValue(value?: number): string {
   return value == null ? '-' : formatNumber(value, 4)
 }
 
+function formatRatioPercent(value?: number | null): string {
+  if (value == null) return '-'
+  return `${value >= 0 ? '+' : ''}${formatNumber(value * 100, 2)}%`
+}
+
 /**
  * 格式化金额，根据交易类型添加正负号
  * 买入/申购应该显示为正数（表示投入的金额）
@@ -430,6 +458,24 @@ function renderIopvChart() {
   const price = quoteHistory.value.map((q: any) => q.price ?? null)
   const iopv = quoteHistory.value.map((q: any) => q.iopv ?? null)
   const premium = quoteHistory.value.map((q: any) => q.premiumRate ?? null)
+  const pctChg = quoteHistory.value.map((q: any) => q.pctChg != null ? q.pctChg * 100 : null)
+
+  if (isBondRepo.value) {
+    iopvChart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['最新价/年化收益率', '涨跌幅%'] },
+      xAxis: { type: 'category', data: dates },
+      yAxis: [
+        { type: 'value', name: '价格/收益率', scale: true },
+        { type: 'value', name: '涨跌幅%', scale: true, position: 'right' },
+      ],
+      series: [
+        { name: '最新价/年化收益率', type: 'line', data: price, smooth: true },
+        { name: '涨跌幅%', type: 'line', yAxisIndex: 1, data: pctChg, smooth: true },
+      ],
+    })
+    return
+  }
 
   iopvChart.setOption({
     tooltip: { trigger: 'axis' },
@@ -652,6 +698,7 @@ if (typeof window !== 'undefined') {
     navChart?.resize()
     klineChart?.resize()
     indicatorChart?.resize()
+    iopvChart?.resize()
   })
 }
 </script>
@@ -742,12 +789,39 @@ if (typeof window !== 'undefined') {
   color: #0f172a;
 }
 
+.bond-quote-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid rgba(230, 162, 60, 0.2);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(230, 162, 60, 0.1), rgba(245, 158, 11, 0.04));
+}
+
+.bond-quote-summary div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bond-quote-summary strong {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  font-size: 14px;
+  color: #92400e;
+}
+
 @media (max-width: 768px) {
   .indicator-summary {
     grid-template-columns: 1fr;
   }
 
   .indicator-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bond-quote-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

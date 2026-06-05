@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 行情数据定时采集任务
  * 
  * 定时任务说明：
- * - 场内产品（ETF/股票/期货/期权）：交易时间内每分钟采集一次实时行情
+ * - 场内产品（ETF/股票/期货/期权/国债逆回购）：交易时间内每分钟采集一次实时行情
  * - 场外产品（基金）：每日18:00采集净值（T+1日净值通常在18:00更新）
  * - 场内产品日K线：每日15:30采集（收盘后）
  */
@@ -120,6 +120,10 @@ public class MarketDataScheduler {
             logger.info("开始采集场内产品实时行情...");
             String result = pythonScriptService.collectETFRealtime();
             logger.info("场内产品实时行情采集完成: {}", result);
+
+            logger.info("开始采集债券/国债逆回购实时行情...");
+            String bondResult = pythonScriptService.collectBondRealtime();
+            logger.info("债券/国债逆回购实时行情采集完成: {}", bondResult);
         } catch (Exception e) {
             logger.error("场内产品实时行情采集异常", e);
         } finally {
@@ -185,6 +189,10 @@ public class MarketDataScheduler {
             logger.info("开始采集场内产品日K线...");
             String result = pythonScriptService.collectETFDaily();
             logger.info("场内产品日K线采集完成: {}", result);
+
+            logger.info("开始采集债券/国债逆回购日线行情...");
+            String bondResult = pythonScriptService.collectBondDaily();
+            logger.info("债券/国债逆回购日线行情采集完成: {}", bondResult);
         } catch (Exception e) {
             logger.error("场内产品日K线采集异常", e);
         }
@@ -218,6 +226,8 @@ public class MarketDataScheduler {
                             logger.info("服务启动后主动采集一次场内实时行情（用于IOPV/估值展示）...");
                             String rt = pythonScriptService.collectETFRealtime();
                             logger.info("启动实时行情采集完成: {}", rt);
+                            String bondRt = pythonScriptService.collectBondRealtime();
+                            logger.info("启动债券/国债逆回购实时行情采集完成: {}", bondRt);
                         } else {
                             logger.info("启动后不触发场内实时行情采集（冷却窗口内或已有任务在运行）");
                         }

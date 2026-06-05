@@ -212,6 +212,34 @@ public class PythonScriptService {
     }
 
     /**
+     * 执行债券/国债逆回购实时行情采集脚本。
+     *
+     * @return 执行结果
+     */
+    public String collectBondRealtime() {
+        try {
+            return executeScript("scripts/market/bond_collector.py", "--type", "realtime");
+        } catch (IOException e) {
+            logger.error("债券实时行情采集失败", e);
+            return "失败: " + e.getMessage();
+        }
+    }
+
+    /**
+     * 执行债券/国债逆回购日线行情采集脚本。
+     *
+     * @return 执行结果
+     */
+    public String collectBondDaily() {
+        try {
+            return executeScript("scripts/market/bond_collector.py", "--type", "daily");
+        } catch (IOException e) {
+            logger.error("债券日线行情采集失败", e);
+            return "失败: " + e.getMessage();
+        }
+    }
+
+    /**
      * 执行指标计算脚本（全量产品）
      */
     public String runIndicatorCalculator() {
