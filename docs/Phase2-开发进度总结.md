@@ -394,7 +394,7 @@
   - ✅ 实现基金净值采集（`fund_collector.py`）
   - ✅ 实现ETF行情采集（`etf_collector.py`）
   - ✅ 股票行情采集（已可获取：由 `etf_collector.py`/`backfill_fund_nav_history.py` 覆盖，独立脚本未单列）
-  - ✅ 债券/国债逆回购行情采集首版（`bond_collector.py`，覆盖 `BOND_REPO` 场内产品）
+  - ✅ 债券/国债逆回购行情采集首版（`bond_collector.py`，覆盖 `BOND_REPO` 场内产品；日线首版由当日实时快照生成）
 - ✅ **行情数据存储**：
   - ✅ market_bar_daily表数据写入（日K线）
   - ✅ market_quote_realtime表数据写入（实时行情）
@@ -518,7 +518,7 @@ scripts/scheduler/
 #### 中优先级
 - [ ] **完善行情采集**：
   - [x] 股票行情采集（已可获取：复用现有采集/回补逻辑）
-  - [x] 债券/国债逆回购行情采集首版（覆盖 `BOND_REPO`，写入实时行情与日线表）
+  - [x] 债券/国债逆回购行情采集首版（覆盖 `BOND_REPO`，写入实时行情与日线表；日线首版由当日实时快照生成）
   - [ ] 错误处理和重试机制优化
 - [ ] **扩展指标计算**：
   - [x] 布林带（BOLL）指标
