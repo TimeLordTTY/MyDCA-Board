@@ -43,8 +43,8 @@ public class IndicatorService {
             return indicators;
         }
 
-        // 兜底：若指标表为空（常见于OTC基金），基于“日K/净值派生K线”的 closePrice 临时计算
-        // 仅填充前端目前使用的字段：ma20/ma60/pctRank
+        // 兜底：若指标表为空（常见于OTC基金），基于“日K/净值派生K线”临时计算前端指标图所需字段。
+        // 该路径只做内存派生，不写入 indicator_daily，也不连接生产数据库。
         List<com.timelordtty.dca.model.MarketBarDaily> bars = marketService.getHistoryBars(productId, startDate, endDate);
         if (bars == null || bars.isEmpty()) {
             return List.of();

@@ -1,6 +1,7 @@
 package com.timelordtty.dca.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -42,5 +43,29 @@ class IndicatorMathTest {
         assertEquals("63.333333", value.k().toPlainString());
         assertEquals("54.444444", value.d().toPlainString());
         assertEquals("81.111111", value.j().toPlainString());
+    }
+
+    @Test
+    void calculateBollReturnsNullWhenWindowIsNotEnough() {
+        List<BigDecimal> closes = List.of(BigDecimal.ONE, BigDecimal.valueOf(2));
+
+        IndicatorMath.BollValue value = IndicatorMath.calculateBoll(closes, 1, 3);
+
+        assertNull(value);
+    }
+
+    @Test
+    void calculateKdjUsesNeutralRsvWhenHighAndLowAreEqual() {
+        List<IndicatorMath.KdjBar> bars = new ArrayList<>();
+        for (int i = 0; i < 9; i++) {
+            bars.add(new IndicatorMath.KdjBar(BigDecimal.TEN, BigDecimal.TEN, BigDecimal.TEN));
+        }
+
+        IndicatorMath.KdjValue value = IndicatorMath.calculateKdj(bars, 8, 9, null, null);
+
+        assertEquals("50.000000", value.rsv().toPlainString());
+        assertEquals("50.000000", value.k().toPlainString());
+        assertEquals("50.000000", value.d().toPlainString());
+        assertEquals("50.000000", value.j().toPlainString());
     }
 }
