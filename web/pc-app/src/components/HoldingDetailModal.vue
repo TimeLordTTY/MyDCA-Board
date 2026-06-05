@@ -59,6 +59,50 @@
               <el-option label="60日" :value="60" />
             </el-select>
           </div>
+          <div v-if="latestIndicator" class="indicator-summary">
+            <div class="indicator-summary-group">
+              <div class="indicator-summary-title">BOLL（{{ latestIndicator.bollWindow || windowDays }}日）</div>
+              <div class="indicator-summary-grid">
+                <div>
+                  <span class="td-muted">中轨</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.bollMiddle) }}</strong>
+                </div>
+                <div>
+                  <span class="td-muted">上轨</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.bollUpper) }}</strong>
+                </div>
+                <div>
+                  <span class="td-muted">下轨</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.bollLower) }}</strong>
+                </div>
+                <div>
+                  <span class="td-muted">标准差</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.bollStd) }}</strong>
+                </div>
+              </div>
+            </div>
+            <div class="indicator-summary-group">
+              <div class="indicator-summary-title">KDJ（{{ latestIndicator.kdjWindow || 9 }}日）</div>
+              <div class="indicator-summary-grid">
+                <div>
+                  <span class="td-muted">K</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.kdjK) }}</strong>
+                </div>
+                <div>
+                  <span class="td-muted">D</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.kdjD) }}</strong>
+                </div>
+                <div>
+                  <span class="td-muted">J</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.kdjJ) }}</strong>
+                </div>
+                <div>
+                  <span class="td-muted">RSV</span>
+                  <strong>{{ formatIndicatorValue(latestIndicator.kdjRsv) }}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
           <div id="indicatorChart" style="width: 100%; height: 400px"></div>
         </el-tab-pane>
 
@@ -154,6 +198,7 @@ const transactionLoading = ref(false)
 
 const isExchange = computed(() => props.holding?.channel === 'EXCHANGE')
 const isOtc = computed(() => props.holding?.channel === 'OTC')
+const latestIndicator = computed(() => indicatorData.value.length > 0 ? indicatorData.value[indicatorData.value.length - 1] : null)
 
 watch([visible, activeTab], async ([newVisible, newTab]) => {
   if (newVisible && props.holding) {
@@ -282,6 +327,10 @@ function formatTxnType(type: string): string {
     ADJUST: '调整',
   }
   return typeMap[type] || type
+}
+
+function formatIndicatorValue(value?: number): string {
+  return value == null ? '-' : formatNumber(value, 4)
 }
 
 /**
@@ -652,6 +701,55 @@ if (typeof window !== 'undefined') {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #909399;
+}
+
+.indicator-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.indicator-summary-group {
+  padding: 12px;
+  border: 1px solid rgba(78, 164, 255, 0.16);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(78, 164, 255, 0.08), rgba(124, 199, 255, 0.04));
+}
+
+.indicator-summary-title {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.indicator-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.indicator-summary-grid div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.indicator-summary-grid strong {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+@media (max-width: 768px) {
+  .indicator-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .indicator-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 /* 交易类型标签样式 */

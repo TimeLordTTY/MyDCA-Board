@@ -427,6 +427,7 @@ scripts/market/
   - ✅ BOLL 指标计算（`boll_calculator.py`，20/60 日窗口，写入中轨、上轨、下轨、标准差）
   - ✅ KDJ 指标计算（`kdj_calculator.py`，9 日 RSV 与 K/D/J 递推）
   - ✅ 前端当前使用的 MA20 / MA60 / BOLL / KDJ / 分位查询已可用（数据库结果优先，缺失时后端临时派生）
+  - ✅ `indicator_daily` 初始化 DDL 与增量迁移均已包含 BOLL/KDJ 字段，唯一键仍沿用 `product_id + trade_date + window_days`
   - ⚠️ CCI、DMI、OBV 等更多技术指标待后续扩展
 - ✅ **指标数据存储**：
   - ✅ indicator_daily表数据写入
@@ -618,7 +619,7 @@ mvn clean compile
 - [x] **持仓详情页面（HoldingDetailModal.vue）**：
   - [x] 历史净值曲线图表（使用ECharts） ✅
   - [x] 历史行情K线图（使用ECharts） ✅
-  - [x] 技术指标图表（MA20、MA60、BOLL、KDJ、分位） ✅
+  - [x] 技术指标图表（MA20、MA60、BOLL、KDJ、分位）与最新指标摘要（BOLL三轨/标准差、KDJ K/D/J/RSV） ✅
   - [x] 标签页切换（净值曲线、K线图、技术指标） ✅
 - [x] **看板页面（Dashboard.vue）**：
   - [x] 持仓市值基于实时行情计算 ✅
