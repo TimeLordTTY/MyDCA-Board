@@ -272,7 +272,11 @@ public class DraftLedgerEntryService {
                 return number.longValue();
             }
             if (value != null && !value.toString().isBlank()) {
-                return Long.parseLong(value.toString());
+                try {
+                    return Long.parseLong(value.toString());
+                } catch (NumberFormatException e) {
+                    throw new RuntimeException(key + " 必须是数字");
+                }
             }
         }
         return null;
@@ -290,7 +294,11 @@ public class DraftLedgerEntryService {
             return new BigDecimal(number.toString());
         }
         if (value != null && !value.toString().isBlank()) {
-            return new BigDecimal(value.toString());
+            try {
+                return new BigDecimal(value.toString());
+            } catch (NumberFormatException e) {
+                throw new RuntimeException(key + " 必须是数字");
+            }
         }
         return null;
     }
