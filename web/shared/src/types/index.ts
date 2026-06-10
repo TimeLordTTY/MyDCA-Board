@@ -10,6 +10,7 @@ export * from './dashboard'
 export * from './market'
 export * from './nav'
 export * from './indicator'
+export * from './draft'
 
 // 重新导出PendingSettlement（从order.ts）
 export type { PendingSettlement } from './order'

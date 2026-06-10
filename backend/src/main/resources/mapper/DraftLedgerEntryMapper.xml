@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.DraftLedgerEntryMapper">
+
+    <resultMap id="BaseResultMap" type="com.timelordtty.dca.model.DraftLedgerEntry">
+        <id column="id" property="id"/>
+        <result column="owner_user_id" property="ownerUserId"/>
+        <result column="owner_family_id" property="ownerFamilyId"/>
+        <result column="source_type" property="sourceType"/>
+        <result column="source_ref" property="sourceRef"/>
+        <result column="raw_input" property="rawInput"/>
+        <result column="parsed_payload_json" property="parsedPayloadJson"/>
+        <result column="preview_payload_json" property="previewPayloadJson"/>
+        <result column="status" property="status"/>
+        <result column="confidence" property="confidence"/>
+        <result column="missing_fields_json" property="missingFieldsJson"/>
+        <result column="confirm_txn_id" property="confirmTxnId"/>
+        <result column="confirm_order_id" property="confirmOrderId"/>
+        <result column="ignore_reason" property="ignoreReason"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="confirmed_at" property="confirmedAt"/>
+        <result column="ignored_at" property="ignoredAt"/>
+    </resultMap>
+
+    <sql id="VisibleCondition">
+        (
+            owner_user_id = #{userId}
+            <if test="familyId != null">
+                OR owner_family_id = #{familyId}
+            </if>
+        )
+    </sql>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO draft_ledger_entry (
+            owner_user_id, owner_family_id, source_type, source_ref, raw_input,
+            parsed_payload_json, preview_payload_json, status, confidence, missing_fields_json,
+            confirm_txn_id, confirm_order_id, ignore_reason,
+            created_at, updated_at, confirmed_at, ignored_at
+        ) VALUES (
+            #{ownerUserId}, #{ownerFamilyId}, #{sourceType}, #{sourceRef}, #{rawInput},
+            #{parsedPayloadJson}, #{previewPayloadJson}, 'DRAFT', #{confidence}, #{missingFieldsJson},
+            NULL, NULL, NULL,
+            NOW(), NOW(), NULL, NULL
+        )
+    </insert>
+
+    <select id="selectVisibleById" resultMap="BaseResultMap">
+        SELECT * FROM draft_ledger_entry
+        WHERE id = #{id}
+          AND <include refid="VisibleCondition"/>
+    </select>
+
+    <select id="selectVisibleByIdForUpdate" resultMap="BaseResultMap">
+        SELECT * FROM draft_ledger_entry
+        WHERE id = #{id}
+          AND <include refid="VisibleCondition"/>
+        FOR UPDATE
+    </select>
+
+    <select id="selectVisibleList" resultMap="BaseResultMap">
+        SELECT * FROM draft_ledger_entry
+        WHERE <include refid="VisibleCondition"/>
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        ORDER BY updated_at DESC, id DESC
+        <if test="limit != null and limit &gt; 0">
+            LIMIT #{limit}
+            <if test="offset != null and offset &gt; 0">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <update id="updateDraftContent">
+        UPDATE draft_ledger_entry
+        SET source_type = #{sourceType},
+            source_ref = #{sourceRef},
+            raw_input = #{rawInput},
+            parsed_payload_json = #{parsedPayloadJson},
+            confidence = #{confidence},
+            missing_fields_json = #{missingFieldsJson},
+            preview_payload_json = NULL,
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND status = 'DRAFT'
+    </update>
+
+    <update id="updatePreview">
+        UPDATE draft_ledger_entry
+        SET preview_payload_json = #{previewPayloadJson},
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND status = 'DRAFT'
+    </update>
+
+    <update id="markConfirmed">
+        UPDATE draft_ledger_entry
+        SET status = 'CONFIRMED',
+            confirm_txn_id = #{confirmTxnId},
+            confirm_order_id = #{confirmOrderId},
+            confirmed_at = NOW(),
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND status = 'DRAFT'
+    </update>
+
+    <update id="markIgnored">
+        UPDATE draft_ledger_entry
+        SET status = 'IGNORED',
+            ignore_reason = #{ignoreReason},
+            ignored_at = NOW(),
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND status = 'DRAFT'
+    </update>
+</mapper>
