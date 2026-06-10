@@ -37,3 +37,12 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 草稿影响预览增强：展示更完整的账户、订单、结算和持仓影响。
 - Android 原生 App 草稿箱：承接草稿列表、详情、编辑、确认和忽略体验。
 - 扩展确认类型：在既有账本、订单和结算服务校验能力完善后，再支持投资订单类草稿确认。
+
+## 文本记账解析 MVP（2026-06-10）
+
+- 已打通 `POST /api/v2/ai/accounting/parse-text`，首版采用规则解析，不连接真实大模型。
+- 已打通 `POST /api/v2/ai/accounting/draft-from-intent`，复用 `DraftLedgerEntryService.createDraft` 创建 `DRAFT` 草稿，不绕过草稿服务直接写 Mapper。
+- 解析结果保留 `sourceType`、`sourceRef`、`rawInput`、`txnType`、`amount`、`note`、`accountNameHint`、`confidence`、`missingFields` 和 `parsedPayloadJson`，用于用户复核。
+- 首版可识别常见支出文本、收入文本、金额和账户名称提示；账户不确定时只返回 `accountNameHint`，不强行匹配错误账户。
+- Hermes 后续只能调用 parse / draft 接口生成草稿，不能直接确认入账；正式入账仍必须由用户通过 `/api/v2/drafts/{draftId}/confirm` 手动确认。
+- shared 层已新增 `aiAccountingApi` 和 `aiAccounting` 类型，供 PC、移动端或 Hermes 调用方复用。
