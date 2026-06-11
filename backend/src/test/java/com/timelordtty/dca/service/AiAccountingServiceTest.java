@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +20,7 @@ import com.timelordtty.dca.dto.DraftFromIntentResponse;
 import com.timelordtty.dca.dto.DraftLedgerEntryDTO;
 import com.timelordtty.dca.dto.ParseTextRequest;
 import java.math.BigDecimal;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -49,6 +52,7 @@ class AiAccountingServiceTest {
         assertFalse(intent.getMissingFields().contains("amount"));
         assertTrue(intent.getConfidence().compareTo(new BigDecimal("0.60")) >= 0);
         assertNotNull(intent.getParsedPayloadJson());
+        verifyNoInteractions(draftLedgerEntryService);
     }
 
     @Test
@@ -85,8 +89,62 @@ class AiAccountingServiceTest {
         AccountingIntentDTO intent = service.parseText(request);
 
         assertNull(intent.getTxnType());
-        assertEquals(new BigDecimal("32.5"), intent.getAmount());
+        assertNull(intent.getAmount());
         assertTrue(intent.getMissingFields().contains("txnType"));
+        assertTrue(intent.getMissingFields().contains("amount"));
+    }
+
+    @Test
+    void parseTextRejectsBlankTextWithClearMessage() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("   ");
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> service.parseText(request));
+
+        assertTrue(error.getMessage().contains("text"));
+        verifyNoInteractions(draftLedgerEntryService);
+    }
+
+    @Test
+    void parseTextDoesNotExtractDateOrAccountDigitsAsAmount() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("2026-06-10 账户622202 午饭，用余额宝生活费");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertNull(intent.getAmount());
+        assertTrue(intent.getMissingFields().contains("amount"));
+        assertTrue(intent.getMissingFields().contains("txnType"));
+        verifyNoInteractions(draftLedgerEntryService);
+    }
+
+    @Test
+    void parseTextDoesNotTreatNegativeAmountAsConfirmableAmount() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("午饭花了-32.5，用余额宝生活费");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertNull(intent.getAmount());
+        assertTrue(intent.getMissingFields().contains("amount"));
+        verifyNoInteractions(draftLedgerEntryService);
+    }
+
+    @Test
+    void parsedPayloadJsonContainsStandardFields() throws Exception {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("午饭花了32.5，用余额宝生活费");
+
+        AccountingIntentDTO intent = service.parseText(request);
+        Map<?, ?> payload = objectMapper.readValue(intent.getParsedPayloadJson(), Map.class);
+
+        assertTrue(payload.containsKey("txnType"));
+        assertTrue(payload.containsKey("amount"));
+        assertTrue(payload.containsKey("note"));
+        assertTrue(payload.containsKey("accountId"));
+        assertTrue(payload.containsKey("accountNameHint"));
+        assertTrue(payload.containsKey("confidence"));
+        assertTrue(payload.containsKey("missingFields"));
     }
 
     @Test
@@ -126,5 +184,66 @@ class AiAccountingServiceTest {
         assertEquals(java.util.List.of("accountId"),
                 objectMapper.readValue(createDraft.getMissingFieldsJson(), java.util.List.class));
         assertTrue(createDraft.getParsedPayloadJson().contains("\"txnType\":\"EXPENSE\""));
+    }
+
+    @Test
+    void draftFromIntentRejectsEmptyIntent() {
+        DraftFromIntentRequest request = new DraftFromIntentRequest();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.draftFromIntent(10L, 20L, request));
+
+        assertTrue(error.getMessage().contains("intent"));
+        verifyNoInteractions(draftLedgerEntryService);
+    }
+
+    @Test
+    void draftFromIntentDefaultsMissingSourceTypeAndRegeneratesPayloadJson() {
+        AccountingIntentDTO intent = new AccountingIntentDTO();
+        intent.setRawInput("收到工资8000到招商银行");
+        intent.setTxnType("INCOME");
+        intent.setAmount(new BigDecimal("8000"));
+        intent.setNote("工资");
+        intent.setAccountNameHint("招商银行");
+
+        DraftLedgerEntryDTO draft = new DraftLedgerEntryDTO();
+        draft.setId(100L);
+        draft.setStatus("DRAFT");
+        when(draftLedgerEntryService.createDraft(eq(10L), eq(20L), org.mockito.ArgumentMatchers.any(CreateDraftRequest.class)))
+                .thenReturn(draft);
+
+        DraftFromIntentRequest request = new DraftFromIntentRequest();
+        request.setIntent(intent);
+        service.draftFromIntent(10L, 20L, request);
+
+        ArgumentCaptor<CreateDraftRequest> captor = ArgumentCaptor.forClass(CreateDraftRequest.class);
+        verify(draftLedgerEntryService).createDraft(eq(10L), eq(20L), captor.capture());
+        CreateDraftRequest createDraft = captor.getValue();
+        assertEquals("HERMES_TEXT", createDraft.getSourceType());
+        assertTrue(createDraft.getParsedPayloadJson().contains("\"txnType\":\"INCOME\""));
+        assertTrue(createDraft.getMissingFieldsJson().contains("accountId"));
+    }
+
+    @Test
+    void draftFromIntentKeepsSupportedNonTextSourceType() {
+        AccountingIntentDTO intent = new AccountingIntentDTO();
+        intent.setSourceType("APP_FORM");
+        intent.setRawInput("表单草稿");
+        intent.setTxnType("EXPENSE");
+        intent.setAmount(new BigDecimal("12.30"));
+
+        DraftLedgerEntryDTO draft = new DraftLedgerEntryDTO();
+        draft.setId(101L);
+        draft.setStatus("DRAFT");
+        when(draftLedgerEntryService.createDraft(eq(10L), eq(20L), org.mockito.ArgumentMatchers.any(CreateDraftRequest.class)))
+                .thenReturn(draft);
+
+        DraftFromIntentRequest request = new DraftFromIntentRequest();
+        request.setIntent(intent);
+        service.draftFromIntent(10L, 20L, request);
+
+        ArgumentCaptor<CreateDraftRequest> captor = ArgumentCaptor.forClass(CreateDraftRequest.class);
+        verify(draftLedgerEntryService).createDraft(eq(10L), eq(20L), captor.capture());
+        assertEquals("APP_FORM", captor.getValue().getSourceType());
     }
 }

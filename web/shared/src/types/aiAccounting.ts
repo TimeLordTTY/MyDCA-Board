@@ -6,6 +6,15 @@
 
 import type { DraftLedgerEntry } from './draft'
 
+/** AI 记账草稿来源类型；保留 string 以兼容后续扩展来源。 */
+export type AiAccountingSourceType =
+  | 'HERMES_TEXT'
+  | 'HERMES_IMAGE'
+  | 'APP_FORM'
+  | 'PAYMENT_NOTIFICATION'
+  | 'MANUAL'
+  | string
+
 /** 文本记账解析请求。 */
 export interface ParseTextRequest {
   /** 原始自然语言文本，例如“午饭花了32.5，用余额宝生活费”。 */
@@ -17,7 +26,7 @@ export interface ParseTextRequest {
 /** 文本解析得到的候选记账意图。 */
 export interface AccountingIntent {
   /** 草稿来源类型，文本解析 MVP 默认使用 HERMES_TEXT。 */
-  sourceType: 'HERMES_TEXT' | string
+  sourceType: AiAccountingSourceType
   /** 外部来源引用。 */
   sourceRef?: string | null
   /** 原始输入文本。 */

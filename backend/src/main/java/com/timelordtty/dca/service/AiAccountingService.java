@@ -51,7 +51,7 @@ public class AiAccountingService {
         intent.setSourceRef(request.getSourceRef());
         intent.setRawInput(normalizedText);
         intent.setTxnType(detectTxnType(normalizedText));
-        intent.setAmount(extractAmount(normalizedText));
+        intent.setAmount(intent.getTxnType() == null ? null : extractAmount(normalizedText));
         intent.setAccountNameHint(extractAccountNameHint(normalizedText));
         intent.setNote(extractNote(normalizedText, intent.getAmount(), intent.getAccountNameHint()));
         intent.setConfidence(calculateConfidence(intent));
@@ -95,7 +95,9 @@ public class AiAccountingService {
         intent.setAccountId(input.getAccountId());
         intent.setAccountNameHint(input.getAccountNameHint());
         intent.setConfidence(input.getConfidence() == null ? calculateConfidence(input) : input.getConfidence());
-        intent.setMissingFields(input.getMissingFields() == null ? buildMissingFields(intent) : new ArrayList<>(input.getMissingFields()));
+        intent.setMissingFields(input.getMissingFields() == null || input.getMissingFields().isEmpty()
+                ? buildMissingFields(intent)
+                : new ArrayList<>(input.getMissingFields()));
         intent.setParsedPayloadJson(defaultIfBlank(input.getParsedPayloadJson(), toIntentJson(intent)));
         return intent;
     }
@@ -112,10 +114,24 @@ public class AiAccountingService {
 
     private BigDecimal extractAmount(String text) {
         Matcher matcher = AMOUNT_PATTERN.matcher(text);
-        if (!matcher.find()) {
-            return null;
+        while (matcher.find()) {
+            if (isSafeAmountCandidate(text, matcher.start(1), matcher.end(1), matcher.group(1))) {
+                return new BigDecimal(matcher.group(1));
+            }
         }
-        return new BigDecimal(matcher.group(1));
+        return null;
+    }
+
+    private boolean isSafeAmountCandidate(String text, int start, int end, String candidate) {
+        char previous = start > 0 ? text.charAt(start - 1) : '\0';
+        char next = end < text.length() ? text.charAt(end) : '\0';
+        if (previous == '-' || next == '-') {
+            return false;
+        }
+        if (candidate.split("\\.")[0].length() >= 6) {
+            return false;
+        }
+        return true;
     }
 
     private String extractAccountNameHint(String text) {

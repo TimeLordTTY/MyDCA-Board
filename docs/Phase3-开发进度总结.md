@@ -46,3 +46,9 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 首版可识别常见支出文本、收入文本、金额和账户名称提示；账户不确定时只返回 `accountNameHint`，不强行匹配错误账户。
 - Hermes 后续只能调用 parse / draft 接口生成草稿，不能直接确认入账；正式入账仍必须由用户通过 `/api/v2/drafts/{draftId}/confirm` 手动确认。
 - shared 层已新增 `aiAccountingApi` 和 `aiAccounting` 类型，供 PC、移动端或 Hermes 调用方复用。
+## 文本记账解析 MVP 验证与加固（2026-06-11）
+
+- 已补充服务层验证，覆盖空文本、支出文本、收入文本、金额缺失、类型不确定、日期/账号数字误提取、负金额、标准 `parsedPayloadJson` 字段、空 intent、默认 `HERMES_TEXT` 和 `APP_FORM` 来源兼容。
+- 金额提取改为保守候选过滤：跳过日期片段、负数片段和疑似长账号数字；交易类型不确定时不生成可确认金额，等待用户补齐。
+- `draft-from-intent` 在 intent 缺少 `sourceType` 时默认使用 `HERMES_TEXT`，在 `missingFields` 为空时由服务端重新计算缺失字段，并重新生成标准 intent JSON。
+- 本轮仍保持 parse-text 只返回 intent；draft-from-intent 只通过 `DraftLedgerEntryService.createDraft` 创建 `DRAFT` 草稿，不调用 `QuickEntryService`，不写正式账本。
