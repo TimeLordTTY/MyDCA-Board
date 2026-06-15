@@ -52,3 +52,11 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 金额提取改为保守候选过滤：跳过日期片段、负数片段和疑似长账号数字；交易类型不确定时不生成可确认金额，等待用户补齐。
 - `draft-from-intent` 在 intent 缺少 `sourceType` 时默认使用 `HERMES_TEXT`，在 `missingFields` 为空时由服务端重新计算缺失字段，并重新生成标准 intent JSON。
 - 本轮仍保持 parse-text 只返回 intent；draft-from-intent 只通过 `DraftLedgerEntryService.createDraft` 创建 `DRAFT` 草稿，不调用 `QuickEntryService`，不写正式账本。
+## PC 草稿箱与文本入口首版（2026-06-15）
+
+- 新增 PC 端 `DraftInbox.vue` 页面，并在顶部导航加入“草稿箱”入口。
+- 文本记账入口按两步执行：先调用 `aiAccountingApi.parseText` 生成候选意图，再调用 `aiAccountingApi.draftFromIntent` 创建 `DRAFT` 草稿。
+- 草稿列表调用 `draftApi.listDrafts`，支持按 `DRAFT`、`CONFIRMED`、`IGNORED` 状态过滤。
+- 草稿详情支持调用 `draftApi.previewDraft` 预览、`draftApi.ignoreDraft` 忽略、`draftApi.confirmDraft` 确认。
+- PC 端确认按钮仅在 `preview.confirmSupported=true` 且草稿仍为 `DRAFT` 时启用，并在确认前再次提示：确认后才会正式记账。
+- 页面明确提示：AI/文本解析只生成草稿，不会直接写入正式账本；正式入账必须由用户点击确认触发。

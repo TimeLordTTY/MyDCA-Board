@@ -83,6 +83,7 @@ const refreshingData = ref(false)
 const navItems = [
   { name: 'Dashboard', path: '/dashboard', label: '总览' },
   { name: 'Ledger', path: '/ledger', label: '流水' },
+  { name: 'DraftInbox', path: '/drafts', label: '草稿箱' },
   { name: 'Orders', path: '/orders', label: '订单&结算' },
   { name: 'Products', path: '/products', label: '产品' },
   { name: 'Accounts', path: '/accounts', label: '账户' },

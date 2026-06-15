@@ -41,6 +41,11 @@ const router = createRouter({
           component: () => import('../views/Ledger.vue'),
         },
         {
+          path: 'drafts',
+          name: 'DraftInbox',
+          component: () => import('../views/DraftInbox.vue'),
+        },
+        {
           path: 'orders',
           name: 'Orders',
           component: () => import('../views/Orders.vue'),
