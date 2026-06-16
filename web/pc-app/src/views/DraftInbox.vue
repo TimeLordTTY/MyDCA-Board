@@ -146,7 +146,7 @@
             </el-button>
             <el-button
               type="danger"
-              :disabled="!preview?.confirmSupported || selectedDraft.status !== 'DRAFT'"
+              :disabled="!canConfirmSelectedDraft"
               :loading="confirming"
               @click="handleConfirm(selectedDraft)"
             >
@@ -324,19 +324,34 @@ const draftQueryParams = computed(() => ({
   pageSize: 50,
 }))
 
+const canConfirmSelectedDraft = computed(() => {
+  return Boolean(
+    selectedDraft.value?.status === 'DRAFT' &&
+      preview.value?.draftId === selectedDraft.value.id &&
+      preview.value.confirmSupported &&
+      !confirming.value
+  )
+})
+
 async function loadDrafts() {
+  const currentSelectedId = selectedDraft.value?.id
   try {
     loadingDrafts.value = true
     const rows = await draftApi.listDrafts(draftQueryParams.value)
     drafts.value = rows
 
-    if (selectedDraft.value) {
-      selectedDraft.value = rows.find((item) => item.id === selectedDraft.value?.id) || null
+    if (currentSelectedId) {
+      const latestSelectedDraft = rows.find((item) => item.id === currentSelectedId) || null
+      selectedDraft.value = latestSelectedDraft
+
+      if (!latestSelectedDraft || preview.value?.draftId !== latestSelectedDraft.id) {
+        preview.value = null
+      }
     }
   } catch (error: any) {
     ElNotification.error({
       title: '草稿加载失败',
-      message: error.message || '无法读取草稿列表',
+      message: getErrorMessage(error, '无法读取草稿列表'),
       position: 'bottom-right',
     })
   } finally {
@@ -362,7 +377,7 @@ async function handleParseText() {
   } catch (error: any) {
     ElNotification.error({
       title: '解析失败',
-      message: error.message || '文本解析接口调用失败',
+      message: getErrorMessage(error, '文本解析接口调用失败'),
       position: 'bottom-right',
     })
   } finally {
@@ -378,6 +393,7 @@ async function handleCreateDraft() {
     const result = await aiAccountingApi.draftFromIntent({ intent: parsedIntent.value })
     selectedDraft.value = result.draft
     preview.value = null
+    statusFilter.value = 'DRAFT'
     await loadDrafts()
     ElNotification.success({
       title: '草稿已创建',
@@ -387,7 +403,7 @@ async function handleCreateDraft() {
   } catch (error: any) {
     ElNotification.error({
       title: '创建草稿失败',
-      message: error.message || 'draft-from-intent 接口调用失败',
+      message: getErrorMessage(error, 'draft-from-intent 接口调用失败'),
       position: 'bottom-right',
     })
   } finally {
@@ -406,14 +422,20 @@ function selectDraft(draft: DraftLedgerEntry) {
 }
 
 async function handlePreview(draft: DraftLedgerEntry) {
+  const draftId = draft.id
   try {
     selectedDraft.value = draft
+    preview.value = null
     previewing.value = true
-    preview.value = await draftApi.previewDraft(draft.id)
+    const latestPreview = await draftApi.previewDraft(draftId)
+
+    if (selectedDraft.value?.id === draftId) {
+      preview.value = latestPreview
+    }
   } catch (error: any) {
     ElNotification.error({
       title: '预览失败',
-      message: error.message || '草稿预览接口调用失败',
+      message: getErrorMessage(error, '草稿预览接口调用失败'),
       position: 'bottom-right',
     })
   } finally {
@@ -446,14 +468,26 @@ async function handleIgnore(draft: DraftLedgerEntry) {
     if (error === 'cancel' || error === 'close') return
     ElNotification.error({
       title: '忽略失败',
-      message: error.message || '草稿忽略接口调用失败',
+      message: getErrorMessage(error, '草稿忽略接口调用失败'),
       position: 'bottom-right',
     })
   }
 }
 
 async function handleConfirm(draft: DraftLedgerEntry) {
-  if (!preview.value?.confirmSupported) return
+  if (
+    draft.status !== 'DRAFT' ||
+    !preview.value ||
+    preview.value.draftId !== draft.id ||
+    !preview.value.confirmSupported
+  ) {
+    ElNotification.warning({
+      title: '请先生成可确认预览',
+      message: '只有当前草稿的预览返回 confirmSupported=true 后，才能正式确认记账。',
+      position: 'bottom-right',
+    })
+    return
+  }
 
   try {
     await ElMessageBox.confirm(
@@ -481,7 +515,7 @@ async function handleConfirm(draft: DraftLedgerEntry) {
     if (error === 'cancel' || error === 'close') return
     ElNotification.error({
       title: '确认失败',
-      message: error.message || '草稿确认接口调用失败',
+      message: getErrorMessage(error, '草稿确认接口调用失败'),
       position: 'bottom-right',
     })
   } finally {
@@ -490,7 +524,7 @@ async function handleConfirm(draft: DraftLedgerEntry) {
 }
 
 function summarizeDraft(draft: DraftLedgerEntry): string {
-  const payload = parseJsonRecord(draft.parsedPayloadJson)
+  const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson))
   const txnType = formatTxnType(asString(payload?.txnType))
   const amount = formatAmount(asNumber(payload?.amount))
   const note = asString(payload?.note) || draft.rawInput || '-'
@@ -513,6 +547,17 @@ function parseJsonRecord(raw?: string | null): Record<string, unknown> | null {
   return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? (parsed as Record<string, unknown>)
     : null
+}
+
+function normalizeIntentPayload(payload: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!payload) return null
+
+  const nestedIntent = payload.intent
+  if (nestedIntent && typeof nestedIntent === 'object' && !Array.isArray(nestedIntent)) {
+    return nestedIntent as Record<string, unknown>
+  }
+
+  return payload
 }
 
 function safeJsonParse(raw?: string | null): unknown {
@@ -541,6 +586,29 @@ function asNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
+}
+
+function getErrorMessage(error: any, fallback: string): string {
+  const data = error?.response?.data
+
+  if (typeof data === 'string' && data.trim()) {
+    return data
+  }
+
+  if (data && typeof data === 'object') {
+    const message = (data as { message?: unknown }).message
+    const detail = (data as { error?: unknown }).error
+
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+
+    if (typeof detail === 'string' && detail.trim()) {
+      return detail
+    }
+  }
+
+  return error?.message || fallback
 }
 
 function formatTxnType(type?: string | null): string {
