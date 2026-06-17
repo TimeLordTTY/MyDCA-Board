@@ -127,3 +127,13 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 今日待办和草稿箱首版默认使用安全空状态；确认按钮保持禁用，后续必须在后端 `preview.confirmSupported=true` 后才允许用户二次确认。
 - 当前未接入真实登录、通知监听、OCR、支付通知解析或真实大模型；移动端只承接查看与确认体验，不绕过后端 confirm，不直接写正式账本。
 - 当前本地环境未配置 Gradle 命令和 Android SDK，Android `assembleDebug` 暂未在本机执行；已通过源码静态检查，并确认现有后端与 Web 构建链路未被破坏。
+
+## Android 原生 App 基础壳验证加固（2026-06-17）
+
+- 已补充 `android-app/README.md`，说明 Android Studio / JDK / SDK 要求、`local.properties` 用法、默认开发 BaseUrl 和 token 安全边界。
+- 已将底部导航压缩为 5 个入口：总览、待办、草稿、资产、设置；登录与 Token 配置占位合并到设置页，避免移动端底部导航过载。
+- 已关闭 Android manifest 的 `allowBackup`，避免金融类 App 首版默认允许系统备份潜在敏感本地状态。
+- 已将本地 HTTP 明文访问限制在 debug manifest 中，仅用于模拟器访问 `10.0.2.2` 开发后端；生产构建应使用 HTTPS。
+- 已移除未使用的 OkHttp logging-interceptor 依赖，降低首版网络层暴露面。
+- 已再次确认 BaseUrl 仅使用 Android 模拟器访问本机后端的开发占位地址，未提交真实 token、cookie、密码或生产私密地址。
+- 当前环境仍无 Gradle 命令、Gradle wrapper 和 Android SDK，因此 Android `test` / `assembleDebug` 未在本机执行；现有后端与 Web 构建链路验证通过。

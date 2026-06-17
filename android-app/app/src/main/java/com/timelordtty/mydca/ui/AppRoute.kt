@@ -7,7 +7,6 @@ enum class AppRoute(
     val title: String,
     val navLabel: String,
 ) {
-    Login("登录配置", "登录"),
     Overview("总览", "总览"),
     TodayTodo("今日待办", "待办"),
     Drafts("草稿箱", "草稿"),

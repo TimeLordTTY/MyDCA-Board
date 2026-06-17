@@ -16,7 +16,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.timelordtty.mydca.core.design.MyDcaTheme
 import com.timelordtty.mydca.ui.screens.DraftInboxScreen
-import com.timelordtty.mydca.ui.screens.LoginPlaceholderScreen
 import com.timelordtty.mydca.ui.screens.OverviewScreen
 import com.timelordtty.mydca.ui.screens.PlaceholderScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
@@ -58,7 +57,6 @@ fun MyDcaApp() {
                 modifier = Modifier.padding(innerPadding),
             ) { route ->
                 when (route) {
-                    AppRoute.Login -> LoginPlaceholderScreen()
                     AppRoute.Overview -> OverviewScreen()
                     AppRoute.TodayTodo -> TodayTodoScreen()
                     AppRoute.Drafts -> DraftInboxScreen()
