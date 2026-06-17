@@ -133,6 +133,14 @@
           </div>
 
           <div class="detail-actions">
+            <el-button
+              type="primary"
+              plain
+              :disabled="selectedDraft.status !== 'DRAFT'"
+              @click="openEditDraft(selectedDraft)"
+            >
+              编辑草稿
+            </el-button>
             <el-button :loading="previewing" @click="handlePreview(selectedDraft)">
               生成预览
             </el-button>
@@ -154,6 +162,97 @@
             </el-button>
           </div>
 
+          <div v-if="selectedDraft.status !== 'DRAFT'" class="edit-disabled-tip">
+            当前草稿已{{ formatStatus(selectedDraft.status) }}，不能再编辑或重新确认。
+          </div>
+
+          <div v-if="editingDraft" class="edit-panel">
+            <div class="intent-title">
+              <span>编辑草稿字段</span>
+              <span class="tag blue tiny">只更新草稿</span>
+            </div>
+            <div class="edit-hint">
+              补齐字段只会保存到草稿，不会直接入账。保存后请重新生成预览，确认无误后再点击“确认记账”。
+            </div>
+
+            <div class="edit-form-grid">
+              <label class="form-field">
+                <span class="field-label">交易类型</span>
+                <el-select v-model="draftEditForm.txnType" placeholder="请选择类型">
+                  <el-option label="支出" value="EXPENSE" />
+                  <el-option label="收入" value="INCOME" />
+                </el-select>
+              </label>
+
+              <label class="form-field">
+                <span class="field-label">金额</span>
+                <el-input
+                  v-model="draftEditForm.amount"
+                  inputmode="decimal"
+                  placeholder="请输入正数金额"
+                />
+              </label>
+
+              <label class="form-field form-field-wide">
+                <span class="field-label">现金/活钱账户</span>
+                <el-select
+                  v-model="draftEditForm.accountId"
+                  filterable
+                  clearable
+                  :loading="accountStore.loading"
+                  placeholder="请选择实际记账账户"
+                >
+                  <el-option
+                    v-for="account in rankedAccountOptions"
+                    :key="account.id"
+                    :label="formatAccountOption(account)"
+                    :value="account.id"
+                  >
+                    <div class="account-option">
+                      <span>{{ account.accountName }}</span>
+                      <small>{{ formatAccountMeta(account) }}</small>
+                    </div>
+                  </el-option>
+                </el-select>
+              </label>
+
+              <label class="form-field form-field-wide">
+                <span class="field-label">账户提示</span>
+                <el-input
+                  v-model="draftEditForm.accountNameHint"
+                  placeholder="保留 AI/文本给出的账户提示，便于复核"
+                />
+              </label>
+
+              <label class="form-field form-field-wide">
+                <span class="field-label">备注</span>
+                <el-input
+                  v-model="draftEditForm.note"
+                  type="textarea"
+                  :rows="3"
+                  maxlength="200"
+                  show-word-limit
+                  placeholder="请输入正式流水备注"
+                />
+              </label>
+            </div>
+
+            <div class="edit-actions">
+              <el-button :disabled="savingDraft" @click="cancelEditDraft">取消</el-button>
+              <el-button type="primary" :loading="savingDraft" @click="handleSaveDraftEdit()">
+                保存草稿
+              </el-button>
+              <el-button
+                type="success"
+                plain
+                :disabled="savingDraft || !selectedDraft"
+                @click="handleSaveDraftEdit(true)"
+              >
+                保存并预览
+              </el-button>
+            </div>
+          </div>
+
           <div v-if="preview" class="preview-panel">
             <div class="intent-title">
               <span>确认预览</span>
@@ -171,8 +270,8 @@
                 <strong>{{ formatAmount(preview.amount) }}</strong>
               </div>
               <div>
-                <span class="field-label">账户 ID</span>
-                <strong>{{ preview.accountId ?? '-' }}</strong>
+                <span class="field-label">账户</span>
+                <strong>{{ formatPreviewAccount(preview.accountId) }}</strong>
               </div>
               <div>
                 <span class="field-label">草稿 ID</span>
@@ -277,6 +376,13 @@
               <td class="right">
                 <div class="table-actions">
                   <button class="btn-small" @click.stop="selectDraft(draft)">详情</button>
+                  <button
+                    class="btn-small"
+                    :disabled="draft.status !== 'DRAFT'"
+                    @click.stop="openEditDraft(draft)"
+                  >
+                    编辑
+                  </button>
                   <button class="btn-small" @click.stop="handlePreview(draft)">预览</button>
                   <button
                     class="btn-small btn-danger"
@@ -298,14 +404,26 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessageBox, ElNotification } from 'element-plus'
-import { aiAccountingApi, draftApi } from '@wealth-hub/shared'
+import { aiAccountingApi, draftApi, useAccountStore } from '@wealth-hub/shared'
 import type {
+  Account,
   AccountingIntent,
   DraftLedgerEntry,
   DraftLedgerStatus,
   DraftPreview,
 } from '@wealth-hub/shared'
 
+type DraftTxnType = 'EXPENSE' | 'INCOME' | ''
+
+interface DraftEditForm {
+  txnType: DraftTxnType
+  amount: string
+  note: string
+  accountId?: number
+  accountNameHint: string
+}
+
+const accountStore = useAccountStore()
 const textInput = ref('')
 const parsedIntent = ref<AccountingIntent | null>(null)
 const drafts = ref<DraftLedgerEntry[]>([])
@@ -317,6 +435,9 @@ const parsing = ref(false)
 const creatingDraft = ref(false)
 const previewing = ref(false)
 const confirming = ref(false)
+const editingDraft = ref(false)
+const savingDraft = ref(false)
+const draftEditForm = ref<DraftEditForm>(emptyDraftEditForm())
 
 const draftQueryParams = computed(() => ({
   status: statusFilter.value || undefined,
@@ -333,6 +454,25 @@ const canConfirmSelectedDraft = computed(() => {
   )
 })
 
+const editableAccountOptions = computed(() => {
+  const preferredAccounts = accountStore.cashLeafAccounts.length
+    ? accountStore.cashLeafAccounts
+    : accountStore.getAllLeafAccounts()
+
+  return preferredAccounts.filter((account) => account.isActive !== false)
+})
+
+const rankedAccountOptions = computed(() => {
+  const hint = draftEditForm.value.accountNameHint.trim().toLowerCase()
+  return [...editableAccountOptions.value].sort((left, right) => {
+    const leftScore = accountHintScore(left, hint)
+    const rightScore = accountHintScore(right, hint)
+
+    if (leftScore !== rightScore) return rightScore - leftScore
+    return left.accountName.localeCompare(right.accountName, 'zh-Hans-CN')
+  })
+})
+
 async function loadDrafts() {
   const currentSelectedId = selectedDraft.value?.id
   try {
@@ -347,6 +487,10 @@ async function loadDrafts() {
       if (!latestSelectedDraft || preview.value?.draftId !== latestSelectedDraft.id) {
         preview.value = null
       }
+
+      if (!latestSelectedDraft || latestSelectedDraft.status !== 'DRAFT') {
+        editingDraft.value = false
+      }
     }
   } catch (error: any) {
     ElNotification.error({
@@ -356,6 +500,12 @@ async function loadDrafts() {
     })
   } finally {
     loadingDrafts.value = false
+  }
+}
+
+async function ensureAccountsLoaded() {
+  if (accountStore.accounts.length === 0 && !accountStore.loading) {
+    await accountStore.fetchAccounts()
   }
 }
 
@@ -393,6 +543,7 @@ async function handleCreateDraft() {
     const result = await aiAccountingApi.draftFromIntent({ intent: parsedIntent.value })
     selectedDraft.value = result.draft
     preview.value = null
+    editingDraft.value = false
     statusFilter.value = 'DRAFT'
     await loadDrafts()
     ElNotification.success({
@@ -419,12 +570,99 @@ function resetTextEntry() {
 function selectDraft(draft: DraftLedgerEntry) {
   selectedDraft.value = draft
   preview.value = null
+  editingDraft.value = false
+}
+
+async function openEditDraft(draft: DraftLedgerEntry) {
+  if (draft.status !== 'DRAFT') {
+    ElNotification.warning({
+      title: '不可编辑',
+      message: '只有 DRAFT 状态草稿允许编辑。',
+      position: 'bottom-right',
+    })
+    return
+  }
+
+  selectedDraft.value = draft
+  preview.value = null
+  draftEditForm.value = buildEditForm(draft)
+  editingDraft.value = true
+
+  try {
+    await ensureAccountsLoaded()
+  } catch (error: any) {
+    ElNotification.error({
+      title: '账户加载失败',
+      message: getErrorMessage(error, '无法加载账户列表'),
+      position: 'bottom-right',
+    })
+  }
+}
+
+function cancelEditDraft() {
+  editingDraft.value = false
+}
+
+async function handleSaveDraftEdit(previewAfterSave = false) {
+  if (!selectedDraft.value || selectedDraft.value.status !== 'DRAFT') return
+
+  const validationMessage = validateDraftEditForm()
+  if (validationMessage) {
+    ElNotification.warning({
+      title: '请先补齐草稿字段',
+      message: validationMessage,
+      position: 'bottom-right',
+    })
+    return
+  }
+
+  const draftId = selectedDraft.value.id
+  const amount = Number(draftEditForm.value.amount)
+  const payload = buildUpdatedPayload(selectedDraft.value, amount)
+  const missingFields = calculateMissingFields(payload)
+
+  try {
+    savingDraft.value = true
+    const updated = await draftApi.updateDraft(draftId, {
+      sourceType: selectedDraft.value.sourceType,
+      sourceRef: selectedDraft.value.sourceRef || undefined,
+      rawInput: selectedDraft.value.rawInput || undefined,
+      parsedPayloadJson: JSON.stringify(payload),
+      confidence: selectedDraft.value.confidence ?? undefined,
+      missingFieldsJson: JSON.stringify(missingFields),
+    })
+
+    selectedDraft.value = updated
+    preview.value = null
+    statusFilter.value = 'DRAFT'
+    await loadDrafts()
+    editingDraft.value = false
+
+    ElNotification.success({
+      title: '草稿已保存',
+      message: '字段已保存到草稿。请重新生成预览后再确认记账。',
+      position: 'bottom-right',
+    })
+
+    if (previewAfterSave) {
+      await handlePreview(updated)
+    }
+  } catch (error: any) {
+    ElNotification.error({
+      title: '保存草稿失败',
+      message: getErrorMessage(error, '草稿编辑保存失败'),
+      position: 'bottom-right',
+    })
+  } finally {
+    savingDraft.value = false
+  }
 }
 
 async function handlePreview(draft: DraftLedgerEntry) {
   const draftId = draft.id
   try {
     selectedDraft.value = draft
+    editingDraft.value = false
     preview.value = null
     previewing.value = true
     const latestPreview = await draftApi.previewDraft(draftId)
@@ -458,6 +696,7 @@ async function handleIgnore(draft: DraftLedgerEntry) {
 
     await draftApi.ignoreDraft(draft.id, { ignoreReason: ignoreReason || undefined })
     preview.value = null
+    editingDraft.value = false
     await loadDrafts()
     ElNotification.success({
       title: '已忽略',
@@ -504,6 +743,7 @@ async function handleConfirm(draft: DraftLedgerEntry) {
     const confirmed = await draftApi.confirmDraft(draft.id)
     selectedDraft.value = confirmed
     preview.value = null
+    editingDraft.value = false
     await loadDrafts()
     window.dispatchEvent(new CustomEvent('data-refresh'))
     ElNotification.success({
@@ -523,12 +763,79 @@ async function handleConfirm(draft: DraftLedgerEntry) {
   }
 }
 
+function emptyDraftEditForm(): DraftEditForm {
+  return {
+    txnType: '',
+    amount: '',
+    note: '',
+    accountId: undefined,
+    accountNameHint: '',
+  }
+}
+
+function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
+  const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson))
+  const amount = asNumber(payload?.amount)
+  const accountId = asNumber(payload?.accountId)
+
+  return {
+    txnType: normalizeEditTxnType(asString(payload?.txnType)),
+    amount: amount === null ? '' : String(amount),
+    note: asString(payload?.note) || draft.rawInput || '',
+    accountId: accountId === null ? undefined : accountId,
+    accountNameHint: asString(payload?.accountNameHint) || '',
+  }
+}
+
+function validateDraftEditForm(): string | null {
+  if (!draftEditForm.value.txnType) return '请选择交易类型。'
+
+  const amount = Number(draftEditForm.value.amount)
+  if (!Number.isFinite(amount) || amount <= 0) return '金额必须是大于 0 的数字。'
+
+  if (!draftEditForm.value.accountId) return '请选择现金或活钱账户。'
+
+  return null
+}
+
+function buildUpdatedPayload(draft: DraftLedgerEntry, amount: number): Record<string, unknown> {
+  const payload = {
+    ...(normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson)) || {}),
+  }
+
+  payload.sourceType = payload.sourceType || draft.sourceType || 'APP_FORM'
+  payload.sourceRef = payload.sourceRef || draft.sourceRef || null
+  payload.rawInput = draft.rawInput || payload.rawInput || ''
+  payload.txnType = draftEditForm.value.txnType
+  payload.amount = amount
+  payload.note = draftEditForm.value.note.trim() || draft.rawInput || ''
+  payload.accountId = draftEditForm.value.accountId
+  payload.accountNameHint = draftEditForm.value.accountNameHint.trim() || null
+  payload.missingFields = calculateMissingFields(payload)
+
+  return payload
+}
+
+function calculateMissingFields(payload: Record<string, unknown>): string[] {
+  const missingFields: string[] = []
+  const txnType = normalizeEditTxnType(asString(payload.txnType))
+  const amount = asNumber(payload.amount)
+  const accountId = asNumber(payload.accountId)
+
+  if (!txnType) missingFields.push('txnType')
+  if (amount === null || amount <= 0) missingFields.push('amount')
+  if (accountId === null) missingFields.push('accountId')
+
+  return missingFields
+}
+
 function summarizeDraft(draft: DraftLedgerEntry): string {
   const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson))
   const txnType = formatTxnType(asString(payload?.txnType))
   const amount = formatAmount(asNumber(payload?.amount))
+  const account = formatPreviewAccount(asNumber(payload?.accountId))
   const note = asString(payload?.note) || draft.rawInput || '-'
-  return `${txnType} / ${amount} / ${note}`
+  return `${txnType} / ${amount} / ${account} / ${note}`
 }
 
 function parseMissingFields(raw?: string | null): string[] {
@@ -586,6 +893,12 @@ function asNumber(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null
   }
   return null
+}
+
+function normalizeEditTxnType(type?: string | null): DraftTxnType {
+  const normalized = type?.trim().toUpperCase()
+  if (normalized === 'EXPENSE' || normalized === 'INCOME') return normalized
+  return ''
 }
 
 function getErrorMessage(error: any, fallback: string): string {
@@ -663,12 +976,43 @@ function formatDateTime(value?: string | null): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
+function formatPreviewAccount(accountId?: number | null): string {
+  if (!accountId) return '-'
+  const account = accountStore.getAccountById(accountId)
+  return account ? `${account.accountName} #${account.id}` : `账户 ID ${accountId}`
+}
+
+function formatAccountOption(account: Account): string {
+  return `${account.accountName} / ${account.accountType} / ${account.fundUsage || '未标记用途'}`
+}
+
+function formatAccountMeta(account: Account): string {
+  const parts = [account.accountType, account.fundUsage || '未标记用途', account.currency]
+  return parts.filter(Boolean).join(' · ')
+}
+
+function accountHintScore(account: Account, hint: string): number {
+  let score = 0
+  const name = account.accountName.toLowerCase()
+  const type = account.accountType.toLowerCase()
+  const usage = String(account.fundUsage || '').toLowerCase()
+
+  if (hint && name.includes(hint)) score += 10
+  if (hint && type.includes(hint)) score += 4
+  if (hint && usage.includes(hint)) score += 2
+  if (['CASH', 'BANK', 'PAYMENT', 'MMF'].includes(account.accountType)) score += 3
+  if (account.fundUsage === 'SPENDABLE') score += 2
+
+  return score
+}
+
 function refreshDraftInbox() {
   loadDrafts()
 }
 
 onMounted(() => {
   loadDrafts()
+  ensureAccountsLoaded()
   window.addEventListener('data-refresh', refreshDraftInbox)
 })
 
@@ -706,7 +1050,8 @@ onBeforeUnmount(() => {
 }
 
 .entry-actions,
-.detail-actions {
+.detail-actions,
+.edit-actions {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -715,12 +1060,35 @@ onBeforeUnmount(() => {
 }
 
 .intent-panel,
-.preview-panel {
+.preview-panel,
+.edit-panel {
   margin-top: 14px;
   padding: 14px;
   border: 1px solid rgba(78, 164, 255, 0.16);
   border-radius: 14px;
   background: rgba(78, 164, 255, 0.06);
+}
+
+.edit-panel {
+  border-color: rgba(34, 197, 94, 0.22);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(78, 164, 255, 0.06));
+}
+
+.edit-hint,
+.edit-disabled-tip {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.edit-disabled-tip {
+  margin-top: 12px;
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .intent-title {
@@ -732,10 +1100,19 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
-.intent-grid {
+.intent-grid,
+.edit-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.form-field {
+  min-width: 0;
+}
+
+.form-field-wide {
+  grid-column: 1 / -1;
 }
 
 .intent-grid > div,
@@ -799,6 +1176,17 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.account-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-option small {
+  color: var(--muted);
 }
 
 .json-details {
@@ -882,7 +1270,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
-  .intent-grid {
+  .intent-grid,
+  .edit-form-grid {
     grid-template-columns: 1fr;
   }
 }
