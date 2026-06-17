@@ -117,3 +117,13 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 已确认待办统计和列表查询复用同一套用户/家庭可见性条件，只统计 `DRAFT`，不把 `CONFIRMED` / `IGNORED` 纳入今日待办。
 - 已加固 PC 草稿箱：从今日待办跳转 `/drafts?draftId=xxx` 时，会在当前列表中自动选中对应草稿；找不到时只提示用户切换筛选条件。
 - 今日待办入口仍保持只读导航能力，不自动 preview、不自动 confirm、不写正式账本、不修改账户余额、不生成订单或结算。
+
+## Android 原生 App 基础壳首版（2026-06-17）
+
+- 新增 `android-app/` Android 原生工程骨架，采用 Kotlin、Jetpack Compose、Material 3 和 Gradle Kotlin DSL。
+- 已包含启动入口、顶部标题栏、底部导航、登录 / Token 配置占位、总览、今日待办、草稿箱、账户 / 流水 / 持仓占位和设置页。
+- 已新增 Android 侧 API 边界：`GET /api/v2/todos/today`、`GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/confirm`、`POST /api/v2/drafts/{draftId}/ignore`。
+- 已新增最小 DTO：`TodayTodoDto`、`TodoItemDto`、`DraftLedgerEntryDto`、`DraftPreviewDto`，以及 BaseUrl、Token 拦截器和统一网络结果结构。
+- 今日待办和草稿箱首版默认使用安全空状态；确认按钮保持禁用，后续必须在后端 `preview.confirmSupported=true` 后才允许用户二次确认。
+- 当前未接入真实登录、通知监听、OCR、支付通知解析或真实大模型；移动端只承接查看与确认体验，不绕过后端 confirm，不直接写正式账本。
+- 当前本地环境未配置 Gradle 命令和 Android SDK，Android `assembleDebug` 暂未在本机执行；已通过源码静态检查，并确认现有后端与 Web 构建链路未被破坏。

@@ -59,6 +59,13 @@ replay_pid*
 .factorypath
 .buildpath
 
+# Android
+.gradle/
+local.properties
+captures/
+*.apk
+*.aab
+
 # Editor/project files
 .vscode/
 .idea/
