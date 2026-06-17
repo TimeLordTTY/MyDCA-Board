@@ -210,6 +210,7 @@ public class DraftLedgerEntryService {
 
         List<String> missing = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
+        boolean accountUnavailable = false;
         if (preview.getTxnType() == null) {
             missing.add("txnType");
         }
@@ -224,6 +225,7 @@ public class DraftLedgerEntryService {
         if (preview.getAccountId() != null) {
             account = accountMapper.selectVisibleRealById(preview.getAccountId(), draft.getOwnerUserId(), draft.getOwnerFamilyId());
             if (account == null) {
+                accountUnavailable = true;
                 addIfAbsent(missing, "accountId");
                 warnings.add("账户不存在、已停用或当前用户/家庭不可见，请重新选择可用账户。");
             } else {
@@ -247,6 +249,8 @@ public class DraftLedgerEntryService {
             warnings.add("预览阶段不会写入正式账本；只有点击确认后才会生成正式流水。");
         } else if (!supportedType) {
             preview.setMessage("首版草稿确认仅支持 EXPENSE/INCOME 快速记账");
+        } else if (accountUnavailable) {
+            preview.setMessage("草稿账户不存在、已停用或当前用户/家庭不可见，请重新选择账户。");
         } else {
             preview.setMessage("草稿缺少必要字段：" + String.join(", ", missing));
         }

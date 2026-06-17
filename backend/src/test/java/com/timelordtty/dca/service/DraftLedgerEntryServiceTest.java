@@ -117,8 +117,12 @@ class DraftLedgerEntryServiceTest {
         DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
 
         assertEquals(false, preview.getConfirmSupported());
+        assertEquals(false, preview.getWillCreateLedgerTxn());
+        assertEquals("NONE", preview.getImpactDirection());
+        assertEquals(BigDecimal.ZERO, preview.getAccountDelta());
         assertTrue(preview.getMissingFields().contains("accountId"));
         assertTrue(preview.getMissingFields().contains("amount"));
+        verify(accountMapper, never()).selectVisibleRealById(any(), any(), any());
         verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
         verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
     }
@@ -153,7 +157,45 @@ class DraftLedgerEntryServiceTest {
         assertEquals(false, preview.getConfirmSupported());
         assertEquals(false, preview.getWillCreateLedgerTxn());
         assertTrue(preview.getMissingFields().contains("accountId"));
+        assertTrue(preview.getMessage().contains("不可见"));
         assertTrue(preview.getWarnings().stream().anyMatch(warning -> warning.contains("不可见")));
+        verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
+        verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
+    }
+
+    @Test
+    void previewDraftRejectsNonRealAccountAsInvisible() {
+        DraftLedgerEntry draft = draft("DRAFT");
+        draft.setParsedPayloadJson("{\"txnType\":\"EXPENSE\",\"accountId\":77,\"amount\":45.67}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(draft);
+        when(accountMapper.selectVisibleRealById(77L, 10L, 20L)).thenReturn(null);
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals(false, preview.getConfirmSupported());
+        assertEquals(false, preview.getWillCreateLedgerTxn());
+        assertTrue(preview.getMissingFields().contains("accountId"));
+        assertTrue(preview.getWarnings().stream().anyMatch(warning -> warning.contains("账户不存在")));
+        verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
+        verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
+    }
+
+    @Test
+    void previewUnsupportedTypeKeepsImpactAndLedgerCreationDisabled() {
+        DraftLedgerEntry draft = draft("DRAFT");
+        draft.setParsedPayloadJson("{\"txnType\":\"BUY\",\"accountId\":7,\"amount\":12.34}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(draft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "证券账户", "BROKER", "INVESTABLE"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals(false, preview.getConfirmSupported());
+        assertEquals(false, preview.getWillCreateLedgerTxn());
+        assertEquals("NONE", preview.getImpactDirection());
+        assertEquals(BigDecimal.ZERO, preview.getAccountDelta());
+        assertEquals(false, preview.getWillCreateOrder());
+        assertEquals(false, preview.getWillCreateSettlement());
+        assertEquals(false, preview.getWillAffectHolding());
         verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
         verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
     }
