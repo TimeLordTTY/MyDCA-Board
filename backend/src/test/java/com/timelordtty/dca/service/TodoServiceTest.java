@@ -3,6 +3,7 @@ package com.timelordtty.dca.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -57,6 +58,23 @@ class TodoServiceTest {
 
         verify(draftLedgerEntryMapper).countVisibleByStatus(10L, 20L, "DRAFT");
         verify(draftLedgerEntryMapper).selectVisibleList(10L, 20L, "DRAFT", 0, 20);
+    }
+
+    @Test
+    void getTodayTodosLimitsItemsButKeepsRealDraftCount() {
+        List<DraftLedgerEntry> visibleDrafts = java.util.stream.LongStream.rangeClosed(1, 20)
+                .mapToObj(id -> draft(id, "DRAFT", "草稿 " + id))
+                .toList();
+        when(draftLedgerEntryMapper.countVisibleByStatus(10L, 20L, "DRAFT")).thenReturn(25);
+        when(draftLedgerEntryMapper.selectVisibleList(10L, 20L, "DRAFT", 0, 20)).thenReturn(visibleDrafts);
+
+        TodayTodoDTO todos = todoService.getTodayTodos(10L, 20L);
+
+        assertEquals(25, todos.getDraftCount());
+        assertEquals(25, todos.getTotalCount());
+        assertEquals(20, todos.getItems().size());
+        verify(draftLedgerEntryMapper, times(1)).selectVisibleList(10L, 20L, "DRAFT", 0, 20);
+        verifyNoInteractions(quickEntryService);
     }
 
     private DraftLedgerEntry draft(Long id, String status, String rawInput) {

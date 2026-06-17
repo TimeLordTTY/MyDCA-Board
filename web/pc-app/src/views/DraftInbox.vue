@@ -426,6 +426,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import { aiAccountingApi, draftApi, useAccountStore } from '@wealth-hub/shared'
 import type {
@@ -447,6 +448,7 @@ interface DraftEditForm {
 }
 
 const accountStore = useAccountStore()
+const route = useRoute()
 const textInput = ref('')
 const parsedIntent = ref<AccountingIntent | null>(null)
 const drafts = ref<DraftLedgerEntry[]>([])
@@ -461,6 +463,7 @@ const confirming = ref(false)
 const editingDraft = ref(false)
 const savingDraft = ref(false)
 const draftEditForm = ref<DraftEditForm>(emptyDraftEditForm())
+const routeDraftHintHandled = ref(false)
 
 const draftQueryParams = computed(() => ({
   status: statusFilter.value || undefined,
@@ -503,6 +506,10 @@ async function loadDrafts() {
     const rows = await draftApi.listDrafts(draftQueryParams.value)
     drafts.value = rows
 
+    if (!currentSelectedId && trySelectRouteDraft(rows)) {
+      return
+    }
+
     if (currentSelectedId) {
       const latestSelectedDraft = rows.find((item) => item.id === currentSelectedId) || null
       selectedDraft.value = latestSelectedDraft
@@ -524,6 +531,31 @@ async function loadDrafts() {
   } finally {
     loadingDrafts.value = false
   }
+}
+
+function trySelectRouteDraft(rows: DraftLedgerEntry[]): boolean {
+  if (routeDraftHintHandled.value) return false
+
+  const draftId = Number(route.query.draftId)
+  if (!Number.isInteger(draftId) || draftId <= 0) {
+    routeDraftHintHandled.value = true
+    return false
+  }
+
+  const matchedDraft = rows.find((item) => item.id === draftId)
+  routeDraftHintHandled.value = true
+
+  if (matchedDraft) {
+    selectDraft(matchedDraft)
+    return true
+  }
+
+  ElNotification.info({
+    title: '草稿未在当前列表中',
+    message: `未在当前筛选结果中找到草稿 #${draftId}，请切换筛选条件或在列表中查看。`,
+    position: 'bottom-right',
+  })
+  return false
 }
 
 async function ensureAccountsLoaded() {
