@@ -605,6 +605,7 @@ function cancelEditDraft() {
 
 async function handleSaveDraftEdit(previewAfterSave = false) {
   if (!selectedDraft.value || selectedDraft.value.status !== 'DRAFT') return
+  if (savingDraft.value) return
 
   const validationMessage = validateDraftEditForm()
   if (validationMessage) {
@@ -623,6 +624,7 @@ async function handleSaveDraftEdit(previewAfterSave = false) {
 
   try {
     savingDraft.value = true
+    preview.value = null
     const updated = await draftApi.updateDraft(draftId, {
       sourceType: selectedDraft.value.sourceType,
       sourceRef: selectedDraft.value.sourceRef || undefined,
@@ -636,6 +638,7 @@ async function handleSaveDraftEdit(previewAfterSave = false) {
     preview.value = null
     statusFilter.value = 'DRAFT'
     await loadDrafts()
+    const latestDraftForPreview = selectedDraft.value || updated
     editingDraft.value = false
 
     ElNotification.success({
@@ -645,7 +648,7 @@ async function handleSaveDraftEdit(previewAfterSave = false) {
     })
 
     if (previewAfterSave) {
-      await handlePreview(updated)
+      await handlePreview(latestDraftForPreview)
     }
   } catch (error: any) {
     ElNotification.error({
@@ -793,7 +796,8 @@ function validateDraftEditForm(): string | null {
   const amount = Number(draftEditForm.value.amount)
   if (!Number.isFinite(amount) || amount <= 0) return '金额必须是大于 0 的数字。'
 
-  if (!draftEditForm.value.accountId) return '请选择现金或活钱账户。'
+  const accountId = Number(draftEditForm.value.accountId)
+  if (!Number.isInteger(accountId) || accountId <= 0) return '请选择有效的现金或活钱账户。'
 
   return null
 }
@@ -824,7 +828,7 @@ function calculateMissingFields(payload: Record<string, unknown>): string[] {
 
   if (!txnType) missingFields.push('txnType')
   if (amount === null || amount <= 0) missingFields.push('amount')
-  if (accountId === null) missingFields.push('accountId')
+  if (accountId === null || accountId <= 0) missingFields.push('accountId')
 
   return missingFields
 }

@@ -77,3 +77,11 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 保存草稿后会清空旧预览并刷新草稿详情和列表；用户可以立即重新生成预览，待 `preview.confirmSupported=true` 后再二次确认正式记账。
 - 文本草稿现在可以从缺少 `accountId` 的状态，通过人工补齐账户与金额等字段进入可预览、可确认闭环。
 - 当前仍不包含分类自动补全、图片 OCR、真实大模型接入和支付通知监听；这些能力继续留给 Phase3 后续迭代。
+
+## PC 草稿编辑与账户补全验证加固（2026-06-17）
+
+- 已加固保存流程：保存时立即清空旧 preview，并阻止重复保存，避免旧预览在保存期间被误认为仍可确认。
+- 已加固“保存并预览”：保存成功并刷新列表后，使用刷新后的当前草稿生成 preview，而不是旧草稿对象。
+- 已加固账户字段校验：`accountId` 必须是大于 0 的正整数，`missingFieldsJson` 对非法或缺失账户会继续标记 `accountId`。
+- 已验证保存草稿只调用 `draftApi.updateDraft` 路径，不自动调用 `confirmDraft`；正式入账仍必须由用户在可确认 preview 后点击“确认记账”。
+- 已执行 `web/shared` build/type-check、`web/pc-app` build、后端 `mvn test` 和项目编译 hook；`web/pc-app` 全量 type-check 仍受既有历史类型问题阻断，但本轮未引入 `DraftInbox.vue` 新类型错误。
