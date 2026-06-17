@@ -90,8 +90,26 @@ export interface DraftPreview {
   txnType?: string | null
   /** 候选现金账户 ID。 */
   accountId?: number | null
+  /** 候选账户名称，用于确认前复核影响对象。 */
+  accountName?: string | null
+  /** 候选账户类型，例如 CASH、BANK、PAYMENT、MMF。 */
+  accountType?: string | null
+  /** 候选账户资金用途，例如 SPENDABLE、RESERVED、INVESTABLE。 */
+  fundUsage?: string | null
   /** 候选金额。 */
   amount?: number | null
+  /** 对账户余额的影响方向：DECREASE、INCREASE 或 NONE。 */
+  impactDirection?: 'DECREASE' | 'INCREASE' | 'NONE' | string | null
+  /** 对候选账户余额的预计变动金额，支出为负数，收入为正数。 */
+  accountDelta?: number | null
+  /** 确认后是否会生成正式流水；预览阶段始终不会写正式账本。 */
+  willCreateLedgerTxn?: boolean | null
+  /** 首版草稿确认是否会生成订单。 */
+  willCreateOrder?: boolean | null
+  /** 首版草稿确认是否会生成待结算记录。 */
+  willCreateSettlement?: boolean | null
+  /** 首版草稿确认是否会影响持仓。 */
+  willAffectHolding?: boolean | null
   /** 候选备注。 */
   note?: string | null
   /** 是否支持直接确认。 */
@@ -100,6 +118,8 @@ export interface DraftPreview {
   message?: string | null
   /** 缺失字段列表。 */
   missingFields?: string[]
+  /** 预览阶段提示或风险说明。 */
+  warnings?: string[]
 }
 
 /** 草稿列表查询参数。 */

@@ -6,7 +6,9 @@ import com.timelordtty.dca.dto.CreateDraftRequest;
 import com.timelordtty.dca.dto.DraftLedgerEntryDTO;
 import com.timelordtty.dca.dto.DraftPreviewDTO;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
+import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.DraftLedgerEntryMapper;
+import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.DraftLedgerEntry;
 import com.timelordtty.dca.model.LedgerTxn;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,8 @@ import java.util.Map;
 public class DraftLedgerEntryService {
     /** 草稿流水持久化入口，只操作 draft_ledger_entry 表。 */
     private final DraftLedgerEntryMapper draftLedgerEntryMapper;
+    /** 账户只读查询入口，用于预览阶段补充当前用户/家庭可见账户信息。 */
+    private final AccountMapper accountMapper;
     /** 统一快速记账入口，确认 EXPENSE/INCOME 草稿时必须通过它写正式流水。 */
     private final QuickEntryService quickEntryService;
     /** JSON 编解码器，用于解析候选载荷并生成前端可展示的预览信息。 */
@@ -36,9 +40,11 @@ public class DraftLedgerEntryService {
      * 装配草稿 Mapper、快速记账服务和 JSON 编解码器。
      */
     public DraftLedgerEntryService(DraftLedgerEntryMapper draftLedgerEntryMapper,
+                                   AccountMapper accountMapper,
                                    QuickEntryService quickEntryService,
                                    ObjectMapper objectMapper) {
         this.draftLedgerEntryMapper = draftLedgerEntryMapper;
+        this.accountMapper = accountMapper;
         this.quickEntryService = quickEntryService;
         this.objectMapper = objectMapper;
     }
@@ -198,8 +204,12 @@ public class DraftLedgerEntryService {
         preview.setAccountId(firstLong(payload, "accountId", "cashAccountId"));
         preview.setAmount(firstBigDecimal(payload, "amount"));
         preview.setNote(defaultIfBlank(firstString(payload, "note", "remark", "description"), draft.getRawInput()));
+        preview.setWillCreateOrder(false);
+        preview.setWillCreateSettlement(false);
+        preview.setWillAffectHolding(false);
 
         List<String> missing = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
         if (preview.getTxnType() == null) {
             missing.add("txnType");
         }
@@ -209,19 +219,69 @@ public class DraftLedgerEntryService {
         if (preview.getAmount() == null || preview.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             missing.add("amount");
         }
+
+        Account account = null;
+        if (preview.getAccountId() != null) {
+            account = accountMapper.selectVisibleRealById(preview.getAccountId(), draft.getOwnerUserId(), draft.getOwnerFamilyId());
+            if (account == null) {
+                addIfAbsent(missing, "accountId");
+                warnings.add("账户不存在、已停用或当前用户/家庭不可见，请重新选择可用账户。");
+            } else {
+                preview.setAccountName(account.getAccountName());
+                preview.setAccountType(account.getAccountType());
+                preview.setFundUsage(account.getFundUsage());
+                if (account.getFundUsage() != null && !account.getFundUsage().isBlank()) {
+                    warnings.add("账户资金用途：" + account.getFundUsage() + "；首版仅提示，不在预览阶段强制阻断。");
+                }
+            }
+        }
         preview.setMissingFields(missing);
 
         boolean supportedType = "EXPENSE".equals(preview.getTxnType()) || "INCOME".equals(preview.getTxnType());
+        applyAccountImpact(preview);
         boolean ready = supportedType && missing.isEmpty();
         preview.setConfirmSupported(ready);
+        preview.setWillCreateLedgerTxn(ready);
         if (ready) {
             preview.setMessage("可确认：将通过 QuickEntryService 生成正式" + preview.getTxnType() + "流水");
+            warnings.add("预览阶段不会写入正式账本；只有点击确认后才会生成正式流水。");
         } else if (!supportedType) {
             preview.setMessage("首版草稿确认仅支持 EXPENSE/INCOME 快速记账");
         } else {
             preview.setMessage("草稿缺少必要字段：" + String.join(", ", missing));
         }
+        preview.setWarnings(warnings);
         return preview;
+    }
+
+    /**
+     * 计算 EXPENSE/INCOME 对候选账户的方向和金额影响；其他类型首版不提供可确认影响。
+     */
+    private void applyAccountImpact(DraftPreviewDTO preview) {
+        if (preview.getAmount() == null || preview.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            preview.setImpactDirection("NONE");
+            preview.setAccountDelta(BigDecimal.ZERO);
+            return;
+        }
+        if ("EXPENSE".equals(preview.getTxnType())) {
+            preview.setImpactDirection("DECREASE");
+            preview.setAccountDelta(preview.getAmount().negate());
+        } else if ("INCOME".equals(preview.getTxnType())) {
+            preview.setImpactDirection("INCREASE");
+            preview.setAccountDelta(preview.getAmount());
+        } else {
+            preview.setImpactDirection("NONE");
+            preview.setAccountDelta(BigDecimal.ZERO);
+        }
+    }
+
+    /**
+     * 缺失字段列表同时承载“缺失”和“不可用”两类阻断原因，避免重复追加同一字段。
+     */
+    private void addIfAbsent(List<String> values, String value) {
+        if (!values.contains(value)) {
+            values.add(value);
+        }
     }
 
     /**

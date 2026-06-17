@@ -16,6 +16,9 @@ public interface AccountMapper {
     List<Account> selectByIds(@Param("ids") List<Long> ids);
     Account selectByCode(@Param("accountCode") String accountCode);
     List<Account> selectByOwner(@Param("ownerUserId") Long ownerUserId, @Param("ownerFamilyId") Long ownerFamilyId);
+    Account selectVisibleRealById(@Param("id") Long id,
+                                  @Param("ownerUserId") Long ownerUserId,
+                                  @Param("ownerFamilyId") Long ownerFamilyId);
     List<Account> selectVirtualAccountsByOwner(@Param("ownerUserId") Long ownerUserId,
                                                @Param("ownerFamilyId") Long ownerFamilyId,
                                                @Param("virtualSubtype") String virtualSubtype);
@@ -32,4 +35,3 @@ public interface AccountMapper {
     int updateReservedAmount(@Param("id") Long id, @Param("reservedAmount") BigDecimal reservedAmount);
     int updateInitialShares(@Param("id") Long id, @Param("initialShares") BigDecimal initialShares);
 }
-

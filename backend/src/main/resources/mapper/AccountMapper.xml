@@ -56,6 +56,17 @@
         ORDER BY account_name
     </select>
 
+    <select id="selectVisibleRealById" resultMap="BaseResultMap">
+        SELECT * FROM accounts
+        WHERE id = #{id}
+        AND is_active = 1
+        AND account_kind = 'REAL'
+        AND (
+            owner_user_id = #{ownerUserId}
+            OR (owner_family_id IS NOT NULL AND owner_family_id = #{ownerFamilyId})
+        )
+    </select>
+
     <select id="selectVirtualAccountsByOwner" resultMap="BaseResultMap">
         SELECT * FROM accounts
         WHERE is_active = 1

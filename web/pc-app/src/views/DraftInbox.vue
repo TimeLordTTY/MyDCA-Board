@@ -278,9 +278,32 @@
                 <strong>{{ preview.draftId }}</strong>
               </div>
             </div>
+            <div class="preview-impact-grid">
+              <div class="impact-card">
+                <span class="field-label">账户影响</span>
+                <strong>{{ formatImpactDirection(preview.impactDirection) }}</strong>
+                <p>
+                  {{ formatPreviewAccount(preview.accountId, preview.accountName) }}
+                  <span v-if="preview.accountType"> / {{ preview.accountType }}</span>
+                  <span v-if="preview.fundUsage"> / {{ preview.fundUsage }}</span>
+                </p>
+                <em>{{ formatSignedAmount(preview.accountDelta) }}</em>
+              </div>
+              <div class="impact-card">
+                <span class="field-label">正式对象影响</span>
+                <p>正式流水：{{ formatBooleanImpact(preview.willCreateLedgerTxn) }}</p>
+                <p>订单：{{ formatBooleanImpact(preview.willCreateOrder) }}</p>
+                <p>待结算：{{ formatBooleanImpact(preview.willCreateSettlement) }}</p>
+                <p>持仓：{{ formatBooleanImpact(preview.willAffectHolding) }}</p>
+              </div>
+            </div>
             <div class="intent-note">
               <span class="field-label">提示</span>
               <p>{{ preview.message || '预览完成，请确认内容无误后再正式记账。' }}</p>
+            </div>
+            <div v-if="preview.warnings?.length" class="warning-list">
+              <span class="field-label">风险 / 提示</span>
+              <p v-for="warning in preview.warnings" :key="warning">{{ warning }}</p>
             </div>
             <div v-if="preview.missingFields?.length" class="missing-list">
               <span class="field-label">仍缺失</span>
@@ -980,10 +1003,33 @@ function formatDateTime(value?: string | null): string {
   return `${year}-${month}-${day} ${hours}:${minutes}`
 }
 
-function formatPreviewAccount(accountId?: number | null): string {
+function formatPreviewAccount(accountId?: number | null, accountName?: string | null): string {
   if (!accountId) return '-'
+  if (accountName) return `${accountName} #${accountId}`
   const account = accountStore.getAccountById(accountId)
   return account ? `${account.accountName} #${account.id}` : `账户 ID ${accountId}`
+}
+
+function formatImpactDirection(direction?: string | null): string {
+  const labels: Record<string, string> = {
+    DECREASE: '账户资金减少',
+    INCREASE: '账户资金增加',
+    NONE: '暂无可确认资金影响',
+  }
+  return direction ? labels[direction] || direction : '-'
+}
+
+function formatSignedAmount(amount?: number | null): string {
+  if (amount === null || amount === undefined || Number.isNaN(amount)) {
+    return '预计变动：-'
+  }
+  const numericAmount = Number(amount)
+  const prefix = numericAmount > 0 ? '+' : ''
+  return `预计变动：${prefix}¥${numericAmount.toFixed(2)}`
+}
+
+function formatBooleanImpact(value?: boolean | null): string {
+  return value ? '会生成' : '不会生成'
 }
 
 function formatAccountOption(account: Account): string {
@@ -1120,11 +1166,35 @@ onBeforeUnmount(() => {
 }
 
 .intent-grid > div,
-.detail-row {
+.detail-row,
+.impact-card,
+.warning-list {
   padding: 10px;
   border: 1px solid rgba(230, 238, 247, 0.95);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.86);
+}
+
+.preview-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.impact-card p,
+.warning-list p {
+  margin: 4px 0 0;
+  color: var(--text);
+  line-height: 1.65;
+}
+
+.impact-card em {
+  display: inline-block;
+  margin-top: 6px;
+  color: #0f766e;
+  font-style: normal;
+  font-weight: 700;
 }
 
 .field-label {
@@ -1275,7 +1345,8 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .intent-grid,
-  .edit-form-grid {
+  .edit-form-grid,
+  .preview-impact-grid {
     grid-template-columns: 1fr;
   }
 }
