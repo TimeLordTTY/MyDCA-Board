@@ -239,6 +239,56 @@
       </div>
     </div>
 
+    <div class="card today-todo-card">
+      <div class="today-todo-head">
+        <div>
+          <h3>
+            今日待办
+            <span class="tag orange tiny" v-if="todayTodo.totalCount > 0">{{ todayTodo.totalCount }} 项</span>
+            <span class="tag green tiny" v-else>已清空</span>
+          </h3>
+          <div class="sub">
+            只展示待处理事项，不会自动确认草稿、执行结算或写入正式账本。
+          </div>
+        </div>
+        <button class="btn" @click="loadTodayTodos" style="padding: 6px 10px; font-size: 12px">
+          刷新待办
+        </button>
+      </div>
+      <div class="today-todo-metrics">
+        <div class="todo-metric" @click="router.push({ name: 'DraftInbox' })">
+          <span>待确认草稿</span>
+          <strong>{{ todayTodo.draftCount }}</strong>
+        </div>
+        <div class="todo-metric muted">
+          <span>待结算</span>
+          <strong>{{ todayTodo.settlementCount }}</strong>
+        </div>
+        <div class="todo-metric muted">
+          <span>策略建议</span>
+          <strong>{{ todayTodo.suggestionCount }}</strong>
+        </div>
+      </div>
+      <div v-if="todayTodo.items.length === 0" class="td-muted todo-empty">
+        暂无待确认草稿。待结算和策略建议首版暂未接入，当前返回 0。
+      </div>
+      <div v-else class="today-todo-list">
+        <button
+          v-for="item in todayTodo.items"
+          :key="`${item.type}-${item.refId}`"
+          class="todo-item"
+          @click="handleTodoItemClick(item)"
+        >
+          <span class="tag blue tiny">{{ item.type }}</span>
+          <span class="todo-item-main">
+            <strong>{{ item.title }}</strong>
+            <em>{{ item.description || '打开草稿箱复核并确认。' }}</em>
+          </span>
+          <span class="todo-action">去处理 →</span>
+        </button>
+      </div>
+    </div>
+
     <div class="grid">
       <!-- 资产配比图表 -->
       <div class="card">
@@ -406,12 +456,14 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElNotification } from 'element-plus'
 import * as echarts from 'echarts'
-import { dashboardApi, holdingApi, marketApi, navApi, orderApi, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
+import { dashboardApi, holdingApi, marketApi, navApi, orderApi, todoApi, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
 import { formatCurrency, formatNumber, formatDate, formatDateTime, getOrderTypeLabel } from '@wealth-hub/shared'
-import type { MarketQuoteRealtime, Nav, AssetOverview, Account } from '@wealth-hub/shared'
+import type { MarketQuoteRealtime, Nav, AssetOverview, Account, TodayTodo, TodoItem } from '@wealth-hub/shared'
 
+const router = useRouter()
 const accountStore = useAccountStore()
 const productStore = useProductStore()
 
@@ -426,6 +478,14 @@ const overview = ref<AssetOverview>({
 })
 
 const todayActions = ref<any[]>([])
+const todayTodo = ref<TodayTodo>({
+  date: '',
+  totalCount: 0,
+  draftCount: 0,
+  settlementCount: 0,
+  suggestionCount: 0,
+  items: [],
+})
 const pendingSettlements = ref<any[]>([])
 const holdings = ref<any[]>([])
 const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
@@ -605,6 +665,8 @@ async function loadData() {
     console.log('账户树:', accountStore.accountTree)
     overview.value = overviewData
 
+    await loadTodayTodos()
+
     // 加载今日建议
     todayActions.value = await dashboardApi.getTodayActions()
 
@@ -681,6 +743,22 @@ async function loadData() {
     updateAllocationChart()
   } catch (error: any) {
     ElNotification.error({ title: '错误', message: error.message || '加载数据失败', position: 'bottom-right' })
+  }
+}
+
+async function loadTodayTodos() {
+  try {
+    todayTodo.value = await todoApi.getTodayTodos()
+  } catch (error: any) {
+    console.warn('加载今日待办失败:', error)
+    todayTodo.value = {
+      date: '',
+      totalCount: 0,
+      draftCount: 0,
+      settlementCount: 0,
+      suggestionCount: 0,
+      items: [],
+    }
   }
 }
 
@@ -1048,6 +1126,17 @@ function handleTodayActionClick(action: any) {
   }
 }
 
+function handleTodoItemClick(item: TodoItem) {
+  if (item.type === 'DRAFT') {
+    router.push({ name: 'DraftInbox', query: { draftId: item.refId } })
+    return
+  }
+
+  if (item.actionPath) {
+    router.push(item.actionPath)
+  }
+}
+
 // 辅助函数：获取产品名称
 function getProductDisplayName(productId: number): string {
   const product = productStore.products.find(p => p.id === productId)
@@ -1224,6 +1313,152 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.today-todo-card {
+  margin-bottom: 16px;
+  border: 1px solid rgba(64, 158, 255, 0.12);
+  background:
+    linear-gradient(135deg, rgba(64, 158, 255, 0.08), rgba(103, 194, 58, 0.04)),
+    #fff;
+}
+
+.today-todo-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.today-todo-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+
+.today-todo-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.todo-metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(64, 158, 255, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.todo-metric:hover {
+  border-color: rgba(64, 158, 255, 0.38);
+  box-shadow: 0 8px 24px rgba(64, 158, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.todo-metric.muted {
+  cursor: default;
+  color: #909399;
+}
+
+.todo-metric.muted:hover {
+  border-color: rgba(64, 158, 255, 0.16);
+  box-shadow: none;
+  transform: none;
+}
+
+.todo-metric span {
+  font-size: 13px;
+}
+
+.todo-metric strong {
+  color: #303133;
+  font-size: 22px;
+}
+
+.todo-empty {
+  padding: 12px 0 2px;
+}
+
+.today-todo-list {
+  display: grid;
+  gap: 8px;
+}
+
+.todo-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(64, 158, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.todo-item:hover {
+  border-color: rgba(64, 158, 255, 0.36);
+  background: #fff;
+}
+
+.todo-item-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.todo-item-main strong,
+.todo-item-main em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.todo-item-main strong {
+  color: #303133;
+  font-size: 14px;
+}
+
+.todo-item-main em {
+  color: #909399;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.todo-action {
+  color: #409eff;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .today-todo-head {
+    flex-direction: column;
+  }
+
+  .today-todo-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .todo-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .todo-action {
+    grid-column: 2;
+  }
+}
+
 .detail-row {
   display: flex;
   justify-content: space-between;

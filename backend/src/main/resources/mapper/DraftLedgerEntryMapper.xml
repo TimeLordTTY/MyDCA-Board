@@ -74,6 +74,12 @@
         </if>
     </select>
 
+    <select id="countVisibleByStatus" resultType="int">
+        SELECT COUNT(1) FROM draft_ledger_entry
+        WHERE <include refid="VisibleCondition"/>
+          AND status = #{status}
+    </select>
+
     <update id="updateDraftContent">
         UPDATE draft_ledger_entry
         SET source_type = #{sourceType},

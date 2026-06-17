@@ -100,3 +100,12 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 不存在、停用、非 REAL 或不可见账户会导致 `confirmSupported=false`，`missingFields` 包含 `accountId`，并返回清晰的 message / warnings。
 - 已覆盖 EXPENSE 负向账户影响、INCOME 正向账户影响、非 REAL / 不可见账户、unsupported txnType、缺失 accountId 不查询 mapper、preview 不调用 `QuickEntryService` 等边界。
 - preview 阶段只更新草稿预览 JSON，不调用 confirm，不写正式账本；confirm 仍只支持 `EXPENSE` / `INCOME`，不生成订单、待结算或持仓变化。
+
+## 今日待办与确认入口首版（2026-06-17）
+
+- 新增 `GET /api/v2/todos/today` 只读接口，首版聚合当前用户或当前家庭可见的 `DRAFT` 草稿，返回总数、草稿数、待结算数、策略建议数和前 20 条待处理项。
+- 待结算和策略建议首版暂未接入，当前明确返回 0，避免把尚未建模的能力误展示为已实现。
+- 新增 shared 层 `todoApi` 与 `TodayTodo` / `TodoItem` 类型，供 PC 端、移动端和后续 Hermes 摘要入口复用。
+- PC 仪表盘新增“今日待办”卡片，展示待确认草稿数量和待处理列表；点击草稿待办进入草稿箱，不在首页直接确认。
+- 今日待办只负责发现和导航，不调用 `confirmDraft`，不写正式账本，不修改账户余额，不生成订单、结算或持仓变化。
+- 用户仍必须在草稿箱中查看 preview，且仅在 `preview.confirmSupported=true` 时手动点击确认，才会进入正式记账流程。

@@ -36,6 +36,13 @@ public interface DraftLedgerEntryMapper {
                                              @Param("limit") Integer limit);
 
     /**
+     * 统计当前用户或家庭可见的指定状态草稿数量，用于只读待办聚合。
+     */
+    int countVisibleByStatus(@Param("userId") Long userId,
+                             @Param("familyId") Long familyId,
+                             @Param("status") String status);
+
+    /**
      * 更新 DRAFT 状态草稿的候选内容，不修改确认或忽略追踪字段。
      */
     int updateDraftContent(DraftLedgerEntry draft);
