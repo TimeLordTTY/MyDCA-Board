@@ -19,7 +19,6 @@ data class DraftLedgerEntryDto(
 
 /**
  * 草稿影响预览 DTO 最小字段。
- *
  * confirmSupported 是移动端确认按钮是否可用的唯一依据之一。
  */
 data class DraftPreviewDto(
@@ -43,7 +42,7 @@ data class DraftPreviewDto(
 )
 
 /**
- * 忽略草稿请求体；首版默认不填写原因，后续由 UI 表单补充。
+ * 忽略草稿请求体；首版使用固定说明，后续可由 UI 表单补充。
  */
 data class IgnoreDraftRequestDto(
     val ignoreReason: String? = null,

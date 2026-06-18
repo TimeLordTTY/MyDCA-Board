@@ -1,7 +1,7 @@
 package com.timelordtty.mydca.ui
 
 /**
- * 首版导航目标。
+ * 首版底部导航目标。
  */
 enum class AppRoute(
     val title: String,

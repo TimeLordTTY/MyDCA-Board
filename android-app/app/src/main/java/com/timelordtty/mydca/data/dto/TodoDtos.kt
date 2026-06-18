@@ -14,7 +14,6 @@ data class TodayTodoDto(
 
 /**
  * 待办单项 DTO。
- *
  * actionPath 只用于移动端导航，不代表自动执行。
  */
 data class TodoItemDto(

@@ -9,8 +9,7 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 
 /**
  * Android 网络客户端装配入口。
- *
- * 首版只声明 API 边界；UI 默认可以使用空状态，不强制连接真实服务。
+ * 只装配后端 API 边界，不连接数据库，也不会在客户端记录 Token 明文。
  */
 object NetworkModule {
     fun createApi(

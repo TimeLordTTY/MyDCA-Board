@@ -2,7 +2,6 @@ package com.timelordtty.mydca.core.network
 
 /**
  * Android 侧 API 基础配置。
- *
  * 默认地址仅指向 Android 模拟器访问本机开发服务的常见地址，不包含任何生产域名或密钥。
  */
 data class ApiConfig(

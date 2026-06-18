@@ -4,22 +4,21 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
-import com.timelordtty.mydca.data.dto.TodayTodoDto
+import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 
 /**
- * 草稿与待办数据仓库。
- *
- * 首版用于隔离 API 调用和 UI 状态，后续可在这里加入登录态、缓存和重试策略。
+ * 草稿数据仓库。
+ * 只封装草稿查看、预览、忽略和用户确认接口；不会直接连接数据库或绕过后端安全边界。
  */
 class DraftRepository(
     private val api: WealthHubApi,
 ) {
-    suspend fun getTodayTodos(): NetworkResult<TodayTodoDto> = safeCall {
-        api.getTodayTodos()
-    }
-
     suspend fun listDrafts(): NetworkResult<List<DraftLedgerEntryDto>> = safeCall {
         api.listDrafts(status = "DRAFT")
+    }
+
+    suspend fun getDraft(draftId: Long): NetworkResult<DraftLedgerEntryDto> = safeCall {
+        api.getDraft(draftId)
     }
 
     suspend fun previewDraft(draftId: Long): NetworkResult<DraftPreviewDto> = safeCall {
@@ -28,6 +27,10 @@ class DraftRepository(
 
     suspend fun confirmDraft(draftId: Long): NetworkResult<DraftLedgerEntryDto> = safeCall {
         api.confirmDraft(draftId)
+    }
+
+    suspend fun ignoreDraft(draftId: Long, reason: String? = null): NetworkResult<DraftLedgerEntryDto> = safeCall {
+        api.ignoreDraft(draftId, IgnoreDraftRequestDto(ignoreReason = reason))
     }
 
     private suspend fun <T> safeCall(block: suspend () -> T): NetworkResult<T> {

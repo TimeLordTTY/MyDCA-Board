@@ -6,9 +6,10 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 设置页包含 BaseUrl 和 Bearer Token 配置占位。
-- API 边界已声明 `/api/v2/todos/today` 和 `/api/v2/drafts` 相关接口。
-- 当前 UI 默认使用安全空状态，不会自动预览、自动确认或写正式账本。
+- 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
+- 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
+- 设置页包含 BaseUrl 和 Bearer Token 输入，仅用于开发联调，当前只保存在内存中。
+- Android App 不接入真实大模型，不自动预览、不自动确认、不直接写数据库。
 
 ## 本地开发要求
 
@@ -22,7 +23,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 如果本地需要配置 SDK 路径，请创建本机私有文件：
 
 ```properties
-sdk.dir=C:\\Users\\<your-user>\\AppData\\Local\\Android\\Sdk
+sdk.dir=C:\Users\<your-user>\AppData\Local\Android\Sdk
 ```
 
 该文件应保存为：
@@ -45,6 +46,14 @@ http://10.0.2.2:8080/
 
 Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，方便本地联调；release 构建不应默认放开明文网络。
 
+## 草稿确认边界
+
+- 文本解析和 AI 入口只生成草稿。
+- 草稿箱必须先调用 preview 接口生成影响预览。
+- 确认按钮必须同时满足：当前草稿为 `DRAFT`、当前预览 `draftId` 与草稿 ID 一致、`preview.confirmSupported=true`。
+- 点击确认前仍会弹出二次确认。
+- 最终校验仍由后端 `/api/v2/drafts/{draftId}/confirm` 统一完成。
+
 ## 安全边界
 
 - 不要提交真实 token、cookie、密码或私有服务地址。
@@ -52,7 +61,6 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 生产构建应使用 HTTPS BaseUrl，不应依赖 debug 明文 HTTP 配置。
 - Android App 不直接写数据库。
 - Android App 不计算最终账本影响，只展示后端 preview。
-- `confirm` 必须由用户手动点击，并由后端 `/api/v2/drafts/{draftId}/confirm` 统一校验。
 - 当前不包含通知监听、OCR、支付通知解析或真实大模型接入。
 
 ## 验证命令
@@ -65,4 +73,4 @@ gradle test
 gradle assembleDebug
 ```
 
-当前仓库没有提交 Gradle wrapper；如后续需要无人值守 CI 构建，可在确认版本和二进制来源后再补充 wrapper。
+当前仓库没有提交 Gradle wrapper；如后续需要无人值守 CI 构建，可在确认版本和二进制来源后再补入 wrapper。

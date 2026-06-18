@@ -137,3 +137,12 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 已移除未使用的 OkHttp logging-interceptor 依赖，降低首版网络层暴露面。
 - 已再次确认 BaseUrl 仅使用 Android 模拟器访问本机后端的开发占位地址，未提交真实 token、cookie、密码或生产私密地址。
 - 当前环境仍无 Gradle 命令、Gradle wrapper 和 Android SDK，因此 Android `test` / `assembleDebug` 未在本机执行；现有后端与 Web 构建链路验证通过。
+
+## Android 今日待办与草稿箱接口接入首版（2026-06-18）
+
+- Android 原生 App 的今日待办页已接入 `GET /api/v2/todos/today`，展示草稿、结算、建议数量和待办列表。
+- 草稿待办支持从今日待办跳转到草稿箱，并按 `refId` 打开对应草稿详情。
+- 草稿箱已接入 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
+- 移动端确认按钮必须同时满足当前草稿仍为 `DRAFT`、当前预览 `draftId` 与草稿 ID 一致、且 `preview.confirmSupported=true`；点击确认前仍会二次提示。
+- 设置页的 BaseUrl 和 Bearer Token 仅保存在当前内存状态中，不写入源码、不持久化、不打印明文 Token。
+- 首版仍不包含真实登录、安全 Token 存储、通知监听、OCR、支付通知解析或真实大模型接入。

@@ -12,7 +12,6 @@ import retrofit2.http.Query
 
 /**
  * Android 侧 WealthHub API 边界。
- *
  * 只声明查看、预览和用户手动确认相关接口；移动端不直接写数据库。
  */
 interface WealthHubApi {
