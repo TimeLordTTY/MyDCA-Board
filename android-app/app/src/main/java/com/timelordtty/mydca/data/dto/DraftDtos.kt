@@ -37,8 +37,8 @@ data class DraftPreviewDto(
     val willCreateOrder: Boolean = false,
     val willCreateSettlement: Boolean = false,
     val willAffectHolding: Boolean = false,
-    val warnings: List<String> = emptyList(),
-    val missingFields: List<String> = emptyList(),
+    val warnings: List<String>? = emptyList(),
+    val missingFields: List<String>? = emptyList(),
 )
 
 /**

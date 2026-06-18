@@ -25,23 +25,28 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun TodayTodoScreen(
-    todoRepository: TodoRepository,
+    todoRepository: TodoRepository?,
+    apiConfigError: String?,
     onOpenDraft: (Long) -> Unit,
 ) {
     var todoState by remember { mutableStateOf<AsyncState<TodayTodoDto>>(AsyncState.Loading) }
     val scope = rememberCoroutineScope()
 
     fun refreshTodos() {
+        val repository = todoRepository ?: run {
+            todoState = AsyncState.Error(apiConfigError ?: "接口配置未就绪")
+            return
+        }
         scope.launch {
             todoState = AsyncState.Loading
-            todoState = when (val result = todoRepository.getTodayTodos()) {
+            todoState = when (val result = repository.getTodayTodos()) {
                 is NetworkResult.Success -> AsyncState.Success(result.data)
                 is NetworkResult.Failure -> AsyncState.Error(result.message)
             }
         }
     }
 
-    LaunchedEffect(todoRepository) {
+    LaunchedEffect(todoRepository, apiConfigError) {
         refreshTodos()
     }
 
@@ -83,11 +88,12 @@ private fun TodayTodoContent(
         OutlinedButton(onClick = onRefresh) {
             Text("刷新")
         }
-        if (todos.items.isEmpty()) {
+        val items = todos.items.orEmpty()
+        if (items.isEmpty()) {
             StatusPill("暂无待办")
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                todos.items.forEach { item ->
+                items.forEach { item ->
                     TodoItemCard(item = item, onOpenDraft = onOpenDraft)
                 }
             }

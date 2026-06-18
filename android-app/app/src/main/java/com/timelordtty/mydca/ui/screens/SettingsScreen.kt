@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 fun SettingsScreen(
     baseUrl: String,
     token: String,
+    apiConfigError: String?,
     onBaseUrlChange: (String) -> Unit,
     onTokenChange: (String) -> Unit,
 ) {
@@ -17,6 +18,14 @@ fun SettingsScreen(
             onBaseUrlChange = onBaseUrlChange,
             onTokenChange = onTokenChange,
         )
+        apiConfigError?.let { message ->
+            SectionCard(
+                title = "接口配置需要修正",
+                description = message,
+            ) {
+                StatusPill("请检查 BaseUrl")
+            }
+        }
         SectionCard(title = "当前未接入能力") {
             KeyValueRow("真实登录", "未接入")
             KeyValueRow("通知监听", "未接入")

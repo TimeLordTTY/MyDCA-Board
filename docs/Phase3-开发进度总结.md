@@ -146,3 +146,11 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 移动端确认按钮必须同时满足当前草稿仍为 `DRAFT`、当前预览 `draftId` 与草稿 ID 一致、且 `preview.confirmSupported=true`；点击确认前仍会二次提示。
 - 设置页的 BaseUrl 和 Bearer Token 仅保存在当前内存状态中，不写入源码、不持久化、不打印明文 Token。
 - 首版仍不包含真实登录、安全 Token 存储、通知监听、OCR、支付通知解析或真实大模型接入。
+
+## Android 今日待办与草稿箱接口接入验证加固（2026-06-18）
+
+- 已加固 BaseUrl 装配：非法或缺少 `http://` / `https://` 的 BaseUrl 不再在 Compose 组合期直接导致 App 崩溃，页面会显示接口配置错误并引导回设置页修正。
+- 已加固 DTO 空值兼容：`TodayTodoDto.items`、`DraftPreviewDto.warnings`、`DraftPreviewDto.missingFields` 支持后端返回 `null` 时安全降级为空列表。
+- 已加固从今日待办进入草稿箱的选中逻辑：列表刷新时优先保留目标 `draftId`，避免被默认第一条草稿覆盖。
+- 已复核草稿确认边界：确认按钮仍必须满足当前草稿为 `DRAFT`、当前预览 `draftId` 匹配、且 `preview.confirmSupported=true`，并保留二次确认弹窗。
+- 首版仍未接入真实登录、安全 Token 持久化、通知监听、OCR、支付通知解析、企业微信入口或真实大模型。

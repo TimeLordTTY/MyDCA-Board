@@ -41,14 +41,18 @@ fun MyDcaApp() {
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
 
         val safeBaseUrl = baseUrl.ifBlank { ApiConfig.DEFAULT_LOCAL_BASE_URL }
-        val api = remember(safeBaseUrl, token) {
-            NetworkModule.createApi(
-                config = ApiConfig(safeBaseUrl),
-                tokenProvider = InMemoryAuthTokenProvider(token),
-            )
+        val apiResult = remember(safeBaseUrl, token) {
+            runCatching {
+                NetworkModule.createApi(
+                    config = ApiConfig(safeBaseUrl),
+                    tokenProvider = InMemoryAuthTokenProvider(token),
+                )
+            }
         }
-        val todoRepository = remember(api) { TodoRepository(api) }
-        val draftRepository = remember(api) { DraftRepository(api) }
+        val api = apiResult.getOrNull()
+        val apiConfigError = apiResult.exceptionOrNull()?.message
+        val todoRepository = remember(api) { api?.let { TodoRepository(it) } }
+        val draftRepository = remember(api) { api?.let { DraftRepository(it) } }
 
         Scaffold(
             topBar = {
@@ -80,6 +84,7 @@ fun MyDcaApp() {
                     AppRoute.Overview -> OverviewScreen()
                     AppRoute.TodayTodo -> TodayTodoScreen(
                         todoRepository = todoRepository,
+                        apiConfigError = apiConfigError,
                         onOpenDraft = { draftId ->
                             selectedDraftId = draftId
                             currentRoute = AppRoute.Drafts
@@ -87,6 +92,7 @@ fun MyDcaApp() {
                     )
                     AppRoute.Drafts -> DraftInboxScreen(
                         draftRepository = draftRepository,
+                        apiConfigError = apiConfigError,
                         selectedDraftId = selectedDraftId,
                         onDraftHandled = { selectedDraftId = null },
                     )
@@ -97,6 +103,7 @@ fun MyDcaApp() {
                     AppRoute.Settings -> SettingsScreen(
                         baseUrl = baseUrl,
                         token = token,
+                        apiConfigError = apiConfigError,
                         onBaseUrlChange = { baseUrl = it },
                         onTokenChange = { token = it },
                     )

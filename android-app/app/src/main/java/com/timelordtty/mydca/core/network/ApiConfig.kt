@@ -15,6 +15,9 @@ data class ApiConfig(
         fun normalizeBaseUrl(value: String): String {
             val trimmed = value.trim()
             require(trimmed.isNotBlank()) { "BaseUrl 不能为空" }
+            require(trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+                "BaseUrl 必须以 http:// 或 https:// 开头"
+            }
             return if (trimmed.endsWith("/")) trimmed else "$trimmed/"
         }
     }

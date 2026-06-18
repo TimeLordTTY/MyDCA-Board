@@ -27,7 +27,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun DraftInboxScreen(
-    draftRepository: DraftRepository,
+    draftRepository: DraftRepository?,
+    apiConfigError: String?,
     selectedDraftId: Long?,
     onDraftHandled: () -> Unit,
 ) {
@@ -46,13 +47,22 @@ fun DraftInboxScreen(
     }
 
     fun refreshDrafts(preferredDraftId: Long? = selectedDraft?.id) {
+        val repository = draftRepository ?: run {
+            draftsState = AsyncState.Error(apiConfigError ?: "接口配置未就绪")
+            return
+        }
         scope.launch {
             draftsState = AsyncState.Loading
-            when (val result = draftRepository.listDrafts()) {
+            when (val result = repository.listDrafts()) {
                 is NetworkResult.Success -> {
                     val drafts = result.data
                     draftsState = AsyncState.Success(drafts)
-                    selectedDraft = drafts.firstOrNull { it.id == preferredDraftId } ?: drafts.firstOrNull()
+                    selectedDraft = if (preferredDraftId != null) {
+                        drafts.firstOrNull { it.id == preferredDraftId }
+                            ?: selectedDraft?.takeIf { it.id == preferredDraftId }
+                    } else {
+                        drafts.firstOrNull()
+                    }
                     previewState = null
                 }
                 is NetworkResult.Failure -> {
@@ -63,9 +73,13 @@ fun DraftInboxScreen(
     }
 
     fun loadDraftDetail(draftId: Long) {
+        val repository = draftRepository ?: run {
+            actionMessage = apiConfigError ?: "接口配置未就绪"
+            return
+        }
         scope.launch {
             actionMessage = "正在加载草稿详情"
-            when (val result = draftRepository.getDraft(draftId)) {
+            when (val result = repository.getDraft(draftId)) {
                 is NetworkResult.Success -> {
                     selectedDraft = result.data
                     previewState = null
@@ -79,10 +93,14 @@ fun DraftInboxScreen(
     }
 
     fun previewSelectedDraft() {
+        val repository = draftRepository ?: run {
+            previewState = AsyncState.Error(apiConfigError ?: "接口配置未就绪")
+            return
+        }
         val draft = selectedDraft ?: return
         scope.launch {
             previewState = AsyncState.Loading
-            previewState = when (val result = draftRepository.previewDraft(draft.id)) {
+            previewState = when (val result = repository.previewDraft(draft.id)) {
                 is NetworkResult.Success -> AsyncState.Success(result.data)
                 is NetworkResult.Failure -> AsyncState.Error(result.message)
             }
@@ -105,7 +123,11 @@ fun DraftInboxScreen(
 
         scope.launch {
             actionMessage = "正在提交确认请求"
-            when (val result = draftRepository.confirmDraft(draft.id)) {
+            val repository = draftRepository ?: run {
+                actionMessage = apiConfigError ?: "接口配置未就绪"
+                return@launch
+            }
+            when (val result = repository.confirmDraft(draft.id)) {
                 is NetworkResult.Success -> {
                     showConfirmDialog = false
                     actionMessage = "草稿已确认：${result.data.id}"
@@ -124,7 +146,11 @@ fun DraftInboxScreen(
         val draft = selectedDraft ?: return
         scope.launch {
             actionMessage = "正在忽略草稿"
-            when (val result = draftRepository.ignoreDraft(draft.id, "Android 手动忽略")) {
+            val repository = draftRepository ?: run {
+                actionMessage = apiConfigError ?: "接口配置未就绪"
+                return@launch
+            }
+            when (val result = repository.ignoreDraft(draft.id, "Android 手动忽略")) {
                 is NetworkResult.Success -> {
                     showIgnoreDialog = false
                     actionMessage = "草稿已忽略：${result.data.id}"
@@ -139,7 +165,7 @@ fun DraftInboxScreen(
         }
     }
 
-    LaunchedEffect(draftRepository, selectedDraftId) {
+    LaunchedEffect(draftRepository, apiConfigError, selectedDraftId) {
         refreshDrafts(selectedDraftId)
         if (selectedDraftId != null) {
             loadDraftDetail(selectedDraftId)
@@ -312,11 +338,13 @@ private fun PreviewContent(preview: DraftPreviewDto) {
         KeyValueRow("会生成订单", if (preview.willCreateOrder) "是" else "否")
         KeyValueRow("会生成结算", if (preview.willCreateSettlement) "是" else "否")
         KeyValueRow("会影响持仓", if (preview.willAffectHolding) "是" else "否")
-        if (preview.missingFields.isNotEmpty()) {
-            Text("缺失字段：${preview.missingFields.joinToString()}")
+        val missingFields = preview.missingFields.orEmpty()
+        val warnings = preview.warnings.orEmpty()
+        if (missingFields.isNotEmpty()) {
+            Text("缺失字段：${missingFields.joinToString()}")
         }
-        if (preview.warnings.isNotEmpty()) {
-            Text("风险提示：${preview.warnings.joinToString()}")
+        if (warnings.isNotEmpty()) {
+            Text("风险提示：${warnings.joinToString()}")
         }
     }
 }

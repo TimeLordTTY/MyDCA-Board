@@ -48,6 +48,7 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 
 ## 草稿确认边界
 
+- BaseUrl 输入无效时，App 会显示配置错误，不会在组合期直接崩溃。
 - 文本解析和 AI 入口只生成草稿。
 - 草稿箱必须先调用 preview 接口生成影响预览。
 - 确认按钮必须同时满足：当前草稿为 `DRAFT`、当前预览 `draftId` 与草稿 ID 一致、`preview.confirmSupported=true`。
@@ -61,7 +62,7 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 生产构建应使用 HTTPS BaseUrl，不应依赖 debug 明文 HTTP 配置。
 - Android App 不直接写数据库。
 - Android App 不计算最终账本影响，只展示后端 preview。
-- 当前不包含通知监听、OCR、支付通知解析或真实大模型接入。
+- 当前不包含真实登录、安全 Token 持久化、通知监听、OCR、支付通知解析、企业微信入口或真实大模型接入。
 
 ## 验证命令
 

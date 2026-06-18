@@ -9,7 +9,7 @@ data class TodayTodoDto(
     val draftCount: Int = 0,
     val settlementCount: Int = 0,
     val suggestionCount: Int = 0,
-    val items: List<TodoItemDto> = emptyList(),
+    val items: List<TodoItemDto>? = emptyList(),
 )
 
 /**
