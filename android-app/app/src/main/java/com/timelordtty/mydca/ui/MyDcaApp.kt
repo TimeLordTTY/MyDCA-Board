@@ -19,6 +19,7 @@ import com.timelordtty.mydca.core.design.MyDcaTheme
 import com.timelordtty.mydca.core.network.ApiConfig
 import com.timelordtty.mydca.core.network.InMemoryAuthTokenProvider
 import com.timelordtty.mydca.core.network.NetworkModule
+import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.TodoRepository
 import com.timelordtty.mydca.ui.screens.DraftInboxScreen
@@ -53,6 +54,7 @@ fun MyDcaApp() {
         val apiConfigError = apiResult.exceptionOrNull()?.message
         val todoRepository = remember(api) { api?.let { TodoRepository(it) } }
         val draftRepository = remember(api) { api?.let { DraftRepository(it) } }
+        val aiAccountingRepository = remember(api) { api?.let { AiAccountingRepository(it) } }
 
         Scaffold(
             topBar = {
@@ -104,8 +106,13 @@ fun MyDcaApp() {
                         baseUrl = baseUrl,
                         token = token,
                         apiConfigError = apiConfigError,
+                        aiAccountingRepository = aiAccountingRepository,
                         onBaseUrlChange = { baseUrl = it },
                         onTokenChange = { token = it },
+                        onOpenDraft = { draftId ->
+                            selectedDraftId = draftId
+                            currentRoute = AppRoute.Drafts
+                        },
                     )
                 }
             }

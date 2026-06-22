@@ -54,6 +54,8 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 金额识别保持保守：验证码、订单号、手机号、卡号等上下文不会作为金额。
 - 常驻通知和聚合通知默认跳过，减少系统噪音。
 - 完整通知原文不落库、不写文件、不打印到日志。
+- 通知候选现在支持用户手动点击“生成草稿”，流程只调用 `parse-text` 和 `draft-from-intent` 创建 `DRAFT` 草稿。
+- 通知候选不会自动生成草稿；生成成功后仍必须进入草稿箱手动 preview，并且只有 `preview.confirmSupported=true` 后才能 confirm。
 - 当前不会自动 preview、不会自动 confirm、不会写正式账本。
 - 当前未接入 OCR、企业微信入口或真实大模型。
 

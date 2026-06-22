@@ -1,8 +1,12 @@
 package com.timelordtty.mydca.data.api
 
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
+import com.timelordtty.mydca.data.dto.AccountingIntentDto
+import com.timelordtty.mydca.data.dto.DraftFromIntentRequestDto
+import com.timelordtty.mydca.data.dto.DraftFromIntentResponseDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
+import com.timelordtty.mydca.data.dto.ParseTextRequestDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -39,4 +43,10 @@ interface WealthHubApi {
         @Path("draftId") draftId: Long,
         @Body request: IgnoreDraftRequestDto = IgnoreDraftRequestDto(),
     ): DraftLedgerEntryDto
+
+    @POST("api/v2/ai/accounting/parse-text")
+    suspend fun parseAccountingText(@Body request: ParseTextRequestDto): AccountingIntentDto
+
+    @POST("api/v2/ai/accounting/draft-from-intent")
+    suspend fun draftFromIntent(@Body request: DraftFromIntentRequestDto): DraftFromIntentResponseDto
 }
