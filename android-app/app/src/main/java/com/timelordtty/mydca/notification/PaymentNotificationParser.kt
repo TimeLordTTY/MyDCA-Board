@@ -27,7 +27,22 @@ object PaymentNotificationParser {
         "unionpay" to "银联",
         "银联" to "银联",
     )
-    private val amountPattern = Regex("(?<![0-9])(?:¥|￥|RMB|人民币)?\\s*([0-9]{1,6}(?:\\.[0-9]{1,2})?)\\s*(?:元|CNY|RMB)?(?![0-9])")
+    private val amountPatterns = listOf(
+        Regex("(?:¥|￥|RMB|人民币)\\s*([0-9]{1,6}(?:\\.[0-9]{1,2})?)(?![0-9])", RegexOption.IGNORE_CASE),
+        Regex("(?<![0-9])([0-9]{1,6}(?:\\.[0-9]{1,2})?)\\s*(?:元|CNY|RMB)(?![0-9])", RegexOption.IGNORE_CASE),
+    )
+    private val nonAmountContextKeywords = listOf(
+        "验证码",
+        "校验码",
+        "订单",
+        "单号",
+        "编号",
+        "尾号",
+        "手机号",
+        "电话",
+        "流水号",
+        "卡号",
+    )
 
     fun parse(packageName: String, appLabel: String?, title: String?, text: String?): ParsedPaymentNotification {
         val combined = listOfNotNull(appLabel, title, text).joinToString(" ").trim()
@@ -49,24 +64,25 @@ object PaymentNotificationParser {
     }
 
     private fun extractAmount(text: String): String? {
-        return amountPattern.findAll(text)
-            .mapNotNull { match -> match.groupValues.getOrNull(1) }
-            .filterNot { value -> looksLikeDateOrTime(text, value) }
+        return amountPatterns.asSequence()
+            .flatMap { pattern -> pattern.findAll(text).mapNotNull { it.groupValues.getOrNull(1) } }
+            .filterNot { value -> looksLikeNonAmount(text, value) }
             .firstOrNull()
     }
 
-    private fun looksLikeDateOrTime(text: String, value: String): Boolean {
+    private fun looksLikeNonAmount(text: String, value: String): Boolean {
         val index = text.indexOf(value)
         if (index < 0) return false
-        val start = (index - 3).coerceAtLeast(0)
-        val end = (index + value.length + 3).coerceAtMost(text.length)
+        val start = (index - 8).coerceAtLeast(0)
+        val end = (index + value.length + 8).coerceAtMost(text.length)
         val context = text.substring(start, end)
         return context.contains("年") ||
             context.contains("月") ||
             context.contains("日") ||
             context.contains(":") ||
             context.contains("时") ||
-            context.contains("分")
+            context.contains("分") ||
+            nonAmountContextKeywords.any { context.contains(it, ignoreCase = true) }
     }
 }
 

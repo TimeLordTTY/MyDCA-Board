@@ -11,6 +11,7 @@ import android.service.notification.StatusBarNotification
 class MyDcaNotificationListenerService : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val notification = sbn?.notification ?: return
+        if (shouldSkipNotification(notification)) return
         val extras = notification.extras ?: return
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
         val text = extractText(notification)
@@ -35,6 +36,12 @@ class MyDcaNotificationListenerService : NotificationListenerService() {
             rawText = rawText,
         )
         NotificationCandidateStore.add(candidate)
+    }
+
+    private fun shouldSkipNotification(notification: Notification): Boolean {
+        val flags = notification.flags
+        return flags and Notification.FLAG_ONGOING_EVENT != 0 ||
+            flags and Notification.FLAG_GROUP_SUMMARY != 0
     }
 
     private fun extractText(notification: Notification): String? {
