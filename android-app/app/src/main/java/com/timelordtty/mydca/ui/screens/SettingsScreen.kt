@@ -11,6 +11,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -21,6 +22,7 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.notification.NotificationCandidate
 import com.timelordtty.mydca.notification.NotificationCandidateStore
+import com.timelordtty.mydca.notification.NotificationDraftInput
 import com.timelordtty.mydca.notification.NotificationPermissionState
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -128,12 +130,14 @@ private fun NotificationCandidateList(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 candidates.take(5).forEach { candidate ->
-                    NotificationCandidateCard(
-                        candidate = candidate,
-                        aiAccountingRepository = aiAccountingRepository,
-                        apiConfigError = apiConfigError,
-                        onOpenDraft = onOpenDraft,
-                    )
+                    key(candidate.id) {
+                        NotificationCandidateCard(
+                            candidate = candidate,
+                            aiAccountingRepository = aiAccountingRepository,
+                            apiConfigError = apiConfigError,
+                            onOpenDraft = onOpenDraft,
+                        )
+                    }
                 }
             }
         }
@@ -152,11 +156,12 @@ private fun NotificationCandidateCard(
     var creatingDraft by remember { mutableStateOf(false) }
     var resultMessage by remember { mutableStateOf<String?>(null) }
     var createdDraftId by remember { mutableStateOf<Long?>(null) }
-    val canCreateDraft = candidate.isPaymentCandidate &&
-        !candidate.amount.isNullOrBlank() &&
-        aiAccountingRepository != null &&
-        apiConfigError.isNullOrBlank() &&
-        createdDraftId == null
+    val candidateAmount = NotificationDraftInput.amountValue(candidate)
+    val canCreateDraft = NotificationDraftInput.canCreateDraft(
+        candidate = candidate,
+        apiAvailable = aiAccountingRepository != null && apiConfigError.isNullOrBlank(),
+        createdDraftId = createdDraftId,
+    )
 
     SectionCard(
         title = candidate.appLabel ?: candidate.packageName,
@@ -170,7 +175,7 @@ private fun NotificationCandidateCard(
         StatusPill("本地候选，必须手动生成草稿，不会自动入账")
         if (!candidate.isPaymentCandidate) {
             Text("当前通知未被识别为支付候选，不能生成草稿。")
-        } else if (candidate.amount.isNullOrBlank()) {
+        } else if (candidateAmount == null) {
             Text("金额不明确，请改用手动记账入口。")
         } else if (!apiConfigError.isNullOrBlank()) {
             Text("接口配置未就绪：$apiConfigError")
@@ -208,7 +213,7 @@ private fun NotificationCandidateCard(
                         resultMessage = null
                         createdDraftId = null
                         scope.launch {
-                            val rawInput = candidate.toDraftRawInput()
+                            val rawInput = NotificationDraftInput.buildRawInput(candidate)
                             when (val parsed = repository.parseText(rawInput, candidate.id)) {
                                 is NetworkResult.Failure -> {
                                     resultMessage = "解析失败：${parsed.message}"
@@ -218,7 +223,7 @@ private fun NotificationCandidateCard(
                                         sourceType = "PAYMENT_NOTIFICATION",
                                         sourceRef = candidate.id,
                                         rawInput = rawInput,
-                                        amount = parsed.data.amount ?: candidate.amount?.toDoubleOrNull(),
+                                        amount = parsed.data.amount ?: candidateAmount,
                                         note = parsed.data.note ?: candidate.textSnippet ?: candidate.titleSnippet,
                                     )
                                     when (val draftResult = repository.draftFromIntent(intent)) {
@@ -254,14 +259,4 @@ private fun NotificationCandidateCard(
 
 private fun formatPostedAt(postedAt: Long): String {
     return SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(postedAt))
-}
-
-private fun NotificationCandidate.toDraftRawInput(): String {
-    return listOfNotNull(
-        sourceHint?.let { "来源：$it" },
-        appLabel?.let { "应用：$it" },
-        titleSnippet?.let { "标题：$it" },
-        textSnippet?.let { "摘要：$it" },
-        amount?.let { "金额：$it 元" },
-    ).joinToString("；")
 }
