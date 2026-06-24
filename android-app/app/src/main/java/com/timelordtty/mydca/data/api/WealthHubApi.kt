@@ -8,9 +8,11 @@ import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 import com.timelordtty.mydca.data.dto.ParseTextRequestDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
+import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -31,6 +33,12 @@ interface WealthHubApi {
 
     @GET("api/v2/drafts/{draftId}")
     suspend fun getDraft(@Path("draftId") draftId: Long): DraftLedgerEntryDto
+
+    @PUT("api/v2/drafts/{draftId}")
+    suspend fun updateDraft(
+        @Path("draftId") draftId: Long,
+        @Body request: UpdateDraftRequestDto,
+    ): DraftLedgerEntryDto
 
     @POST("api/v2/drafts/{draftId}/preview")
     suspend fun previewDraft(@Path("draftId") draftId: Long): DraftPreviewDto

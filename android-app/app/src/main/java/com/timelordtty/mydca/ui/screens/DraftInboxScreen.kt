@@ -8,6 +8,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -17,13 +18,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
+import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.ui.state.AsyncState
 import kotlinx.coroutines.launch
+
+private data class DraftEditForm(
+    val txnType: String = "EXPENSE",
+    val amount: String = "",
+    val note: String = "",
+    val accountId: String = "",
+    val accountNameHint: String = "",
+)
 
 @Composable
 fun DraftInboxScreen(
@@ -36,12 +48,22 @@ fun DraftInboxScreen(
     var selectedDraft by remember { mutableStateOf<DraftLedgerEntryDto?>(null) }
     var previewState by remember { mutableStateOf<AsyncState<DraftPreviewDto>?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    var editForm by remember { mutableStateOf(DraftEditForm()) }
+    var editError by remember { mutableStateOf<String?>(null) }
+    var isSavingDraft by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showIgnoreDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    fun selectDraft(draft: DraftLedgerEntryDto) {
+    fun setCurrentDraft(draft: DraftLedgerEntryDto?) {
         selectedDraft = draft
+        editForm = draft?.toEditForm() ?: DraftEditForm()
+        editError = null
+        isSavingDraft = false
+    }
+
+    fun selectDraft(draft: DraftLedgerEntryDto) {
+        setCurrentDraft(draft)
         previewState = null
         actionMessage = null
     }
@@ -57,12 +79,12 @@ fun DraftInboxScreen(
                 is NetworkResult.Success -> {
                     val drafts = result.data
                     draftsState = AsyncState.Success(drafts)
-                    selectedDraft = if (preferredDraftId != null) {
+                    setCurrentDraft(if (preferredDraftId != null) {
                         drafts.firstOrNull { it.id == preferredDraftId }
                             ?: selectedDraft?.takeIf { it.id == preferredDraftId }
                     } else {
                         drafts.firstOrNull()
-                    }
+                    })
                     previewState = null
                 }
                 is NetworkResult.Failure -> {
@@ -81,7 +103,7 @@ fun DraftInboxScreen(
             actionMessage = "正在加载草稿详情"
             when (val result = repository.getDraft(draftId)) {
                 is NetworkResult.Success -> {
-                    selectedDraft = result.data
+                    setCurrentDraft(result.data)
                     previewState = null
                     actionMessage = null
                 }
@@ -104,6 +126,51 @@ fun DraftInboxScreen(
                 is NetworkResult.Success -> AsyncState.Success(result.data)
                 is NetworkResult.Failure -> AsyncState.Error(result.message)
             }
+        }
+    }
+
+    fun saveSelectedDraft(previewAfterSave: Boolean) {
+        val draft = selectedDraft ?: return
+        if (draft.status?.equals("DRAFT", ignoreCase = true) != true) {
+            editError = "只有 DRAFT 状态草稿可以编辑。"
+            return
+        }
+        val request = editForm.toUpdateRequest(draft) { message ->
+            editError = message
+        } ?: return
+        val repository = draftRepository ?: run {
+            editError = apiConfigError ?: "接口配置未就绪"
+            return
+        }
+        scope.launch {
+            isSavingDraft = true
+            editError = null
+            previewState = null
+            actionMessage = if (previewAfterSave) "正在保存草稿并重新生成预览" else "正在保存草稿"
+            when (val updateResult = repository.updateDraft(draft.id, request)) {
+                is NetworkResult.Success -> {
+                    setCurrentDraft(updateResult.data)
+                    actionMessage = "草稿已保存：${updateResult.data.id}。旧预览已清空，请基于最新草稿重新预览。"
+                    if (previewAfterSave) {
+                        previewState = AsyncState.Loading
+                        previewState = when (val previewResult = repository.previewDraft(updateResult.data.id)) {
+                            is NetworkResult.Success -> {
+                                actionMessage = "草稿已保存，并已基于最新内容生成预览。"
+                                AsyncState.Success(previewResult.data)
+                            }
+                            is NetworkResult.Failure -> {
+                                actionMessage = "草稿已保存，但重新预览失败：${previewResult.message}"
+                                AsyncState.Error(previewResult.message)
+                            }
+                        }
+                    }
+                }
+                is NetworkResult.Failure -> {
+                    editError = "保存失败：${updateResult.message}"
+                    actionMessage = null
+                }
+            }
+            isSavingDraft = false
         }
     }
 
@@ -206,6 +273,12 @@ fun DraftInboxScreen(
             selectedDraft = selectedDraft,
             previewState = previewState,
             canConfirm = canConfirm,
+            editForm = editForm,
+            editError = editError,
+            isSavingDraft = isSavingDraft,
+            onEditFormChange = { editForm = it },
+            onSave = { saveSelectedDraft(previewAfterSave = false) },
+            onSaveAndPreview = { saveSelectedDraft(previewAfterSave = true) },
             onPreview = ::previewSelectedDraft,
             onIgnore = { showIgnoreDialog = true },
             onConfirm = { showConfirmDialog = true },
@@ -270,6 +343,12 @@ private fun DraftDetailSection(
     selectedDraft: DraftLedgerEntryDto?,
     previewState: AsyncState<DraftPreviewDto>?,
     canConfirm: Boolean,
+    editForm: DraftEditForm,
+    editError: String?,
+    isSavingDraft: Boolean,
+    onEditFormChange: (DraftEditForm) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndPreview: () -> Unit,
     onPreview: () -> Unit,
     onIgnore: () -> Unit,
     onConfirm: () -> Unit,
@@ -288,6 +367,16 @@ private fun DraftDetailSection(
         KeyValueRow("来源", selectedDraft.sourceType ?: "未知")
         KeyValueRow("原始输入", selectedDraft.rawInput ?: "无")
         KeyValueRow("缺失字段", selectedDraft.missingFieldsJson ?: "无")
+
+        DraftEditSection(
+            selectedDraft = selectedDraft,
+            editForm = editForm,
+            editError = editError,
+            isSavingDraft = isSavingDraft,
+            onEditFormChange = onEditFormChange,
+            onSave = onSave,
+            onSaveAndPreview = onSaveAndPreview,
+        )
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
@@ -315,6 +404,96 @@ private fun DraftDetailSection(
             AsyncState.Loading -> CircularProgressIndicator()
             is AsyncState.Error -> Text("预览失败：${previewState.message}")
             is AsyncState.Success -> PreviewContent(previewState.data)
+        }
+    }
+}
+
+@Composable
+private fun DraftEditSection(
+    selectedDraft: DraftLedgerEntryDto,
+    editForm: DraftEditForm,
+    editError: String?,
+    isSavingDraft: Boolean,
+    onEditFormChange: (DraftEditForm) -> Unit,
+    onSave: () -> Unit,
+    onSaveAndPreview: () -> Unit,
+) {
+    val editable = selectedDraft.status?.equals("DRAFT", ignoreCase = true) == true
+    SectionCard(
+        title = "草稿编辑与账户补全",
+        description = "保存只调用 PUT /api/v2/drafts/{draftId} 更新 DRAFT 草稿，不会直接写正式账本；保存后必须重新 preview。",
+    ) {
+        if (!editable) {
+            StatusPill("非 DRAFT 草稿不可编辑，只能查看历史状态。")
+            return@SectionCard
+        }
+
+        Text("accountId 是后端真实账户 ID，必须是正整数；accountNameHint 只是人工提示，不会替代 accountId。")
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(
+                enabled = !isSavingDraft,
+                onClick = { onEditFormChange(editForm.copy(txnType = "EXPENSE")) },
+            ) {
+                Text(if (editForm.txnType == "EXPENSE") "支出 EXPENSE ✓" else "支出 EXPENSE")
+            }
+            OutlinedButton(
+                enabled = !isSavingDraft,
+                onClick = { onEditFormChange(editForm.copy(txnType = "INCOME")) },
+            ) {
+                Text(if (editForm.txnType == "INCOME") "收入 INCOME ✓" else "收入 INCOME")
+            }
+        }
+
+        OutlinedTextField(
+            value = editForm.amount,
+            onValueChange = { onEditFormChange(editForm.copy(amount = it)) },
+            enabled = !isSavingDraft,
+            label = { Text("金额 amount") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = editForm.accountId,
+            onValueChange = { onEditFormChange(editForm.copy(accountId = it)) },
+            enabled = !isSavingDraft,
+            label = { Text("真实账户 ID accountId") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = editForm.accountNameHint,
+            onValueChange = { onEditFormChange(editForm.copy(accountNameHint = it)) },
+            enabled = !isSavingDraft,
+            label = { Text("账户提示 accountNameHint") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = editForm.note,
+            onValueChange = { onEditFormChange(editForm.copy(note = it)) },
+            enabled = !isSavingDraft,
+            label = { Text("备注 note") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        editError?.let { Text(it) }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                enabled = !isSavingDraft,
+                onClick = onSave,
+            ) {
+                Text(if (isSavingDraft) "保存中" else "保存草稿")
+            }
+            OutlinedButton(
+                enabled = !isSavingDraft,
+                onClick = onSaveAndPreview,
+            ) {
+                Text("保存并预览")
+            }
         }
     }
 }
@@ -420,4 +599,124 @@ private fun IgnoreDraftDialog(
             }
         },
     )
+}
+
+private fun DraftLedgerEntryDto.toEditForm(): DraftEditForm {
+    val txnType = jsonString(parsedPayloadJson, "txnType")
+        ?: jsonString(parsedPayloadJson, "transactionType")
+        ?: jsonString(parsedPayloadJson, "type")
+        ?: "EXPENSE"
+    val amount = jsonScalar(parsedPayloadJson, "amount").orEmpty()
+    val accountId = jsonScalar(parsedPayloadJson, "accountId")
+        ?: jsonScalar(parsedPayloadJson, "cashAccountId")
+        ?: ""
+    val note = jsonString(parsedPayloadJson, "note")
+        ?: jsonString(parsedPayloadJson, "remark")
+        ?: jsonString(parsedPayloadJson, "description")
+        ?: rawInput.orEmpty()
+    val accountNameHint = jsonString(parsedPayloadJson, "accountNameHint").orEmpty()
+    return DraftEditForm(
+        txnType = txnType.uppercase().takeIf { it == "EXPENSE" || it == "INCOME" } ?: "EXPENSE",
+        amount = amount,
+        note = note,
+        accountId = accountId,
+        accountNameHint = accountNameHint,
+    )
+}
+
+private fun DraftEditForm.toUpdateRequest(
+    draft: DraftLedgerEntryDto,
+    onError: (String) -> Unit,
+): UpdateDraftRequestDto? {
+    val normalizedType = txnType.uppercase()
+    if (normalizedType !in setOf("EXPENSE", "INCOME")) {
+        onError("交易类型必须是 EXPENSE 或 INCOME。")
+        return null
+    }
+    val normalizedAmount = amount.trim().toDoubleOrNull()
+    if (normalizedAmount == null || normalizedAmount <= 0.0) {
+        onError("金额必须是大于 0 的数字。")
+        return null
+    }
+    val normalizedAccountId = accountId.trim().toLongOrNull()
+    if (normalizedAccountId == null || normalizedAccountId <= 0L) {
+        onError("accountId 必须是后端真实账户 ID，且为大于 0 的正整数。")
+        return null
+    }
+
+    val normalizedNote = note.trim()
+    val normalizedAccountNameHint = accountNameHint.trim()
+    val missingFields = buildList {
+        if (normalizedType.isBlank()) add("txnType")
+        if (normalizedAmount <= 0.0) add("amount")
+        if (normalizedAccountId <= 0L) add("accountId")
+    }
+    return UpdateDraftRequestDto(
+        sourceType = draft.sourceType,
+        sourceRef = draft.sourceRef,
+        rawInput = normalizedNote.ifBlank { draft.rawInput.orEmpty() },
+        parsedPayloadJson = buildParsedPayloadJson(
+            txnType = normalizedType,
+            amount = normalizedAmount,
+            note = normalizedNote,
+            accountId = normalizedAccountId,
+            accountNameHint = normalizedAccountNameHint,
+        ),
+        confidence = draft.confidence,
+        missingFieldsJson = buildStringArrayJson(missingFields),
+    )
+}
+
+private fun buildParsedPayloadJson(
+    txnType: String,
+    amount: Double,
+    note: String,
+    accountId: Long,
+    accountNameHint: String,
+): String {
+    return buildString {
+        append("{")
+        append("\"txnType\":\"").append(jsonEscape(txnType)).append("\",")
+        append("\"amount\":").append(amount.toString()).append(",")
+        append("\"accountId\":").append(accountId)
+        if (note.isNotBlank()) {
+            append(",\"note\":\"").append(jsonEscape(note)).append("\"")
+        }
+        if (accountNameHint.isNotBlank()) {
+            append(",\"accountNameHint\":\"").append(jsonEscape(accountNameHint)).append("\"")
+        }
+        append("}")
+    }
+}
+
+private fun buildStringArrayJson(values: List<String>): String {
+    return values.joinToString(prefix = "[", postfix = "]") { "\"${jsonEscape(it)}\"" }
+}
+
+private fun jsonString(json: String?, key: String): String? {
+    val value = jsonScalar(json, key) ?: return null
+    return value
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
+        .takeIf { it.isNotBlank() }
+}
+
+private fun jsonScalar(json: String?, key: String): String? {
+    if (json.isNullOrBlank()) {
+        return null
+    }
+    val stringMatch = Regex("\"${Regex.escape(key)}\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"").find(json)
+    if (stringMatch != null) {
+        return stringMatch.groupValues[1]
+    }
+    val scalarMatch = Regex("\"${Regex.escape(key)}\"\\s*:\\s*([^,}\\s]+)").find(json)
+    return scalarMatch?.groupValues?.getOrNull(1)?.trim()?.trim('"')
+}
+
+private fun jsonEscape(value: String): String {
+    return value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
 }

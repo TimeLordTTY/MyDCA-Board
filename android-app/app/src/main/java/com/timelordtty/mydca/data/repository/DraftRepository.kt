@@ -5,6 +5,7 @@ import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
+import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 
 /**
  * 草稿数据仓库。
@@ -23,6 +24,10 @@ class DraftRepository(
 
     suspend fun previewDraft(draftId: Long): NetworkResult<DraftPreviewDto> = safeCall {
         api.previewDraft(draftId)
+    }
+
+    suspend fun updateDraft(draftId: Long, request: UpdateDraftRequestDto): NetworkResult<DraftLedgerEntryDto> = safeCall {
+        api.updateDraft(draftId, request)
     }
 
     suspend fun confirmDraft(draftId: Long): NetworkResult<DraftLedgerEntryDto> = safeCall {

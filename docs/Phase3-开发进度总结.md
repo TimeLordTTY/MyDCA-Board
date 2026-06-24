@@ -186,3 +186,13 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 已补充 helper 单元测试，覆盖脱敏 rawInput 不包含完整 rawText、普通聊天不可创建草稿、缺失或非数值金额不可创建草稿、已创建后不重复创建。
 - Compose 候选列表已使用 `candidate.id` 作为稳定 key，避免列表重排时将草稿生成状态错挂到其他候选通知。
 - 已复核通知候选流程不会自动 preview、不会自动 confirm、不会写正式账本。
+
+
+## Android 草稿编辑与账户补全首版（2026-06-24）
+
+- 草稿箱详情页新增 DRAFT 草稿编辑面板，支持补齐 `txnType`、`amount`、`note`、`accountId` 和 `accountNameHint`。
+- Android 侧新增 `PUT /api/v2/drafts/{draftId}` 调用，保存只更新草稿候选内容，不写正式 `ledger_txn`、不修改账户余额、不生成订单或交易。
+- `accountId` 首版采用手动输入，必须是大于 0 的后端真实账户 ID；`accountNameHint` 只是人工提示，不会替代真实账户 ID。
+- 保存草稿会立即清空旧 preview；“保存并预览”会使用保存后的草稿重新调用 preview，不会自动 confirm。
+- 确认按钮仍必须满足当前草稿为 `DRAFT`、当前 preview 的 `draftId` 与草稿 ID 匹配、且 `preview.confirmSupported=true`，并保留二次确认。
+- 当前仍未接入企业微信入口、真实登录、安全 Token 持久化、OCR 或真实大模型。

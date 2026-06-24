@@ -90,3 +90,13 @@ gradle assembleDebug
 当前仓库没有提交 Gradle wrapper；如后续需要无人值守 CI 构建，可在确认版本和二进制来源后再补入 wrapper。
 
 - 验证加固：生成草稿按钮使用候选 ID 作为稳定状态边界，并且只有金额可解析为数值时才允许创建草稿。
+
+
+## 草稿编辑与账户补全
+
+- 草稿箱详情页支持编辑 DRAFT 草稿的 `txnType`、`amount`、`note`、`accountId` 和 `accountNameHint`。
+- 保存草稿调用 `PUT /api/v2/drafts/{draftId}`，只更新草稿候选内容，不会直接写正式账本。
+- `accountId` 是后端真实账户 ID，必须输入正整数；`accountNameHint` 只是提示，不会替代真实账户。
+- 保存后旧 preview 会被清空；“保存并预览”会基于保存后的草稿重新生成 preview。
+- 确认按钮仍必须等待当前草稿 DRAFT、preview 匹配当前草稿且 `preview.confirmSupported=true`，并由用户二次确认。
+- 当前仍未接入企业微信入口、真实登录、安全 Token 持久化、OCR 或真实大模型。
