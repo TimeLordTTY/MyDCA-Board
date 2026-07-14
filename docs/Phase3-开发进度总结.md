@@ -196,3 +196,11 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 保存草稿会立即清空旧 preview；“保存并预览”会使用保存后的草稿重新调用 preview，不会自动 confirm。
 - 确认按钮仍必须满足当前草稿为 `DRAFT`、当前 preview 的 `draftId` 与草稿 ID 匹配、且 `preview.confirmSupported=true`，并保留二次确认。
 - 当前仍未接入企业微信入口、真实登录、安全 Token 持久化、OCR 或真实大模型。
+
+## Android 可信构建链与 APK 验证（2026-07-14）
+
+- 已为 `android-app/` 建立 Gradle Wrapper 构建入口，使用 Gradle 8.7、JDK 17、Android SDK 35。
+- 已新增项目级 `gradle.properties`，启用 AndroidX，并保留 AGP 8.5.2 与 compileSdk 35 的明确抑制配置，不升级 AGP/Kotlin/Compose 技术栈。
+- 已真实执行 `testDebugUnitTest`、`assembleDebug` 和 `lintDebug`，均通过；debug APK 已生成，大小 10,483,798 bytes，SHA-256 为 A89F380790DDFA6090E1CC8047D6B711D9907BEE026194A48EAFE75EC04D4368。
+- 构建链只产出 debug APK，不生成 release signing key，不提交 APK、SDK、Gradle 缓存或本机 `local.properties`。
+- 当前移动端边界不变：不接真实模型、不自动 confirm、不连接生产数据库、不修改真实账本、账户、持仓、订单或交易数据。

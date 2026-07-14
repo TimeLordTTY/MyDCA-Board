@@ -14,9 +14,9 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 ## 本地开发要求
 
 - JDK 17。
-- Android Studio。
-- Android SDK，建议包含 `compileSdk = 35` 对应平台。
-- Gradle 可使用 Android Studio 内置 Gradle，或后续补充项目 Gradle wrapper。
+- Android Studio 或 Android SDK command-line tools。
+- Android SDK，至少包含 `platforms;android-35`、`build-tools;35.0.0` 和 `platform-tools`。
+- 项目已提交 Gradle Wrapper：Gradle `8.7`，用于匹配当前 Android Gradle Plugin `8.5.2` 和 JDK 17。
 
 首次打开工程时，在 Android Studio 中选择 `android-app/` 目录。
 
@@ -79,15 +79,32 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 
 ## 验证命令
 
-在配置 Android SDK 和 Gradle 后，可执行：
+在配置 JDK 17 与 Android SDK 后，可执行：
 
-```bash
+```powershell
 cd android-app
-gradle test
-gradle assembleDebug
+.\gradlew.bat --version
+.\gradlew.bat testDebugUnitTest --no-daemon
+.\gradlew.bat assembleDebug --no-daemon
 ```
 
-当前仓库没有提交 Gradle wrapper；如后续需要无人值守 CI 构建，可在确认版本和二进制来源后再补入 wrapper。
+Debug APK 默认输出位置：
+
+```text
+android-app/app/build/outputs/apk/debug/app-debug.apk
+```
+
+`local.properties`、`.gradle/`、`build/` 和 APK 产物均不应提交到 Git。
+
+本轮真实构建验证（2026-07-14）：
+
+- Gradle Wrapper：`8.7`，`distributionUrl=https://services.gradle.org/distributions/gradle-8.7-bin.zip`，已记录 `distributionSha256Sum`。
+- JDK：17。
+- Android SDK：`platforms;android-35`、`build-tools;35.0.0`、`platform-tools`。
+- `.\gradlew.bat testDebugUnitTest --no-daemon --stacktrace`：通过。
+- `.\gradlew.bat assembleDebug --no-daemon --stacktrace`：通过。
+- `.\gradlew.bat lintDebug --no-daemon --stacktrace`：通过。
+- Debug APK：已生成，大小 10,483,798 bytes，SHA-256：A89F380790DDFA6090E1CC8047D6B711D9907BEE026194A48EAFE75EC04D4368；APK 不提交到 Git。
 
 - 验证加固：生成草稿按钮使用候选 ID 作为稳定状态边界，并且只有金额可解析为数值时才允许创建草稿。
 

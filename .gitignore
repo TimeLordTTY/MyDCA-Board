@@ -48,6 +48,7 @@ out/
 target/
 *.class
 *.jar
+!android-app/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 *.nar
