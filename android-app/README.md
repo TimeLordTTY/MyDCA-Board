@@ -8,7 +8,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
-- 设置页包含 BaseUrl 和 Bearer Token 输入，仅用于开发联调，当前只保存在内存中。
+- 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
 - Android App 不接入真实大模型，不自动预览、不自动确认、不直接写数据库。
 
 ## 本地开发要求
@@ -71,11 +71,11 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 ## 安全边界
 
 - 不要提交真实 token、cookie、密码或私有服务地址。
-- Token 后续必须进入 Android 安全存储，不得硬编码到源码。
+- Token 由 Android Keystore 管理的 AES-GCM 密钥加密后持久化，不得硬编码到源码或输出到日志。
 - 生产构建应使用 HTTPS BaseUrl，不应依赖 debug 明文 HTTP 配置。
 - Android App 不直接写数据库。
 - Android App 不计算最终账本影响，只展示后端 preview。
-- 当前不包含真实登录、安全 Token 持久化、通知监听、OCR、支付通知解析、企业微信入口或真实大模型接入。
+- 当前不包含 OCR、企业微信入口或真实大模型接入；通知候选与草稿仍需用户手动确认。
 
 ## 验证命令
 
@@ -116,4 +116,21 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - `accountId` 是后端真实账户 ID，必须输入正整数；`accountNameHint` 只是提示，不会替代真实账户。
 - 保存后旧 preview 会被清空；“保存并预览”会基于保存后的草稿重新生成 preview。
 - 确认按钮仍必须等待当前草稿 DRAFT、preview 匹配当前草稿且 `preview.confirmSupported=true`，并由用户二次确认。
-- 当前仍未接入企业微信入口、真实登录、安全 Token 持久化、OCR 或真实大模型。
+- 当前仍未接入企业微信入口、OCR 或真实大模型。
+
+## 真实登录与安全会话
+
+- 后端真实契约为 `POST /api/v2/auth/login`，请求字段是 `username` / `password`，成功响应返回 `token` 和用户摘要。
+- 业务请求只向当前配置的 MyDCA API 主机附加 `Authorization: Bearer <token>`；登录、注册和登出请求不会携带陈旧 Token。
+- 后端没有 refresh token 契约，因此 Android 不实现伪刷新；受保护接口返回 401 后会清理会话并要求重新登录，不会自动重试。
+- App 启动时先从安全存储恢复会话。Token 使用 Android Keystore 管理的 AES-GCM 密钥加密，SharedPreferences 只保存密文和随机 IV。
+- 密文损坏或密钥失效时会清理不可用状态并安全降级为未登录；密码始终只存在于当前登录表单内存中。
+- 退出登录会调用现有无状态 logout 端点，并始终清除本地 Token；远端请求失败不会阻断本地退出。
+- BaseUrl 默认值仍只用于模拟器访问本机开发服务。不要提交账号、密码、Token、Cookie、`local.properties`、keystore 或签名密钥。
+
+本轮真实验证（2026-07-16）：
+
+- `testDebugUnitTest`：通过，共 29 项测试。
+- `assembleDebug`：通过。
+- `lintDebug`：通过。
+- Debug APK：已生成，大小 10,584,229 bytes，SHA-256：`EDF0B2FB6BA57B632F39F8CF5630AE805C338B117BFAC13A398690F50C163C2A`；APK 不提交到 Git。

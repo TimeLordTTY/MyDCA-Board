@@ -32,21 +32,35 @@ import java.util.Locale
 @Composable
 fun SettingsScreen(
     baseUrl: String,
-    token: String,
+    displayName: String?,
     apiConfigError: String?,
     aiAccountingRepository: AiAccountingRepository?,
     onBaseUrlChange: (String) -> Unit,
-    onTokenChange: (String) -> Unit,
+    onLogout: () -> Unit,
     onOpenDraft: (Long) -> Unit,
 ) {
     PageScaffold {
-        SafetyBanner("设置页首版只管理开发联调用的 BaseUrl、Token 输入和通知监听授权入口。配置保存在当前内存状态中，不写入源码、不持久化、不记录明文 Token。")
-        LoginPlaceholderContent(
-            baseUrl = baseUrl,
-            token = token,
-            onBaseUrlChange = onBaseUrlChange,
-            onTokenChange = onTokenChange,
-        )
+        SafetyBanner("登录令牌由 Android Keystore 加密保护。设置页不会显示、复制或记录完整 Token。")
+        SectionCard(
+            title = "认证会话",
+            description = "退出登录会立即清除内存和本地加密凭据，即使远端登出请求失败也不会保留本地会话。",
+        ) {
+            KeyValueRow("当前用户", displayName ?: "已认证用户")
+            StatusPill("已安全登录")
+            OutlinedButton(onClick = onLogout) {
+                Text("退出登录")
+            }
+        }
+        SectionCard(
+            title = "接口配置",
+            description = "BaseUrl 仅用于当前运行中的开发联调，不包含账号密码或 Token。",
+        ) {
+            androidx.compose.material3.OutlinedTextField(
+                value = baseUrl,
+                onValueChange = onBaseUrlChange,
+                label = { Text("BaseUrl") },
+            )
+        }
         apiConfigError?.let { message ->
             SectionCard(
                 title = "接口配置需要修正",
@@ -61,8 +75,6 @@ fun SettingsScreen(
             onOpenDraft = onOpenDraft,
         )
         SectionCard(title = "当前未接入能力") {
-            KeyValueRow("真实登录", "未接入")
-            KeyValueRow("安全 Token 持久化", "未接入")
             KeyValueRow("OCR", "未接入")
             KeyValueRow("企业微信入口", "未接入")
             KeyValueRow("真实大模型", "未接入")

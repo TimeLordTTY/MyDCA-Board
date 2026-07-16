@@ -204,3 +204,13 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 已真实执行 `testDebugUnitTest`、`assembleDebug` 和 `lintDebug`，均通过；debug APK 已生成，大小 10,483,798 bytes，SHA-256 为 A89F380790DDFA6090E1CC8047D6B711D9907BEE026194A48EAFE75EC04D4368。
 - 构建链只产出 debug APK，不生成 release signing key，不提交 APK、SDK、Gradle 缓存或本机 `local.properties`。
 - 当前移动端边界不变：不接真实模型、不自动 confirm、不连接生产数据库、不修改真实账本、账户、持仓、订单或交易数据。
+
+## Android 真实登录与安全 Token 持久化（2026-07-16）
+
+- 已接通后端现有 `POST /api/v2/auth/login` JWT 登录契约，未新增 refresh token、OAuth/OIDC 或认证绕过逻辑。
+- App 已建立初始化、未登录、登录中、已登录、失败与失效状态；启动恢复完成前不会进入受保护页面。
+- 登录 Token 由 Android Keystore 管理的 AES-GCM 密钥加密持久化，密码不保存，Token 不展示、不打印、不进入调试 UI。
+- 同源业务请求自动附加 Bearer Token；登录端点排除陈旧认证头，受保护请求 401 后清除会话且不自动重试。
+- 设置页已提供幂等退出登录入口，远端无状态 logout 失败时仍保证本地凭据清理和返回登录页。
+- 已新增 JVM 单元测试覆盖认证会话、仓库和网络拦截器；2026-07-16 真实通过 29 项单元测试、debug APK 构建和 lint。
+- OCR、真实大模型、自动入账、自动交易仍未接入；现有草稿 preview / confirm 人工边界未改变。

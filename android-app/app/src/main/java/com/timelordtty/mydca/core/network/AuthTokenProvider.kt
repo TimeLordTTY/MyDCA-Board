@@ -1,9 +1,6 @@
 package com.timelordtty.mydca.core.network
 
-/**
- * Token 提供边界。
- * 首版不实现真实登录和持久化，后续应接入安全存储，不得硬编码真实 token。
- */
+/** 内存认证头读取边界；持久化由独立 TokenStore 负责。 */
 interface AuthTokenProvider {
     fun token(): String?
 }
@@ -16,4 +13,9 @@ class InMemoryAuthTokenProvider(
     fun updateToken(token: String?) {
         currentToken = token
     }
+}
+
+/** 受保护请求返回 401 时的会话失效边界。 */
+fun interface UnauthorizedHandler {
+    fun onUnauthorized()
 }
