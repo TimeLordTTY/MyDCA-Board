@@ -36,6 +36,7 @@ fun DraftInboxScreen(
     apiConfigError: String?,
     selectedDraftId: Long?,
     onDraftHandled: () -> Unit,
+    onOpenImageOcr: () -> Unit,
 ) {
     var draftsState by remember { mutableStateOf<AsyncState<List<DraftLedgerEntryDto>>>(AsyncState.Loading) }
     var selectedDraft by remember { mutableStateOf<DraftLedgerEntryDto?>(null) }
@@ -306,6 +307,12 @@ fun DraftInboxScreen(
 
     PageScaffold {
         SafetyBanner("草稿箱只承接查看、预览和用户手动确认。AI/文本解析只生成草稿，不会直接入账；只有二次确认后才会调用确认接口。")
+        SectionCard(
+            title = "图片识别记账",
+            description = "手动选择支付截图，在本机识别并复核文字后生成 DRAFT；图片不会上传。",
+        ) {
+            Button(onClick = onOpenImageOcr) { Text("选择图片开始识别") }
+        }
 
         actionMessage?.let { message ->
             SectionCard(title = "操作状态", description = message)

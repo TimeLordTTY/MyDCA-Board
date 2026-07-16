@@ -75,7 +75,6 @@ fun SettingsScreen(
             onOpenDraft = onOpenDraft,
         )
         SectionCard(title = "当前未接入能力") {
-            KeyValueRow("OCR", "未接入")
             KeyValueRow("企业微信入口", "未接入")
             KeyValueRow("真实大模型", "未接入")
         }

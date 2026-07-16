@@ -57,7 +57,7 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 通知候选现在支持用户手动点击“生成草稿”，流程只调用 `parse-text` 和 `draft-from-intent` 创建 `DRAFT` 草稿。
 - 通知候选不会自动生成草稿；生成成功后仍必须进入草稿箱手动 preview，并且只有 `preview.confirmSupported=true` 后才能 confirm。
 - 当前不会自动 preview、不会自动 confirm、不会写正式账本。
-- 当前未接入 OCR、企业微信入口或真实大模型。
+- 当前未接入企业微信入口或真实大模型。
 
 ## 草稿确认边界
 
@@ -75,7 +75,7 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 生产构建应使用 HTTPS BaseUrl，不应依赖 debug 明文 HTTP 配置。
 - Android App 不直接写数据库。
 - Android App 不计算最终账本影响，只展示后端 preview。
-- 当前不包含 OCR、企业微信入口或真实大模型接入；通知候选与草稿仍需用户手动确认。
+- 当前不包含企业微信入口或真实大模型接入；图片 OCR、通知候选与草稿仍需用户手动确认。
 
 ## 验证命令
 
@@ -116,7 +116,7 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - `accountId` 是后端真实账户 ID，必须输入正整数；`accountNameHint` 只是提示，不会替代真实账户。
 - 保存后旧 preview 会被清空；“保存并预览”会基于保存后的草稿重新生成 preview。
 - 确认按钮仍必须等待当前草稿 DRAFT、preview 匹配当前草稿且 `preview.confirmSupported=true`，并由用户二次确认。
-- 当前仍未接入企业微信入口、OCR 或真实大模型。
+- 当前仍未接入企业微信入口或真实大模型。
 
 ## 真实登录与安全会话
 
@@ -134,3 +134,16 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - `assembleDebug`：通过。
 - `lintDebug`：通过。
 - Debug APK：已生成，大小 10,584,229 bytes，SHA-256：`EDF0B2FB6BA57B632F39F8CF5630AE805C338B117BFAC13A398690F50C163C2A`；APK 不提交到 Git。
+
+## 图片 OCR 到草稿
+
+- 草稿箱内提供“图片识别记账”入口，使用系统 Photo Picker 主动选择单张图片；Manifest 未申请 `READ_MEDIA_IMAGES` 或 `READ_EXTERNAL_STORAGE`。
+- OCR 使用 Google ML Kit Text Recognition v2 bundled 中文模型 `com.google.mlkit:text-recognition-chinese:16.0.1`，来自 Google Maven，模型随 APK 分发，不依赖首次远程下载。
+- 图片 URI 只存在于当前页面识别协程中，图片、URI 和字节不会进入 Retrofit 请求，也不会写入文件、数据库或偏好设置。
+- 新图片会清空上一张图片的识别、候选和草稿状态；异步结果按随机请求 ID 绑定，旧结果不能覆盖新图片。
+- OCR 文本仅保存在页面内存中并允许编辑。只有用户点击“解析记账候选”后，当前编辑文本才会发送给自己的 MyDCA 后端。
+- 候选 intent 由用户复核后，才允许调用既有 `draft-from-intent` 创建 `DRAFT`；来源类型复用后端已支持的 `APP_FORM`。
+- 创建成功后不会自动 preview、不会自动 confirm、不会写正式账本；用户仍需进入草稿箱补齐账户并二次确认。
+- 2026-07-16 自动验证：36 项 JVM 单元测试、`assembleDebug`、`lintDebug` 均通过。
+- Debug APK：大小 56,429,546 bytes，SHA-256：`B1DBD06EEC2CB95DBE5ABE5BAF60EB8C1D47117CF9DA4170A754941B7545B2C0`；体积增长来自随 APK 分发的离线中文模型。
+- 真实设备 Photo Picker、中文支付截图识别准确率和不同厂商 URI 兼容性仍需手工验证，不应把 JVM 测试视为真实 OCR 图片验证。

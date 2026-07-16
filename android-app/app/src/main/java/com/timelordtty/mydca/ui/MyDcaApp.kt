@@ -38,6 +38,7 @@ import com.timelordtty.mydca.ui.screens.PlaceholderScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
+import com.timelordtty.mydca.ui.screens.OcrDraftScreen
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -157,6 +158,7 @@ private fun AuthenticatedApp(
 ) {
         var currentRoute by rememberSaveable { mutableStateOf(AppRoute.TodayTodo) }
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
+        var showImageOcr by remember { mutableStateOf(false) }
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
@@ -197,12 +199,24 @@ private fun AuthenticatedApp(
                             currentRoute = AppRoute.Drafts
                         },
                     )
-                    AppRoute.Drafts -> DraftInboxScreen(
-                        draftRepository = draftRepository,
-                        apiConfigError = apiConfigError,
-                        selectedDraftId = selectedDraftId,
-                        onDraftHandled = { selectedDraftId = null },
-                    )
+                    AppRoute.Drafts -> if (showImageOcr) {
+                        OcrDraftScreen(
+                            repository = aiAccountingRepository,
+                            onClose = { showImageOcr = false },
+                            onOpenDraft = { draftId ->
+                                selectedDraftId = draftId
+                                showImageOcr = false
+                            },
+                        )
+                    } else {
+                        DraftInboxScreen(
+                            draftRepository = draftRepository,
+                            apiConfigError = apiConfigError,
+                            selectedDraftId = selectedDraftId,
+                            onDraftHandled = { selectedDraftId = null },
+                            onOpenImageOcr = { showImageOcr = true },
+                        )
+                    }
                     AppRoute.Accounts -> PlaceholderScreen(
                         title = "账户 / 流水 / 持仓",
                         description = "移动端首版只保留查看入口，后续按账户、流水、持仓拆分只读列表。",
