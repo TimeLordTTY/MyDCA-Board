@@ -2,7 +2,7 @@ package com.timelordtty.mydca.core.network
 
 /**
  * Android 侧 API 基础配置。
- * 默认地址仅指向 Android 模拟器访问本机开发服务的常见地址，不包含任何生产域名或密钥。
+ * 默认地址使用已验证的 HTTPS 服务入口；开发联调时仍可在界面中临时改为模拟器本机地址。
  */
 data class ApiConfig(
     val baseUrl: String = DEFAULT_BASE_URL,
