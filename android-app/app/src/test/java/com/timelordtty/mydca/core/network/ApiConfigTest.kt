@@ -8,6 +8,11 @@ import org.junit.Test
  */
 class ApiConfigTest {
     @Test
+    fun defaultBaseUrlUsesProductionHttps() {
+        assertEquals("https://www.timelordtty.cn/", ApiConfig().normalizedBaseUrl)
+    }
+
+    @Test
     fun normalizeBaseUrlAppendsTrailingSlash() {
         assertEquals("http://10.0.2.2:8080/", ApiConfig.normalizeBaseUrl("http://10.0.2.2:8080"))
     }

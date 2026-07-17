@@ -5,12 +5,12 @@ package com.timelordtty.mydca.core.network
  * 默认地址仅指向 Android 模拟器访问本机开发服务的常见地址，不包含任何生产域名或密钥。
  */
 data class ApiConfig(
-    val baseUrl: String = DEFAULT_LOCAL_BASE_URL,
+    val baseUrl: String = DEFAULT_BASE_URL,
 ) {
     val normalizedBaseUrl: String = normalizeBaseUrl(baseUrl)
 
     companion object {
-        const val DEFAULT_LOCAL_BASE_URL = "http://10.0.2.2:8080/"
+        const val DEFAULT_BASE_URL = "https://www.timelordtty.cn/"
 
         fun normalizeBaseUrl(value: String): String {
             val trimmed = value.trim()

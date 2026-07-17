@@ -39,8 +39,10 @@ android-app/local.properties
 默认开发地址为：
 
 ```text
-http://10.0.2.2:8080/
+https://www.timelordtty.cn/
 ```
+
+默认值用于可安装测试 APK，已与当前 HTTPS 生产入口对齐。开发者仍可在登录页或设置页临时改为 `http://10.0.2.2:8080/` 连接本机模拟器服务；该输入只保留在当前运行，不包含账号、密码或 Token。
 
 这是 Android 模拟器访问宿主机本地后端服务的常见地址，只用于开发占位，不代表生产地址。
 
@@ -126,7 +128,7 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - App 启动时先从安全存储恢复会话。Token 使用 Android Keystore 管理的 AES-GCM 密钥加密，SharedPreferences 只保存密文和随机 IV。
 - 密文损坏或密钥失效时会清理不可用状态并安全降级为未登录；密码始终只存在于当前登录表单内存中。
 - 退出登录会调用现有无状态 logout 端点，并始终清除本地 Token；远端请求失败不会阻断本地退出。
-- BaseUrl 默认值仍只用于模拟器访问本机开发服务。不要提交账号、密码、Token、Cookie、`local.properties`、keystore 或签名密钥。
+- BaseUrl 默认使用 HTTPS 生产入口，开发联调时可手动切换到模拟器本机地址。不要提交账号、密码、Token、Cookie、`local.properties`、keystore 或签名密钥。
 
 本轮真实验证（2026-07-16）：
 

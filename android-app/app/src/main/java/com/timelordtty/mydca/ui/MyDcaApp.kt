@@ -51,12 +51,12 @@ fun MyDcaApp() {
     MyDcaTheme {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
-        var baseUrl by rememberSaveable { mutableStateOf(ApiConfig.DEFAULT_LOCAL_BASE_URL) }
+        var baseUrl by rememberSaveable { mutableStateOf(ApiConfig.DEFAULT_BASE_URL) }
         val authSession = remember { AuthSession(KeystoreTokenStore(context)) }
         val authState by authSession.state.collectAsState()
         LaunchedEffect(authSession) { authSession.restore() }
 
-        val safeBaseUrl = baseUrl.ifBlank { ApiConfig.DEFAULT_LOCAL_BASE_URL }
+        val safeBaseUrl = baseUrl.ifBlank { ApiConfig.DEFAULT_BASE_URL }
         val servicesResult = remember(safeBaseUrl, authSession) {
             runCatching {
                 NetworkModule.createServices(
