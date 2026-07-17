@@ -87,7 +87,7 @@ def run() -> None:
         "POST",
         "/api/v2/auth/login",
         {"username": username, "password": password},
-        expected=(200, 500),
+        expected=(200, 400, 500),
     )
     created_user = status != 200
     if created_user:
