@@ -30,7 +30,9 @@ jobs:
 
       - name: Build debug APK
         working-directory: android-app
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug
 
       - name: Prepare artifact metadata
         shell: bash
