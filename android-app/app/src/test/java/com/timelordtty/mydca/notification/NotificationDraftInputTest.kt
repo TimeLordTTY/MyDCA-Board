@@ -7,7 +7,7 @@ import org.junit.Test
 class NotificationDraftInputTest {
     @Test
     fun rawInputUsesOnlySanitizedCandidateFields() {
-        val candidate = paymentCandidate(rawText = "完整通知原文不要进入草稿输入")
+        val candidate = paymentCandidate()
 
         val rawInput = NotificationDraftInput.buildRawInput(candidate)
 
@@ -53,7 +53,6 @@ class NotificationDraftInputTest {
     private fun paymentCandidate(
         isPaymentCandidate: Boolean = true,
         amount: String? = "18.80",
-        rawText: String? = null,
     ): NotificationCandidate {
         return NotificationCandidate(
             id = "candidate-1",
@@ -65,7 +64,6 @@ class NotificationDraftInputTest {
             isPaymentCandidate = isPaymentCandidate,
             amount = amount,
             sourceHint = "微信",
-            rawText = rawText,
         )
     }
 }

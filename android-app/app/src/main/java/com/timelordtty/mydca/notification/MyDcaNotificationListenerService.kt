@@ -1,69 +1,78 @@
 package com.timelordtty.mydca.notification
 
+import android.Manifest
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.timelordtty.mydca.MainActivity
+import com.timelordtty.mydca.R
 
-/**
- * MyDCA 通知监听基础服务。
- * 首版只生成本地候选事件，不持久化通知原文、不打印日志、不调用后端创建草稿。
- */
 class MyDcaNotificationListenerService : NotificationListenerService() {
+    override fun onCreate() {
+        super.onCreate()
+        NotificationCandidateStore.initialize(this)
+    }
+
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val notification = sbn?.notification ?: return
-        if (shouldSkipNotification(notification)) return
-        val extras = notification.extras ?: return
-        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
-        val text = extractText(notification)
+        if (notification.flags and Notification.FLAG_ONGOING_EVENT != 0 || notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        val title = notification.extras?.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = notification.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
+            ?: notification.extras?.getCharSequence(Notification.EXTRA_TEXT)?.toString()
         val appLabel = resolveAppLabel(sbn.packageName)
-        val parsed = PaymentNotificationParser.parse(
-            packageName = sbn.packageName,
-            appLabel = appLabel,
-            title = title,
-            text = text,
-        )
-        val rawText = listOfNotNull(title, text).joinToString(" ").ifBlank { null }
+        val parsed = PaymentNotificationParser.parse(sbn.packageName, appLabel, title, text)
+        val amount = parsed.amount ?: return
+        if (!parsed.isPaymentCandidate) return
+
+        val fingerprint = PaymentNotificationParser.fingerprint(sbn.packageName, amount, title, text, sbn.postTime)
         val candidate = NotificationCandidate(
-            id = "${sbn.packageName}:${sbn.postTime}:${sbn.id}",
+            id = fingerprint,
+            fingerprint = fingerprint,
             packageName = sbn.packageName,
             appLabel = appLabel,
             postedAt = sbn.postTime,
-            titleSnippet = sanitizeSnippet(title),
-            textSnippet = sanitizeSnippet(text),
-            isPaymentCandidate = parsed.isPaymentCandidate,
-            amount = parsed.amount,
+            titleSnippet = PaymentNotificationParser.sanitizeSnippet(title),
+            textSnippet = PaymentNotificationParser.sanitizeSnippet(text),
+            amount = amount,
             sourceHint = parsed.sourceHint,
-            rawText = rawText,
         )
-        NotificationCandidateStore.add(candidate)
+        if (NotificationCandidateStore.add(candidate)) {
+            sendLocalReminder(candidate)
+        }
     }
 
-    private fun shouldSkipNotification(notification: Notification): Boolean {
-        val flags = notification.flags
-        return flags and Notification.FLAG_ONGOING_EVENT != 0 ||
-            flags and Notification.FLAG_GROUP_SUMMARY != 0
+    private fun sendLocalReminder(candidate: NotificationCandidate) {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val manager = getSystemService(NotificationManager::class.java)
+        val channelId = "payment_candidates"
+        if (Build.VERSION.SDK_INT >= 26) {
+            manager.createNotificationChannel(NotificationChannel(channelId, "支付通知候选", NotificationManager.IMPORTANCE_DEFAULT))
+        }
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(NotificationNavigationTarget.EXTRA_CANDIDATE_ID, candidate.id)
+        }
+        val pendingIntent = PendingIntent.getActivity(this, candidate.id.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val reminder = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("发现一条支付通知候选")
+            .setContentText("${candidate.sourceHint ?: "支付应用"} · ${candidate.amount} 元，请手动核对后生成草稿")
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(candidate.id.hashCode(), reminder)
+        NotificationCandidateStore.markReminderSent(candidate.id)
     }
 
-    private fun extractText(notification: Notification): String? {
-        val extras = notification.extras ?: return null
-        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
-        val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()
-        return bigText ?: text
-    }
-
-    private fun resolveAppLabel(packageName: String): String? {
-        return runCatching {
-            val appInfo = packageManager.getApplicationInfo(packageName, 0)
-            packageManager.getApplicationLabel(appInfo).toString()
-        }.getOrNull()
-    }
-
-    private fun sanitizeSnippet(value: String?): String? {
-        val compact = value
-            ?.replace(Regex("\\s+"), " ")
-            ?.trim()
-            .orEmpty()
-        if (compact.isBlank()) return null
-        return if (compact.length <= 40) compact else compact.take(40) + "…"
-    }
+    private fun resolveAppLabel(packageName: String): String? = runCatching {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(packageName, 0)).toString()
+    }.getOrNull()
 }

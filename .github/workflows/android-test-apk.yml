@@ -39,9 +39,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifact
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk artifact/MyDCA-Board-v0.2-${GITHUB_SHA::8}.apk
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk artifact/MyDCA-Board-v0.3-${GITHUB_SHA::8}.apk
           cd artifact
-          sha256sum MyDCA-Board-v0.2-${GITHUB_SHA::8}.apk > SHA256SUMS.txt
+          sha256sum MyDCA-Board-v0.3-${GITHUB_SHA::8}.apk > SHA256SUMS.txt
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "branch=${GITHUB_REF_NAME}"
@@ -53,7 +53,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mydca-android-v0.2-${{ github.sha }}
+          name: mydca-android-v0.3-${{ github.sha }}
           path: artifact/
           if-no-files-found: error
           retention-days: 30

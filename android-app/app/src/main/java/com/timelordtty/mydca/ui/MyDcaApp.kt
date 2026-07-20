@@ -40,6 +40,7 @@ import com.timelordtty.mydca.ui.screens.SettingsScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
 import com.timelordtty.mydca.ui.screens.OcrDraftScreen
+import com.timelordtty.mydca.notification.NotificationNavigationTarget
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -164,6 +165,10 @@ private fun AuthenticatedApp(
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
         val wealthRepository = remember(services.wealthHubApi) { WealthRepository(services.wealthHubApi) }
+        val notificationTarget by NotificationNavigationTarget.candidateId.collectAsState()
+        LaunchedEffect(notificationTarget) {
+            if (notificationTarget != null) currentRoute = AppRoute.TodayTodo
+        }
 
         Scaffold(
             topBar = {
@@ -198,7 +203,9 @@ private fun AuthenticatedApp(
                     )
                     AppRoute.TodayTodo -> TodayTodoScreen(
                         todoRepository = todoRepository,
+                        aiAccountingRepository = aiAccountingRepository,
                         apiConfigError = apiConfigError,
+                        selectedCandidateId = notificationTarget,
                         onOpenDraft = { draftId ->
                             selectedDraftId = draftId
                             currentRoute = AppRoute.Drafts
@@ -230,13 +237,8 @@ private fun AuthenticatedApp(
                         baseUrl = baseUrl,
                         displayName = displayName,
                         apiConfigError = apiConfigError,
-                        aiAccountingRepository = aiAccountingRepository,
                         onBaseUrlChange = onBaseUrlChange,
                         onLogout = onLogout,
-                        onOpenDraft = { draftId ->
-                            selectedDraftId = draftId
-                            currentRoute = AppRoute.Drafts
-                        },
                     )
                 }
             }

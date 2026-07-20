@@ -1,89 +1,56 @@
 package com.timelordtty.mydca.notification
 
-/**
- * 支付通知保守解析器。
- * 首版只给出是否疑似支付和可选金额，不创建草稿、不调用后端、不输出通知原文。
- */
+import java.security.MessageDigest
+
+/** 仅接受明确支付应用、支付语义和有效金额的保守解析器。 */
 object PaymentNotificationParser {
-    private val paymentKeywords = listOf(
-        "支付",
-        "付款",
-        "消费",
-        "扣款",
-        "收款",
-        "到账",
-        "退款",
-        "交易",
-        "转账",
+    private val supportedPackages = mapOf(
+        "com.eg.android.AlipayGphone" to "支付宝",
+        "com.tencent.mm" to "微信支付",
+        "com.unionpay" to "云闪付",
     )
-    private val sourceHints = mapOf(
-        "alipay" to "支付宝",
-        "支付宝" to "支付宝",
-        "wechat" to "微信",
-        "weixin" to "微信",
-        "微信" to "微信",
-        "bank" to "银行",
-        "银行" to "银行",
-        "unionpay" to "银联",
-        "银联" to "银联",
-    )
+    private val paymentKeywords = listOf("支付", "付款", "消费", "扣款", "收款", "到账", "退款", "交易", "转账")
+    private val blockedKeywords = listOf("验证码", "校验码", "广告", "优惠券", "活动", "营销", "促销", "聊天消息")
     private val amountPatterns = listOf(
-        Regex("(?:¥|￥|RMB|人民币)\\s*([0-9]{1,6}(?:\\.[0-9]{1,2})?)(?![0-9])", RegexOption.IGNORE_CASE),
-        Regex("(?<![0-9])([0-9]{1,6}(?:\\.[0-9]{1,2})?)\\s*(?:元|CNY|RMB)(?![0-9])", RegexOption.IGNORE_CASE),
-    )
-    private val nonAmountContextKeywords = listOf(
-        "验证码",
-        "校验码",
-        "订单",
-        "单号",
-        "编号",
-        "尾号",
-        "手机号",
-        "电话",
-        "流水号",
-        "卡号",
+        Regex("(?:¥|￥|RMB|人民币)\\s*([0-9]{1,8}(?:\\.[0-9]{1,2})?)(?![0-9])", RegexOption.IGNORE_CASE),
+        Regex("(?<![0-9])([0-9]{1,8}(?:\\.[0-9]{1,2})?)\\s*(?:元|CNY|RMB)(?![0-9])", RegexOption.IGNORE_CASE),
     )
 
     fun parse(packageName: String, appLabel: String?, title: String?, text: String?): ParsedPaymentNotification {
+        val source = supportedPackages[packageName]
         val combined = listOfNotNull(appLabel, title, text).joinToString(" ").trim()
-        val hasPaymentKeyword = paymentKeywords.any { combined.contains(it, ignoreCase = true) }
-        val sourceHint = resolveSourceHint(packageName, appLabel, combined)
         val amount = extractAmount(combined)
-        return ParsedPaymentNotification(
-            isPaymentCandidate = hasPaymentKeyword || (sourceHint != null && amount != null),
-            amount = amount,
-            sourceHint = sourceHint,
-        )
+        val accepted = source != null &&
+            paymentKeywords.any { combined.contains(it, ignoreCase = true) } &&
+            blockedKeywords.none { combined.contains(it, ignoreCase = true) } &&
+            amount != null
+        return ParsedPaymentNotification(accepted, if (accepted) amount else null, if (accepted) source else null)
     }
 
-    private fun resolveSourceHint(packageName: String, appLabel: String?, text: String): String? {
-        val sourceText = listOfNotNull(packageName, appLabel, text).joinToString(" ")
-        return sourceHints.entries.firstOrNull { (needle, _) ->
-            sourceText.contains(needle, ignoreCase = true)
-        }?.value
+    fun sanitizeSnippet(value: String?, maxLength: Int = 48): String? {
+        var text = value?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+        if (text.isBlank()) return null
+        text = text
+            .replace(Regex("(?<!\\d)1[3-9]\\d{9}(?!\\d)"), "***手机号")
+            .replace(Regex("(?<!\\d)\\d{12,19}(?!\\d)"), "****卡号")
+            .replace(Regex("(?i)(验证码|校验码)[:：\\s]*[0-9]{4,8}"), "$1：****")
+            .replace(Regex("(?i)(订单号|交易号|流水号|单号)[:：\\s]*[A-Z0-9_-]{6,}"), "$1：****")
+        return if (text.length <= maxLength) text else text.take(maxLength) + "…"
     }
 
-    private fun extractAmount(text: String): String? {
-        return amountPatterns.asSequence()
-            .flatMap { pattern -> pattern.findAll(text).mapNotNull { it.groupValues.getOrNull(1) } }
-            .filterNot { value -> looksLikeNonAmount(text, value) }
-            .firstOrNull()
+    fun fingerprint(packageName: String, amount: String, title: String?, text: String?, postedAt: Long): String {
+        val minuteBucket = postedAt / 60_000L
+        val normalized = listOf(packageName, amount, sanitizeSnippet(title), sanitizeSnippet(text), minuteBucket)
+            .joinToString("|") { it?.toString().orEmpty().lowercase() }
+        return MessageDigest.getInstance("SHA-256")
+            .digest(normalized.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
     }
 
-    private fun looksLikeNonAmount(text: String, value: String): Boolean {
-        val index = text.indexOf(value)
-        if (index < 0) return false
-        val start = (index - 8).coerceAtLeast(0)
-        val end = (index + value.length + 8).coerceAtMost(text.length)
-        val context = text.substring(start, end)
-        return context.contains("年") ||
-            context.contains("月") ||
-            context.contains("日") ||
-            context.contains(":") ||
-            context.contains("时") ||
-            context.contains("分") ||
-            nonAmountContextKeywords.any { context.contains(it, ignoreCase = true) }
-    }
+    private fun extractAmount(text: String): String? = amountPatterns.asSequence()
+        .flatMap { it.findAll(text).mapNotNull { match -> match.groupValues.getOrNull(1) } }
+        .mapNotNull { value -> value.toDoubleOrNull()?.takeIf { it > 0.0 }?.let { value } }
+        .firstOrNull()
 }
 
 data class ParsedPaymentNotification(

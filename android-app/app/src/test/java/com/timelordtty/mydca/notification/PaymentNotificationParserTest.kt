@@ -1,93 +1,40 @@
 package com.timelordtty.mydca.notification
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * 验证支付通知解析保持保守，不把普通通知、验证码或订单号误判为可用金额。
- */
 class PaymentNotificationParserTest {
-    @Test
-    fun parseWechatPaymentWithAmount() {
-        val result = PaymentNotificationParser.parse(
-            packageName = "com.tencent.mm",
-            appLabel = "微信",
-            title = "微信支付",
-            text = "你已成功付款 18.80 元",
-        )
-
+    @Test fun acceptsSupportedPaymentWithAmount() {
+        val result = PaymentNotificationParser.parse("com.tencent.mm", "微信", "微信支付", "付款 18.80 元")
         assertTrue(result.isPaymentCandidate)
         assertEquals("18.80", result.amount)
-        assertEquals("微信", result.sourceHint)
+        assertEquals("微信支付", result.sourceHint)
     }
 
-    @Test
-    fun parseBankDebitWithCurrencyPrefix() {
-        val result = PaymentNotificationParser.parse(
-            packageName = "com.bank.demo",
-            appLabel = "银行",
-            title = "账户扣款提醒",
-            text = "消费成功，金额￥128.50",
-        )
-
-        assertTrue(result.isPaymentCandidate)
-        assertEquals("128.50", result.amount)
-        assertEquals("银行", result.sourceHint)
+    @Test fun rejectsUnknownPackageEvenWithPaymentText() {
+        assertFalse(PaymentNotificationParser.parse("com.bank.demo", "银行", "扣款", "消费 128 元").isPaymentCandidate)
     }
 
-    @Test
-    fun ignoreNormalChatNotification() {
-        val result = PaymentNotificationParser.parse(
-            packageName = "com.tencent.mm",
-            appLabel = "微信",
-            title = "好友消息",
-            text = "今晚一起吃饭吗",
-        )
-
-        assertFalse(result.isPaymentCandidate)
-        assertNull(result.amount)
+    @Test fun rejectsChatMarketingVerificationAndMissingAmount() {
+        assertFalse(PaymentNotificationParser.parse("com.tencent.mm", "微信", "好友消息", "今晚吃饭吗").isPaymentCandidate)
+        assertFalse(PaymentNotificationParser.parse("com.eg.android.AlipayGphone", "支付宝", "活动", "优惠支付 10 元").isPaymentCandidate)
+        assertFalse(PaymentNotificationParser.parse("com.unionpay", "云闪付", "验证码", "支付验证码 123456").isPaymentCandidate)
+        assertFalse(PaymentNotificationParser.parse("com.tencent.mm", "微信", "退款到账", "请查看余额").isPaymentCandidate)
     }
 
-    @Test
-    fun doesNotTreatVerificationCodeAsAmount() {
-        val result = PaymentNotificationParser.parse(
-            packageName = "com.demo.pay",
-            appLabel = "支付应用",
-            title = "验证码",
-            text = "验证码 123456，请勿泄露",
-        )
-
-        assertTrue(result.isPaymentCandidate)
-        assertNull(result.amount)
+    @Test fun sanitizesSensitiveValuesAndTruncates() {
+        val value = PaymentNotificationParser.sanitizeSnippet("验证码：123456 手机 13812345678 订单号 ABCDEF123456 " + "内容".repeat(40))!!
+        assertFalse(value.contains("123456"))
+        assertFalse(value.contains("13812345678"))
+        assertFalse(value.contains("ABCDEF123456"))
+        assertTrue(value.length <= 49)
     }
 
-    @Test
-    fun doesNotTreatOrderNumberAsAmount() {
-        val result = PaymentNotificationParser.parse(
-            packageName = "com.demo.pay",
-            appLabel = "支付应用",
-            title = "支付成功",
-            text = "订单号 202606220001 已完成",
-        )
-
-        assertTrue(result.isPaymentCandidate)
-        assertNull(result.amount)
-    }
-
-    @Test
-    fun refundCandidateCanHaveNoAmount() {
-        val result = PaymentNotificationParser.parse(
-            packageName = "com.alipay.mobile",
-            appLabel = "支付宝",
-            title = "退款到账",
-            text = "退款已到账，请稍后查看余额",
-        )
-
-        assertTrue(result.isPaymentCandidate)
-        assertNull(result.amount)
-        assertEquals("支付宝", result.sourceHint)
+    @Test fun fingerprintIsStableWithinMinuteAndChangesWithAmount() {
+        val first = PaymentNotificationParser.fingerprint("com.tencent.mm", "18.80", "支付", "付款 18.80 元", 60_001)
+        val repeated = PaymentNotificationParser.fingerprint("com.tencent.mm", "18.80", "支付", "付款 18.80 元", 119_999)
+        val other = PaymentNotificationParser.fingerprint("com.tencent.mm", "19.80", "支付", "付款 19.80 元", 60_001)
+        assertEquals(first, repeated)
+        assertNotEquals(first, other)
     }
 }
