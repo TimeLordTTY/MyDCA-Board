@@ -32,9 +32,10 @@ import com.timelordtty.mydca.data.repository.AuthRepository
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.TodoRepository
+import com.timelordtty.mydca.data.repository.WealthRepository
+import com.timelordtty.mydca.ui.screens.AssetsScreen
 import com.timelordtty.mydca.ui.screens.DraftInboxScreen
 import com.timelordtty.mydca.ui.screens.OverviewScreen
-import com.timelordtty.mydca.ui.screens.PlaceholderScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
@@ -162,6 +163,7 @@ private fun AuthenticatedApp(
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
+        val wealthRepository = remember(services.wealthHubApi) { WealthRepository(services.wealthHubApi) }
 
         Scaffold(
             topBar = {
@@ -190,7 +192,10 @@ private fun AuthenticatedApp(
                 modifier = Modifier.padding(innerPadding),
             ) { route ->
                 when (route) {
-                    AppRoute.Overview -> OverviewScreen()
+                    AppRoute.Overview -> OverviewScreen(
+                        wealthRepository = wealthRepository,
+                        apiConfigError = apiConfigError,
+                    )
                     AppRoute.TodayTodo -> TodayTodoScreen(
                         todoRepository = todoRepository,
                         apiConfigError = apiConfigError,
@@ -217,9 +222,9 @@ private fun AuthenticatedApp(
                             onOpenImageOcr = { showImageOcr = true },
                         )
                     }
-                    AppRoute.Accounts -> PlaceholderScreen(
-                        title = "账户 / 流水 / 持仓",
-                        description = "移动端首版只保留查看入口，后续按账户、流水、持仓拆分只读列表。",
+                    AppRoute.Accounts -> AssetsScreen(
+                        wealthRepository = wealthRepository,
+                        apiConfigError = apiConfigError,
                     )
                     AppRoute.Settings -> SettingsScreen(
                         baseUrl = baseUrl,

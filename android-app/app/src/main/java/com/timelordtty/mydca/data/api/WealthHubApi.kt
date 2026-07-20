@@ -6,6 +6,11 @@ import com.timelordtty.mydca.data.dto.DraftFromIntentRequestDto
 import com.timelordtty.mydca.data.dto.DraftFromIntentResponseDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
+import com.timelordtty.mydca.data.dto.MobileAccountDto
+import com.timelordtty.mydca.data.dto.MobileHoldingDto
+import com.timelordtty.mydca.data.dto.MobileOverviewDto
+import com.timelordtty.mydca.data.dto.MobilePageDto
+import com.timelordtty.mydca.data.dto.MobileTransactionDto
 import com.timelordtty.mydca.data.dto.ParseTextRequestDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
@@ -57,4 +62,28 @@ interface WealthHubApi {
 
     @POST("api/v2/ai/accounting/draft-from-intent")
     suspend fun draftFromIntent(@Body request: DraftFromIntentRequestDto): DraftFromIntentResponseDto
+
+    @GET("api/v2/mobile/overview")
+    suspend fun getMobileOverview(): MobileOverviewDto
+
+    @GET("api/v2/mobile/accounts")
+    suspend fun getMobileAccounts(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20,
+    ): MobilePageDto<MobileAccountDto>
+
+    @GET("api/v2/mobile/accounts/{accountId}")
+    suspend fun getMobileAccountDetail(@Path("accountId") accountId: Long): MobileAccountDto
+
+    @GET("api/v2/mobile/transactions")
+    suspend fun getMobileTransactions(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20,
+    ): MobilePageDto<MobileTransactionDto>
+
+    @GET("api/v2/mobile/holdings")
+    suspend fun getMobileHoldings(
+        @Query("page") page: Int = 1,
+        @Query("pageSize") pageSize: Int = 20,
+    ): MobilePageDto<MobileHoldingDto>
 }
