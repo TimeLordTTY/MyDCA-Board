@@ -1,8 +1,11 @@
 package com.timelordtty.dca.service;
 
 import com.timelordtty.dca.dto.AuthResponse;
+import com.timelordtty.dca.dto.LedgerStatsQueryDTO;
+import com.timelordtty.dca.dto.LedgerStatsSummaryDTO;
 import com.timelordtty.dca.dto.TodayTodoDTO;
 import com.timelordtty.dca.dto.mobile.MobileAccountDto;
+import com.timelordtty.dca.dto.mobile.MobileCashFlowDto;
 import com.timelordtty.dca.dto.mobile.MobileActivityItemDto;
 import com.timelordtty.dca.dto.mobile.MobileHoldingDto;
 import com.timelordtty.dca.dto.mobile.MobilePageResponse;
@@ -15,6 +18,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -58,6 +62,10 @@ public class MobileWealthService {
         dto.setTotalLiabilities(overview.getTotalLiabilities());
         dto.setNetWorth(overview.getNetWorth());
         dto.setAccountCount(accounts.size());
+        dto.setSpendableAmount(sumFundUsage(accounts, "SPENDABLE"));
+        dto.setReservedFundAmount(sumFundUsage(accounts, "RESERVED"));
+        dto.setInvestableAmount(sumFundUsage(accounts, "INVESTABLE"));
+        dto.setUnallocatedAmount(sumUnallocated(accounts));
         dto.setDraftCount(todos.getDraftCount());
         dto.setSettlementCount(todos.getSettlementCount());
         dto.setSuggestionCount(todos.getSuggestionCount());
@@ -75,7 +83,7 @@ public class MobileWealthService {
 
     public MobilePageResponse<MobileAccountDto> getAccounts(int page, int pageSize) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
-        List<MobileAccountDto> items = flattenAccounts(accountService.getAccountTree(currentUser.getId(), null)).stream()
+        List<MobileAccountDto> items = flattenAllAccounts(accountService.getAccountTree(currentUser.getId(), null)).stream()
                 .map(this::toAccountDto)
                 .sorted(Comparator.comparing(MobileAccountDto::getUpdatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
@@ -84,7 +92,7 @@ public class MobileWealthService {
 
     public MobileAccountDto getAccountDetail(Long id) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
-        return flattenAccounts(accountService.getAccountTree(currentUser.getId(), null)).stream()
+        return flattenAllAccounts(accountService.getAccountTree(currentUser.getId(), null)).stream()
                 .filter(account -> id.equals(account.getId()))
                 .findFirst()
                 .map(this::toAccountDto)
@@ -98,6 +106,26 @@ public class MobileWealthService {
                 .sorted(Comparator.comparing(MobileHoldingDto::getMarketValue, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
         return page(items, page, pageSize);
+    }
+
+    public MobileCashFlowDto getCurrentMonthCashFlow() {
+        AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        LocalDate start = LocalDate.now().withDayOfMonth(1);
+        LedgerStatsQueryDTO query = new LedgerStatsQueryDTO();
+        query.setStartDate(start);
+        query.setEndDate(LocalDate.now());
+        query.setIncludeTransfer(false);
+        LedgerStatsSummaryDTO summary = ledgerService.getLedgerStatsSummary(currentUser, query);
+        MobileCashFlowDto dto = new MobileCashFlowDto();
+        dto.setMonthStart(start);
+        dto.setMonthEnd(LocalDate.now());
+        dto.setIncome(summary.getTotalIncome());
+        dto.setExpense(summary.getTotalExpense());
+        dto.setNetCashFlow(summary.getNetCashflow());
+        dto.setInvestmentInflow(summary.getInvestmentInflow());
+        dto.setInvestmentOutflow(summary.getInvestmentOutflow());
+        dto.setRecentActivities(toActivities(getTransactions(1, 5).getItems()));
+        return dto;
     }
 
     public MobilePageResponse<MobileTransactionDto> getTransactions(int page, int pageSize) {
@@ -168,10 +196,17 @@ public class MobileWealthService {
     private MobileAccountDto toAccountDto(Account account) {
         MobileAccountDto dto = new MobileAccountDto();
         dto.setId(account.getId());
+        dto.setParentAccountId(account.getParentAccountId());
         dto.setAccountName(account.getAccountName());
         dto.setAccountType(account.getAccountType());
+        dto.setFundUsage(account.getFundUsage());
+        boolean leaf = account.getChildren() == null || account.getChildren().isEmpty();
+        dto.setLeaf(leaf);
+        boolean spendableLeaf = leaf && "REAL".equals(account.getAccountKind()) && "SPENDABLE".equals(account.getFundUsage());
+        dto.setSelectableForExpense(spendableLeaf);
+        dto.setSafetyMessage(accountSafetyMessage(account, leaf));
         dto.setCurrency(account.getCurrency());
-        dto.setBalance(account.getBalance());
+        dto.setBalance(aggregateBalance(account));
         dto.setReservedAmount(account.getReservedAmount());
         dto.setAvailableAmount((account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO)
                 .subtract(account.getReservedAmount() != null ? account.getReservedAmount() : BigDecimal.ZERO));
@@ -208,6 +243,49 @@ public class MobileWealthService {
             }
         }
         return result;
+    }
+
+    private List<Account> flattenAllAccounts(List<Account> roots) {
+        List<Account> result = new ArrayList<>();
+        for (Account account : roots) {
+            result.add(account);
+            if (account.getChildren() != null) result.addAll(flattenAllAccounts(account.getChildren()));
+        }
+        return result;
+    }
+
+    private BigDecimal aggregateBalance(Account account) {
+        if (account.getChildren() == null || account.getChildren().isEmpty()) {
+            return account.getBalance() == null ? BigDecimal.ZERO : account.getBalance();
+        }
+        return account.getChildren().stream().map(this::aggregateBalance).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    static BigDecimal sumFundUsage(List<Account> accounts, String usage) {
+        return accounts.stream().filter(MobileWealthService::isCashLeaf)
+                .filter(account -> usage.equals(account.getFundUsage()))
+                .map(Account::getBalance).filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    static BigDecimal sumUnallocated(List<Account> accounts) {
+        return accounts.stream().filter(MobileWealthService::isCashLeaf)
+                .filter(account -> account.getFundUsage() == null || account.getFundUsage().isBlank())
+                .map(Account::getBalance).filter(java.util.Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private static boolean isCashLeaf(Account account) {
+        return "REAL".equals(account.getAccountKind()) && "CASH".equals(account.getAccountType())
+                && (account.getChildren() == null || account.getChildren().isEmpty());
+    }
+
+    private String accountSafetyMessage(Account account, boolean leaf) {
+        if (!leaf) return "父账户仅用于聚合展示，不能作为记账来源";
+        if (account.getFundUsage() == null || account.getFundUsage().isBlank()) return "待分配账户不应默认用于消费或投资";
+        if ("RESERVED".equals(account.getFundUsage())) return "专款账户不得用于日常消费";
+        if ("INVESTABLE".equals(account.getFundUsage())) return "可投资资金不得用于日常消费";
+        return "可用于日常消费，正式入账仍需预览和二次确认";
     }
 
     private <T> MobilePageResponse<T> page(List<T> items, int page, int pageSize) {

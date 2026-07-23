@@ -1,6 +1,7 @@
 package com.timelordtty.mydca.ui.state
 
 import com.timelordtty.mydca.data.dto.MobileAccountDto
+import com.timelordtty.mydca.data.dto.MobileCashFlowDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -17,5 +18,6 @@ data class AssetsUiState(
     val accounts: MobilePageDto<MobileAccountDto> = MobilePageDto(),
     val transactions: MobilePageDto<MobileTransactionDto> = MobilePageDto(),
     val holdings: MobilePageDto<MobileHoldingDto> = MobilePageDto(),
+    val cashFlow: MobileCashFlowDto? = null,
     val errorMessage: String? = null,
 )

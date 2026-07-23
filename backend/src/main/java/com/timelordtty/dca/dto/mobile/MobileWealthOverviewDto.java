@@ -11,6 +11,10 @@ public class MobileWealthOverviewDto {
     private BigDecimal totalLiabilities;
     private BigDecimal netWorth;
     private int accountCount;
+    private BigDecimal spendableAmount = BigDecimal.ZERO;
+    private BigDecimal reservedFundAmount = BigDecimal.ZERO;
+    private BigDecimal investableAmount = BigDecimal.ZERO;
+    private BigDecimal unallocatedAmount = BigDecimal.ZERO;
     private int draftCount;
     private int settlementCount;
     private int suggestionCount;
@@ -65,6 +69,15 @@ public class MobileWealthOverviewDto {
     public void setAccountCount(int accountCount) {
         this.accountCount = accountCount;
     }
+
+    public BigDecimal getSpendableAmount() { return spendableAmount; }
+    public void setSpendableAmount(BigDecimal spendableAmount) { this.spendableAmount = spendableAmount; }
+    public BigDecimal getReservedFundAmount() { return reservedFundAmount; }
+    public void setReservedFundAmount(BigDecimal reservedFundAmount) { this.reservedFundAmount = reservedFundAmount; }
+    public BigDecimal getInvestableAmount() { return investableAmount; }
+    public void setInvestableAmount(BigDecimal investableAmount) { this.investableAmount = investableAmount; }
+    public BigDecimal getUnallocatedAmount() { return unallocatedAmount; }
+    public void setUnallocatedAmount(BigDecimal unallocatedAmount) { this.unallocatedAmount = unallocatedAmount; }
 
     public int getDraftCount() {
         return draftCount;

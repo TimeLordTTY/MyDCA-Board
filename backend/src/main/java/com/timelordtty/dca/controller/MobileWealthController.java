@@ -1,6 +1,7 @@
 package com.timelordtty.dca.controller;
 
 import com.timelordtty.dca.dto.mobile.MobileAccountDto;
+import com.timelordtty.dca.dto.mobile.MobileCashFlowDto;
 import com.timelordtty.dca.dto.mobile.MobileHoldingDto;
 import com.timelordtty.dca.dto.mobile.MobilePageResponse;
 import com.timelordtty.dca.dto.mobile.MobileTransactionDto;
@@ -38,6 +39,11 @@ public class MobileWealthController {
     @GetMapping("/accounts/{id}")
     public ResponseEntity<MobileAccountDto> getAccountDetail(@PathVariable Long id) {
         return ResponseEntity.ok(mobileWealthService.getAccountDetail(id));
+    }
+
+    @GetMapping("/cash-flow")
+    public ResponseEntity<MobileCashFlowDto> getCashFlow() {
+        return ResponseEntity.ok(mobileWealthService.getCurrentMonthCashFlow());
     }
 
     @GetMapping("/transactions")

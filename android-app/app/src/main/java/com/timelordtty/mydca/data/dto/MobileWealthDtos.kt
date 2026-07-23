@@ -20,6 +20,10 @@ data class MobileOverviewDto(
     val totalLiabilities: String? = null,
     val netWorth: String? = null,
     val accountCount: Int = 0,
+    val spendableAmount: String? = null,
+    val reservedFundAmount: String? = null,
+    val investableAmount: String? = null,
+    val unallocatedAmount: String? = null,
     val draftCount: Int = 0,
     val settlementCount: Int = 0,
     val suggestionCount: Int = 0,
@@ -43,15 +47,32 @@ data class MobileActivityDto(
 @JsonClass(generateAdapter = true)
 data class MobileAccountDto(
     val id: Long,
+    val parentAccountId: Long? = null,
     val accountName: String,
     val parentAccountName: String? = null,
     val accountType: String? = null,
+    val fundUsage: String? = null,
+    val leaf: Boolean = true,
+    val selectableForExpense: Boolean = false,
+    val safetyMessage: String? = null,
     val currency: String? = null,
     val balance: String? = null,
     val reservedAmount: String? = null,
     val availableAmount: String? = null,
     val active: Boolean? = null,
     val updatedAt: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class MobileCashFlowDto(
+    val monthStart: String? = null,
+    val monthEnd: String? = null,
+    val income: String? = null,
+    val expense: String? = null,
+    val netCashFlow: String? = null,
+    val investmentInflow: String? = null,
+    val investmentOutflow: String? = null,
+    val recentActivities: List<MobileActivityDto> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)

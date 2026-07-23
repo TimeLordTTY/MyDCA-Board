@@ -3,6 +3,7 @@ package com.timelordtty.mydca.data.repository
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.MobileAccountDto
+import com.timelordtty.mydca.data.dto.MobileCashFlowDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -22,6 +23,8 @@ open class WealthRepository(
     open suspend fun getAccountDetail(accountId: Long): NetworkResult<MobileAccountDto> = safeNetworkCall {
         api.getMobileAccountDetail(accountId)
     }
+
+    open suspend fun getCashFlow(): NetworkResult<MobileCashFlowDto> = safeNetworkCall { api.getMobileCashFlow() }
 
     open suspend fun getTransactions(page: Int, pageSize: Int): NetworkResult<MobilePageDto<MobileTransactionDto>> = safeNetworkCall {
         api.getMobileTransactions(page, pageSize)

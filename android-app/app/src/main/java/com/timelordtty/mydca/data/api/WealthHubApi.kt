@@ -7,6 +7,7 @@ import com.timelordtty.mydca.data.dto.DraftFromIntentResponseDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
+import com.timelordtty.mydca.data.dto.MobileCashFlowDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -74,6 +75,9 @@ interface WealthHubApi {
 
     @GET("api/v2/mobile/accounts/{accountId}")
     suspend fun getMobileAccountDetail(@Path("accountId") accountId: Long): MobileAccountDto
+
+    @GET("api/v2/mobile/cash-flow")
+    suspend fun getMobileCashFlow(): MobileCashFlowDto
 
     @GET("api/v2/mobile/transactions")
     suspend fun getMobileTransactions(

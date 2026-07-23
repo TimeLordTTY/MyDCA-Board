@@ -58,6 +58,15 @@ fun AssetsScreen(
 
 @Composable
 private fun AssetsContent(state: AssetsUiState, onRefresh: () -> Unit) {
+    state.cashFlow?.let { cashFlow ->
+        SectionCard(title = "本月现金流", description = "转账不计收支，投资流入/流出单独展示。") {
+            KeyValueRow("收入", formatMoney(cashFlow.income))
+            KeyValueRow("日常支出", formatMoney(cashFlow.expense))
+            KeyValueRow("净现金流", formatSignedMoney(cashFlow.netCashFlow))
+            KeyValueRow("投资流入", formatMoney(cashFlow.investmentInflow))
+            KeyValueRow("投资流出", formatMoney(cashFlow.investmentOutflow))
+        }
+    }
     SectionCard(title = "账户", description = "共 ${state.accounts.total} 个，只展示当前登录用户可读账户。") {
         OutlinedButton(onClick = onRefresh) { Text("刷新") }
         if (state.accounts.items.isEmpty()) {
@@ -72,6 +81,9 @@ private fun AssetsContent(state: AssetsUiState, onRefresh: () -> Unit) {
                         KeyValueRow("余额/市值", formatMoney(account.balance))
                         KeyValueRow("可用", formatMoney(account.availableAmount))
                         KeyValueRow("保留", formatMoney(account.reservedAmount))
+                        KeyValueRow("资金用途", account.fundUsage ?: "待分配")
+                        KeyValueRow("层级", if (account.leaf) "叶子账户" else "父账户（只读聚合）")
+                        KeyValueRow("消费限制", account.safetyMessage ?: "暂无统一口径")
                         KeyValueRow("更新时间", formatDateTime(account.updatedAt))
                     }
                 }

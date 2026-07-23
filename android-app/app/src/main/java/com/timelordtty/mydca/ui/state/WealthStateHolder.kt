@@ -36,17 +36,20 @@ class WealthStateHolder(
         val accountsDeferred = async { repository.getAccounts(page, pageSize) }
         val transactionsDeferred = async { repository.getTransactions(page, pageSize) }
         val holdingsDeferred = async { repository.getHoldings(page, pageSize) }
+        val cashFlowDeferred = async { repository.getCashFlow() }
 
         val accounts = accountsDeferred.await()
         val transactions = transactionsDeferred.await()
         val holdings = holdingsDeferred.await()
-        val firstError = listOf(accounts, transactions, holdings).filterIsInstance<NetworkResult.Failure>().firstOrNull()
+        val cashFlow = cashFlowDeferred.await()
+        val firstError = listOf(accounts, transactions, holdings, cashFlow).filterIsInstance<NetworkResult.Failure>().firstOrNull()
 
         AssetsUiState(
             isLoading = false,
             accounts = (accounts as? NetworkResult.Success)?.data ?: MobilePageDto<MobileAccountDto>(),
             transactions = (transactions as? NetworkResult.Success)?.data ?: MobilePageDto<MobileTransactionDto>(),
             holdings = (holdings as? NetworkResult.Success)?.data ?: MobilePageDto<MobileHoldingDto>(),
+            cashFlow = (cashFlow as? NetworkResult.Success)?.data,
             errorMessage = firstError?.message,
         )
     }

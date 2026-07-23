@@ -73,6 +73,12 @@ private fun OverviewContent(state: WealthOverviewUiState, onRefresh: () -> Unit)
         KeyValueRow("待办总数", overview.totalTodoCount.toString())
         OutlinedButton(onClick = onRefresh) { Text("刷新") }
     }
+    SectionCard(title = "资金分区", description = "仅由后端汇总 REAL/CASH 叶子账户，父账户不重复计入。") {
+        KeyValueRow("可支出 SPENDABLE", formatMoney(overview.spendableAmount))
+        KeyValueRow("专款 RESERVED", formatMoney(overview.reservedFundAmount))
+        KeyValueRow("可投资 INVESTABLE", formatMoney(overview.investableAmount))
+        KeyValueRow("待分配", formatMoney(overview.unallocatedAmount))
+    }
     SectionCard(title = "最近活动", description = "默认展示最近 5 条流水摘要。") {
         if (overview.recentActivities.isEmpty()) {
             StatusPill("暂无活动")
