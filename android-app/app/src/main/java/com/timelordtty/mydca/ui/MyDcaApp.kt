@@ -223,6 +223,7 @@ private fun AuthenticatedApp(
                     } else {
                         DraftInboxScreen(
                             draftRepository = draftRepository,
+                            wealthRepository = wealthRepository,
                             apiConfigError = apiConfigError,
                             selectedDraftId = selectedDraftId,
                             onDraftHandled = { selectedDraftId = null },

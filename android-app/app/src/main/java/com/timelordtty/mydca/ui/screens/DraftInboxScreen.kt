@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
+import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.repository.DraftRepository
+import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.ui.state.AsyncState
 import com.timelordtty.mydca.ui.state.DraftEditForm
 import com.timelordtty.mydca.ui.state.DraftEditState
@@ -33,6 +35,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun DraftInboxScreen(
     draftRepository: DraftRepository?,
+    wealthRepository: WealthRepository?,
     apiConfigError: String?,
     selectedDraftId: Long?,
     onDraftHandled: () -> Unit,
@@ -50,6 +53,7 @@ fun DraftInboxScreen(
     var isConfirmingDraft by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showIgnoreDialog by remember { mutableStateOf(false) }
+    var selectableAccounts by remember { mutableStateOf<List<MobileAccountDto>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
     fun setCurrentDraft(draft: DraftLedgerEntryDto?) {
@@ -290,6 +294,14 @@ fun DraftInboxScreen(
             loadDraftDetail(selectedDraftId)
         }
     }
+    LaunchedEffect(wealthRepository) {
+        if (wealthRepository != null) {
+            when (val result = wealthRepository.getAccounts(1, 100)) {
+                is NetworkResult.Success -> selectableAccounts = result.data.items.filter { it.leaf }
+                is NetworkResult.Failure -> actionMessage = "账户选择器加载失败：${result.message}"
+            }
+        }
+    }
 
     val preview = when (val state = previewState) {
         is AsyncState.Success -> state.data
@@ -338,6 +350,7 @@ fun DraftInboxScreen(
             previewState = previewState,
             canConfirm = canConfirm,
             editForm = editForm,
+            selectableAccounts = selectableAccounts,
             editError = editError,
             isEditDirty = isEditDirty,
             isSavingDraft = isSavingDraft,
@@ -416,6 +429,7 @@ private fun DraftDetailSection(
     previewState: AsyncState<DraftPreviewDto>?,
     canConfirm: Boolean,
     editForm: DraftEditForm,
+    selectableAccounts: List<MobileAccountDto>,
     editError: String?,
     isEditDirty: Boolean,
     isSavingDraft: Boolean,
@@ -445,6 +459,7 @@ private fun DraftDetailSection(
         DraftEditSection(
             selectedDraft = selectedDraft,
             editForm = editForm,
+            selectableAccounts = selectableAccounts,
             editError = editError,
             isEditDirty = isEditDirty,
             isSavingDraft = isSavingDraft,
@@ -493,6 +508,7 @@ private fun DraftDetailSection(
 private fun DraftEditSection(
     selectedDraft: DraftLedgerEntryDto,
     editForm: DraftEditForm,
+    selectableAccounts: List<MobileAccountDto>,
     editError: String?,
     isEditDirty: Boolean,
     isSavingDraft: Boolean,
@@ -542,6 +558,34 @@ private fun DraftEditSection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
         )
+        SectionCard(
+            title = "选择叶子账户",
+            description = "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。",
+        ) {
+            val candidates = selectableAccounts.filter { account ->
+                editForm.txnType != "EXPENSE" || account.selectableForExpense
+            }
+            if (candidates.isEmpty()) {
+                StatusPill("暂无符合当前交易类型的可选账户")
+            } else {
+                candidates.forEach { account ->
+                    OutlinedButton(
+                        enabled = !isSavingDraft && !isPreviewingDraft,
+                        onClick = {
+                            onEditFormChange(
+                                editForm.copy(
+                                    accountId = account.id.toString(),
+                                    accountNameHint = account.accountName,
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("${account.accountName} · ${account.fundUsage ?: "待分配"} · 可用 ${formatMoney(account.availableAmount)}")
+                    }
+                }
+            }
+        }
         OutlinedTextField(
             value = editForm.accountId,
             onValueChange = { onEditFormChange(editForm.copy(accountId = it)) },
