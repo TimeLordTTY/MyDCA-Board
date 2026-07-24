@@ -202,7 +202,9 @@ public class MobileWealthService {
         dto.setFundUsage(account.getFundUsage());
         boolean leaf = account.getChildren() == null || account.getChildren().isEmpty();
         dto.setLeaf(leaf);
-        boolean spendableLeaf = leaf && "REAL".equals(account.getAccountKind()) && "SPENDABLE".equals(account.getFundUsage());
+        boolean selectableLeaf = leaf && "REAL".equals(account.getAccountKind()) && Boolean.TRUE.equals(account.getIsActive());
+        dto.setSelectableForDraft(selectableLeaf);
+        boolean spendableLeaf = selectableLeaf && "SPENDABLE".equals(account.getFundUsage());
         dto.setSelectableForExpense(spendableLeaf);
         dto.setSafetyMessage(accountSafetyMessage(account, leaf));
         dto.setCurrency(account.getCurrency());

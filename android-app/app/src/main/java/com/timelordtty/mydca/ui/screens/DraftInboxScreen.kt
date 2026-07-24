@@ -563,7 +563,8 @@ private fun DraftEditSection(
             description = "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。",
         ) {
             val candidates = selectableAccounts.filter { account ->
-                editForm.txnType != "EXPENSE" || account.selectableForExpense
+                account.selectableForDraft &&
+                    (editForm.txnType != "EXPENSE" || account.selectableForExpense)
             }
             if (candidates.isEmpty()) {
                 StatusPill("暂无符合当前交易类型的可选账户")

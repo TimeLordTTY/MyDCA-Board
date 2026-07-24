@@ -53,6 +53,7 @@ data class MobileAccountDto(
     val accountType: String? = null,
     val fundUsage: String? = null,
     val leaf: Boolean = true,
+    val selectableForDraft: Boolean = false,
     val selectableForExpense: Boolean = false,
     val safetyMessage: String? = null,
     val currency: String? = null,

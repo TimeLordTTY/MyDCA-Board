@@ -181,6 +181,59 @@ class DraftLedgerEntryServiceTest {
     }
 
     @Test
+    void previewExpenseRejectsReservedAccountWithoutPostingLedger() {
+        DraftLedgerEntry draft = draft("DRAFT");
+        draft.setParsedPayloadJson("{\"txnType\":\"EXPENSE\",\"accountId\":7,\"amount\":12.34}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(draft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L))
+                .thenReturn(account(7L, "房租专款", "CASH", "RESERVED"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals(false, preview.getConfirmSupported());
+        assertTrue(preview.getMessage().contains("RESERVED"));
+        assertTrue(preview.getMessage().contains("SPENDABLE"));
+        verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
+    }
+
+    @Test
+    void confirmExpenseRejectsInvestableAccountWithoutPostingLedger() {
+        DraftLedgerEntry draft = draft("DRAFT");
+        draft.setParsedPayloadJson("{\"txnType\":\"EXPENSE\",\"accountId\":7,\"amount\":12.34}");
+        when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(draft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L))
+                .thenReturn(account(7L, "投资资金", "CASH", "INVESTABLE"));
+
+        RuntimeException error = assertThrows(
+                RuntimeException.class,
+                () -> service.confirmDraft(10L, 20L, 1L)
+        );
+
+        assertTrue(error.getMessage().contains("INVESTABLE"));
+        assertTrue(error.getMessage().contains("SPENDABLE"));
+        verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
+        verify(mapper, never()).markConfirmed(any(), any(), any());
+    }
+
+    @Test
+    void previewDraftRejectsParentAccountWithoutPostingLedger() {
+        DraftLedgerEntry draft = draft("DRAFT");
+        draft.setParsedPayloadJson("{\"txnType\":\"INCOME\",\"accountId\":7,\"amount\":12.34}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(draft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L))
+                .thenReturn(account(7L, "现金总账户", "CASH", "SPENDABLE"));
+        when(accountMapper.selectChildren(7L))
+                .thenReturn(java.util.List.of(account(8L, "工资卡", "CASH", "SPENDABLE")));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals(false, preview.getConfirmSupported());
+        assertTrue(preview.getMessage().contains("父账户"));
+        assertTrue(preview.getMessage().contains("叶子账户"));
+        verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
+    }
+
+    @Test
     void previewUnsupportedTypeKeepsImpactAndLedgerCreationDisabled() {
         DraftLedgerEntry draft = draft("DRAFT");
         draft.setParsedPayloadJson("{\"txnType\":\"BUY\",\"accountId\":7,\"amount\":12.34}");

@@ -11,6 +11,7 @@ public class MobileAccountDto {
     private String accountType;
     private String fundUsage;
     private Boolean leaf;
+    private Boolean selectableForDraft;
     private Boolean selectableForExpense;
     private String safetyMessage;
     private String currency;
@@ -34,6 +35,8 @@ public class MobileAccountDto {
     public void setFundUsage(String fundUsage) { this.fundUsage = fundUsage; }
     public Boolean getLeaf() { return leaf; }
     public void setLeaf(Boolean leaf) { this.leaf = leaf; }
+    public Boolean getSelectableForDraft() { return selectableForDraft; }
+    public void setSelectableForDraft(Boolean selectableForDraft) { this.selectableForDraft = selectableForDraft; }
     public Boolean getSelectableForExpense() { return selectableForExpense; }
     public void setSelectableForExpense(Boolean selectableForExpense) { this.selectableForExpense = selectableForExpense; }
     public String getSafetyMessage() { return safetyMessage; }

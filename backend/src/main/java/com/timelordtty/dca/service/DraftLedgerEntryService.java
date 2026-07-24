@@ -211,6 +211,7 @@ public class DraftLedgerEntryService {
         List<String> missing = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         boolean accountUnavailable = false;
+        String accountRuleViolation = null;
         if (preview.getTxnType() == null) {
             missing.add("txnType");
         }
@@ -232,8 +233,15 @@ public class DraftLedgerEntryService {
                 preview.setAccountName(account.getAccountName());
                 preview.setAccountType(account.getAccountType());
                 preview.setFundUsage(account.getFundUsage());
-                if (account.getFundUsage() != null && !account.getFundUsage().isBlank()) {
-                    warnings.add("账户资金用途：" + account.getFundUsage() + "；首版仅提示，不在预览阶段强制阻断。");
+                if (!accountMapper.selectChildren(account.getId()).isEmpty()) {
+                    accountRuleViolation = "父账户仅用于聚合展示，不能作为记账账户；请选择其下可用的叶子账户。";
+                } else if ("EXPENSE".equals(preview.getTxnType())
+                        && !"SPENDABLE".equals(account.getFundUsage())) {
+                    accountRuleViolation = expenseAccountRuleMessage(account.getFundUsage());
+                }
+                if (accountRuleViolation != null) {
+                    addIfAbsent(missing, "accountId");
+                    warnings.add(accountRuleViolation);
                 }
             }
         }
@@ -251,11 +259,23 @@ public class DraftLedgerEntryService {
             preview.setMessage("首版草稿确认仅支持 EXPENSE/INCOME 快速记账");
         } else if (accountUnavailable) {
             preview.setMessage("草稿账户不存在、已停用或当前用户/家庭不可见，请重新选择账户。");
+        } else if (accountRuleViolation != null) {
+            preview.setMessage(accountRuleViolation);
         } else {
             preview.setMessage("草稿缺少必要字段：" + String.join(", ", missing));
         }
         preview.setWarnings(warnings);
         return preview;
+    }
+
+    private String expenseAccountRuleMessage(String fundUsage) {
+        if ("RESERVED".equals(fundUsage)) {
+            return "专款 RESERVED 账户不得用于日常消费；请选择 SPENDABLE 叶子账户。";
+        }
+        if ("INVESTABLE".equals(fundUsage)) {
+            return "可投资 INVESTABLE 账户不得用于日常消费；请选择 SPENDABLE 叶子账户。";
+        }
+        return "待分配账户不应直接用于日常消费；请先完成资金分区并选择 SPENDABLE 叶子账户。";
     }
 
     /**
