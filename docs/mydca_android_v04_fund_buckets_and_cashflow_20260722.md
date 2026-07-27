@@ -34,6 +34,13 @@
 - Web 未修改，因此未重复执行 Web production build。
 - 未连接生产数据库，未修改数据库 schema，未创建或确认真实草稿，未修改任何真实账本、余额、持仓或订单。
 
+### 2026-07-27 当前分支复验
+
+- 在 `v2` 的 `1fc8fba85bbd0dfe9bbc2458a7ba53e8a6c8f82f` 上重新执行 `backend: mvn test`：46 项测试全部通过。
+- 重新执行 Android `testDebugUnitTest assembleDebug lintDebug`：构建成功。
+- 执行 `scripts/post-task-compile-hook.ps1`：后端 package 与 Web production build 均通过。
+- 通过 GitHub API 重新核验 Run `30071421897` 的 Artifact `8588186382`，状态仍为未过期，构建提交、大小和过期时间与下方记录一致。
+
 ## 部署与只读核验
 
 - 本轮未修改 backend/web，因此未重新部署服务器。
