@@ -48,6 +48,13 @@
 - 重新下载 Artifact `8588186382` 到仓库外临时目录，APK 实际 SHA-256 与 `SHA256SUMS.txt` 一致；Artifact 仍未过期。
 - 公开 HTTPS 只读探测结果保持为财富中枢入口 HTTP 200、未公开的 `/actuator/health` HTTP 404；未连接生产数据库，也未执行登录后写入或真实账本操作。
 
+### 2026-07-27 最终执行复验
+
+- 在 `v2` 的 `e7c5b562c9c4d3c644f50b27ff2484a04214a27d` 上执行 `backend: mvn test`：46 项测试全部通过。
+- 执行 Android `testDebugUnitTest assembleDebug lintDebug`：构建成功。
+- 通过 GitHub API 实时核验 Run `30071421897` 仍为成功，Artifact `8588186382` 仍未过期，名称、构建提交、压缩包大小和过期时间均与本报告一致。
+- 本次只复核既有业务实现和交付证据，未连接生产数据库，未执行真实资金操作，也未重复修改已完成的业务代码。
+
 ## 部署与只读核验
 
 - 本轮未修改 backend/web，因此未重新部署服务器。
