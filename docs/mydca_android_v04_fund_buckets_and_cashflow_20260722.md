@@ -41,6 +41,13 @@
 - 执行 `scripts/post-task-compile-hook.ps1`：后端 package 与 Web production build 均通过。
 - 通过 GitHub API 重新核验 Run `30071421897` 的 Artifact `8588186382`，状态仍为未过期，构建提交、大小和过期时间与下方记录一致。
 
+### 2026-07-27 owner-approved 续跑复验
+
+- 在 `v2` 的 `6d355bcf0f23b224ab70a6c40495fed275c42a3f` 上再次执行 `backend: mvn test`：46 项测试全部通过。
+- 再次执行 Android `testDebugUnitTest assembleDebug lintDebug`：构建成功；强制完成钩子的后端 package 与 Web production build 均通过。
+- 重新下载 Artifact `8588186382` 到仓库外临时目录，APK 实际 SHA-256 与 `SHA256SUMS.txt` 一致；Artifact 仍未过期。
+- 公开 HTTPS 只读探测结果保持为财富中枢入口 HTTP 200、未公开的 `/actuator/health` HTTP 404；未连接生产数据库，也未执行登录后写入或真实账本操作。
+
 ## 部署与只读核验
 
 - 本轮未修改 backend/web，因此未重新部署服务器。
