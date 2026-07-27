@@ -62,6 +62,13 @@
 - 重新下载 Run `30071421897` 的 Artifact `8588186382`，APK 实际 SHA-256 与制品内 `SHA256SUMS.txt` 一致；Artifact 状态仍为未过期。
 - 公开 HTTPS 只读探测结果为财富中枢入口 HTTP 200、未公开的 `/actuator/health` HTTP 404；未部署服务，未连接生产数据库，未执行登录后写入或任何真实资金操作。
 
+### 2026-07-27 owner-approved 任务完成核验
+
+- 在 `v2` 的 `8d336da2442e6559eb119be9e8a9e12aa99335b2` 上执行 `backend: mvn test`：46 项测试全部通过。
+- 执行 Android `testDebugUnitTest assembleDebug lintDebug`：构建成功；执行强制完成钩子，后端 package 与 Web production build 均通过。
+- GitHub Actions Run `30071421897` 仍为成功，Artifact `8588186382` 未过期；重新下载所得 APK 为 `MyDCA-Board-v0.4-4a5a8776.apk`，大小 55,685,797 bytes，SHA-256 与制品内 `SHA256SUMS.txt` 一致。
+- 本轮未修改既有业务实现，未部署服务、未连接生产数据库、未执行真实资金操作，也未发送超出目标仓库 `allowed_paths` 的通知或归档变更。
+
 ## 部署与只读核验
 
 - 本轮未修改 backend/web，因此未重新部署服务器。
