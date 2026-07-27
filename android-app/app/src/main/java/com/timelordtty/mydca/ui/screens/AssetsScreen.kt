@@ -2,7 +2,11 @@ package com.timelordtty.mydca.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.data.repository.WealthRepository
+import com.timelordtty.mydca.ui.state.AccountFundUsageFilter
 import com.timelordtty.mydca.ui.state.AssetsUiState
 import com.timelordtty.mydca.ui.state.WealthStateHolder
 import kotlinx.coroutines.launch
@@ -22,6 +27,8 @@ import kotlinx.coroutines.launch
 fun AssetsScreen(
     wealthRepository: WealthRepository?,
     apiConfigError: String?,
+    selectedFilter: AccountFundUsageFilter,
+    onFilterChange: (AccountFundUsageFilter) -> Unit,
 ) {
     var state by remember { mutableStateOf(AssetsUiState()) }
     val scope = rememberCoroutineScope()
@@ -50,14 +57,19 @@ fun AssetsScreen(
             !errorMessage.isNullOrBlank() &&
                 state.accounts.items.isEmpty() &&
                 state.transactions.items.isEmpty() &&
-                state.holdings.items.isEmpty() -> RetrySection("资产数据加载失败", errorMessage, ::refresh)
-            else -> AssetsContent(state, ::refresh)
+                state.holdings.items.isEmpty() -> RetrySection(selectedFilter.errorTitle(), errorMessage, ::refresh)
+            else -> AssetsContent(state, selectedFilter, onFilterChange, ::refresh)
         }
     }
 }
 
 @Composable
-private fun AssetsContent(state: AssetsUiState, onRefresh: () -> Unit) {
+private fun AssetsContent(
+    state: AssetsUiState,
+    selectedFilter: AccountFundUsageFilter,
+    onFilterChange: (AccountFundUsageFilter) -> Unit,
+    onRefresh: () -> Unit,
+) {
     state.cashFlow?.let { cashFlow ->
         SectionCard(title = "本月现金流", description = "转账不计收支，投资流入/流出单独展示。") {
             KeyValueRow("收入", formatMoney(cashFlow.income))
@@ -67,13 +79,29 @@ private fun AssetsContent(state: AssetsUiState, onRefresh: () -> Unit) {
             KeyValueRow("投资流出", formatMoney(cashFlow.investmentOutflow))
         }
     }
-    SectionCard(title = "账户", description = "共 ${state.accounts.total} 个，只展示当前登录用户可读账户。") {
+    val filteredAccounts = state.accounts.items.filter(selectedFilter::matches)
+    SectionCard(
+        title = "账户",
+        description = "当前筛选：${selectedFilter.label}；共 ${filteredAccounts.size} 个，只展示当前登录用户可读账户。",
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = androidx.compose.ui.Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            AccountFundUsageFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = selectedFilter == filter,
+                    onClick = { onFilterChange(filter) },
+                    label = { Text(filter.label) },
+                )
+            }
+        }
         OutlinedButton(onClick = onRefresh) { Text("刷新") }
-        if (state.accounts.items.isEmpty()) {
-            StatusPill("暂无账户")
+        if (filteredAccounts.isEmpty()) {
+            StatusPill(selectedFilter.emptyMessage)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                state.accounts.items.forEach { account ->
+                filteredAccounts.forEach { account ->
                     SectionCard(
                         title = account.accountName,
                         description = listOfNotNull(account.parentAccountName, account.accountType).joinToString(" · "),
@@ -129,6 +157,6 @@ private fun AssetsContent(state: AssetsUiState, onRefresh: () -> Unit) {
         }
     }
     if (!state.errorMessage.isNullOrBlank()) {
-        RetrySection("部分数据加载不完整", state.errorMessage, onRefresh)
+        RetrySection("${selectedFilter.label}筛选下部分数据加载不完整", state.errorMessage, onRefresh)
     }
 }

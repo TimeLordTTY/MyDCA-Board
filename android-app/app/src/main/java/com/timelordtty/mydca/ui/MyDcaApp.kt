@@ -40,6 +40,7 @@ import com.timelordtty.mydca.ui.screens.SettingsScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
 import com.timelordtty.mydca.ui.screens.OcrDraftScreen
+import com.timelordtty.mydca.ui.state.AccountFundUsageFilter
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -160,6 +161,7 @@ private fun AuthenticatedApp(
 ) {
         var currentRoute by rememberSaveable { mutableStateOf(AppRoute.TodayTodo) }
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
+        var accountFilterValue by rememberSaveable { mutableStateOf(AccountFundUsageFilter.ALL.name) }
         var showImageOcr by remember { mutableStateOf(false) }
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
@@ -233,6 +235,8 @@ private fun AuthenticatedApp(
                     AppRoute.Accounts -> AssetsScreen(
                         wealthRepository = wealthRepository,
                         apiConfigError = apiConfigError,
+                        selectedFilter = AccountFundUsageFilter.fromSavedValue(accountFilterValue),
+                        onFilterChange = { accountFilterValue = it.name },
                     )
                     AppRoute.Settings -> SettingsScreen(
                         baseUrl = baseUrl,
