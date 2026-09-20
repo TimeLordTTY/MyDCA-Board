@@ -21,6 +21,12 @@ const router = createRouter({
       meta: { requiresAuth: true },
     },
     {
+      path: '/portal-login',
+      name: 'PortalLogin',
+      component: () => import('../views/PortalLogin.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       path: '/',
       component: () => import('../layouts/MainLayout.vue'),
       redirect: '/dashboard',
@@ -81,9 +87,11 @@ router.beforeEach((to, from, next) => {
   const token = localStorage.getItem('token')
 
   if (to.meta.requiresAuth && !token) {
-    next({ name: 'Login', query: { redirect: to.fullPath } })
+    next({ name: to.name === 'Portal' ? 'PortalLogin' : 'Login', query: { redirect: to.fullPath } })
   } else if (to.name === 'Login' && token) {
     next({ name: 'Dashboard' })
+  } else if (to.name === 'PortalLogin' && token) {
+    next({ name: 'Portal' })
   } else {
     next()
   }
