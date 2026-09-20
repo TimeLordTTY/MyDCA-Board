@@ -125,8 +125,8 @@ const apps = [
     external: true,
   },
   {
-    title: '青小鹿',
-    description: '诗词站中的青小鹿页面。',
+    title: '情晓录',
+    description: '诗词站中的情晓录页面。',
     path: 'poem.timelordtty.cn/qingxiaolu/',
     href: 'https://poem.timelordtty.cn/qingxiaolu/',
     icon: Sunny,
