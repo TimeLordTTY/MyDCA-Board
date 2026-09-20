@@ -15,6 +15,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: '/portal',
+      name: 'Portal',
+      component: () => import('../views/Portal.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/',
       component: () => import('../layouts/MainLayout.vue'),
       redirect: '/dashboard',
