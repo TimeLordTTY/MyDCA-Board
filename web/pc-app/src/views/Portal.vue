@@ -25,6 +25,8 @@
             :key="item.href"
             class="app-card"
             :href="item.href"
+            :target="item.external ? '_blank' : undefined"
+            :rel="item.external ? 'noopener noreferrer' : undefined"
           >
             <div class="app-icon" :class="item.iconClass">
               <component :is="item.icon" />
@@ -73,6 +75,9 @@ import { useRouter } from 'vue-router'
 import {
   ArrowRight,
   DataAnalysis,
+  PictureFilled,
+  Reading,
+  Sunny,
   Iphone,
   House,
   Wallet,
@@ -101,6 +106,32 @@ const apps = [
     href: '/wealth-hub-mobile/dashboard',
     icon: Iphone,
     iconClass: 'violet',
+  },
+  {
+    title: '游戏墙',
+    description: '浏览和管理已收录的游戏内容。',
+    path: '/game-wall/games',
+    href: '/game-wall/games',
+    icon: PictureFilled,
+    iconClass: 'orange',
+  },
+  {
+    title: '诗词站',
+    description: '进入独立的诗词与创作站点。',
+    path: 'poem.timelordtty.cn',
+    href: 'https://poem.timelordtty.cn/',
+    icon: Reading,
+    iconClass: 'green',
+    external: true,
+  },
+  {
+    title: '青小鹿',
+    description: '诗词站中的青小鹿页面。',
+    path: 'poem.timelordtty.cn/qingxiaolu/',
+    href: 'https://poem.timelordtty.cn/qingxiaolu/',
+    icon: Sunny,
+    iconClass: 'rose',
+    external: true,
   },
 ]
 
@@ -258,6 +289,21 @@ async function handleLogout() {
 .app-icon.violet {
   color: #7658d7;
   background: #f0ecff;
+}
+
+.app-icon.orange {
+  color: #d68132;
+  background: #fff0df;
+}
+
+.app-icon.green {
+  color: #33856c;
+  background: #e1f5ed;
+}
+
+.app-icon.rose {
+  color: #c45f77;
+  background: #ffebf0;
 }
 
 .app-content {
