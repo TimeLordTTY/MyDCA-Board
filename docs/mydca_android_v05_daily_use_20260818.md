@@ -52,9 +52,13 @@
 
 ## 本地构建产物（本轮）
 
-本轮执行约束为“提交但不推送”。v0.5.0 的源码提交未推送到远端，
-`Android test APK` 工作流（push 到 `v2` 的 `android-app/**` 触发）无法为本提交产出 Run/Artifact，
-因此不伪造任何 Run ID 或 Artifact ID。
+本轮工作进程的执行约束为“提交但不推送”，因此由本进程产出的证据只有本地构建产物。
+推送由 owner 批准的 approved Codex auto-executor 在进程退出后完成：它会校验改动路径是否落在
+`allowed_paths` 内，随后推送结果提交，并在 finalize 阶段把任务从 `agent-inbox/pending` 移入
+`agent-inbox/in_progress`，写入 AiCore 报告与交付清单，再排队 Hermes 企业微信完成通知。
+
+`Android test APK` 工作流由推送 `v2` 分支的 `android-app/**` 变更触发。推送成功后由执行器侧记录真实
+Run ID 与 Artifact ID；本报告不对尚未产生的 Run/Artifact 做任何推测或伪造。
 
 - 本地 `assembleDebug` 产物路径：`android-app/app/build/outputs/apk/debug/app-debug.apk`
 - 文件名：`app-debug.apk`
@@ -65,9 +69,13 @@
 ### GitHub Actions 制品状态
 
 - Workflow：Android test APK
-- 本提交对应 Run：NOT_PRODUCED（本轮禁止 push，未触发工作流，未获取到 Run ID）
-- 本提交对应 Artifact ID / 名称：NOT_PRODUCED
+- 本进程产生的 Run：NOT_PRODUCED（工作进程按指令不推送，工作流未在本进程内触发）
+- 本进程产生的 Artifact ID / 名称：NOT_PRODUCED（同上）
+- 结果提交推送后由 approved Codex auto-executor 触发工作流并记录真实 Run/Artifact 证据
 - 最近一次历史 Run（由前序 Android 提交触发，仅作参考，不代表 v0.5.0）：`30243077286`，结果 success，触发分支 `v2`。
+
+工作流在 CI 用一次性 debug 签名密钥重新打包，因此 CI 产出的 APK 与上文本地 APK 的 SHA-256 不会相同；
+两者只能分别作为“本地构建成功”与“CI 构建成功”的独立证据，不能互相替代。
 
 ## 明确未实现
 
