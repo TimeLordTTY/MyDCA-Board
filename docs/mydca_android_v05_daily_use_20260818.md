@@ -3,6 +3,7 @@
 核验日期：2026-09-26
 目标仓库：`TimeLordTTY/MyDCA-Board`（分支 `v2`）
 对应任务：`task-mydca-android-v05-daily-use-20260818`
+业务实现提交：`dca789f3482430ac8a15d208d3765bb0ab56353b`（已在本地 `v2` 提交，本轮未推送）
 
 ## 版本信息
 
