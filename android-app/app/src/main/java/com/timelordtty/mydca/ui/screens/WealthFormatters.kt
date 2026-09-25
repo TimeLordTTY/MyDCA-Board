@@ -2,8 +2,10 @@ package com.timelordtty.mydca.ui.screens
 
 import java.math.BigDecimal
 import java.text.DecimalFormat
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val moneyFormatter = DecimalFormat("#,##0.00")
@@ -39,4 +41,13 @@ fun formatDateTime(value: String?): String {
             LocalDate.parse(value).format(DateTimeFormatter.ISO_LOCAL_DATE)
         }.getOrDefault(value)
     }
+}
+
+/** 展示本次刷新的本地时间，用于区分“刚刷新成功”和“仍是旧数据”。 */
+fun formatClockTime(epochMillis: Long?): String {
+    if (epochMillis == null || epochMillis <= 0L) return "暂无"
+    return runCatching {
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(epochMillis), ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("MM-dd HH:mm:ss"))
+    }.getOrDefault("暂无")
 }

@@ -78,6 +78,80 @@ class WealthStateHolderTest {
         assertEquals(2, state.holdings.total)
         assertEquals("88.00", state.cashFlow?.netCashFlow)
     }
+
+    @Test
+    fun refreshFailureKeepsLastSuccessfulOverview() = runTest {
+        val holder = WealthStateHolder(
+            repository = object : WealthRepository(FailingWealthApi()) {
+                override suspend fun getOverview(): NetworkResult<MobileOverviewDto> {
+                    return NetworkResult.Failure("总览超时")
+                }
+            },
+            clock = { 5L },
+        )
+        val previous = WealthOverviewUiState(
+            isLoading = false,
+            overview = MobileOverviewDto(totalAssets = "100.00"),
+            lastUpdatedAt = 42L,
+        )
+
+        val state = holder.loadOverview(previous)
+
+        assertEquals("100.00", state.overview?.totalAssets)
+        assertEquals(42L, state.lastUpdatedAt)
+        assertEquals("总览超时", state.errorMessage)
+        assertFalse(state.isLoading)
+        assertFalse(state.isRefreshing)
+    }
+
+    @Test
+    fun refreshFailureKeepsPreviousAssetPages() = runTest {
+        val holder = WealthStateHolder(object : WealthRepository(FailingWealthApi()) {
+            override suspend fun getAccounts(page: Int, pageSize: Int): NetworkResult<MobilePageDto<MobileAccountDto>> =
+                NetworkResult.Failure("账户超时")
+
+            override suspend fun getTransactions(page: Int, pageSize: Int): NetworkResult<MobilePageDto<MobileTransactionDto>> =
+                NetworkResult.Failure("流水超时")
+
+            override suspend fun getHoldings(page: Int, pageSize: Int): NetworkResult<MobilePageDto<MobileHoldingDto>> =
+                NetworkResult.Failure("持仓超时")
+
+            override suspend fun getCashFlow(): NetworkResult<MobileCashFlowDto> =
+                NetworkResult.Failure("现金流超时")
+        })
+        val previous = AssetsUiState(
+            isLoading = false,
+            transactions = MobilePageDto(total = 4),
+            lastUpdatedAt = 11L,
+        )
+
+        val state = holder.loadAssets(previous = previous)
+
+        assertEquals(4, state.transactions.total)
+        assertEquals(11L, state.lastUpdatedAt)
+        assertEquals("账户超时", state.errorMessage)
+    }
+
+    @Test
+    fun accountDetailUsesReadOnlyEndpoint() = runTest {
+        val holder = WealthStateHolder(
+            repository = object : WealthRepository(FailingWealthApi()) {
+                override suspend fun getAccountDetail(accountId: Long): NetworkResult<MobileAccountDto> {
+                    return NetworkResult.Success(
+                        MobileAccountDto(id = accountId, accountName = "现金", fundUsage = "SPENDABLE"),
+                    )
+                }
+            },
+            clock = { 7L },
+        )
+
+        val state = holder.loadAccountDetail(9L)
+
+        assertEquals(9L, state.accountId)
+        assertEquals("现金", state.account?.accountName)
+        assertEquals(7L, state.lastUpdatedAt)
+        assertNull(state.errorMessage)
+    }
 }
 
 private class FailingWealthApi : WealthHubApi {

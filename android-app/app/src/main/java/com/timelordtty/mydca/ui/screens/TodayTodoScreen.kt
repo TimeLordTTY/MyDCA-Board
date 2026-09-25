@@ -3,37 +3,37 @@ package com.timelordtty.mydca.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import com.timelordtty.mydca.data.dto.TodoItemDto
-import com.timelordtty.mydca.data.repository.TodoRepository
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
+import com.timelordtty.mydca.data.repository.TodoRepository
+import com.timelordtty.mydca.notification.DraftCreationGate
 import com.timelordtty.mydca.notification.NotificationCandidate
 import com.timelordtty.mydca.notification.NotificationCandidateStatus
 import com.timelordtty.mydca.notification.NotificationCandidateStore
 import com.timelordtty.mydca.notification.NotificationDraftInput
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
-import com.timelordtty.mydca.notification.DraftCreationGate
+import com.timelordtty.mydca.ui.state.TodayTodoStateHolder
+import com.timelordtty.mydca.ui.state.TodayTodoUiState
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.timelordtty.mydca.ui.state.AsyncState
 import kotlinx.coroutines.launch
 
 @Composable
@@ -44,25 +44,31 @@ fun TodayTodoScreen(
     selectedCandidateId: String?,
     onOpenDraft: (Long) -> Unit,
 ) {
-    var todoState by remember { mutableStateOf<AsyncState<TodayTodoDto>>(AsyncState.Loading) }
+    var state by remember { mutableStateOf(TodayTodoUiState()) }
     val scope = rememberCoroutineScope()
+    val holder = remember(todoRepository) { todoRepository?.let { TodayTodoStateHolder(it) } }
 
-    fun refreshTodos() {
-        val repository = todoRepository ?: run {
-            todoState = AsyncState.Error(apiConfigError ?: "接口配置未就绪")
+    fun refresh(showLoading: Boolean) {
+        if (holder == null) {
+            state = state.copy(
+                isLoading = false,
+                isRefreshing = false,
+                errorMessage = apiConfigError ?: "接口配置未就绪",
+            )
             return
         }
-        scope.launch {
-            todoState = AsyncState.Loading
-            todoState = when (val result = repository.getTodayTodos()) {
-                is NetworkResult.Success -> AsyncState.Success(result.data)
-                is NetworkResult.Failure -> AsyncState.Error(result.message)
-            }
-        }
+        val loaded = state.todos != null
+        val previous = state.copy(
+            isLoading = showLoading && !loaded,
+            isRefreshing = !(showLoading && !loaded),
+            errorMessage = null,
+        )
+        state = previous
+        scope.launch { state = holder.load(previous) }
     }
 
     LaunchedEffect(todoRepository, apiConfigError) {
-        refreshTodos()
+        refresh(showLoading = true)
     }
 
     PageScaffold {
@@ -74,18 +80,21 @@ fun TodayTodoScreen(
             onOpenDraft = onOpenDraft,
         )
 
-        when (val state = todoState) {
-            AsyncState.Loading -> LoadingSection("正在加载今日待办")
-            is AsyncState.Error -> ErrorSection(
-                title = "今日待办加载失败",
-                message = state.message,
-                onRetry = ::refreshTodos,
-            )
-            is AsyncState.Success -> TodayTodoContent(
-                todos = state.data,
-                onRefresh = ::refreshTodos,
-                onOpenDraft = onOpenDraft,
-            )
+        when {
+            state.isLoading -> LoadingSection("正在加载今日待办")
+            state.todos == null && !state.errorMessage.isNullOrBlank() ->
+                ErrorSection("今日待办加载失败", state.errorMessage!!, { refresh(showLoading = true) })
+            else -> {
+                RefreshBar(state.lastUpdatedAt, state.isRefreshing) { refresh(showLoading = false) }
+                if (!state.errorMessage.isNullOrBlank()) {
+                    NoticeBanner(
+                        title = "本次刷新失败，以下保留上次成功待办",
+                        message = state.errorMessage!!,
+                        onRetry = { refresh(showLoading = false) },
+                    )
+                }
+                state.todos?.let { todos -> TodayTodoContent(todos, onOpenDraft) }
+            }
         }
     }
 }
@@ -171,7 +180,6 @@ private fun PaymentCandidateCard(
 @Composable
 private fun TodayTodoContent(
     todos: TodayTodoDto,
-    onRefresh: () -> Unit,
     onOpenDraft: (Long) -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -184,9 +192,6 @@ private fun TodayTodoContent(
         title = "今日待办",
         description = "${todos.date ?: "今日"} 共 ${todos.totalCount} 项。点击草稿待办只会打开草稿详情，不会直接入账。",
     ) {
-        OutlinedButton(onClick = onRefresh) {
-            Text("刷新")
-        }
         val items = todos.items.orEmpty()
         if (items.isEmpty()) {
             StatusPill("暂无待办")
@@ -219,26 +224,6 @@ private fun TodoItemCard(
             }
         } else {
             StatusPill("当前移动端仅支持草稿导航")
-        }
-    }
-}
-
-@Composable
-private fun LoadingSection(title: String) {
-    SectionCard(title = title) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun ErrorSection(
-    title: String,
-    message: String,
-    onRetry: () -> Unit,
-) {
-    SectionCard(title = title, description = message) {
-        OutlinedButton(onClick = onRetry) {
-            Text("重试")
         }
     }
 }

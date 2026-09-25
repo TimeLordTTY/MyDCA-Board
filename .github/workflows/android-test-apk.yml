@@ -40,9 +40,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifact
-          cp android-app/app/build/outputs/apk/debug/app-debug.apk artifact/MyDCA-Board-v0.4.1-${GITHUB_SHA::8}.apk
+          cp android-app/app/build/outputs/apk/debug/app-debug.apk artifact/MyDCA-Board-v0.5.0-${GITHUB_SHA::8}.apk
           cd artifact
-          sha256sum MyDCA-Board-v0.4.1-${GITHUB_SHA::8}.apk > SHA256SUMS.txt
+          sha256sum MyDCA-Board-v0.5.0-${GITHUB_SHA::8}.apk > SHA256SUMS.txt
           {
             echo "repository=${GITHUB_REPOSITORY}"
             echo "branch=${GITHUB_REF_NAME}"
@@ -50,7 +50,7 @@ jobs:
             echo "base_url=https://www.timelordtty.cn/"
             echo "variant=debug"
           } > build-metadata.txt
-          echo "artifact_name=mydca-android-v0.4.1-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "artifact_name=mydca-android-v0.5.0-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

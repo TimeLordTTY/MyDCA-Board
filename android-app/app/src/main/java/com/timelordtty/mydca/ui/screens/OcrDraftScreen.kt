@@ -13,6 +13,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,19 +31,30 @@ import com.timelordtty.mydca.ui.state.OcrDraftStage
 import java.util.UUID
 import kotlinx.coroutines.launch
 
-/** 系统 Photo Picker、本地 OCR、候选复核与 DRAFT 创建的人工闭环。 */
+/** 草稿录入方式：图片识别或手工文本；两种入口都不会自动 preview / confirm。 */
+enum class OcrEntryMode { Image, ManualText }
+
+/** 系统 Photo Picker、本地 OCR、候选复核与 DRAFT 创建的人工闭环；同时承载“手工记一笔”文本入口。 */
 @Composable
 fun OcrDraftScreen(
     repository: AiAccountingRepository,
     onClose: () -> Unit,
     onOpenDraft: (Long) -> Unit,
+    entryMode: OcrEntryMode = OcrEntryMode.Image,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val manualEntry = entryMode == OcrEntryMode.ManualText
     val coordinator = remember { OcrDraftCoordinator() }
     val recognizer = remember { MlKitImageTextRecognizer() }
     val state by coordinator.state.collectAsState()
     var hasSelectedImage by remember { mutableStateOf(false) }
+
+    LaunchedEffect(entryMode) {
+        if (manualEntry) {
+            coordinator.startTextEntry(UUID.randomUUID().toString(), "")
+        }
+    }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -67,28 +79,53 @@ fun OcrDraftScreen(
 
     PageScaffold {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("图片识别记账")
+            Text(if (manualEntry) "手工记一笔" else "图片识别记账")
             OutlinedButton(onClick = onClose, enabled = !busy) { Text("返回草稿箱") }
         }
-        SafetyBanner("图片只在本机交给随 App 分发的 ML Kit 模型识别，不会上传。只有你复核并点击后，当前编辑文本才会发送到自己的 MyDCA 后端生成 DRAFT。")
-        SectionCard(
-            title = "1 选择图片并本地识别",
-            description = "使用系统 Photo Picker 主动选择单张支付截图；App 不扫描相册，也不申请广泛存储权限。",
-        ) {
-            Button(
-                enabled = !busy,
-                onClick = {
-                    picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                },
+        if (manualEntry) {
+            SafetyBanner("手工记一笔只把你输入的文字发给自己的 MyDCA 后端解析为记账候选，不会自动 preview、confirm 或正式入账。")
+            SectionCard(
+                title = "手工输入记账内容",
+                description = "例如：早餐 18 元 微信支付。请勿填写卡号、身份证等敏感信息。",
             ) {
-                Text(if (hasSelectedImage) "更换图片" else "选择支付截图")
+                OutlinedTextField(
+                    value = state.recognizedText,
+                    onValueChange = coordinator::editText,
+                    enabled = state.stage in setOf(OcrDraftStage.Recognized, OcrDraftStage.IntentReady),
+                    minLines = 5,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("待复核文字") },
+                )
+                Button(
+                    enabled = state.stage == OcrDraftStage.Recognized && state.recognizedText.isNotBlank(),
+                    onClick = { scope.launch { coordinator.parseIntent(repository) } },
+                ) {
+                    Text(if (state.stage == OcrDraftStage.ParsingIntent) "解析中" else "解析记账候选")
+                }
+                state.message?.let { Text(it) }
             }
-            StatusPill(stageLabel(state.stage))
-            if (state.stage == OcrDraftStage.Recognizing) CircularProgressIndicator()
-            state.message?.let { Text(it) }
+        } else {
+            SafetyBanner("图片只在本机交给随 App 分发的 ML Kit 模型识别，不会上传。只有你复核并点击后，当前编辑文本才会发送到自己的 MyDCA 后端生成 DRAFT。")
+            SectionCard(
+                title = "1 选择图片并本地识别",
+                description = "使用系统 Photo Picker 主动选择单张支付截图；App 不扫描相册，也不申请广泛存储权限。",
+            ) {
+                Button(
+                    enabled = !busy,
+                    onClick = {
+                        picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                ) {
+                    Text(if (hasSelectedImage) "更换图片" else "选择支付截图")
+                }
+                StatusPill(stageLabel(state.stage))
+                if (state.stage == OcrDraftStage.Recognizing) CircularProgressIndicator()
+                state.message?.let { Text(it) }
+            }
         }
 
-        if (state.stage in setOf(
+        if (!manualEntry && state.stage in setOf(
                 OcrDraftStage.Recognized,
                 OcrDraftStage.ParsingIntent,
                 OcrDraftStage.IntentReady,

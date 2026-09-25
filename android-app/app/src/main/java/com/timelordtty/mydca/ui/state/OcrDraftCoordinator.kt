@@ -29,7 +29,11 @@ data class OcrDraftUiState(
     val message: String? = null,
 )
 
-/** 绑定图片请求与异步结果，并串联“识别、解析候选、人工确认生成 DRAFT”三个阶段。 */
+/**
+ * 绑定请求与异步结果，并串联“识别/输入、解析候选、人工确认生成 DRAFT”三个阶段。
+ *
+ * 该状态机不会自动 preview、自动 confirm 或静默生成正式流水；每一步都必须由主人显式触发。
+ */
 class OcrDraftCoordinator {
     private val mutableState = MutableStateFlow(OcrDraftUiState())
     val state: StateFlow<OcrDraftUiState> = mutableState.asStateFlow()
@@ -39,6 +43,19 @@ class OcrDraftCoordinator {
         mutableState.value = OcrDraftUiState(
             stage = OcrDraftStage.ImageSelected,
             requestId = requestId,
+        )
+    }
+
+    /**
+     * 手工记账入口：跳过图片阶段直接进入“文字已就绪”，后续解析和生成 DRAFT 仍必须由主人逐步点击。
+     * 本方法不调用任何接口，只准备可编辑文本。
+     */
+    @Synchronized
+    fun startTextEntry(requestId: String, text: String) {
+        mutableState.value = OcrDraftUiState(
+            stage = OcrDraftStage.Recognized,
+            requestId = requestId,
+            recognizedText = text.trim(),
         )
     }
 

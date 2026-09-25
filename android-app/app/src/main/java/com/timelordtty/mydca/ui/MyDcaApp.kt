@@ -39,6 +39,7 @@ import com.timelordtty.mydca.ui.screens.OverviewScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
+import com.timelordtty.mydca.ui.screens.OcrEntryMode
 import com.timelordtty.mydca.ui.screens.OcrDraftScreen
 import com.timelordtty.mydca.ui.state.AccountFundUsageFilter
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
@@ -162,7 +163,7 @@ private fun AuthenticatedApp(
         var currentRoute by rememberSaveable { mutableStateOf(AppRoute.TodayTodo) }
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
         var accountFilterValue by rememberSaveable { mutableStateOf(AccountFundUsageFilter.ALL.name) }
-        var showImageOcr by remember { mutableStateOf(false) }
+        var draftEntryMode by remember { mutableStateOf<OcrEntryMode?>(null) }
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
@@ -213,24 +214,29 @@ private fun AuthenticatedApp(
                             currentRoute = AppRoute.Drafts
                         },
                     )
-                    AppRoute.Drafts -> if (showImageOcr) {
-                        OcrDraftScreen(
-                            repository = aiAccountingRepository,
-                            onClose = { showImageOcr = false },
-                            onOpenDraft = { draftId ->
-                                selectedDraftId = draftId
-                                showImageOcr = false
-                            },
-                        )
-                    } else {
-                        DraftInboxScreen(
-                            draftRepository = draftRepository,
-                            wealthRepository = wealthRepository,
-                            apiConfigError = apiConfigError,
-                            selectedDraftId = selectedDraftId,
-                            onDraftHandled = { selectedDraftId = null },
-                            onOpenImageOcr = { showImageOcr = true },
-                        )
+                    AppRoute.Drafts -> {
+                        val entryMode = draftEntryMode
+                        if (entryMode != null) {
+                            OcrDraftScreen(
+                                repository = aiAccountingRepository,
+                                entryMode = entryMode,
+                                onClose = { draftEntryMode = null },
+                                onOpenDraft = { draftId ->
+                                    selectedDraftId = draftId
+                                    draftEntryMode = null
+                                },
+                            )
+                        } else {
+                            DraftInboxScreen(
+                                draftRepository = draftRepository,
+                                wealthRepository = wealthRepository,
+                                apiConfigError = apiConfigError,
+                                selectedDraftId = selectedDraftId,
+                                onDraftHandled = { selectedDraftId = null },
+                                onOpenImageOcr = { draftEntryMode = OcrEntryMode.Image },
+                                onOpenManualEntry = { draftEntryMode = OcrEntryMode.ManualText },
+                            )
+                        }
                     }
                     AppRoute.Accounts -> AssetsScreen(
                         wealthRepository = wealthRepository,

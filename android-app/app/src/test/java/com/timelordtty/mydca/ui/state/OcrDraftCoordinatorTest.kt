@@ -113,6 +113,37 @@ class OcrDraftCoordinatorTest {
         assertTrue(coordinator.state.value.message.orEmpty().contains("失败"))
     }
 
+    @Test
+    fun startTextEntryPreparesEditableTextWithoutCallingBackend() = runBlocking {
+        val coordinator = OcrDraftCoordinator()
+        val gateway = FakeGateway()
+
+        coordinator.startTextEntry("manual-1", "  早餐 18 元 微信支付  ")
+
+        assertEquals(OcrDraftStage.Recognized, coordinator.state.value.stage)
+        assertEquals("manual-1", coordinator.state.value.requestId)
+        assertEquals("早餐 18 元 微信支付", coordinator.state.value.recognizedText)
+        assertNull(coordinator.state.value.intent)
+        assertNull(coordinator.state.value.draftId)
+        assertEquals(0, gateway.parseCalls)
+        assertEquals(0, gateway.createCalls)
+    }
+
+    @Test
+    fun manualTextEntryStillRequiresExplicitParseAndDraftSteps() = runBlocking {
+        val coordinator = OcrDraftCoordinator()
+        val gateway = FakeGateway()
+        coordinator.startTextEntry("manual-2", "打车 32.5 元 支付宝")
+
+        coordinator.parseIntent(gateway)
+        assertEquals(OcrDraftStage.IntentReady, coordinator.state.value.stage)
+        assertNull(coordinator.state.value.draftId)
+
+        coordinator.createDraft(gateway)
+        assertEquals(OcrDraftStage.DraftCreated, coordinator.state.value.stage)
+        assertEquals(42L, coordinator.state.value.draftId)
+    }
+
     private fun readyCoordinator(requestId: String, text: String): OcrDraftCoordinator {
         return OcrDraftCoordinator().apply {
             selectImage(requestId)

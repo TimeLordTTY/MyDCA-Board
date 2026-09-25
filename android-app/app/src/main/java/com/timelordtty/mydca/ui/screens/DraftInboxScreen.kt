@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,7 +20,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
@@ -28,8 +28,10 @@ import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.ui.state.AsyncState
+import com.timelordtty.mydca.ui.state.DraftAccountSelection
 import com.timelordtty.mydca.ui.state.DraftEditForm
 import com.timelordtty.mydca.ui.state.DraftEditState
+import com.timelordtty.mydca.ui.state.DraftReview
 import kotlinx.coroutines.launch
 
 @Composable
@@ -40,8 +42,12 @@ fun DraftInboxScreen(
     selectedDraftId: Long?,
     onDraftHandled: () -> Unit,
     onOpenImageOcr: () -> Unit,
+    onOpenManualEntry: () -> Unit,
 ) {
     var draftsState by remember { mutableStateOf<AsyncState<List<DraftLedgerEntryDto>>>(AsyncState.Loading) }
+    var listError by remember { mutableStateOf<String?>(null) }
+    var isRefreshingDrafts by remember { mutableStateOf(false) }
+    var draftsUpdatedAt by remember { mutableStateOf<Long?>(null) }
     var selectedDraft by remember { mutableStateOf<DraftLedgerEntryDto?>(null) }
     var previewState by remember { mutableStateOf<AsyncState<DraftPreviewDto>?>(null) }
     var actionMessage by remember { mutableStateOf<String?>(null) }
@@ -78,11 +84,15 @@ fun DraftInboxScreen(
             return
         }
         scope.launch {
-            draftsState = AsyncState.Loading
+            val hasLoaded = draftsState is AsyncState.Success
+            isRefreshingDrafts = hasLoaded
+            if (!hasLoaded) draftsState = AsyncState.Loading
             when (val result = repository.listDrafts()) {
                 is NetworkResult.Success -> {
                     val drafts = result.data
                     draftsState = AsyncState.Success(drafts)
+                    listError = null
+                    draftsUpdatedAt = System.currentTimeMillis()
                     setCurrentDraft(if (preferredDraftId != null) {
                         drafts.firstOrNull { it.id == preferredDraftId }
                             ?: selectedDraft?.takeIf { it.id == preferredDraftId }
@@ -92,9 +102,14 @@ fun DraftInboxScreen(
                     previewState = null
                 }
                 is NetworkResult.Failure -> {
-                    draftsState = AsyncState.Error(result.message)
+                    if (hasLoaded) {
+                        listError = result.message
+                    } else {
+                        draftsState = AsyncState.Error(result.message)
+                    }
                 }
             }
+            isRefreshingDrafts = false
         }
     }
 
@@ -156,7 +171,7 @@ fun DraftInboxScreen(
 
     fun saveSelectedDraft(previewAfterSave: Boolean) {
         val draft = selectedDraft ?: return
-        if (draft.status?.equals("DRAFT", ignoreCase = true) != true) {
+        if (!DraftReview.isDraft(draft)) {
             editError = "只有 DRAFT 状态草稿可以编辑。"
             return
         }
@@ -307,7 +322,7 @@ fun DraftInboxScreen(
         is AsyncState.Success -> state.data
         else -> null
     }
-    val canConfirm = selectedDraft?.status?.equals("DRAFT", ignoreCase = true) == true &&
+    val canConfirm = DraftReview.isDraft(selectedDraft) &&
         DraftEditState.canConfirm(
             draft = selectedDraft,
             preview = preview,
@@ -320,10 +335,13 @@ fun DraftInboxScreen(
     PageScaffold {
         SafetyBanner("草稿箱只承接查看、预览和用户手动确认。AI/文本解析只生成草稿，不会直接入账；只有二次确认后才会调用确认接口。")
         SectionCard(
-            title = "图片识别记账",
-            description = "手动选择支付截图，在本机识别并复核文字后生成 DRAFT；图片不会上传。",
+            title = "记账入口",
+            description = "手工记一笔只解析文本并生成 DRAFT；图片识别只在本机识别，图片不会上传。两条入口都不会自动 preview、confirm 或正式入账。",
         ) {
-            Button(onClick = onOpenImageOcr) { Text("选择图片开始识别") }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = onOpenManualEntry) { Text("手工记一笔") }
+                OutlinedButton(onClick = onOpenImageOcr) { Text("选择图片开始识别") }
+            }
         }
 
         actionMessage?.let { message ->
@@ -331,8 +349,8 @@ fun DraftInboxScreen(
         }
 
         when (val state = draftsState) {
-            AsyncState.Loading -> LoadingCard("正在加载草稿箱")
-            is AsyncState.Error -> ErrorCard(
+            AsyncState.Loading -> LoadingSection("正在加载草稿箱")
+            is AsyncState.Error -> ErrorSection(
                 title = "草稿箱加载失败",
                 message = state.message,
                 onRetry = { refreshDrafts() },
@@ -340,6 +358,9 @@ fun DraftInboxScreen(
             is AsyncState.Success -> DraftListSection(
                 drafts = state.data,
                 selectedDraftId = selectedDraft?.id,
+                isRefreshing = isRefreshingDrafts,
+                lastUpdatedAt = draftsUpdatedAt,
+                listError = listError,
                 onRefresh = { refreshDrafts() },
                 onSelectDraft = ::selectDraft,
             )
@@ -390,6 +411,9 @@ fun DraftInboxScreen(
 private fun DraftListSection(
     drafts: List<DraftLedgerEntryDto>,
     selectedDraftId: Long?,
+    isRefreshing: Boolean,
+    lastUpdatedAt: Long?,
+    listError: String?,
     onRefresh: () -> Unit,
     onSelectDraft: (DraftLedgerEntryDto) -> Unit,
 ) {
@@ -397,25 +421,39 @@ private fun DraftListSection(
         title = "待确认草稿",
         description = "来自 GET /api/v2/drafts?status=DRAFT。列表只展示草稿，不会自动确认或入账。",
     ) {
-        OutlinedButton(onClick = onRefresh) {
-            Text("刷新草稿")
+        RefreshBar(
+            lastUpdatedAt = lastUpdatedAt,
+            isRefreshing = isRefreshing,
+            refreshLabel = "刷新草稿",
+            onRefresh = onRefresh,
+        )
+        if (listError != null) {
+            NoticeBanner(
+                title = "本次刷新失败，以下保留上次成功草稿列表",
+                message = listError,
+                onRetry = onRefresh,
+            )
         }
         if (drafts.isEmpty()) {
             StatusPill("暂无 DRAFT 草稿")
         } else {
+            StatusPill("待人工确认 ${DraftReview.pendingDraftCount(drafts)} 条")
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 drafts.forEach { draft ->
-                    val rawInput = draft.rawInput ?: "无原文"
-                    val label = if (draft.id == selectedDraftId) {
-                        "已选 #${draft.id}：$rawInput"
-                    } else {
-                        "#${draft.id}：$rawInput"
-                    }
+                    val selected = draft.id == selectedDraftId
+                    val label = (if (selected) "已选 " else "") + DraftReview.listLabel(draft)
                     OutlinedButton(
                         onClick = { onSelectDraft(draft) },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(label)
+                    }
+                    val rawInput = draft.rawInput
+                    if (!rawInput.isNullOrBlank()) {
+                        Text(
+                            text = "原文：$rawInput",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             }
@@ -451,27 +489,38 @@ private fun DraftDetailSection(
         }
 
         KeyValueRow("草稿 ID", selectedDraft.id.toString())
-        KeyValueRow("状态", selectedDraft.status ?: "未知")
+        KeyValueRow("状态", DraftReview.statusLabel(selectedDraft.status))
         KeyValueRow("来源", selectedDraft.sourceType ?: "未知")
         KeyValueRow("原始输入", selectedDraft.rawInput ?: "无")
-        KeyValueRow("缺失字段", selectedDraft.missingFieldsJson ?: "无")
-
-        DraftEditSection(
-            selectedDraft = selectedDraft,
-            editForm = editForm,
-            selectableAccounts = selectableAccounts,
-            editError = editError,
-            isEditDirty = isEditDirty,
-            isSavingDraft = isSavingDraft,
-            isPreviewingDraft = isPreviewingDraft,
-            onEditFormChange = onEditFormChange,
-            onSave = onSave,
-            onSaveAndPreview = onSaveAndPreview,
+        KeyValueRow("创建时间", formatDateTime(selectedDraft.createdAt))
+        KeyValueRow("更新时间", formatDateTime(selectedDraft.updatedAt))
+        StatusPill(
+            if (DraftReview.isDraft(selectedDraft)) {
+                "仅 DRAFT，尚未入账"
+            } else {
+                "历史状态，只读查看"
+            }
         )
+        ParsedInfoSection(selectedDraft)
+
+        if (DraftReview.isDraft(selectedDraft)) {
+            DraftEditSection(
+                selectedDraft = selectedDraft,
+                editForm = editForm,
+                selectableAccounts = selectableAccounts,
+                editError = editError,
+                isEditDirty = isEditDirty,
+                isSavingDraft = isSavingDraft,
+                isPreviewingDraft = isPreviewingDraft,
+                onEditFormChange = onEditFormChange,
+                onSave = onSave,
+                onSaveAndPreview = onSaveAndPreview,
+            )
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
-                enabled = selectedDraft.status?.equals("DRAFT", ignoreCase = true) == true &&
+                enabled = DraftReview.isDraft(selectedDraft) &&
                     !isEditDirty &&
                     !isSavingDraft &&
                     !isPreviewingDraft,
@@ -480,7 +529,7 @@ private fun DraftDetailSection(
                 Text(if (isPreviewingDraft) "预览中" else "生成预览")
             }
             OutlinedButton(
-                enabled = selectedDraft.status?.equals("DRAFT", ignoreCase = true) == true &&
+                enabled = DraftReview.isDraft(selectedDraft) &&
                     !isSavingDraft &&
                     !isPreviewingDraft,
                 onClick = onIgnore,
@@ -505,6 +554,26 @@ private fun DraftDetailSection(
 }
 
 @Composable
+private fun ParsedInfoSection(draft: DraftLedgerEntryDto) {
+    val info = DraftReview.parsedInfo(draft)
+    SectionCard(
+        title = "解析信息复核",
+        description = "只展示后端已返回的候选字段；补齐字段仍需保存草稿后重新生成预览。",
+    ) {
+        KeyValueRow("交易类型", DraftReview.txnTypeLabel(info.txnType))
+        KeyValueRow("金额", info.amount ?: "待补充")
+        KeyValueRow("账户 ID", info.accountId ?: "待补充")
+        KeyValueRow("账户提示", info.accountNameHint ?: "无")
+        KeyValueRow("备注", info.note ?: "无")
+        KeyValueRow("解析置信度", info.confidence ?: "未提供")
+        KeyValueRow("缺失字段", info.missingFieldText)
+        if (!info.hasParsedField) {
+            StatusPill("没有可用候选字段，请在下方表单补齐")
+        }
+    }
+}
+
+@Composable
 private fun DraftEditSection(
     selectedDraft: DraftLedgerEntryDto,
     editForm: DraftEditForm,
@@ -517,7 +586,7 @@ private fun DraftEditSection(
     onSave: () -> Unit,
     onSaveAndPreview: () -> Unit,
 ) {
-    val editable = selectedDraft.status?.equals("DRAFT", ignoreCase = true) == true
+    val editable = DraftReview.isDraft(selectedDraft)
     SectionCard(
         title = "草稿编辑与账户补全",
         description = "保存只调用 PUT /api/v2/drafts/{draftId} 更新 DRAFT 草稿，不会直接写正式账本；保存后必须重新 preview。",
@@ -537,15 +606,15 @@ private fun DraftEditSection(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = { onEditFormChange(editForm.copy(txnType = "EXPENSE")) },
+                onClick = { onEditFormChange(editForm.copy(txnType = DraftAccountSelection.EXPENSE)) },
             ) {
-                Text(if (editForm.txnType == "EXPENSE") "支出 EXPENSE ✓" else "支出 EXPENSE")
+                Text(if (editForm.txnType == DraftAccountSelection.EXPENSE) "支出 EXPENSE ✓" else "支出 EXPENSE")
             }
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = { onEditFormChange(editForm.copy(txnType = "INCOME")) },
+                onClick = { onEditFormChange(editForm.copy(txnType = DraftAccountSelection.INCOME)) },
             ) {
-                Text(if (editForm.txnType == "INCOME") "收入 INCOME ✓" else "收入 INCOME")
+                Text(if (editForm.txnType == DraftAccountSelection.INCOME) "收入 INCOME ✓" else "收入 INCOME")
             }
         }
 
@@ -563,8 +632,10 @@ private fun DraftEditSection(
             description = "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。",
         ) {
             val candidates = selectableAccounts.filter { account ->
-                account.selectableForDraft &&
-                    (editForm.txnType != "EXPENSE" || account.selectableForExpense)
+                DraftAccountSelection.isSelectable(editForm.txnType, account)
+            }
+            val blocked = selectableAccounts.filterNot { account ->
+                DraftAccountSelection.isSelectable(editForm.txnType, account)
             }
             if (candidates.isEmpty()) {
                 StatusPill("暂无符合当前交易类型的可选账户")
@@ -584,6 +655,15 @@ private fun DraftEditSection(
                     ) {
                         Text("${account.accountName} · ${account.fundUsage ?: "待分配"} · 可用 ${formatMoney(account.availableAmount)}")
                     }
+                }
+            }
+            if (blocked.isNotEmpty()) {
+                Text("以下账户受保护，当前交易类型不可选择：")
+                blocked.forEach { account ->
+                    Text(
+                        text = "${account.accountName}：${DraftAccountSelection.rejectionReason(editForm.txnType, account)}",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }
@@ -657,26 +737,6 @@ private fun PreviewContent(preview: DraftPreviewDto) {
         }
         if (warnings.isNotEmpty()) {
             Text("风险提示：${warnings.joinToString()}")
-        }
-    }
-}
-
-@Composable
-private fun LoadingCard(title: String) {
-    SectionCard(title = title) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun ErrorCard(
-    title: String,
-    message: String,
-    onRetry: () -> Unit,
-) {
-    SectionCard(title = title, description = message) {
-        OutlinedButton(onClick = onRetry) {
-            Text("重试")
         }
     }
 }

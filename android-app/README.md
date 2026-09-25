@@ -6,6 +6,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
+- 当前版本 `versionName = 0.5.0`（`versionCode = 6`），APK 制品命名为 `MyDCA-Board-v0.5.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
@@ -149,3 +150,14 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 2026-07-16 自动验证：36 项 JVM 单元测试、`assembleDebug`、`lintDebug` 均通过。
 - Debug APK：大小 56,429,546 bytes，SHA-256：`B1DBD06EEC2CB95DBE5ABE5BAF60EB8C1D47117CF9DA4170A754941B7545B2C0`；体积增长来自随 APK 分发的离线中文模型。
 - 真实设备 Photo Picker、中文支付截图识别准确率和不同厂商 URI 兼容性仍需手工验证，不应把 JVM 测试视为真实 OCR 图片验证。
+
+## v0.5 日常可用化
+
+- 总览、资产、今日待办、草稿箱统一改为非破坏式刷新：已有数据时刷新只显示“最近更新”时间与刷新按钮，不隐藏当前数据；刷新失败只提示错误并保留上一次成功数据，仅首次加载失败才显示整页错误态。
+- 草稿箱新增“手工记一笔”入口：直接把输入文本交给后端解析为记账候选，跳过图片阶段；解析与生成 DRAFT 仍必须由用户逐步点击，不会自动 preview、confirm 或正式入账。
+- 草稿详情新增“解析信息复核”，展示 DRAFT 状态、交易类型、金额、账户、备注、置信度和缺失字段；草稿列表展示待人工确认数量与摘要。
+- 草稿账户选择统一走 `DraftAccountSelection`：普通消费只允许 SPENDABLE 叶子账户，父账户、RESERVED、INVESTABLE 和待分配账户会给出明确原因且不可选择。
+- 资产页可对单个账户按需读取 `GET /api/v2/mobile/accounts/{accountId}` 的服务端详情，不参与列表批量刷新。
+- 保留 v0.4.1 的资金用途筛选状态与选中态恢复行为。
+- 2026-09-26 自动验证：`testDebugUnitTest` 68 项测试通过、`assembleDebug` 通过、`lintDebug` 通过（2 条既有 warning，0 error）。
+- Debug APK：大小 55,718,565 bytes，SHA-256：`C8B3D341A968EB9FDB94DE5815FA9D2E1F75B72AAE1DA9EE8E5B65B693307D53`；APK 不提交到 Git。
