@@ -30,6 +30,8 @@ data class OcrDraftUiState(
     val intent: AccountingIntentDto? = null,
     val draftId: Long? = null,
     val message: String? = null,
+    /** 本次采集固定的 sourceRef；为空时回落到既有 android-ocr-<requestId> 规则。 */
+    val sourceRef: String? = null,
 )
 
 /**
@@ -41,11 +43,16 @@ class OcrDraftCoordinator {
     private val mutableState = MutableStateFlow(OcrDraftUiState())
     val state: StateFlow<OcrDraftUiState> = mutableState.asStateFlow()
 
+    /**
+     * 图片入口（系统 Photo Picker 或外部分享图片）：只登记请求与可选的稳定 sourceRef，
+     * 不会自动开始识别；识别与后续解析、生成 DRAFT 仍必须由主人逐步点击。
+     */
     @Synchronized
-    fun selectImage(requestId: String) {
+    fun selectImage(requestId: String, sourceRef: String? = null) {
         mutableState.value = OcrDraftUiState(
             stage = OcrDraftStage.ImageSelected,
             requestId = requestId,
+            sourceRef = sourceRef,
         )
     }
 
@@ -54,10 +61,11 @@ class OcrDraftCoordinator {
      * 本方法不调用任何接口，只准备可编辑文本。
      */
     @Synchronized
-    fun startTextEntry(requestId: String, text: String) {
+    fun startTextEntry(requestId: String, text: String, sourceRef: String? = null) {
         mutableState.value = OcrDraftUiState(
             stage = OcrDraftStage.Recognized,
             requestId = requestId,
+            sourceRef = sourceRef,
             recognizedText = text.trim(),
         )
     }
@@ -117,7 +125,8 @@ class OcrDraftCoordinator {
             val text = current.recognizedText.trim()
             if (current.stage != OcrDraftStage.Recognized || text.isBlank()) return
             mutableState.value = current.copy(stage = OcrDraftStage.ParsingIntent, message = null)
-            Triple(current.requestId ?: return, text, "android-ocr-${current.requestId}")
+            val sourceRef = current.sourceRef ?: "android-ocr-${current.requestId}"
+            Triple(current.requestId ?: return, text, sourceRef)
         }
         val result = gateway.parseText(submission.second, submission.third)
         synchronized(this) {

@@ -3,16 +3,13 @@
 <!-- CURRENT-SNAPSHOT:START -->
 ## 当前发布状态（2026-09-27）
 
-- 当前 Android：`versionName=0.7.0`、`versionCode=8`。
-- v0.7 快速采集中心 result commit：`6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`。
-- GitHub Actions `Android test APK` Run `36320197608` 已成功。
-- Artifact ID：`10931548073`。
-- APK：`MyDCA-Board-v0.7.0-6098a972.apk`。
-- CI APK SHA-256：`D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
-- v0.8 后端草稿强幂等已完成，但它是服务端可靠性里程碑，不代表 Android 已发布 0.8.0。
-- 下一 Android 普通工程目标：v0.8.0 系统分享快速采集。
+- 当前 Android：`versionName=0.8.0`、`versionCode=9`。
+- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
+- v0.7 快速采集中心 result commit：`6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`（CI Run `36320197608` / Artifact `10931548073` / SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`）。
+- v0.8.0 CI 制品：`NOT_PRODUCED`（本地提交后再推送触发 `Android test APK`），Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待真实工作流回填。
+- 下一 Android 普通工程目标：v0.8.0 真实设备验收与 CI 制品回填，或按 owner 决策进入 v0.9 采集入口扩展。
 
-> 本文历史章节中“CI NOT_PRODUCED / 待回填”的 v0.6/v0.7 描述已被上面的真实 GitHub Actions 证据取代。
+> 本文历史章节中“CI NOT_PRODUCED / 待回填”的 v0.6/v0.7 描述已被真实 GitHub Actions 证据取代；v0.8.0 仍以真实工作流输出为准。
 <!-- CURRENT-SNAPSHOT:END -->
 
 MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待办、草稿查看、草稿预览和用户手动确认体验。
@@ -21,7 +18,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.7.0`（`versionCode = 8`），APK 制品命名为 `MyDCA-Board-v0.7.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.8.0`（`versionCode = 9`），APK 制品命名为 `MyDCA-Board-v0.8.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
@@ -203,3 +200,19 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 新增 `QuickCaptureHubTest`（纯 Kotlin，无 instrumentation）15 项：入口可见性、打开 / 关闭保持原 route、四个入口路由、数量统计口径、空数量占位、状态清空、文案不含内部名称，以及类型守卫断言 helper 不存在 preview / confirm / 快速入账能力。
 - 2026-09-27 验证：`testDebugUnitTest` 24 个测试类共 119 项通过、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过。
 - Debug APK：大小 55,825,296 bytes，SHA-256：`AAE92D1D5C867D89AFC5499237FFA72D3940A7C0BB1769B2F9CE77D6097F4DA0`；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）需在真实推送触发工作流后回填，本轮未推送，不声称 CI APK 已交付。
+
+## v0.8.0 系统分享快速采集
+
+- 版本收口为 `versionName = 0.8.0`（`versionCode = 9`）；已构建 APK 经 `aapt2 dump badging` 实测为 `versionCode='9' versionName='0.8.0'`。
+- `MainActivity` 只新增一个 `ACTION_SEND` intent-filter（`text/*` + `image/*`），**不声明 `ACTION_SEND_MULTIPLE`**，不新增任何广泛权限，也不修改 `launchMode`；`onCreate` 与 `onNewIntent` 共用同一接收逻辑。
+- 新增 `share/` 纯 Kotlin 解析层：`ExternalSharePayload`（只有 `Text` / `Image` 两种形态）、`ExternalShareRequest`、`ExternalShareResolver`（唯一解析规则 + `MAX_TEXT_LENGTH = 2000` 超长截断）、`ExternalShareRejection`（5 类安全拒绝，均带中文提示）、`ExternalShareResolution`、`ExternalShareSourceRef`、`ExternalSharePendingStore`（进程内一次性 pending）、`SharedImageOcrGate`（图片识别门）。
+- 文本分享进入既有“手工记一笔”页面并预填：页面固定提示“来自系统分享，尚未解析/未生成草稿”，文字可编辑可清空，进入页面不发起任何网络请求；只有用户点击“解析记账候选”才解析，只有再点击“确认生成 DRAFT”才建档。
+- 单图分享进入既有图片识别页但**不自动 OCR**：必须先点击“使用此图片并识别”，复用既有 ML Kit 中文模型；识别后仍需手动解析、手动生成 DRAFT。
+- 隐私：分享文本与图片 URI 只存在当前进程内存，不写偏好设置 / 文件、不打印、不上传；同一 payload 只消费一次，未登录期间保留到登录后消费一次，不为跨进程恢复持久化原文。
+- 图片只接受系统授权的临时 `content://` URI；`file://` 与未知 scheme 安全拒绝并给中文提示；`ACTION_SEND_MULTIPLE` 多选一律拒绝。
+- sourceRef：`android-share-text-<uuid>` / `android-share-image-<uuid>`，不同分享事件必然不同，不含分享原文 / 文件名 / URI；解析、创建 DRAFT 与 Outbox 重试重放复用同一值；既有 `android-ocr-<requestId>` 与通知 `fingerprint` 规则未改动。
+- 一次性导航状态收口：返回 / 取消（`onCaptureExit`）、主动切换底部导航（`onManualNavigation`）、成功生成 DRAFT（`onDraftCreated`）都会清空 share target，并同时清空旧 `selectedDraftId`、`NotificationNavigationTarget` 与 `QuickCaptureFocus`；v0.7 四入口与底部导航信息架构未改动。
+- 新增 4 个测试类 37 项：`ExternalShareResolverTest` 11 项、`ExternalSharePendingStoreTest` 9 项、`SharedImageOcrGateTest` 5 项、`ExternalShareCaptureRegressionTest` 12 项；覆盖解析与拒绝、超长边界、一次性消费、登录前后消费、预填不解析 / 不建档、图片不自动 OCR、sourceRef 稳定性、导航清理，并反射断言分享层不存在 preview / confirm / QuickEntry 能力。
+- 2026-09-27 验证：`testDebugUnitTest` 28 个测试类共 156 项通过（由 24 类 119 项增至 28 类 156 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
+- Debug APK：大小 55,800,680 bytes，SHA-256：`E5E6737C11C305BFF76639F3260E1FF1028FC28E32F8CF67387723E835C7236A`（debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察，不作为制品身份）；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
+- 明确未做：不自动解析分享内容、不自动 OCR、不自动创建草稿、不自动 preview / confirm / 正式入账；未新增后台常驻服务、桌面小组件或通知栏快捷入口。

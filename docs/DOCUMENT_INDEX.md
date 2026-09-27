@@ -1,7 +1,7 @@
 # 财富中枢文档索引与事实源优先级
 
-**作者**：ChatGPT  
-**更新时间**：2026-09-27 22:03 +08:00
+- **作者**：ChatGPT
+- **更新时间**：2026-09-27 23:40 +08:00
 
 ## 读取顺序
 
@@ -27,5 +27,6 @@
 - 后端：`backend/README.md`
 - 数据库增量：`sql/updatesql/README.md`
 - v0.7：`docs/mydca_android_v07_quick_capture_hub_20260927.md`
-- v0.8：`docs/mydca_v08_draft_strong_idempotency_20260927.md`
+- Android v0.8.0：`docs/mydca_android_v080_external_share_capture_20260927.md`
+- v0.8 后端强幂等：`docs/mydca_v08_draft_strong_idempotency_20260927.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。

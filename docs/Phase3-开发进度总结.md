@@ -5,12 +5,13 @@
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.7.0 / versionCode 8`，v0.7 全局“记一笔”快速采集中心已完成。
+- Android 当前版本：`0.8.0 / versionCode 9`，v0.7 全局“记一笔”快速采集中心与 v0.8.0 系统分享快速采集均已完成。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
 - 采集链继续严格停在 DRAFT：手工/OCR/通知候选/Outbox 均不会自动 preview、confirm 或正式入账。
-- 下一普通工程目标：**Android v0.8.0 外部分享快速采集**；数据库 migration 上线不与普通功能开发混在一起。
+- v0.8.0 外部分享快速采集已落地：系统 Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程，不自动 parse/OCR/draft/preview/confirm。
+- 下一普通工程目标：v0.8.0 真实设备验收与 CI 制品回填，或按 owner 决策进入 v0.9 采集入口扩展；数据库 migration 上线不与普通功能开发混在一起。
 
 ### 已被后续版本完成的旧待办
 
@@ -343,6 +344,34 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   Android `testDebugUnitTest --rerun-tasks` 24 类 119 项通过（与 v0.7 基线一致，无回归）；
   `scripts/post-task-compile-hook.ps1` 通过；`git diff --check` 通过。未连接任何数据库、未执行 migration、未推送。
 
+## Android v0.8.0 外部分享快速采集（2026-09-27）
+
+- 对应任务 `task-mydca-android-v080-external-share-capture-20260927`（owner 直接批准，L3，`allowed_paths` 为 `android-app/**`、`docs/**`、
+  `README.md`、`.github/workflows/android-test-apk.yml`），详细说明见 `docs/mydca_android_v080_external_share_capture_20260927.md`。
+- 目标：把系统 Share Sheet 的**文本**与**单张图片**安全导入现有手工文本 / 本地 OCR 采集流程，只做预填，并发布 v0.8.0。
+- 入口：`AndroidManifest.xml` 的 `MainActivity` 只新增一个 `ACTION_SEND` intent-filter（`text/*` + `image/*`），
+  不声明 `ACTION_SEND_MULTIPLE`，不新增任何广泛权限，也未修改 `launchMode`；`onCreate` 与 `onNewIntent` 共用同一接收逻辑。
+- 解析层：新增 `share/` 包（`ExternalSharePayload`、`ExternalShareRequest`、`ExternalShareResolver`、`ExternalShareRejection`、
+  `ExternalShareResolution`、`ExternalShareSourceRef`、`ExternalSharePendingStore`、`SharedImageOcrGate`），全部为纯 Kotlin，
+  可直接 JVM 单元测试；`MainActivity` 只读 intent 字段，不解析候选、不创建草稿、不发起网络请求。
+- 隐私：分享文本与图片 URI 只存在当前进程内存，不写偏好设置 / 文件、不打印、不上传；同一 payload 只消费一次，
+  未登录期间保留到登录后消费一次，不为跨进程恢复持久化原文；文本超限安全截断并提示。
+- 图片：收到分享 Intent 不自动 OCR，必须用户点击“使用此图片并识别”；复用既有 ML Kit 中文模型，图片不上传不落盘；
+  只接受系统授权临时 `content://` URI，`file://` 与未知 scheme 安全拒绝并给中文提示。
+- sourceRef：`android-share-text-<uuid>` / `android-share-image-<uuid>`，不同分享事件必然不同，不含分享原文 / 文件名 / URI；
+  解析、创建 DRAFT 与 Outbox 重试重放全程复用同一值（既有 `android-ocr-<requestId>` 与通知 `fingerprint` 规则未改动）。
+- 一次性状态：新增 `ui/ExternalShareHub.kt`（落点决策 + 预填文案）与 `ui/ExternalShareCaptureSession`：
+  返回 / 取消、主动切换底部导航、成功生成 DRAFT 都会清空 share target，并同时清空旧 `selectedDraftId`、
+  `NotificationNavigationTarget` 与 `QuickCaptureFocus`，避免一次性导航状态互相残留；v0.7 四入口与底部导航未改动。
+- 版本：`versionName = 0.8.0`、`versionCode = 9`（`aapt2 dump badging` 实测 `versionCode='9' versionName='0.8.0'`）；
+  工作流制品名与文件名同步为 `mydca-android-v0.8.0-<sha>` / `MyDCA-Board-v0.8.0-<short-sha>.apk`，仍为一次性 debug 签名且不提交 APK。
+- 新增 4 个测试类 37 项（`ExternalShareResolverTest` 11、`ExternalSharePendingStoreTest` 9、`SharedImageOcrGateTest` 5、
+  `ExternalShareCaptureRegressionTest` 12），覆盖解析规则、拒绝路径、超长边界、一次性消费、登录前后消费、预填不解析 / 不建档、
+  图片不自动 OCR、sourceRef 稳定性与导航清理，并用反射断言分享层不存在 preview / confirm / QuickEntry 能力。
+- 本轮验证：`testDebugUnitTest` 28 类 156 项通过（由 24 类 119 项增至 28 类 156 项）、`assembleDebug` 通过、
+  `lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
+- 本地 Debug APK：55,800,680 bytes，SHA-256 `E5E6737C11C305BFF76639F3260E1FF1028FC28E32F8CF67387723E835C7236A`（本机真实构建输出，但 debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察；APK 不提交到 Git）；
+  本进程未推送，CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地哈希冒充。
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 服务端 `draft_ledger_entry` 唯一约束缺口已收敛：该缺口最初因为 `allowed_paths` 不含 `sql/**` 而遗留，
@@ -354,11 +383,21 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 
 ## 后续待办（Android v0.7 快速记账采集中心）
 
-- 快速面板只做“定位 + 导航”，仍未实现真正的全局快捷方式（桌面小组件 / 通知栏快捷入口 / 分享菜单接入），
-  因此“两步内进入任一采集路径”目前依赖先打开 App。
+- 快速面板只做“定位 + 导航”，仍未实现桌面小组件 / 通知栏快捷入口这类系统级入口；
+  其中“从其它 App 分享进 MyDCA”已由 v0.8.0 系统 Share Sheet 文本 / 单图入口补齐
+  （详见 `docs/mydca_android_v080_external_share_capture_20260927.md`），其余系统级入口仍依赖先打开 App。
 - 通知候选区与 Outbox 区的“定位”是路由 + 标记，不是滚动锚点；长列表下用户仍可能需要手动滚动。
 - `sourceRef` 唯一约束已下推到数据库：v0.8 通过 `sql/updatesql/20260927/` 添加用户作用域与家庭作用域唯一键，
   并在 `DraftLedgerEntryService.createDraft` 增加唯一冲突恢复路径，v0.6 的并发重放窗口已关闭。
 - v0.7.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）仍需在真实推送触发 `Android test APK`
   工作流后回填；本轮未推送，未声称 CI APK 交付完成。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
+
+## 后续待办（Android v0.8.0 外部分享快速采集）
+
+- v0.8.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
+  工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
+- 系统 Share Sheet 的文本 / 单图需要真机人工验收：不同厂商 Share Sheet 行为、临时 `content://` URI 授权时长、
+  以及“未登录时先登录再消费一次”的端到端体验。
+- 未实现 `ACTION_SEND_MULTIPLE` 多选分享、桌面小组件、通知栏快捷入口；任何后续入口都继续只到 DRAFT。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。

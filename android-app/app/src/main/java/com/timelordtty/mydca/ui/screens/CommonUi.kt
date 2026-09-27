@@ -147,6 +147,34 @@ fun RetrySection(title: String, message: String, onRetry: () -> Unit) {
     }
 }
 
+/** 外部分享被安全拒绝时的中文提示；提示只消费一次，也不触发任何自动跳转。 */
+@Composable
+fun ExternalShareNoticeBanner(
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(18.dp),
+        modifier = modifier
+            .padding(16.dp)
+            .fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("系统分享未导入", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(message, style = MaterialTheme.typography.bodySmall)
+            OutlinedButton(onClick = onDismiss) {
+                Text("知道了")
+            }
+        }
+    }
+}
+
 /** 首次加载占位卡片，只在页面还没有任何数据时使用。 */
 @Composable
 fun LoadingSection(title: String) {

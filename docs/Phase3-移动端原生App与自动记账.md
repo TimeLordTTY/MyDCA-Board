@@ -5,11 +5,11 @@
 
 本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-已落地：原生 Android 0.7.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+已落地：原生 Android 0.8.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
 
 安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 
-下一普通移动端任务：**Android v0.8.0 外部分享快速采集**，把系统 Share Sheet 的文本/单图导入现有手工/OCR 流程，但不会自动解析或生成草稿。
+下一普通移动端任务：v0.8.0 真实设备验收与 CI 制品回填，或按 owner 决策进入 v0.9 采集入口扩展（桌面小组件 / 通知栏快捷入口）；任何新入口都继续只到 DRAFT。
 <!-- CURRENT-SNAPSHOT:END -->
 
 ## 阶段定位
@@ -413,6 +413,23 @@ CREATE TABLE `draft_ledger_entry` (
 - `source_ref` 为空时保留原有非幂等行为，不做模糊去重；不使用金额、备注等弱条件猜重。
 - 上述能力只是本地失败重试队列 / outbox 的前置条件，不代表 outbox 已实现；`dedup_key` 弱幂等与
   批量确认幂等仍为后续待办。
+
+### 当前已实现（Android v0.8.0 系统分享入口）
+
+- `MainActivity` 只新增一个 `ACTION_SEND` intent-filter（`text/*` + `image/*`），不声明 `ACTION_SEND_MULTIPLE`，
+  也不申请 `READ_MEDIA_IMAGES` / `READ_EXTERNAL_STORAGE` 等广泛权限；`onCreate` 与 `onNewIntent` 共用同一接收逻辑。
+- 分享内容先经纯 Kotlin 的 `share/ExternalShareResolver` 判定：文本按 `text/*` 接收并做长度上限保护，
+  图片只接受系统授权临时 `content://` URI，`file://` 与未知 scheme 安全拒绝并给中文提示。
+- 分享只做预填：文本进入现有“手工记一笔”输入框，图片进入现有 OCR 页但**不自动识别**，
+  必须由用户点击“使用此图片并识别”；解析候选与创建 DRAFT 仍各需一次用户显式操作。
+- 分享文本与图片 URI 只存在于当前进程内存：不写偏好设置 / 文件、不打印、不上传；同一 payload 只消费一次，
+  未登录期间保留到登录后消费一次，不为跨进程恢复持久化原文。
+- sourceRef 规则扩展为 `android-share-text-<uuid>` / `android-share-image-<uuid>`，不含分享原文 / 文件名 / URI，
+  Outbox 重试重放继续复用同一值；既有 `android-ocr-<requestId>` 与通知候选 `fingerprint` 规则未改动。
+- 一次性导航状态收口：返回 / 取消、主动切换底部导航、成功生成 DRAFT 都会清空 share target，
+  并与 `selectedDraftId` / `NotificationNavigationTarget` / `QuickCaptureFocus` 相互清除，避免残留串扰。
+- 明确未做：不自动解析、不自动 OCR、不自动创建草稿、不自动 preview、不自动 confirm、不自动正式入账；
+  未新增后台常驻服务、桌面小组件或通知栏快捷入口。
 
 ### 批量确认幂等
 

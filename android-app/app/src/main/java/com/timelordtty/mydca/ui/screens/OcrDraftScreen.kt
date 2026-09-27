@@ -1,5 +1,6 @@
 package com.timelordtty.mydca.ui.screens
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,11 +24,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.ocr.MlKitImageTextRecognizer
 import com.timelordtty.mydca.outbox.DraftOutboxOrigin
 import com.timelordtty.mydca.outbox.DraftOutboxQueue
+import com.timelordtty.mydca.share.ExternalShareCapture
+import com.timelordtty.mydca.share.ExternalSharePayload
+import com.timelordtty.mydca.share.SharedImageOcrGate
+import com.timelordtty.mydca.ui.ExternalShareHub
 import com.timelordtty.mydca.ui.state.OcrDraftCoordinator
 import com.timelordtty.mydca.ui.state.OcrDraftStage
 import java.util.UUID
@@ -36,7 +40,14 @@ import kotlinx.coroutines.launch
 /** 草稿录入方式：图片识别或手工文本；两种入口都不会自动 preview / confirm。 */
 enum class OcrEntryMode { Image, ManualText }
 
-/** 系统 Photo Picker、本地 OCR、候选复核与 DRAFT 创建的人工闭环；同时承载“手工记一笔”文本入口。 */
+/**
+ * 系统 Photo Picker、本地 OCR、候选复核与 DRAFT 创建的人工闭环；同时承载“手工记一笔”文本入口。
+ *
+ * 外部分享（[externalShare]）只做预填：
+ * - 分享文本只填进可编辑输入框，不自动解析；
+ * - 分享图片只在内存里登记，必须由用户点击“使用此图片并识别”才在本机 OCR；
+ * - 原始分享文本与图片 URI 都不写日志、不写偏好设置、不落盘、不上传。
+ */
 @Composable
 fun OcrDraftScreen(
     repository: AiAccountingRepository,
@@ -44,6 +55,8 @@ fun OcrDraftScreen(
     onOpenDraft: (Long) -> Unit,
     entryMode: OcrEntryMode = OcrEntryMode.Image,
     draftOutbox: DraftOutboxQueue? = null,
+    externalShare: ExternalShareCapture? = null,
+    onExternalShareSettled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -53,17 +66,14 @@ fun OcrDraftScreen(
     val state by coordinator.state.collectAsState()
     var hasSelectedImage by remember { mutableStateOf(false) }
 
-    LaunchedEffect(entryMode) {
-        if (manualEntry) {
-            coordinator.startTextEntry(UUID.randomUUID().toString(), "")
-        }
+    val sharedText = (externalShare?.payload as? ExternalSharePayload.Text)?.text
+    val sharedImageUri = (externalShare?.payload as? ExternalSharePayload.Image)?.uri
+    val sharedRequestId = remember(externalShare) { UUID.randomUUID().toString() }
+    val sharedImageGate = remember(externalShare) {
+        sharedImageUri?.let { uri -> SharedImageOcrGate(uri = uri, sourceRef = externalShare.sourceRef) }
     }
 
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val requestId = UUID.randomUUID().toString()
-        hasSelectedImage = true
-        coordinator.selectImage(requestId)
+    fun runLocalRecognition(requestId: String, uri: Uri) {
         scope.launch {
             if (!coordinator.beginRecognition(requestId)) return@launch
             try {
@@ -72,6 +82,35 @@ fun OcrDraftScreen(
                 coordinator.recognitionFailed(requestId)
             }
         }
+    }
+
+    LaunchedEffect(entryMode, externalShare) {
+        when {
+            sharedText != null -> coordinator.startTextEntry(
+                requestId = sharedRequestId,
+                text = sharedText,
+                sourceRef = externalShare.sourceRef,
+            )
+            sharedImageUri != null -> {
+                hasSelectedImage = true
+                coordinator.selectImage(requestId = sharedRequestId, sourceRef = externalShare.sourceRef)
+            }
+            manualEntry -> coordinator.startTextEntry(UUID.randomUUID().toString(), "")
+        }
+    }
+
+    LaunchedEffect(state.stage, externalShare) {
+        if (externalShare != null && state.stage == OcrDraftStage.DraftCreated) {
+            onExternalShareSettled()
+        }
+    }
+
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val requestId = UUID.randomUUID().toString()
+        hasSelectedImage = true
+        coordinator.selectImage(requestId)
+        runLocalRecognition(requestId, uri)
     }
 
     val busy = state.stage in setOf(
@@ -85,11 +124,19 @@ fun OcrDraftScreen(
             Text(if (manualEntry) "手工记一笔" else "图片识别记账")
             OutlinedButton(onClick = onClose, enabled = !busy) { Text("返回草稿箱") }
         }
+        if (externalShare != null) {
+            SafetyBanner(ExternalShareHub.bannerFor(externalShare.payload))
+            StatusPill(ExternalShareHub.PREFILL_HINT)
+        }
         if (manualEntry) {
             SafetyBanner("手工记一笔只把你输入的文字发给自己的 MyDCA 后端解析为记账候选，不会自动 preview、confirm 或正式入账。")
             SectionCard(
                 title = "手工输入记账内容",
-                description = "例如：早餐 18 元 微信支付。请勿填写卡号、身份证等敏感信息。",
+                description = if (sharedText != null) {
+                    "分享文字已预填，可直接编辑或清空。例如：早餐 18 元 微信支付。请勿填写卡号、身份证等敏感信息。"
+                } else {
+                    "例如：早餐 18 元 微信支付。请勿填写卡号、身份证等敏感信息。"
+                },
             ) {
                 OutlinedTextField(
                     value = state.recognizedText,
@@ -112,8 +159,25 @@ fun OcrDraftScreen(
             SafetyBanner("图片只在本机交给随 App 分发的 ML Kit 模型识别，不会上传。只有你复核并点击后，当前编辑文本才会发送到自己的 MyDCA 后端生成 DRAFT。")
             SectionCard(
                 title = "1 选择图片并本地识别",
-                description = "使用系统 Photo Picker 主动选择单张支付截图；App 不扫描相册，也不申请广泛存储权限。",
+                description = if (sharedImageGate != null) {
+                    "分享进来的图片已就绪，只有你点击“使用此图片并识别”才会在本机识别；App 不扫描相册，也不申请广泛存储权限。"
+                } else {
+                    "使用系统 Photo Picker 主动选择单张支付截图；App 不扫描相册，也不申请广泛存储权限。"
+                },
             ) {
+                sharedImageGate?.let { gate ->
+                    if (state.stage == OcrDraftStage.ImageSelected) {
+                        Button(
+                            enabled = !busy,
+                            onClick = {
+                                if (!gate.startRecognitionByUser()) return@Button
+                                runLocalRecognition(sharedRequestId, Uri.parse(gate.uri))
+                            },
+                        ) {
+                            Text("使用此图片并识别")
+                        }
+                    }
+                }
                 Button(
                     enabled = !busy,
                     onClick = {

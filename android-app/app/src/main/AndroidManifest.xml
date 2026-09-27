@@ -26,6 +26,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              外部分享只接收 ACTION_SEND 单条文本或单张图片：
+              不声明 ACTION_SEND_MULTIPLE，也不申请任何广泛存储权限。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

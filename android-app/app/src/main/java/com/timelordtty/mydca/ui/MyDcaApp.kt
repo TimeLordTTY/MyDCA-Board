@@ -38,6 +38,7 @@ import com.timelordtty.mydca.data.repository.TodoRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.ui.screens.AssetsScreen
 import com.timelordtty.mydca.ui.screens.DraftInboxScreen
+import com.timelordtty.mydca.ui.screens.ExternalShareNoticeBanner
 import com.timelordtty.mydca.ui.screens.OverviewScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
@@ -50,6 +51,7 @@ import com.timelordtty.mydca.notification.NotificationCandidateStore
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
 import com.timelordtty.mydca.outbox.AndroidDraftOutbox
 import com.timelordtty.mydca.outbox.DraftOutboxOrigin
+import com.timelordtty.mydca.share.ExternalSharePendingStore
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -65,6 +67,7 @@ fun MyDcaApp() {
         var baseUrl by rememberSaveable { mutableStateOf(ApiConfig.DEFAULT_BASE_URL) }
         val authSession = remember { AuthSession(KeystoreTokenStore(context)) }
         val authState by authSession.state.collectAsState()
+        val shareNotice by ExternalSharePendingStore.instance.notice.collectAsState()
         LaunchedEffect(authSession) { authSession.restore() }
 
         val safeBaseUrl = baseUrl.ifBlank { ApiConfig.DEFAULT_BASE_URL }
@@ -83,49 +86,59 @@ fun MyDcaApp() {
         }
         val apiConfigError = servicesResult.exceptionOrNull()?.message
 
-        when (val state = authState) {
-            AuthState.Initializing -> InitializingScreen()
-            AuthState.Unauthenticated,
-            is AuthState.AuthFailed,
-            AuthState.Expired,
-            AuthState.Authenticating -> LoginScreen(
-                baseUrl = baseUrl,
-                isAuthenticating = state == AuthState.Authenticating,
-                errorMessage = when (state) {
-                    is AuthState.AuthFailed -> state.message
-                    AuthState.Expired -> "登录已失效，请重新登录"
-                    else -> apiConfigError
-                },
-                onBaseUrlChange = { baseUrl = it },
-                onLogin = { username, password ->
-                    val repository = authRepository
-                    if (repository == null) return@LoginScreen
-                    scope.launch {
-                        when (repository.login(username, password)) {
-                            is NetworkResult.Success -> Unit
-                            is NetworkResult.Failure -> Unit
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (val state = authState) {
+                AuthState.Initializing -> InitializingScreen()
+                AuthState.Unauthenticated,
+                is AuthState.AuthFailed,
+                AuthState.Expired,
+                AuthState.Authenticating -> LoginScreen(
+                    baseUrl = baseUrl,
+                    isAuthenticating = state == AuthState.Authenticating,
+                    errorMessage = when (state) {
+                        is AuthState.AuthFailed -> state.message
+                        AuthState.Expired -> "登录已失效，请重新登录"
+                        else -> apiConfigError
+                    },
+                    onBaseUrlChange = { baseUrl = it },
+                    onLogin = { username, password ->
+                        val repository = authRepository
+                        if (repository == null) return@LoginScreen
+                        scope.launch {
+                            when (repository.login(username, password)) {
+                                is NetworkResult.Success -> Unit
+                                is NetworkResult.Failure -> Unit
+                            }
                         }
+                    },
+                )
+                is AuthState.Authenticated -> {
+                    if (services == null) {
+                        InvalidConfigurationScreen(
+                            baseUrl = baseUrl,
+                            message = apiConfigError ?: "接口配置无效",
+                            onBaseUrlChange = { baseUrl = it },
+                            onLogout = authSession::logout,
+                        )
+                    } else {
+                        AuthenticatedApp(
+                            baseUrl = baseUrl,
+                            displayName = state.displayName,
+                            services = services,
+                            apiConfigError = apiConfigError,
+                            onBaseUrlChange = { baseUrl = it },
+                            onLogout = { scope.launch { authRepository?.logout() ?: authSession.logout() } },
+                        )
                     }
-                },
-            )
-            is AuthState.Authenticated -> {
-                if (services == null) {
-                    InvalidConfigurationScreen(
-                        baseUrl = baseUrl,
-                        message = apiConfigError ?: "接口配置无效",
-                        onBaseUrlChange = { baseUrl = it },
-                        onLogout = authSession::logout,
-                    )
-                } else {
-                    AuthenticatedApp(
-                        baseUrl = baseUrl,
-                        displayName = state.displayName,
-                        services = services,
-                        apiConfigError = apiConfigError,
-                        onBaseUrlChange = { baseUrl = it },
-                        onLogout = { scope.launch { authRepository?.logout() ?: authSession.logout() } },
-                    )
                 }
+            }
+
+            shareNotice?.let { message ->
+                ExternalShareNoticeBanner(
+                    message = message,
+                    onDismiss = { ExternalSharePendingStore.instance.consumeNotice() },
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
     }
@@ -174,6 +187,7 @@ private fun AuthenticatedApp(
         var draftEntryMode by remember { mutableStateOf<OcrEntryMode?>(null) }
         var quickFocus by remember { mutableStateOf(QuickCaptureFocus.NONE) }
         var isQuickCaptureOpen by rememberSaveable { mutableStateOf(false) }
+        val shareSession = remember { ExternalShareCaptureSession() }
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
@@ -198,7 +212,22 @@ private fun AuthenticatedApp(
                 currentRoute = AppRoute.TodayTodo
                 draftEntryMode = null
                 quickFocus = QuickCaptureFocus.NONE
+                shareSession.onManualNavigation()
             }
+        }
+        val pendingShare by ExternalSharePendingStore.instance.pending.collectAsState()
+        val sharedCapture by shareSession.active.collectAsState()
+        LaunchedEffect(pendingShare) {
+            // 一次性消费外部分享：本效果只在已登录分支内运行，因此未登录时会保留到登录后再消费一次。
+            val capture = pendingShare ?: return@LaunchedEffect
+            ExternalSharePendingStore.instance.consume()
+            val destination = ExternalShareHub.destinationFor(capture.payload)
+            shareSession.adopt(capture)
+            selectedDraftId = null
+            NotificationNavigationTarget.clear()
+            quickFocus = QuickCaptureFocus.NONE
+            draftEntryMode = destination.entryMode
+            currentRoute = destination.route
         }
         val notificationCandidates by NotificationCandidateStore.candidates.collectAsState()
         val outboxEntries by draftOutbox.entries.collectAsState()
@@ -212,6 +241,7 @@ private fun AuthenticatedApp(
             val decision = QuickCaptureHub.decide(action)
             if (decision.clearSelectedDraftId) selectedDraftId = null
             if (decision.clearSelectedCandidateId) NotificationNavigationTarget.clear()
+            shareSession.onCaptureExit()
             draftEntryMode = decision.entryMode
             quickFocus = decision.focus
             currentRoute = decision.route
@@ -242,6 +272,7 @@ private fun AuthenticatedApp(
                                 draftEntryMode = null
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
                                 NotificationNavigationTarget.clear()
+                                shareSession.onManualNavigation()
                             },
                             label = { Text(route.navLabel) },
                             icon = { Text(route.navLabel.take(1)) },
@@ -279,12 +310,18 @@ private fun AuthenticatedApp(
                             OcrDraftScreen(
                                 repository = aiAccountingRepository,
                                 entryMode = entryMode,
-                                onClose = { draftEntryMode = null },
+                                onClose = {
+                                    draftEntryMode = null
+                                    shareSession.onCaptureExit()
+                                },
                                 onOpenDraft = { draftId ->
                                     selectedDraftId = draftId
                                     draftEntryMode = null
+                                    shareSession.onCaptureExit()
                                 },
                                 draftOutbox = draftOutbox,
+                                externalShare = sharedCapture,
+                                onExternalShareSettled = { shareSession.onDraftCreated() },
                             )
                         } else {
                             DraftInboxScreen(
