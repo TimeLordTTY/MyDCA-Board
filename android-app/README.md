@@ -161,3 +161,16 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 保留 v0.4.1 的资金用途筛选状态与选中态恢复行为。
 - 2026-09-26 自动验证：`testDebugUnitTest` 68 项测试通过、`assembleDebug` 通过、`lintDebug` 通过（2 条既有 warning，0 error）。
 - Debug APK：大小 55,718,565 bytes，SHA-256：`C8B3D341A968EB9FDB94DE5815FA9D2E1F75B72AAE1DA9EE8E5B65B693307D53`；APK 不提交到 Git。
+
+## v0.6 可靠记账采集（发布加固）
+
+- 版本收口为 `versionName = 0.6.0`（`versionCode = 7`）；已构建 APK 的清单经 `aapt2 dump badging` 实测确认为 `versionCode='7' versionName='0.6.0'`。
+- APK 工作流（`.github/workflows/android-test-apk.yml`）制品名与文件名同步为 v0.6.0：artifact `mydca-android-v0.6.0-<sha>`、文件 `MyDCA-Board-v0.6.0-<short-sha>.apk`，继续使用一次性 debug 签名，APK 不提交到 Git。
+- 草稿创建失败不再直接丢弃：可恢复的网络 / 5xx 失败会加密进入本地 Outbox（独立密钥别名与独立偏好文件），按 30s / 120s / 600s / 1800s 有限退避重试，默认上限 5 次，用尽转 `EXHAUSTED`。
+- 401 / 403 转 `AUTH_PAUSED` 等待重新登录；其他 4xx 与未知异常转 `BLOCKED`，只展示原因供人工修改或丢弃，不做无限自动重试。
+- 重试的唯一网络动作是“创建 DRAFT”，类型上不存在 preview / confirm / ignore 能力；重试成功即出队，服务端返回 `DRAFT` 时提供“打开草稿”引导，返回既有 `CONFIRMED` / `IGNORED` 时只展示状态。
+- 手工文本、图片 OCR、支付通知候选三入口统一 `sourceRef` 规则（`android-ocr-<requestId>` / 通知 `fingerprint`），同一次采集的重试始终复用同一 `sourceRef`；重放由服务端幂等基础兜底，不产生重复草稿。
+- 草稿确认边界不变：仍必须当前草稿为 `DRAFT`、当前 preview 的 `draftId` 与草稿 ID 一致、`preview.confirmSupported=true`，并由用户在二次确认对话框中确认。
+- v0.6 明确未做：不自动 preview、不自动 confirm、不自动正式入账、不自动交易、不接入真实大模型、不实现后台常驻无限重试（无常驻服务或系统级调度）。
+- 2026-09-27 发布加固自动验证：后端 `mvn -B test` 55 项通过；Android `testDebugUnitTest` 23 个测试类共 104 项通过、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）；`scripts/post-task-compile-hook.ps1` 通过。
+- Debug APK：大小 55,916,141 bytes，SHA-256：`6149D8FD47C8A4A1E9FA38726979341959892F344913884BC8860C3F4859C891`；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / SHA-256）需在真实推送触发工作流后回填，不在本轮声称已交付。

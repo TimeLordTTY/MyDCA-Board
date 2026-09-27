@@ -263,9 +263,24 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   transient 入队、401 暂停、4xx 不自动重试、重试成功出队、既有草稿出队、重试不触达 preview / confirm、
   进程重启恢复、退避与单实例；`assembleDebug` 与 `lintDebug` 通过（0 error，2 条既有 warning）。
 
+## Android v0.6.0 发布加固与 APK 交付证据（2026-09-27）
+
+- 对应任务 `task-mydca-v06-release-hardening-20260926`，前置为 `task-mydca-v06-draft-idempotency-20260926` 与 `task-mydca-v06-secure-outbox-20260926`，
+  详细说明见 `docs/mydca_android_v06_reliable_capture_20260926.md`。
+- 版本核对：`versionName = 0.6.0`、`versionCode = 7`；已构建 APK 经 `aapt2 dump badging` 实测为 `versionCode='7' versionName='0.6.0'`。
+- APK 工作流命名收口：artifact `mydca-android-v0.6.0-<sha>`、文件 `MyDCA-Board-v0.6.0-<short-sha>.apk`，`SHA256SUMS.txt` 同步，
+  继续使用一次性 debug 签名且不提交 APK；触发条件不变（`workflow_dispatch` 或 `v2` 上命中 `android-app/**` / 工作流文件的推送）。
+- 最终回归新增 `DraftOutboxReleaseRegressionTest`：三入口（手工文本 / OCR / 通知候选）端到端只创建 `DRAFT` 并在重试成功后出队；
+  并以类型守卫断言 `DraftCreationGateway` 只声明 `createDraft`、outbox 各类不暴露 `preview` / `confirm` / `ignore` / `quickentry` 能力。
+- 本轮验证：后端 `mvn -B test` 55 项通过；Android `testDebugUnitTest` 23 个测试类共 104 项通过（由 102 项增至 104 项）、
+  `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）；`scripts/post-task-compile-hook.ps1` 通过。
+- 本地 Debug APK：55,916,141 bytes，SHA-256 `6149D8FD47C8A4A1E9FA38726979341959892F344913884BC8860C3F4859C891`，APK 不提交到 Git。
+- CI 制品状态：本进程按指令不推送，工作流未触发，Run ID / Artifact ID / APK 文件名 / SHA-256 均为 NOT_PRODUCED；
+  因此本轮不声称 APK 交付完成，需在真实推送后由工作流产出并回填。
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 仍未引入服务端 `draft_ledger_entry (source_type, source_ref)` 唯一约束：本轮 `allowed_paths` 仅含 `android-app/**` 与 `docs/**`，
   不包含 `sql/**`，并发重放的极窄竞争窗口仍然存在；客户端已按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队。
 - 未实现常驻后台服务或系统级任务调度，重试只发生在 App 启动、前台恢复、进入草稿箱页面与用户显式操作时。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
+- v0.6.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / SHA-256）仍需在真实推送触发 `Android test APK` 工作流后回填；本轮未推送，未声称 APK 交付完成。
