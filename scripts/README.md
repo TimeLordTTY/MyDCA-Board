@@ -1,155 +1,27 @@
-# Python脚本使用说明
+# Python 脚本说明
 
-## 目录结构
+本目录保存财富中枢的行情、指标、调度及其他任务型 Python 工具。它们不是 AiCore 自动研发链本身，也不能因为脚本存在就推断 Hermes 已获准调用。
 
-```
-scripts/
-├── market/          # 行情数据采集
-│   ├── README.md
-│   ├── requirements.txt
-│   ├── config.py
-│   ├── fund_collector.py    # 基金净值采集
-│   └── etf_collector.py     # ETF行情采集
-├── indicator/       # 指标计算
-│   ├── README.md
-│   ├── requirements.txt
-│   ├── calculator.py         # 指标计算主程序
-│   ├── ma_calculator.py     # 移动平均线计算
-│   ├── macd_calculator.py   # MACD指标计算
-│   └── rsi_calculator.py    # RSI指标计算
-├── scheduler/       # 定时任务调度
-│   ├── README.md
-│   ├── requirements.txt
-│   └── scheduler.py          # 定时任务调度器
-└── test_all.py     # 测试脚本
-```
+当前工程状态与任务优先级请先读 `../docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-## 安装依赖
+## 主要目录
 
-### 1. 行情数据采集依赖
+- `market/`：基金/ETF 行情、净值与历史补数据。
+- `indicator/`：MA、MACD、RSI 等指标。
+- `scheduler/`：项目内部调度工具。
+- 其他目录以仓库实际文件为准。
 
-```bash
-cd scripts/market
-pip install -r requirements.txt
-```
+## 安全规则
 
-### 2. 指标计算依赖
+- 不把真实数据库密码、Token、Cookie、API key 写入 Git。
+- 涉及数据库的脚本只能在任务明确授权并确认目标环境后执行。
+- AiCore/Hermes 不得因为这里存在脚本就自动运行生产数据任务。
+- 新脚本应有明确参数、非 0 失败退出码、脱敏日志和可复核输出。
 
-```bash
-cd scripts/indicator
-pip install -r requirements.txt
-```
+## 开发与验证
 
-**注意**：ta-lib 库需要额外安装：
-- Windows: 下载预编译的 wheel 文件或使用 conda
-- Linux/Mac: 需要先安装 ta-lib C 库，然后安装 Python 包
+按具体子目录 README / requirements 安装依赖并执行最小相关测试。任何仓库代码或项目文件修改后，最终仍需运行根目录 `scripts/post-task-compile-hook.ps1`；成功只写 stdout/log，不播放声音、不弹 Windows 通知。
 
-### 3. 定时任务调度依赖
+## 历史说明
 
-```bash
-cd scripts/scheduler
-pip install -r requirements.txt
-```
-
-### 4. 安装所有依赖
-
-```bash
-# 在项目根目录执行
-pip install -r scripts/market/requirements.txt
-pip install -r scripts/indicator/requirements.txt
-pip install -r scripts/scheduler/requirements.txt
-```
-
-## 配置数据库连接
-
-编辑 `scripts/market/config.py` 和 `scripts/indicator/config.py`，配置数据库连接信息：
-
-```python
-DB_CONFIG = {
-    'host': 'localhost',
-    'port': 3306,
-    'user': 'your_username',
-    'password': 'your_password',
-    'database': 'your_database',
-    'charset': 'utf8mb4'
-}
-```
-
-## 测试脚本
-
-运行测试脚本验证所有模块是否正常工作：
-
-```bash
-cd scripts
-python test_all.py
-```
-
-## 使用说明
-
-### 行情数据采集
-
-#### 基金净值采集
-
-```bash
-cd scripts/market
-python fund_collector.py
-```
-
-#### ETF行情采集
-
-```bash
-cd scripts/market
-python etf_collector.py
-```
-
-### 指标计算
-
-```bash
-cd scripts/indicator
-python calculator.py
-```
-
-### 定时任务调度
-
-```bash
-cd scripts/scheduler
-python scheduler.py
-```
-
-## 定时任务配置
-
-定时任务默认配置：
-- 基金净值采集：每天 18:00
-- ETF实时行情：交易时间内每5分钟（9:30-15:00）
-- ETF日K线：每天 15:30（收盘后）
-- 指标计算：每天 16:00（数据采集完成后）
-
-## 注意事项
-
-1. **数据库连接**：确保数据库连接配置正确，且数据库服务正在运行
-2. **数据源**：akshare 数据源需要网络连接，某些接口可能有访问限制
-3. **错误处理**：脚本包含基本的错误处理，但建议在生产环境中添加更完善的日志和监控
-4. **性能**：批量数据采集时，注意控制请求频率，避免对数据源造成压力
-
-## 故障排查
-
-### 导入错误
-
-如果遇到模块导入错误，请检查：
-1. Python 版本（建议 Python 3.8+）
-2. 依赖是否已正确安装
-3. 是否在正确的目录下运行脚本
-
-### 数据库连接错误
-
-如果遇到数据库连接错误，请检查：
-1. 数据库服务是否运行
-2. 连接配置是否正确
-3. 数据库用户权限是否足够
-
-### 数据采集失败
-
-如果数据采集失败，请检查：
-1. 网络连接是否正常
-2. akshare 数据源是否可访问
-3. 产品代码是否正确
+早期 README 中曾给出固定数据库连接示例与固定调度时间。实际运行配置必须以当前环境配置和对应脚本为准，文档不再把示例连接参数或时间表当生产事实。
