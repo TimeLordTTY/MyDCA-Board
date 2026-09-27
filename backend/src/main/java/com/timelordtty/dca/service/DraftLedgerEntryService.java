@@ -11,6 +11,7 @@ import com.timelordtty.dca.mapper.DraftLedgerEntryMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.DraftLedgerEntry;
 import com.timelordtty.dca.model.LedgerTxn;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,13 +53,16 @@ public class DraftLedgerEntryService {
     /**
      * 创建草稿流水候选记录，初始状态为 DRAFT，不会触发正式账本入账。
      *
-     * <p>当 sourceRef 非空时按幂等语义重放：同一用户对相同 sourceType + sourceRef 的重复请求直接返回既有草稿，
+     * <p>当 sourceRef 非空时按幂等语义重放：同一可见归属作用域对相同 sourceType + sourceRef 的重复请求直接返回既有草稿，
      * 无论它仍是 DRAFT，还是已经 CONFIRMED / IGNORED，都不再插入第二条，让客户端据草稿状态决定下一步。
      * sourceRef 为空时保持原有非幂等行为，不按金额、备注等弱条件做模糊去重。</p>
+     *
+     * <p>应用层“先查后插”之外还有数据库唯一键兜底：两个请求同时查不到、随后同时插入时，后写的一方会收到唯一键冲突，
+     * 本方法不在这种情况下抛错，而是按同一可见作用域重新查询并返回先写入的那条草稿，因此并发重放最多只落一条草稿。</p>
      */
     public DraftLedgerEntryDTO createDraft(Long userId, Long familyId, CreateDraftRequest request) {
         String sourceType = defaultIfBlank(request.getSourceType(), "manual");
-        String sourceRef = request.getSourceRef();
+        String sourceRef = normalizeSourceRef(request.getSourceRef());
 
         DraftLedgerEntry replay = findReplayableDraft(userId, familyId, sourceType, sourceRef);
         if (replay != null) {
@@ -74,7 +78,12 @@ public class DraftLedgerEntryService {
         draft.setParsedPayloadJson(request.getParsedPayloadJson());
         draft.setConfidence(request.getConfidence());
         draft.setMissingFieldsJson(request.getMissingFieldsJson());
-        draftLedgerEntryMapper.insert(draft);
+        try {
+            draftLedgerEntryMapper.insert(draft);
+        } catch (DuplicateKeyException duplicateKey) {
+            return DraftLedgerEntryDTO.fromModel(replayExistingDraftAfterDuplicateKey(
+                    userId, familyId, sourceType, sourceRef, duplicateKey));
+        }
         return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draft.getId()));
     }
 
@@ -89,6 +98,32 @@ public class DraftLedgerEntryService {
             return null;
         }
         return draftLedgerEntryMapper.selectVisibleBySource(userId, familyId, sourceType, sourceRef);
+    }
+
+    /**
+     * 并发重放竞态的唯一恢复路径：数据库唯一键冲突说明同一可见作用域内已有同来源草稿。
+     *
+     * <p>这里按同一 source scope 重新查询并返回既有草稿（DRAFT / CONFIRMED / IGNORED 均可）。
+     * 只有明确的唯一键冲突（{@link DuplicateKeyException}）才会走到这里；重查不到既有草稿时原样抛出该冲突，
+     * 保证其他数据库异常与不可见冲突不会被吞掉并伪装成成功。</p>
+     */
+    private DraftLedgerEntry replayExistingDraftAfterDuplicateKey(Long userId, Long familyId, String sourceType,
+                                                                 String sourceRef, DuplicateKeyException duplicateKey) {
+        DraftLedgerEntry existing = findReplayableDraft(userId, familyId, sourceType, sourceRef);
+        if (existing == null) {
+            throw duplicateKey;
+        }
+        return existing;
+    }
+
+    /**
+     * 空 sourceRef 统一按 NULL 落库，与数据库唯一键语义保持一致。
+     *
+     * <p>唯一键只对非空 sourceRef 生效（MySQL 唯一索引不约束多行 NULL），因此“空来源不强制幂等”的规则必须先把
+     * 空串、空白串归一化为 NULL，否则空串会被唯一键当成有效来源参与去重。</p>
+     */
+    private String normalizeSourceRef(String sourceRef) {
+        return sourceRef == null || sourceRef.isBlank() ? null : sourceRef;
     }
 
     /**
@@ -122,12 +157,17 @@ public class DraftLedgerEntryService {
         DraftLedgerEntry draft = new DraftLedgerEntry();
         draft.setId(draftId);
         draft.setSourceType(defaultIfBlank(request.getSourceType(), existing.getSourceType()));
-        draft.setSourceRef(request.getSourceRef());
+        draft.setSourceRef(normalizeSourceRef(request.getSourceRef()));
         draft.setRawInput(request.getRawInput());
         draft.setParsedPayloadJson(request.getParsedPayloadJson());
         draft.setConfidence(request.getConfidence());
         draft.setMissingFieldsJson(request.getMissingFieldsJson());
-        int updated = draftLedgerEntryMapper.updateDraftContent(draft);
+        int updated;
+        try {
+            updated = draftLedgerEntryMapper.updateDraftContent(draft);
+        } catch (DuplicateKeyException duplicateKey) {
+            throw new RuntimeException("该来源已被同一可见范围内的另一条草稿占用，请更换来源标识或刷新后重试");
+        }
         if (updated != 1) {
             throw new RuntimeException("草稿更新失败，请刷新后重试");
         }

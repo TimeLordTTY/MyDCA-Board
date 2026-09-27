@@ -392,7 +392,10 @@ CREATE TABLE `draft_ledger_entry` (
 ### 当前已实现（Android v0.6 草稿创建幂等基础）
 
 - 现有 `draft_ledger_entry` 表已具备 `source_type` + `source_ref`，v0.6 直接把两者组合作为 DRAFT 创建的幂等键，
-  未新增 `external_ref` / `dedup_key` 列，也未新增唯一约束。
+  未新增 `external_ref` / `dedup_key` 列。
+- v0.8 已在该幂等键上补齐数据库唯一约束（用户作用域与家庭作用域两个唯一键）并在唯一冲突时恢复为既有草稿，
+  并发重放不再产生重复草稿；`dedup_key` 弱幂等仍为后续待办，
+  详见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`。
 - `POST /api/v2/ai/accounting/draft-from-intent` 对相同 `source_type + source_ref` 的重复请求返回既有草稿，
   无论草稿处于 `DRAFT`、`CONFIRMED` 还是 `IGNORED`，都不会因重试再创建第二条。
 - `source_ref` 为空时保留原有非幂等行为，不做模糊去重；不使用金额、备注等弱条件猜重。

@@ -41,6 +41,19 @@ mysql -u user -p database < updatesql/202402/02_*.sql
 
 ### 当前更新脚本
 
+#### 2026年9月（20260927）草稿强幂等：来源唯一键
+
+- `01_precheck_draft_ledger_source_duplicates.sql` - 只读预检
+  - 说明：按用户作用域 / 家庭作用域列出 `draft_ledger_entry` 的历史重复来源，并列出空串 `source_ref` 明细
+  - 该脚本只读，不改数据；存在重复时后续唯一键会创建失败（不静默删除或改写真实数据）
+- `02_normalize_blank_draft_ledger_source_ref.sql` - 空来源归一化
+  - 说明：把空串 / 纯空白 `source_ref` 归一化为 `NULL`，让唯一键只约束真正的来源标识
+- `03_add_draft_ledger_source_unique_keys.sql` - 添加来源唯一键
+  - 说明：`uk_draft_ledger_user_source (owner_user_id, source_type, source_ref)` 与
+    `uk_draft_ledger_family_source (owner_family_id, source_type, source_ref)`
+  - 回退：脚本末尾提供 `DROP INDEX` 语句
+  - 详见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`
+
 #### 2024年1月（202401）
 
 - `01_init_admin_user.sql` - 初始化系统管理员用户

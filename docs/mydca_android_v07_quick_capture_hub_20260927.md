@@ -122,4 +122,4 @@
 - 不新增短信 / 通讯录 / 相册广泛读取 / 定位 / 录音权限；不把通知或 OCR 原文明文持久化。
 - 不部署生产后端、不连接生产数据库、不修改真实财务记录。
 - 未引入后台常驻服务或系统级调度；Outbox 重试时机与 v0.6 一致。
-- 未把 `sourceRef` 唯一约束下推到数据库（本轮 `allowed_paths` 不含 `sql/**`），v0.6 的并发重放窗口保持不变。
+- 本任务当时未把 `sourceRef` 唯一约束下推到数据库（`allowed_paths` 不含 `sql/**`）；该 v0.6 并发重放窗口已由 v0.8 收敛：`sql/updatesql/20260927/` 的用户作用域与家庭作用域唯一键 + `DraftLedgerEntryService.createDraft` 唯一冲突恢复路径，详见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`。

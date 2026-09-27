@@ -129,6 +129,6 @@ UI（草稿箱页 `DraftOutboxSection`）：
 ## 明确未实现
 
 - 未实现常驻后台服务或系统级任务调度（无 WorkManager / JobScheduler 常驻队列）：重试只发生在 App 启动、前台恢复、进入草稿箱页面和用户显式操作时，符合 v0.6 的“不要求常驻后台服务”。
-- 未引入服务端 `draft_ledger_entry (source_type, source_ref)` 唯一约束：本任务 `allowed_paths` 仅包含 `android-app/**` 与 `docs/**`，不包含 `sql/**`；并发重放的极窄竞争窗口仍然存在，客户端已先按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队。
+- 本任务当时未引入服务端 `draft_ledger_entry` 唯一约束（`allowed_paths` 不含 `sql/**`）；该并发重放窗口已由 v0.8 收敛（`sql/updatesql/20260927/` 的两个作用域唯一键 + `createDraft` 唯一冲突恢复，见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`），客户端仍先按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队。
 - 未实现 AI 自动资金分类、自动 preview、自动 confirm、自动正式入账，也未提供直接修改余额、持仓、订单或执行交易的入口；未接入真实大模型。
 - 未连接生产数据库，未创建真实草稿，未使用真实账号做写入 smoke；真实设备上的通知监听与弱网重试仍需人工验证。

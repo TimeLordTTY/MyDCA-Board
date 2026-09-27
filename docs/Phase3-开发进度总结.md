@@ -230,7 +230,8 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 为 Android v0.6“可靠记账采集”补齐服务端草稿创建可安全重放的前置能力，对应任务 `task-mydca-v06-draft-idempotency-20260926`，
   详细说明见 `docs/mydca_android_v06_draft_idempotency_20260926.md`。
 - `DraftLedgerEntryMapper` 新增 `selectVisibleBySource`：按当前用户/家庭可见性 + `source_type` + `source_ref` 查询既有草稿，
-  不限制草稿状态；未新增数据库 schema，也未新增唯一约束，复用既有 `idx_draft_ledger_source` 索引。
+  不限制草稿状态；本任务当时未新增数据库 schema 与唯一约束，复用既有 `idx_draft_ledger_source` 索引
+  （数据库唯一约束已于 v0.8 补齐，见下文“草稿强幂等与并发去重（2026-09-27，MyDCA v0.8）”）。
 - `DraftLedgerEntryService.createDraft` 在插入前先做幂等查找：`sourceRef` 非空且命中时直接返回既有草稿（`DRAFT` / `CONFIRMED` / `IGNORED` 均可），
   不再插入新行；`sourceRef` 为空时保持原有非幂等行为，不按金额或备注做模糊去重。
 - `draft-from-intent` 与 `POST /api/v2/drafts` 共用同一 `createDraft` 入口，因此两条创建路径遵循同一套重放语义；重放路径不会调用 `QuickEntryService`。
@@ -302,10 +303,34 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过。
 - 本轮未推送：CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地 APK 哈希冒充 CI artifact。
 
+## 草稿强幂等与并发去重（2026-09-27，MyDCA v0.8）
+
+- 对应任务 `task-mydca-v08-draft-strong-idempotency-20260927`（owner 直接批准，L3），
+  详细说明见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`；目标是补齐 v0.6 起持续保留的可靠性缺口，
+  把“同一采集事件重复提交只产生一条草稿”从应用层幂等提升为数据库级可验证的强幂等。
+- 数据库唯一性：新增增量 migration `sql/updatesql/20260927/`（01 只读预检 → 02 空来源归一化为 `NULL` → 03 添加唯一键），
+  添加 `uk_draft_ledger_user_source (owner_user_id, source_type, source_ref)` 与
+  `uk_draft_ledger_family_source (owner_family_id, source_type, source_ref)`；两个唯一键合起来正好等于
+  “同一个人或同一个家庭可见”的可见作用域，不同用户 / 家庭之间互不冲突；`source_ref IS NULL` 不参与唯一性判定，
+  保留“空来源不强制幂等”的旧行为；未改写 `20260610` 的历史建表脚本。
+- 预检与阻断：预检脚本按用户 / 家庭作用域列出历史重复草稿与空来源明细；存在重复时唯一键创建会以 1062 失败，
+  迁移不含任何 `DELETE`，不静默删除真实数据，由人工决定保留哪一条；脚本末尾给出 `DROP INDEX` 回退语句。
+- 并发恢复：`DraftLedgerEntryService.createDraft` 先保留应用层幂等查询，仅捕获 `DuplicateKeyException`，
+  按同一可见作用域重查并返回既有草稿（`DRAFT` / `CONFIRMED` / `IGNORED` 均直接返回）；重查不到时原样抛出冲突；
+  其他数据库异常不进入恢复分支。恢复路径不 preview、不 confirm、不调用 `QuickEntryService`、不写正式账本 / 订单 / 结算 / 持仓。
+- 空来源归一化：`sourceRef` 为空 / 空白串时按 `NULL` 落库，避免空串被唯一键当成有效来源参与去重；
+  `updateDraft` 改写 `source_ref` 撞唯一键时转为明确业务提示，不再表现为未处理的数据库异常。
+- Android 侧未改动代码：核对确认手工文本 / OCR 的 `android-ocr-<requestId>` 与通知候选 `fingerprint` 仍是
+  “一次采集事件”级别且重试复用同一值，Outbox 只重试创建 DRAFT，未新增后台常驻重试。
+- 本轮验证：backend `mvn -B test` 70 项通过（由 55 项增至 70 项：新增 10 项并发恢复 + 5 项迁移等价可验证方案）；
+  Android `testDebugUnitTest --rerun-tasks` 24 类 119 项通过（与 v0.7 基线一致，无回归）；
+  `scripts/post-task-compile-hook.ps1` 通过；`git diff --check` 通过。未连接任何数据库、未执行 migration、未推送。
+
 ## 后续待办（Android v0.6 可靠记账采集）
 
-- 仍未引入服务端 `draft_ledger_entry (source_type, source_ref)` 唯一约束：本轮 `allowed_paths` 仅含 `android-app/**` 与 `docs/**`，
-  不包含 `sql/**`，并发重放的极窄竞争窗口仍然存在；客户端已按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队。
+- 服务端 `draft_ledger_entry` 唯一约束缺口已收敛：该缺口最初因为 `allowed_paths` 不含 `sql/**` 而遗留，
+  现已由 v0.8 `sql/updatesql/20260927/` 的两个作用域唯一键 + `createDraft` 唯一冲突恢复路径补齐，
+  并发重放不再产生重复草稿（详见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`）。
 - 未实现常驻后台服务或系统级任务调度，重试只发生在 App 启动、前台恢复、进入草稿箱页面与用户显式操作时。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
 - v0.6.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / SHA-256）仍需在真实推送触发 `Android test APK` 工作流后回填；本轮未推送，未声称 APK 交付完成。
@@ -315,7 +340,8 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 快速面板只做“定位 + 导航”，仍未实现真正的全局快捷方式（桌面小组件 / 通知栏快捷入口 / 分享菜单接入），
   因此“两步内进入任一采集路径”目前依赖先打开 App。
 - 通知候选区与 Outbox 区的“定位”是路由 + 标记，不是滚动锚点；长列表下用户仍可能需要手动滚动。
-- 仍未把 `sourceRef` 唯一约束下推到数据库（本轮 `allowed_paths` 不含 `sql/**`），v0.6 的并发重放窗口保持不变。
+- `sourceRef` 唯一约束已下推到数据库：v0.8 通过 `sql/updatesql/20260927/` 添加用户作用域与家庭作用域唯一键，
+  并在 `DraftLedgerEntryService.createDraft` 增加唯一冲突恢复路径，v0.6 的并发重放窗口已关闭。
 - v0.7.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）仍需在真实推送触发 `Android test APK`
   工作流后回填；本轮未推送，未声称 CI APK 交付完成。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。

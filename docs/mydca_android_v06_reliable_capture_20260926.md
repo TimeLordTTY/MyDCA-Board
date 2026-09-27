@@ -90,7 +90,7 @@
 
 - 不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 - 不实现后台常驻无限重试（无常驻服务、无 WorkManager / JobScheduler 常驻队列）；重试只发生在 App 启动、前台恢复（`ON_START`）、进入草稿箱页面与用户显式操作时，且受有限退避与次数上限约束。
-- 未引入服务端 `draft_ledger_entry (source_type, source_ref)` 唯一约束：本任务 `allowed_paths` 不含 `sql/**`，并发重放的极窄竞争窗口仍存在；客户端按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队，服务端 `createDraft` 先查后插。
+- 本任务当时未引入服务端 `draft_ledger_entry` 唯一约束（`allowed_paths` 不含 `sql/**`），并发重放的极窄竞争窗口随后已由 v0.8 收敛：`sql/updatesql/20260927/` 添加用户作用域与家庭作用域唯一键，服务端 `createDraft` 在唯一冲突时按同一可见作用域重查既有草稿；客户端仍按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队。详见 `docs/mydca_v08_draft_strong_idempotency_20260927.md`。
 - 不让通知 / OCR 原文无加密落地；outbox 只加密保存字段白名单内的内容（不含 Token、密码、Cookie、图片 / URI、通知完整原文）。
 - 未接入真实大模型做账本决策。
 - 真实设备上的通知监听、弱网重试与厂商 URI 兼容性仍需人工验证，JVM 测试不等于真实设备验证。

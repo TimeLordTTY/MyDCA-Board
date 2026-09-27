@@ -69,8 +69,9 @@ Android v0.6 的目标是“可靠记账采集”：本地失败重试队列在�
 
 - Android 本地失败重试队列 / outbox 仍未实现；本任务只提供其服务端前置能力。
 - 本任务不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
-- 未在本轮为 `draft_ledger_entry` 引入数据库唯一约束。并发重放同 `sourceRef` 时仍存在极窄竞争窗口，
-  理论上可能产生两条草稿；更早的既有草稿会在后续重试中被返回，该竞争留待 outbox 落地时结合唯一索引一并收敛。
+- 本任务当时未为 `draft_ledger_entry` 引入数据库唯一约束，并发重放同 `sourceRef` 时存在极窄竞争窗口。
+  **该缺口已由 v0.8 收敛**：`docs/mydca_v08_draft_strong_idempotency_20260927.md` 通过增量 migration
+  （`sql/updatesql/20260927/`）添加用户作用域与家庭作用域两个唯一键，并在 `createDraft` 中增加唯一冲突恢复路径。
 
 ## 提交与推送
 
