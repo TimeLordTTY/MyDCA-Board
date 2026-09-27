@@ -115,60 +115,6 @@ Requirements:
     }
 }
 
-function Invoke-SuccessBeep {
-    try {
-        [Console]::Beep(1046, 180)
-        Start-Sleep -Milliseconds 80
-        [Console]::Beep(1318, 180)
-        Start-Sleep -Milliseconds 80
-        [Console]::Beep(1568, 260)
-    }
-    catch {
-        Write-Host "`a"
-    }
-}
-
-function Invoke-SuccessNotification {
-    param(
-        [string]$Title = "Codex Hook",
-        [string]$Body = "Build passed."
-    )
-
-    try {
-        [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-        [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-
-        $safeTitle = [System.Security.SecurityElement]::Escape($Title)
-        $safeBody = [System.Security.SecurityElement]::Escape($Body)
-        $xml = @"
-<toast>
-  <visual>
-    <binding template='ToastGeneric'>
-      <text>$safeTitle</text>
-      <text>$safeBody</text>
-    </binding>
-  </visual>
-</toast>
-"@
-
-        $doc = New-Object Windows.Data.Xml.Dom.XmlDocument
-        $doc.LoadXml($xml)
-        $toast = [Windows.UI.Notifications.ToastNotification]::new($doc)
-        $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("Windows PowerShell")
-        $notifier.Show($toast)
-        return
-    }
-    catch {
-    }
-
-    try {
-        $wshell = New-Object -ComObject WScript.Shell
-        [void]$wshell.Popup($Body, 5, $Title, 64)
-    }
-    catch {
-    }
-}
-
 Write-Host "RepoRoot: $RepoRoot"
 Write-Host "Log file: $latestLog"
 
@@ -181,8 +127,6 @@ for ($round = 0; $round -le $MaxFixRounds; $round++) {
     if (Invoke-ProjectBuild) {
         Write-Host ""
         Write-Host "Build passed."
-        Invoke-SuccessBeep
-        Invoke-SuccessNotification -Title "Codex Build Hook" -Body "Build passed for $RepoRoot"
         exit 0
     }
 
