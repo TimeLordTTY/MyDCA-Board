@@ -35,6 +35,7 @@ fun DraftOutboxSection(
     gateway: DraftCreationGateway?,
     onOpenDraft: (Long) -> Unit,
     onDraftCreated: () -> Unit,
+    highlighted: Boolean = false,
 ) {
     if (outbox == null) return
     val entries by outbox.entries.collectAsState()
@@ -50,6 +51,9 @@ fun DraftOutboxSection(
         description = "创建 DRAFT 失败但未丢失的采集会加密暂存在这里，跨重启保留。重试只会重新创建 DRAFT，不会自动 preview、confirm 或正式入账。",
     ) {
         Text("待重试数量：${entries.size}")
+        if (highlighted) {
+            StatusPill("已定位到你刚才打开的待重试区域")
+        }
         if (entries.isEmpty()) {
             StatusPill("暂无待重试草稿")
         }

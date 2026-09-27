@@ -6,7 +6,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.6.0`（`versionCode = 7`），APK 制品命名为 `MyDCA-Board-v0.6.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.7.0`（`versionCode = 8`），APK 制品命名为 `MyDCA-Board-v0.7.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
@@ -174,3 +174,17 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - v0.6 明确未做：不自动 preview、不自动 confirm、不自动正式入账、不自动交易、不接入真实大模型、不实现后台常驻无限重试（无常驻服务或系统级调度）。
 - 2026-09-27 发布加固自动验证：后端 `mvn -B test` 55 项通过；Android `testDebugUnitTest` 23 个测试类共 104 项通过、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）；`scripts/post-task-compile-hook.ps1` 通过。
 - Debug APK：大小 55,916,141 bytes，SHA-256：`6149D8FD47C8A4A1E9FA38726979341959892F344913884BC8860C3F4859C891`；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / SHA-256）需在真实推送触发工作流后回填，不在本轮声称已交付。
+
+## v0.7 快速记账采集中心
+
+- 版本收口为 `versionName = 0.7.0`（`versionCode = 8`）；已构建 APK 经 `aapt2 dump badging` 实测为 `versionCode='8' versionName='0.7.0'`。
+- 已登录主 Scaffold 新增全局“记一笔”悬浮入口（`ExtendedFloatingActionButton`）：总览、今日待办、草稿箱、资产四个主要页面可见，设置页与手工 / 图片录入子页面按统一规则隐藏；不改变既有 5 个底部导航的信息架构。
+- 入口打开“快速记账”面板（`ModalBottomSheet`），提供四个采集入口：手工记一笔、图片识别、支付通知候选（显示未处理数量）、待重试（显示 Outbox 数量）；空候选 / 空 Outbox 时入口仍在，徽标显示“暂无待处理”。
+- 面板只做导航，不含任何解析 / 预览 / 正式确认按钮：打开与关闭面板都不改变当前页面；选择入口后才跳转，并清空旧的 `selectedDraftId` 与通知候选 `candidateId`。
+- 手工 / 图片入口复用既有 `OcrDraftScreen`；通知候选进入今日待办候选区并显示“已定位到待处理候选”；待重试进入草稿箱“本地待重试草稿”区并显示定位标记。
+- 用户主动切换底部导航时复位一次性定位、清空录入模式，并丢弃待处理的通知导航目标（`NotificationNavigationTarget.clear()`），避免返回后错误跳页或残留旧高亮。
+- 计数只来自本机脱敏候选 store 与加密本地 Outbox，无新增网络轮询、无新增权限、无新增明文落盘；面板文案不展示内部类名 / 枚举名。
+- 安全边界不变：快速入口不调用 parse / draft / preview / confirm；手工与 OCR 仍需用户显式点击才解析、再显式点击才创建 DRAFT；通知候选不会自动生成草稿；Outbox 只重试创建 DRAFT；草稿最终确认仍由 `DraftInboxScreen` 的 `DRAFT` + 当前 preview + `confirmSupported=true` + 二次确认守门。
+- 新增 `QuickCaptureHubTest`（纯 Kotlin，无 instrumentation）15 项：入口可见性、打开 / 关闭保持原 route、四个入口路由、数量统计口径、空数量占位、状态清空、文案不含内部名称，以及类型守卫断言 helper 不存在 preview / confirm / 快速入账能力。
+- 2026-09-27 验证：`testDebugUnitTest` 24 个测试类共 119 项通过、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过。
+- Debug APK：大小 55,825,296 bytes，SHA-256：`AAE92D1D5C867D89AFC5499237FFA72D3940A7C0BB1769B2F9CE77D6097F4DA0`；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）需在真实推送触发工作流后回填，本轮未推送，不声称 CI APK 已交付。

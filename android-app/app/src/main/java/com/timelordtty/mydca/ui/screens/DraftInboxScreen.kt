@@ -48,6 +48,7 @@ fun DraftInboxScreen(
     onOpenDraft: (Long) -> Unit,
     draftOutbox: DraftOutboxQueue? = null,
     draftCreationGateway: DraftCreationGateway? = null,
+    focusOutbox: Boolean = false,
 ) {
     var draftsState by remember { mutableStateOf<AsyncState<List<DraftLedgerEntryDto>>>(AsyncState.Loading) }
     var listError by remember { mutableStateOf<String?>(null) }
@@ -361,6 +362,7 @@ fun DraftInboxScreen(
             gateway = draftCreationGateway,
             onOpenDraft = onOpenDraft,
             onDraftCreated = { refreshDrafts() },
+            highlighted = focusOutbox,
         )
 
         actionMessage?.let { message ->

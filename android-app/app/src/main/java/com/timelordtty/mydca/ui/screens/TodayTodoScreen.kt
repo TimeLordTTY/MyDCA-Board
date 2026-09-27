@@ -46,6 +46,7 @@ fun TodayTodoScreen(
     selectedCandidateId: String?,
     onOpenDraft: (Long) -> Unit,
     draftOutbox: DraftOutboxQueue? = null,
+    focusCandidates: Boolean = false,
 ) {
     var state by remember { mutableStateOf(TodayTodoUiState()) }
     val scope = rememberCoroutineScope()
@@ -82,6 +83,7 @@ fun TodayTodoScreen(
             selectedCandidateId = selectedCandidateId,
             onOpenDraft = onOpenDraft,
             draftOutbox = draftOutbox,
+            focusCandidates = focusCandidates,
         )
 
         when {
@@ -110,11 +112,15 @@ private fun PaymentCandidateSection(
     selectedCandidateId: String?,
     onOpenDraft: (Long) -> Unit,
     draftOutbox: DraftOutboxQueue?,
+    focusCandidates: Boolean,
 ) {
     val candidates by NotificationCandidateStore.candidates.collectAsState()
     val visible = candidates.filter { it.status != NotificationCandidateStatus.DISMISSED }
         .sortedByDescending { if (it.id == selectedCandidateId) Long.MAX_VALUE else it.postedAt }
     SectionCard("支付通知候选", "${visible.size} 条。候选只会在你手动确认后生成 DRAFT，不会自动 preview、confirm 或正式入账。") {
+        if (focusCandidates && visible.isNotEmpty()) {
+            StatusPill("已定位到待处理候选，请手动选择是否生成草稿")
+        }
         if (visible.isEmpty()) StatusPill("暂无候选")
         visible.forEach { candidate ->
             PaymentCandidateCard(candidate, repository, apiConfigError, onOpenDraft, draftOutbox)

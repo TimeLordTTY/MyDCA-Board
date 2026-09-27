@@ -16,4 +16,9 @@ object NotificationNavigationTarget {
     fun consume(candidateId: String) {
         if (mutableCandidateId.value == candidateId) mutableCandidateId.value = null
     }
+
+    /** 主动丢弃待处理的通知导航目标，避免用户切页后仍高亮旧候选。 */
+    fun clear() {
+        mutableCandidateId.value = null
+    }
 }

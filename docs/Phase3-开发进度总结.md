@@ -277,6 +277,31 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 本地 Debug APK：55,916,141 bytes，SHA-256 `6149D8FD47C8A4A1E9FA38726979341959892F344913884BC8860C3F4859C891`，APK 不提交到 Git。
 - CI 制品状态：本进程按指令不推送，工作流未触发，Run ID / Artifact ID / APK 文件名 / SHA-256 均为 NOT_PRODUCED；
   因此本轮不声称 APK 交付完成，需在真实推送后由工作流产出并回填。
+## Android v0.7.0 快速记账采集中心（2026-09-27）
+
+- 对应任务 `task-mydca-android-v07-quick-capture-hub-20260927`（owner 直接批准，L3，`allowed_paths` 仅 `android-app/**`、`docs/**`、
+  `.github/workflows/android-test-apk.yml`），详细说明见 `docs/mydca_android_v07_quick_capture_hub_20260927.md`。
+- 目标是把原本分散在草稿箱 / 今日待办 / 设置页的四条采集路径（手工文本、图片 OCR、支付通知候选、本地 Outbox）收拢为一个
+  “快速记账采集中心”，只改采集体验，不改任何后端账本语义。
+- 新增 `ui/QuickCaptureHub.kt` 纯 Kotlin helper：入口可见规则（主要页面可见、设置页隐藏）、四个入口的面板条目与数量徽标、
+  点击后的确定性路由决策（`QuickCaptureDecision`）、一次性定位信号（`QuickCaptureFocus`）与只读计数（`QuickCaptureCounts`）。
+- 已登录主 `Scaffold` 新增“记一笔”`ExtendedFloatingActionButton`，点击打开 `QuickCaptureSheet`（`ModalBottomSheet`）：
+  手工记一笔 / 图片识别复用既有 `OcrDraftScreen`；支付通知候选路由到今日待办候选区；待重试路由到草稿箱“本地待重试草稿”区，
+  两处均显示定位标记；空候选 / 空 Outbox 仍可打开并显示“暂无待处理”。面板不含任何解析 / 预览 / 正式确认按钮。
+- 返回体验收口：打开 / 关闭面板不改变当前页面；每次点击入口都会清空旧 `selectedDraftId` 与通知候选 `candidateId`；
+  主动切换底部导航时复位一次性定位与录入模式，并新增 `NotificationNavigationTarget.clear()` 丢弃待处理的通知导航目标；
+  未引入导航框架重构。
+- 隐私与计数：候选数取自本机脱敏候选 store（排除 `DISMISSED`），重试数取自加密本地 Outbox，均为本地 StateFlow，
+  无新增网络轮询、无新增权限、无新增明文落盘；面板文案不展示内部类名 / 枚举名。
+- 安全边界不变：快速入口与面板不调用 parse / draft / preview / confirm；手工与 OCR 仍需显式点击才解析、再显式点击才创建 DRAFT；
+  通知候选不会自动生成草稿；Outbox 只重试创建 DRAFT；草稿最终确认仍由 `DraftInboxScreen` 的 `DRAFT` + 当前 preview +
+  `confirmSupported=true` + 二次确认守门。
+- 版本收口：`versionName = 0.7.0`、`versionCode = 8`（`aapt2 dump badging` 实测 `versionCode='8' versionName='0.7.0'`）；
+  工作流制品名与文件名同步为 `mydca-android-v0.7.0-<sha>` / `MyDCA-Board-v0.7.0-<short-sha>.apk`，仍为一次性 debug 签名，APK 不提交到 Git。
+- 本轮验证：Android `testDebugUnitTest` 24 个测试类共 119 项通过（由 23 类 104 项增至 24 类 119 项，新增 15 项 `QuickCaptureHubTest`）、
+  `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过。
+- 本轮未推送：CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地 APK 哈希冒充 CI artifact。
+
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 仍未引入服务端 `draft_ledger_entry (source_type, source_ref)` 唯一约束：本轮 `allowed_paths` 仅含 `android-app/**` 与 `docs/**`，
@@ -284,3 +309,13 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 未实现常驻后台服务或系统级任务调度，重试只发生在 App 启动、前台恢复、进入草稿箱页面与用户显式操作时。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
 - v0.6.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / SHA-256）仍需在真实推送触发 `Android test APK` 工作流后回填；本轮未推送，未声称 APK 交付完成。
+
+## 后续待办（Android v0.7 快速记账采集中心）
+
+- 快速面板只做“定位 + 导航”，仍未实现真正的全局快捷方式（桌面小组件 / 通知栏快捷入口 / 分享菜单接入），
+  因此“两步内进入任一采集路径”目前依赖先打开 App。
+- 通知候选区与 Outbox 区的“定位”是路由 + 标记，不是滚动锚点；长列表下用户仍可能需要手动滚动。
+- 仍未把 `sourceRef` 唯一约束下推到数据库（本轮 `allowed_paths` 不含 `sql/**`），v0.6 的并发重放窗口保持不变。
+- v0.7.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）仍需在真实推送触发 `Android test APK`
+  工作流后回填；本轮未推送，未声称 CI APK 交付完成。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。

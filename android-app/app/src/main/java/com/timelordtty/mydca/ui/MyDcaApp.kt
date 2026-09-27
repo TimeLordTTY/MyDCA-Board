@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -43,6 +44,7 @@ import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
 import com.timelordtty.mydca.ui.screens.OcrEntryMode
 import com.timelordtty.mydca.ui.screens.OcrDraftScreen
+import com.timelordtty.mydca.ui.screens.QuickCaptureSheet
 import com.timelordtty.mydca.ui.state.AccountFundUsageFilter
 import com.timelordtty.mydca.notification.NotificationCandidateStore
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
@@ -170,6 +172,8 @@ private fun AuthenticatedApp(
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
         var accountFilterValue by rememberSaveable { mutableStateOf(AccountFundUsageFilter.ALL.name) }
         var draftEntryMode by remember { mutableStateOf<OcrEntryMode?>(null) }
+        var quickFocus by remember { mutableStateOf(QuickCaptureFocus.NONE) }
+        var isQuickCaptureOpen by rememberSaveable { mutableStateOf(false) }
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
@@ -190,7 +194,27 @@ private fun AuthenticatedApp(
         }
         val notificationTarget by NotificationNavigationTarget.candidateId.collectAsState()
         LaunchedEffect(notificationTarget) {
-            if (notificationTarget != null) currentRoute = AppRoute.TodayTodo
+            if (notificationTarget != null) {
+                currentRoute = AppRoute.TodayTodo
+                draftEntryMode = null
+                quickFocus = QuickCaptureFocus.NONE
+            }
+        }
+        val notificationCandidates by NotificationCandidateStore.candidates.collectAsState()
+        val outboxEntries by draftOutbox.entries.collectAsState()
+        val quickCaptureEntries = QuickCaptureHub.entries(
+            pendingCandidateCount = QuickCaptureCounts.pendingCandidates(notificationCandidates),
+            outboxCount = QuickCaptureCounts.outboxRetries(outboxEntries),
+        )
+
+        /** 快速面板只做导航：不经手解析、草稿创建、预览或确认。 */
+        fun startQuickCapture(action: QuickCaptureAction) {
+            val decision = QuickCaptureHub.decide(action)
+            if (decision.clearSelectedDraftId) selectedDraftId = null
+            if (decision.clearSelectedCandidateId) NotificationNavigationTarget.clear()
+            draftEntryMode = decision.entryMode
+            quickFocus = decision.focus
+            currentRoute = decision.route
         }
 
         Scaffold(
@@ -201,12 +225,24 @@ private fun AuthenticatedApp(
                     }
                 )
             },
+            floatingActionButton = {
+                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null)) {
+                    ExtendedFloatingActionButton(onClick = { isQuickCaptureOpen = true }) {
+                        Text("记一笔")
+                    }
+                }
+            },
             bottomBar = {
                 NavigationBar {
                     AppRoute.entries.forEach { route ->
                         NavigationBarItem(
                             selected = currentRoute == route,
-                            onClick = { currentRoute = route },
+                            onClick = {
+                                currentRoute = route
+                                draftEntryMode = null
+                                quickFocus = QuickCaptureHub.focusAfterManualNavigation()
+                                NotificationNavigationTarget.clear()
+                            },
                             label = { Text(route.navLabel) },
                             icon = { Text(route.navLabel.take(1)) },
                         )
@@ -232,8 +268,10 @@ private fun AuthenticatedApp(
                         onOpenDraft = { draftId ->
                             selectedDraftId = draftId
                             currentRoute = AppRoute.Drafts
+                            quickFocus = QuickCaptureFocus.NONE
                         },
                         draftOutbox = draftOutbox,
+                        focusCandidates = quickFocus.notificationCandidates,
                     )
                     AppRoute.Drafts -> {
                         val entryMode = draftEntryMode
@@ -260,6 +298,7 @@ private fun AuthenticatedApp(
                                 onOpenDraft = { draftId -> selectedDraftId = draftId },
                                 draftOutbox = draftOutbox,
                                 draftCreationGateway = aiAccountingRepository,
+                                focusOutbox = quickFocus.outbox,
                             )
                         }
                     }
@@ -278,5 +317,16 @@ private fun AuthenticatedApp(
                     )
                 }
             }
+        }
+
+        if (isQuickCaptureOpen) {
+            QuickCaptureSheet(
+                entries = quickCaptureEntries,
+                onSelect = { action ->
+                    isQuickCaptureOpen = false
+                    startQuickCapture(action)
+                },
+                onDismiss = { isQuickCaptureOpen = false },
+            )
         }
 }
