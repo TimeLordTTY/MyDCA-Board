@@ -1,5 +1,22 @@
 # Phase3 开发进度总结
 
+<!-- CURRENT-SNAPSHOT:START -->
+## 当前实现快照（2026-09-27）
+
+> 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
+
+- Android 当前版本：`0.7.0 / versionCode 8`，v0.7 全局“记一笔”快速采集中心已完成。
+- v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
+- v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
+- v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
+- 采集链继续严格停在 DRAFT：手工/OCR/通知候选/Outbox 均不会自动 preview、confirm 或正式入账。
+- 下一普通工程目标：**Android v0.8.0 外部分享快速采集**；数据库 migration 上线不与普通功能开发混在一起。
+
+### 已被后续版本完成的旧待办
+
+本文件早期章节中的“Hermes 文本记账 MVP”“Android 原生 App 草稿箱”“OCR”“通知监听”“真实登录”等曾经是后续待办，现均已完成。保留原文仅用于历史时间线，不再作为当前任务清单。
+<!-- CURRENT-SNAPSHOT:END -->
+
 ## 当前基线
 
 Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优先完成服务端草稿能力，让 Hermes、PC 端和后续 Android 原生 App 都能围绕同一套草稿 API 协作。

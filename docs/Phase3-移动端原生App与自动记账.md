@@ -1,5 +1,17 @@
 # Phase 3 开发进度总结（对话优先草稿闭环与移动端基础）
 
+<!-- CURRENT-SNAPSHOT:START -->
+## 当前实现快照（2026-09-27）
+
+本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
+
+已落地：原生 Android 0.7.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+
+安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
+
+下一普通移动端任务：**Android v0.8.0 外部分享快速采集**，把系统 Share Sheet 的文本/单图导入现有手工/OCR 流程，但不会自动解析或生成草稿。
+<!-- CURRENT-SNAPSHOT:END -->
+
 ## 阶段定位
 
 - Phase3 是在 Phase2 已完成 PC 端、Mobile H5、行情、指标、定时任务高优先级闭环之后插入的新阶段。

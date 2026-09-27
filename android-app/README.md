@@ -1,5 +1,20 @@
 # MyDCA Android App
 
+<!-- CURRENT-SNAPSHOT:START -->
+## 当前发布状态（2026-09-27）
+
+- 当前 Android：`versionName=0.7.0`、`versionCode=8`。
+- v0.7 快速采集中心 result commit：`6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`。
+- GitHub Actions `Android test APK` Run `36320197608` 已成功。
+- Artifact ID：`10931548073`。
+- APK：`MyDCA-Board-v0.7.0-6098a972.apk`。
+- CI APK SHA-256：`D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
+- v0.8 后端草稿强幂等已完成，但它是服务端可靠性里程碑，不代表 Android 已发布 0.8.0。
+- 下一 Android 普通工程目标：v0.8.0 系统分享快速采集。
+
+> 本文历史章节中“CI NOT_PRODUCED / 待回填”的 v0.6/v0.7 描述已被上面的真实 GitHub Actions 证据取代。
+<!-- CURRENT-SNAPSHOT:END -->
+
 MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待办、草稿查看、草稿预览和用户手动确认体验。
 
 ## 当前范围
