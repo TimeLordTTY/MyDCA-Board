@@ -1,5 +1,21 @@
 # 财富中枢系统 · 总体功能设计文档v1.2
 
+<!-- CURRENT-SNAPSHOT:START -->
+## 2026-09-27 实施状态覆盖说明
+
+本文件主要描述目标架构/长期设计，不再作为“当前完成度”的唯一事实源。当前代码与实施状态请先读取 `docs/CURRENT_DEVELOPMENT_STATE.md` 和 `docs/DOCUMENT_INDEX.md`。
+
+当前关键事实：
+- Phase3 `draft_ledger_entry` 已实际落地，不再是规划表。
+- Android 原生端已成为长期主移动端；Mobile H5 为历史兼容。
+- Android 当前为 0.7.0，已具备登录、草稿、手工/OCR/通知候选、加密 Outbox、全局快速采集中心。
+- v0.8 后端已增加 sourceRef 数据库强幂等与并发唯一冲突恢复；migration 尚未部署到任何数据库。
+- 所有 AI/OCR/通知/Outbox 路径仍只到 DRAFT；正式入账必须 preview + 用户二次确认。
+- 普通自动工程通过 AiCore 调度交付；生产数据库迁移、真实账本/交易不属于普通后台自动任务。
+
+因此本文后续出现“当前未实现”“下一步 Phase1”“draft_ledger_entry 规划新增”“Android 尚未接入”等历史措辞时，应按其原始设计时期理解，不得覆盖上述当前事实。
+<!-- CURRENT-SNAPSHOT:END -->
+
 ---
 
 ## 1. 系统总体概述
