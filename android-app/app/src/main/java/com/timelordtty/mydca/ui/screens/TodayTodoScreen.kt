@@ -29,6 +29,8 @@ import com.timelordtty.mydca.notification.NotificationCandidateStatus
 import com.timelordtty.mydca.notification.NotificationCandidateStore
 import com.timelordtty.mydca.notification.NotificationDraftInput
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
+import com.timelordtty.mydca.outbox.DraftOutboxOrigin
+import com.timelordtty.mydca.outbox.DraftOutboxQueue
 import com.timelordtty.mydca.ui.state.TodayTodoStateHolder
 import com.timelordtty.mydca.ui.state.TodayTodoUiState
 import java.text.SimpleDateFormat
@@ -43,6 +45,7 @@ fun TodayTodoScreen(
     apiConfigError: String?,
     selectedCandidateId: String?,
     onOpenDraft: (Long) -> Unit,
+    draftOutbox: DraftOutboxQueue? = null,
 ) {
     var state by remember { mutableStateOf(TodayTodoUiState()) }
     val scope = rememberCoroutineScope()
@@ -78,6 +81,7 @@ fun TodayTodoScreen(
             apiConfigError = apiConfigError,
             selectedCandidateId = selectedCandidateId,
             onOpenDraft = onOpenDraft,
+            draftOutbox = draftOutbox,
         )
 
         when {
@@ -105,6 +109,7 @@ private fun PaymentCandidateSection(
     apiConfigError: String?,
     selectedCandidateId: String?,
     onOpenDraft: (Long) -> Unit,
+    draftOutbox: DraftOutboxQueue?,
 ) {
     val candidates by NotificationCandidateStore.candidates.collectAsState()
     val visible = candidates.filter { it.status != NotificationCandidateStatus.DISMISSED }
@@ -112,7 +117,7 @@ private fun PaymentCandidateSection(
     SectionCard("支付通知候选", "${visible.size} 条。候选只会在你手动确认后生成 DRAFT，不会自动 preview、confirm 或正式入账。") {
         if (visible.isEmpty()) StatusPill("暂无候选")
         visible.forEach { candidate ->
-            PaymentCandidateCard(candidate, repository, apiConfigError, onOpenDraft)
+            PaymentCandidateCard(candidate, repository, apiConfigError, onOpenDraft, draftOutbox)
         }
     }
     LaunchedEffect(selectedCandidateId, visible) {
@@ -128,6 +133,7 @@ private fun PaymentCandidateCard(
     repository: AiAccountingRepository?,
     apiConfigError: String?,
     onOpenDraft: (Long) -> Unit,
+    draftOutbox: DraftOutboxQueue?,
 ) {
     val scope = rememberCoroutineScope()
     var confirm by remember(candidate.id) { mutableStateOf(false) }
@@ -161,7 +167,19 @@ private fun PaymentCandidateCard(
                     is NetworkResult.Success -> {
                         val intent = parsed.data.copy(sourceType = "PAYMENT_NOTIFICATION", sourceRef = candidate.fingerprint, rawInput = raw, amount = parsed.data.amount ?: candidate.amount?.toDoubleOrNull())
                         when (val result = api.draftFromIntent(intent)) {
-                            is NetworkResult.Failure -> message = "创建失败：${result.message}"
+                            is NetworkResult.Failure -> {
+                                val queued = draftOutbox?.enqueue(
+                                    intent = intent,
+                                    origin = DraftOutboxOrigin.PAYMENT_NOTIFICATION,
+                                    summary = NotificationDraftInput.summary(candidate),
+                                    failure = result,
+                                )
+                                message = if (queued != null) {
+                                    "创建失败：${result.message}。已进入本地待重试队列，只会重试创建 DRAFT，不会自动入账。"
+                                } else {
+                                    "创建失败：${result.message}"
+                                }
+                            }
                             is NetworkResult.Success -> {
                                 val draftId = result.data.draft.id
                                 NotificationCandidateStore.markDraftCreated(candidate.id, draftId)

@@ -3,6 +3,9 @@ package com.timelordtty.mydca.ui.state
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.AccountingIntentDto
 import com.timelordtty.mydca.ocr.OcrDraftGateway
+import com.timelordtty.mydca.outbox.DraftCreationGateway
+import com.timelordtty.mydca.outbox.DraftOutboxOrigin
+import com.timelordtty.mydca.outbox.DraftOutboxQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -139,7 +142,17 @@ class OcrDraftCoordinator {
         }
     }
 
-    suspend fun createDraft(gateway: OcrDraftGateway) {
+    /**
+     * 创建 DRAFT。
+     *
+     * 只有这一步失败才可能进入本地 outbox；解析失败不会走到这里。
+     * 入队复用同一份 intent（因此 sourceRef 稳定），重试仍只会调用“创建 DRAFT”，不会 preview 或 confirm。
+     */
+    suspend fun createDraft(
+        gateway: DraftCreationGateway,
+        outbox: DraftOutboxQueue? = null,
+        origin: DraftOutboxOrigin = DraftOutboxOrigin.OCR,
+    ) {
         val submission = synchronized(this) {
             val current = mutableState.value
             val intent = current.intent ?: return
@@ -148,13 +161,27 @@ class OcrDraftCoordinator {
             Pair(current.requestId ?: return, intent)
         }
         val result = gateway.createDraft(submission.second)
+        val queued = if (result is NetworkResult.Failure) {
+            outbox?.enqueue(
+                intent = submission.second,
+                origin = origin,
+                summary = submission.second.rawInput.orEmpty(),
+                failure = result,
+            )
+        } else {
+            null
+        }
         synchronized(this) {
             val current = mutableState.value
             if (current.requestId != submission.first || current.stage != OcrDraftStage.CreatingDraft) return
             mutableState.value = when (result) {
                 is NetworkResult.Failure -> current.copy(
                     stage = OcrDraftStage.IntentReady,
-                    message = "草稿创建失败，请稍后重试",
+                    message = if (queued != null) {
+                        "草稿创建失败：${result.message}。已进入本地待重试队列，只会重试创建 DRAFT，不会自动入账。"
+                    } else {
+                        "草稿创建失败：${result.message}"
+                    },
                 )
                 is NetworkResult.Success -> current.copy(
                     stage = OcrDraftStage.DraftCreated,

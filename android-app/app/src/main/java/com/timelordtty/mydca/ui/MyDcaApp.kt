@@ -21,6 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.timelordtty.mydca.auth.AuthSession
 import com.timelordtty.mydca.auth.AuthState
 import com.timelordtty.mydca.auth.KeystoreTokenStore
@@ -42,7 +44,10 @@ import com.timelordtty.mydca.ui.screens.LoginScreen
 import com.timelordtty.mydca.ui.screens.OcrEntryMode
 import com.timelordtty.mydca.ui.screens.OcrDraftScreen
 import com.timelordtty.mydca.ui.state.AccountFundUsageFilter
+import com.timelordtty.mydca.notification.NotificationCandidateStore
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
+import com.timelordtty.mydca.outbox.AndroidDraftOutbox
+import com.timelordtty.mydca.outbox.DraftOutboxOrigin
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -160,6 +165,7 @@ private fun AuthenticatedApp(
     onBaseUrlChange: (String) -> Unit,
     onLogout: () -> Unit,
 ) {
+        val context = LocalContext.current
         var currentRoute by rememberSaveable { mutableStateOf(AppRoute.TodayTodo) }
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
         var accountFilterValue by rememberSaveable { mutableStateOf(AccountFundUsageFilter.ALL.name) }
@@ -168,6 +174,20 @@ private fun AuthenticatedApp(
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
         val wealthRepository = remember(services.wealthHubApi) { WealthRepository(services.wealthHubApi) }
+        val outboxScope = rememberCoroutineScope()
+        val draftOutbox = remember(context) {
+            AndroidDraftOutbox.createQueue(context) { entry, draftId ->
+                if (entry.origin == DraftOutboxOrigin.PAYMENT_NOTIFICATION) {
+                    NotificationCandidateStore.markDraftCreated(entry.sourceRef, draftId)
+                }
+            }
+        }
+        LaunchedEffect(draftOutbox, aiAccountingRepository) {
+            draftOutbox.retryDueEntries(aiAccountingRepository)
+        }
+        LifecycleEventEffect(Lifecycle.Event.ON_START) {
+            outboxScope.launch { draftOutbox.retryDueEntries(aiAccountingRepository) }
+        }
         val notificationTarget by NotificationNavigationTarget.candidateId.collectAsState()
         LaunchedEffect(notificationTarget) {
             if (notificationTarget != null) currentRoute = AppRoute.TodayTodo
@@ -213,6 +233,7 @@ private fun AuthenticatedApp(
                             selectedDraftId = draftId
                             currentRoute = AppRoute.Drafts
                         },
+                        draftOutbox = draftOutbox,
                     )
                     AppRoute.Drafts -> {
                         val entryMode = draftEntryMode
@@ -225,6 +246,7 @@ private fun AuthenticatedApp(
                                     selectedDraftId = draftId
                                     draftEntryMode = null
                                 },
+                                draftOutbox = draftOutbox,
                             )
                         } else {
                             DraftInboxScreen(
@@ -235,6 +257,9 @@ private fun AuthenticatedApp(
                                 onDraftHandled = { selectedDraftId = null },
                                 onOpenImageOcr = { draftEntryMode = OcrEntryMode.Image },
                                 onOpenManualEntry = { draftEntryMode = OcrEntryMode.ManualText },
+                                onOpenDraft = { draftId -> selectedDraftId = draftId },
+                                draftOutbox = draftOutbox,
+                                draftCreationGateway = aiAccountingRepository,
                             )
                         }
                     }

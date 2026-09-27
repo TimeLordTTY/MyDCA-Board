@@ -239,8 +239,33 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 本轮服务端测试由 46 项增至 55 项，新增覆盖重复请求返回同一草稿、不同来源创建不同草稿、跨用户/家庭不互相命中、
   空 `sourceRef` 保持旧行为、已确认/已忽略来源重试不新建草稿、重放不触发 `QuickEntryService`。
 
+## Android 安全草稿 Outbox 与三入口恢复（2026-09-27，Android v0.6）
+
+- 对应任务 `task-mydca-v06-secure-outbox-20260926`，依赖服务端幂等前置 `task-mydca-v06-draft-idempotency-20260926`，
+  详细说明见 `docs/mydca_android_v06_secure_outbox_20260926.md`。
+- 新增 `com.timelordtty.mydca.outbox` 抽象：`DraftOutboxQueue` / `DraftOutboxStorage` / `EncryptedDraftOutboxStorage` /
+  `DraftOutboxCodec` / `DraftOutboxRetryPolicy` / `DraftOutboxErrorClassifier` / `DraftCreationGateway` / `AndroidDraftOutbox`。
+- Outbox 只承载“创建草稿”链路：唯一的网络依赖 `DraftCreationGateway` 只有 `createDraft`，类型上不存在
+  preview / confirm / ignore / QuickEntry / 正式账本入口，重试不可能越过人工确认边界。
+- 加密落盘：`core/security` 抽取 `SecretCipher` / `AesGcmSecretCipher` / `AndroidKeystoreAesKey` / `SecureKeyValueStore`，
+  `KeystoreTokenStore` 复用同一实现（别名与偏好键不变，已登录会话不丢失）；Outbox 使用独立密钥别名与独立偏好文件，
+  只写入密文与随机 IV，且字段白名单里不存在 Token、密码、Cookie、图片 / URI 或通知完整原文。
+- 三类入口统一 sourceRef 规则：手工文本与 OCR 使用每次采集生成的 `android-ocr-<requestId>`，通知候选使用 `fingerprint`，
+  同一次采集的重试始终复用同一 `sourceRef`；解析失败不入队，缺少稳定 `sourceRef` 不入队。
+- 错误分类：网络中断 / 超时 / 5xx 可重试（有限退避 30s/120s/600s/1800s，默认上限 5 次，用尽转 `EXHAUSTED`）；
+  401 / 403 转 `AUTH_PAUSED` 等待重新登录；其他 4xx 与未知异常转 `BLOCKED`，只展示原因供用户修改或丢弃，不自动循环重试。
+- 受控重试触发点：App 启动、从后台恢复（`ON_START`）、进入草稿箱页面、用户“立即重试”/“立即重试全部”/“丢弃”；
+  未引入常驻后台服务或系统级调度；批量重试单实例执行，与手动重试互斥。
+- 草稿箱新增“本地待重试草稿”区块：展示待重试数量、来源、创建时间、队列状态、重试次数、下次自动重试时间与最近失败原因，
+  默认只展示脱敏摘要；重试成功即出队，服务端返回 `DRAFT` 时提供“打开草稿”引导，返回既有 `CONFIRMED` / `IGNORED`
+  草稿时只展示状态、不发起任何确认动作。
+- 本轮 Android 测试由 68 项增至 102 项（22 个测试类，0 失败），新增覆盖加密往返、明文不落盘、sourceRef 稳定、
+  transient 入队、401 暂停、4xx 不自动重试、重试成功出队、既有草稿出队、重试不触达 preview / confirm、
+  进程重启恢复、退避与单实例；`assembleDebug` 与 `lintDebug` 通过（0 error，2 条既有 warning）。
+
 ## 后续待办（Android v0.6 可靠记账采集）
 
-- Android 本地失败重试队列 / outbox 仍未实现，本任务只完成其服务端前置能力，不计入本轮交付。
-- 尚未为 `draft_ledger_entry` 引入 `(source_type, source_ref)` 唯一约束；并发重放的极窄竞争窗口留待 outbox 落地时一并收敛。
+- 仍未引入服务端 `draft_ledger_entry (source_type, source_ref)` 唯一约束：本轮 `allowed_paths` 仅含 `android-app/**` 与 `docs/**`，
+  不包含 `sql/**`，并发重放的极窄竞争窗口仍然存在；客户端已按 `sourceType + sourceRef` 去重并在命中既有草稿时直接出队。
+- 未实现常驻后台服务或系统级任务调度，重试只发生在 App 启动、前台恢复、进入草稿箱页面与用户显式操作时。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。

@@ -27,6 +27,8 @@ import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
+import com.timelordtty.mydca.outbox.DraftCreationGateway
+import com.timelordtty.mydca.outbox.DraftOutboxQueue
 import com.timelordtty.mydca.ui.state.AsyncState
 import com.timelordtty.mydca.ui.state.DraftAccountSelection
 import com.timelordtty.mydca.ui.state.DraftEditForm
@@ -43,6 +45,9 @@ fun DraftInboxScreen(
     onDraftHandled: () -> Unit,
     onOpenImageOcr: () -> Unit,
     onOpenManualEntry: () -> Unit,
+    onOpenDraft: (Long) -> Unit,
+    draftOutbox: DraftOutboxQueue? = null,
+    draftCreationGateway: DraftCreationGateway? = null,
 ) {
     var draftsState by remember { mutableStateOf<AsyncState<List<DraftLedgerEntryDto>>>(AsyncState.Loading) }
     var listError by remember { mutableStateOf<String?>(null) }
@@ -309,6 +314,13 @@ fun DraftInboxScreen(
             loadDraftDetail(selectedDraftId)
         }
     }
+    LaunchedEffect(draftOutbox, draftCreationGateway) {
+        val outbox = draftOutbox ?: return@LaunchedEffect
+        val gateway = draftCreationGateway ?: return@LaunchedEffect
+        if (outbox.retryDueEntries(gateway) > 0) {
+            refreshDrafts(null)
+        }
+    }
     LaunchedEffect(wealthRepository) {
         if (wealthRepository != null) {
             when (val result = wealthRepository.getAccounts(1, 100)) {
@@ -343,6 +355,13 @@ fun DraftInboxScreen(
                 OutlinedButton(onClick = onOpenImageOcr) { Text("选择图片开始识别") }
             }
         }
+
+        DraftOutboxSection(
+            outbox = draftOutbox,
+            gateway = draftCreationGateway,
+            onOpenDraft = onOpenDraft,
+            onDraftCreated = { refreshDrafts() },
+        )
 
         actionMessage?.let { message ->
             SectionCard(title = "操作状态", description = message)

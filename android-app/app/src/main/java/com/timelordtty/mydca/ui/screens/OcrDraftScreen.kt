@@ -26,6 +26,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.ocr.MlKitImageTextRecognizer
+import com.timelordtty.mydca.outbox.DraftOutboxOrigin
+import com.timelordtty.mydca.outbox.DraftOutboxQueue
 import com.timelordtty.mydca.ui.state.OcrDraftCoordinator
 import com.timelordtty.mydca.ui.state.OcrDraftStage
 import java.util.UUID
@@ -41,6 +43,7 @@ fun OcrDraftScreen(
     onClose: () -> Unit,
     onOpenDraft: (Long) -> Unit,
     entryMode: OcrEntryMode = OcrEntryMode.Image,
+    draftOutbox: DraftOutboxQueue? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -169,7 +172,10 @@ fun OcrDraftScreen(
                 }
                 Button(
                     enabled = state.stage == OcrDraftStage.IntentReady,
-                    onClick = { scope.launch { coordinator.createDraft(repository) } },
+                    onClick = {
+                        val origin = if (manualEntry) DraftOutboxOrigin.MANUAL_TEXT else DraftOutboxOrigin.OCR
+                        scope.launch { coordinator.createDraft(repository, draftOutbox, origin) }
+                    },
                 ) {
                     Text(if (state.stage == OcrDraftStage.CreatingDraft) "创建中" else "确认生成 DRAFT")
                 }
