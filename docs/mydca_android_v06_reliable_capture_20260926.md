@@ -68,14 +68,19 @@
 - 该产物为本地 `assembleDebug` 输出；APK 含打包时间戳，重建后字节与哈希可能变化，仅作为“本地构建成功”的证据。
 - APK 不进入源码仓库（`.gitignore` 已忽略 `*.apk` 与 `build/`）。
 
-### GitHub Actions 制品状态
+### GitHub Actions 最终制品证据
+
+任务进程结束后，auto-executor 已将结果提交推送到 `v2`，随后 GitHub Actions 真实触发并成功：
 
 - Workflow：`Android test APK`
-- 本进程产生的 Run ID：NOT_PRODUCED（工作进程按指令不推送，工作流未在本进程内触发）
-- 本进程产生的 Artifact ID / 名称：NOT_PRODUCED（同上）
-- APK 文件名 / SHA-256（CI 制品）：NOT_PRODUCED（同上）
+- Run ID：`36306899948`
+- Head SHA：`a732c3bc569959a4f53a6448d8c7e6ce3dcc63ee`
+- Artifact ID：`10928005959`
+- Artifact：`mydca-android-v0.6.0-a732c3bc569959a4f53a6448d8c7e6ce3dcc63ee`
+- APK：`MyDCA-Board-v0.6.0-a732c3bc.apk`
+- CI APK SHA-256：`2298E56D4B9DF18218CAD17A1CCFA3EA094592364F2AFA2FD5E5582B103BB0CD`
 
-因此本次执行**不声称 APK 交付完成**：CI 制品的 Run ID、Artifact ID、文件名与 SHA-256 必须在推送真实发生后由工作流产出并回填；工作流在 CI 用一次性 debug 密钥重新打包，CI 产物的 SHA-256 与本报告的本地产物不会相同，两者只能分别作为独立证据。
+因此早期“NOT_PRODUCED”仅描述执行进程尚未 push 的瞬间状态，不再是最终交付状态。
 
 ## 5. 安全边界与明确未实现
 
@@ -97,4 +102,4 @@
 
 ## 6. 仓库编译钩子
 
-按仓库 `AGENTS.md` 要求执行编译钩子 `scripts/post-task-compile-hook.ps1`；第 1 轮即通过：后端 `mvn -DskipTests package` BUILD SUCCESS，前端 `npm run build`（vite）构建成功，未触发自动修复轮。构建日志见 `.codex-hooks/logs/latest-build.log`；钩子的成功蜂鸣与系统通知行为保持不变，未修改钩子脚本。
+按仓库 `AGENTS.md` 要求执行编译钩子 `scripts/post-task-compile-hook.ps1`；第 1 轮即通过：后端 `mvn -DskipTests package` BUILD SUCCESS，前端 `npm run build`（vite）构建成功，未触发自动修复轮。构建日志见 `.codex-hooks/logs/latest-build.log`。后续已按主人要求移除成功蜂鸣与 Windows Toast/Popup；当前成功构建只写 stdout/log，不再打扰桌面。

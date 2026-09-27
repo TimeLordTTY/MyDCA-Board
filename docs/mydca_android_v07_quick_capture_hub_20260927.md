@@ -8,7 +8,7 @@
 本任务范围：只优化 Android 端采集体验，把原本分散在草稿箱、今日待办和设置页的四条采集路径收拢为
 一个“快速记账采集中心”，并发布 v0.7.0。**不改变任何后端账本语义**，不新增自动 preview / confirm / 正式入账。
 
-本轮不推送：改动只提交到本地 `v2`，由 owner 批准的 Codex auto-executor 在进程退出后校验 `allowed_paths` 再推送。
+执行阶段先本地提交；最终已由 approved auto-executor 校验 `allowed_paths` 后推送到 `v2`，并完成 AiCore/Hermes verified WeCom 交付。
 
 ## 1. 全局“记一笔”入口
 
@@ -113,8 +113,10 @@
 | 权限核对 | `aapt2 dump badging app-debug.apk` | 未新增权限；仍只有清单声明的 `INTERNET` / `POST_NOTIFICATIONS`（其余为依赖库带入） |
 
 - 本地 Debug APK：大小 55,825,296 bytes，SHA-256 `AAE92D1D5C867D89AFC5499237FFA72D3940A7C0BB1769B2F9CE77D6097F4DA0`；APK 不提交到 Git。
-- CI 制品状态：本进程按指令不推送，工作流未触发，Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 均为 `NOT_PRODUCED`；
-  因此本轮不声称 CI APK 交付完成，需在真实推送后由 `Android test APK` 工作流产出并回填，不得用本地 APK 哈希冒充 CI artifact。
+- auto-executor 后续已将 result commit `6098a9728f23dc6e0b6bbd5b7d0460c5630f4252` 推送到 `v2`，GitHub Actions `Android test APK` 已真实成功：
+  Run ID `36320197608`，Artifact ID `10931548073`，Artifact `mydca-android-v0.7.0-6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`，
+  APK `MyDCA-Board-v0.7.0-6098a972.apk`，CI APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
+  早期 `NOT_PRODUCED` 只是执行进程尚未 push 时的中间状态，不是最终交付状态。
 
 ## 9. 明确未做
 
