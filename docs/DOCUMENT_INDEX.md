@@ -1,0 +1,31 @@
+# 财富中枢文档索引与事实源优先级
+
+**作者**：ChatGPT  
+**更新时间**：2026-09-27 22:03 +08:00
+
+## 读取顺序
+
+1. `AGENTS.md`、`AGENT.MD`：仓库执行规则与验证要求。
+2. `docs/CURRENT_DEVELOPMENT_STATE.md`：当前版本、已完成能力、安全边界、真实待办。
+3. `docs/Phase3-开发进度总结.md`：Phase3 时间线与能力演进。
+4. `docs/Phase3-移动端原生App与自动记账.md`：移动端/草稿闭环架构。
+5. 当前任务对应专项文档。
+6. `docs/财富中枢系统完整设计方案.md`、`docs/wealth_hub_design_full_v1.2.md`、`docs/开发实施指南.md`：目标架构与长期计划。
+
+## 冲突处理
+
+**代码/测试/迁移脚本 > CURRENT_DEVELOPMENT_STATE > Phase3 当前总结 > 专项文档 > 长期设计文档 > 历史 Phase1/Phase2 记录**。
+
+版本专项文档记录当时任务事实；其历史“下一步/未完成”若已被后续任务完成，不得覆盖当前状态。
+
+任何“当前处于初始化阶段”“Android 未接真实登录/OCR/通知监听”“draft_ledger_entry 尚未落地”等旧表述都只能按历史上下文理解。
+
+## 当前关键文档
+
+- 当前状态：`docs/CURRENT_DEVELOPMENT_STATE.md`
+- Android：`android-app/README.md`
+- 后端：`backend/README.md`
+- 数据库增量：`sql/updatesql/README.md`
+- v0.7：`docs/mydca_android_v07_quick_capture_hub_20260927.md`
+- v0.8：`docs/mydca_v08_draft_strong_idempotency_20260927.md`
+- 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。
