@@ -173,7 +173,14 @@ ALTER TABLE draft_ledger_entry
 - 不把 `sourceRef` 扩展为包含敏感完整通知原文（通知来源仍只用脱敏指纹）；
 - 不新增 Android 后台常驻重试，不改变 v0.6 有限退避策略。
 
-## 十一、提交与推送
+## 十一、最终交付状态
 
-本轮执行约束为“提交但不推送”：改动只提交到本地 `v2`，
-由 owner 批准的 Codex auto-executor 在进程退出后校验改动路径落在 `allowed_paths` 内再推送。
+结果提交已由 approved auto-executor 推送到 `MyDCA-Board@v2`：
+
+- result commit：`ea8b3618e25c648127c62750c307ae8af976dd56`
+- AiCore run：`20260927-211513-approved-codex-executor`
+- tests：passed
+- Hermes：`requested_channel=wecom`、`actual_channel=wecom`、`response_verified=true`、`fallback_reason=none`
+- Delivery Manifest：`completed / verified_wecom_receipt`
+
+企业微信完成消息正文生成时可能仍显示 `awaiting_wecom_verification`；这是发送前状态。最终事实以上述 Delivery Manifest 与 receipt 为准。
