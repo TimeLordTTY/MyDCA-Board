@@ -246,4 +246,34 @@ class AiAccountingServiceTest {
         verify(draftLedgerEntryService).createDraft(eq(10L), eq(20L), captor.capture());
         assertEquals("APP_FORM", captor.getValue().getSourceType());
     }
+
+    @Test
+    void draftFromIntentReplayReturnsExistingDraftAndKeepsSourceKeyStable() {
+        AccountingIntentDTO intent = new AccountingIntentDTO();
+        intent.setSourceType("PAYMENT_NOTIFICATION");
+        intent.setSourceRef("candidate-fingerprint-1");
+        intent.setRawInput("微信支付 32.50 元");
+        intent.setTxnType("EXPENSE");
+        intent.setAmount(new BigDecimal("32.50"));
+
+        DraftLedgerEntryDTO existing = new DraftLedgerEntryDTO();
+        existing.setId(77L);
+        existing.setStatus("CONFIRMED");
+        existing.setSourceType("PAYMENT_NOTIFICATION");
+        existing.setSourceRef("candidate-fingerprint-1");
+        when(draftLedgerEntryService.createDraft(eq(10L), eq(20L), org.mockito.ArgumentMatchers.any(CreateDraftRequest.class)))
+                .thenReturn(existing);
+
+        DraftFromIntentRequest request = new DraftFromIntentRequest();
+        request.setIntent(intent);
+        DraftFromIntentResponse response = service.draftFromIntent(10L, 20L, request);
+
+        assertEquals(77L, response.getDraft().getId());
+        assertEquals("CONFIRMED", response.getDraft().getStatus());
+
+        ArgumentCaptor<CreateDraftRequest> captor = ArgumentCaptor.forClass(CreateDraftRequest.class);
+        verify(draftLedgerEntryService).createDraft(eq(10L), eq(20L), captor.capture());
+        assertEquals("PAYMENT_NOTIFICATION", captor.getValue().getSourceType());
+        assertEquals("candidate-fingerprint-1", captor.getValue().getSourceRef());
+    }
 }

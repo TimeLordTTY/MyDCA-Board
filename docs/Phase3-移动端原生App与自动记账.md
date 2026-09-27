@@ -389,6 +389,16 @@ CREATE TABLE `draft_ledger_entry` (
 - 重复请求返回已有草稿或已有正式流水摘要。
 - 对于确认直落账，幂等记录可落在正式流水扩展字段、幂等表或业务侧查询逻辑中；无论采用哪种方式，都必须保证不会重复写入分录。
 
+### 当前已实现（Android v0.6 草稿创建幂等基础）
+
+- 现有 `draft_ledger_entry` 表已具备 `source_type` + `source_ref`，v0.6 直接把两者组合作为 DRAFT 创建的幂等键，
+  未新增 `external_ref` / `dedup_key` 列，也未新增唯一约束。
+- `POST /api/v2/ai/accounting/draft-from-intent` 对相同 `source_type + source_ref` 的重复请求返回既有草稿，
+  无论草稿处于 `DRAFT`、`CONFIRMED` 还是 `IGNORED`，都不会因重试再创建第二条。
+- `source_ref` 为空时保留原有非幂等行为，不做模糊去重；不使用金额、备注等弱条件猜重。
+- 上述能力只是本地失败重试队列 / outbox 的前置条件，不代表 outbox 已实现；`dedup_key` 弱幂等与
+  批量确认幂等仍为后续待办。
+
 ### 批量确认幂等
 
 - 已 `CONFIRMED` 的草稿再次确认，应返回 `duplicate` / `already_confirmed`，不重复生成正式流水。

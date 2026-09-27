@@ -52,6 +52,16 @@
           AND <include refid="VisibleCondition"/>
     </select>
 
+    <!-- 幂等重放查询：按当前用户/家庭可见性 + source_type + source_ref 命中既有草稿，不限制状态。 -->
+    <select id="selectVisibleBySource" resultMap="BaseResultMap">
+        SELECT * FROM draft_ledger_entry
+        WHERE <include refid="VisibleCondition"/>
+          AND source_type = #{sourceType}
+          AND source_ref = #{sourceRef}
+        ORDER BY id ASC
+        LIMIT 1
+    </select>
+
     <select id="selectVisibleByIdForUpdate" resultMap="BaseResultMap">
         SELECT * FROM draft_ledger_entry
         WHERE id = #{id}

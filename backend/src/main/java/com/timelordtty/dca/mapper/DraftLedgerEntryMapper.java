@@ -22,6 +22,17 @@ public interface DraftLedgerEntryMapper {
     DraftLedgerEntry selectVisibleById(@Param("id") Long id, @Param("userId") Long userId, @Param("familyId") Long familyId);
 
     /**
+     * 按当前用户或家庭可见性 + 来源标识查询既有草稿，用于草稿创建幂等重放。
+     *
+     * <p>该查询不限制草稿状态：DRAFT、CONFIRMED、IGNORED 都可作为重放目标，避免同一次采集尝试因重试
+     * 再创建第二条草稿。查询条件始终带调用者 user/family 边界，不能跨用户、跨家庭命中他人草稿。</p>
+     */
+    DraftLedgerEntry selectVisibleBySource(@Param("userId") Long userId,
+                                           @Param("familyId") Long familyId,
+                                           @Param("sourceType") String sourceType,
+                                           @Param("sourceRef") String sourceRef);
+
+    /**
      * 按当前用户或家庭权限查询草稿详情并加行锁，用于确认时防止重复入账。
      */
     DraftLedgerEntry selectVisibleByIdForUpdate(@Param("id") Long id, @Param("userId") Long userId, @Param("familyId") Long familyId);

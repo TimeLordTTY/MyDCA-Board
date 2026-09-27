@@ -224,3 +224,23 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 来源类型复用后端已支持的 `APP_FORM`，未修改数据库结构或新增不兼容枚举；创建后不自动 preview、不自动 confirm。
 - 已通过 36 项 Android JVM 单元测试、`assembleDebug` 和 `lintDebug`；新 debug APK SHA-256 为 B1DBD06EEC2CB95DBE5ABE5BAF60EB8C1D47117CF9DA4170A754941B7545B2C0。
 - 真实设备图片选择、中文支付截图准确率和厂商 URI 兼容性仍需手工验证；真实大模型、自动入账和自动交易继续不在本阶段范围内。
+
+## 草稿创建幂等基础（2026-09-27，Android v0.6 前置）
+
+- 为 Android v0.6“可靠记账采集”补齐服务端草稿创建可安全重放的前置能力，对应任务 `task-mydca-v06-draft-idempotency-20260926`，
+  详细说明见 `docs/mydca_android_v06_draft_idempotency_20260926.md`。
+- `DraftLedgerEntryMapper` 新增 `selectVisibleBySource`：按当前用户/家庭可见性 + `source_type` + `source_ref` 查询既有草稿，
+  不限制草稿状态；未新增数据库 schema，也未新增唯一约束，复用既有 `idx_draft_ledger_source` 索引。
+- `DraftLedgerEntryService.createDraft` 在插入前先做幂等查找：`sourceRef` 非空且命中时直接返回既有草稿（`DRAFT` / `CONFIRMED` / `IGNORED` 均可），
+  不再插入新行；`sourceRef` 为空时保持原有非幂等行为，不按金额或备注做模糊去重。
+- `draft-from-intent` 与 `POST /api/v2/drafts` 共用同一 `createDraft` 入口，因此两条创建路径遵循同一套重放语义；重放路径不会调用 `QuickEntryService`。
+- 已明确 Android 三类来源的 `sourceRef` 约定：手工文本与 OCR 使用每次输入/选图生成的 `android-ocr-<requestId>`，
+  通知候选使用 `fingerprint`，同一次采集尝试的重试沿用同一 `sourceRef`。
+- 本轮服务端测试由 46 项增至 55 项，新增覆盖重复请求返回同一草稿、不同来源创建不同草稿、跨用户/家庭不互相命中、
+  空 `sourceRef` 保持旧行为、已确认/已忽略来源重试不新建草稿、重放不触发 `QuickEntryService`。
+
+## 后续待办（Android v0.6 可靠记账采集）
+
+- Android 本地失败重试队列 / outbox 仍未实现，本任务只完成其服务端前置能力，不计入本轮交付。
+- 尚未为 `draft_ledger_entry` 引入 `(source_type, source_ref)` 唯一约束；并发重放的极窄竞争窗口留待 outbox 落地时一并收敛。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。

@@ -51,19 +51,44 @@ public class DraftLedgerEntryService {
 
     /**
      * 创建草稿流水候选记录，初始状态为 DRAFT，不会触发正式账本入账。
+     *
+     * <p>当 sourceRef 非空时按幂等语义重放：同一用户对相同 sourceType + sourceRef 的重复请求直接返回既有草稿，
+     * 无论它仍是 DRAFT，还是已经 CONFIRMED / IGNORED，都不再插入第二条，让客户端据草稿状态决定下一步。
+     * sourceRef 为空时保持原有非幂等行为，不按金额、备注等弱条件做模糊去重。</p>
      */
     public DraftLedgerEntryDTO createDraft(Long userId, Long familyId, CreateDraftRequest request) {
+        String sourceType = defaultIfBlank(request.getSourceType(), "manual");
+        String sourceRef = request.getSourceRef();
+
+        DraftLedgerEntry replay = findReplayableDraft(userId, familyId, sourceType, sourceRef);
+        if (replay != null) {
+            return DraftLedgerEntryDTO.fromModel(replay);
+        }
+
         DraftLedgerEntry draft = new DraftLedgerEntry();
         draft.setOwnerUserId(userId);
         draft.setOwnerFamilyId(familyId);
-        draft.setSourceType(defaultIfBlank(request.getSourceType(), "manual"));
-        draft.setSourceRef(request.getSourceRef());
+        draft.setSourceType(sourceType);
+        draft.setSourceRef(sourceRef);
         draft.setRawInput(request.getRawInput());
         draft.setParsedPayloadJson(request.getParsedPayloadJson());
         draft.setConfidence(request.getConfidence());
         draft.setMissingFieldsJson(request.getMissingFieldsJson());
         draftLedgerEntryMapper.insert(draft);
         return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draft.getId()));
+    }
+
+    /**
+     * 按当前用户/家庭可见性和 sourceType + sourceRef 查找可重放的既有草稿。
+     *
+     * <p>只有非空 sourceRef 才参与幂等匹配，避免把没有来源标识的草稿错误合并；匹配不限制草稿状态，
+     * 保证已确认或已忽略的来源重试也不会再建第二条。查询始终带调用者 user/family 边界，不能命中他人不可见草稿。</p>
+     */
+    private DraftLedgerEntry findReplayableDraft(Long userId, Long familyId, String sourceType, String sourceRef) {
+        if (sourceRef == null || sourceRef.isBlank()) {
+            return null;
+        }
+        return draftLedgerEntryMapper.selectVisibleBySource(userId, familyId, sourceType, sourceRef);
     }
 
     /**

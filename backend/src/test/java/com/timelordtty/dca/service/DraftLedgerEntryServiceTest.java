@@ -1,16 +1,21 @@
 package com.timelordtty.dca.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.timelordtty.dca.dto.CreateDraftRequest;
+import com.timelordtty.dca.dto.DraftLedgerEntryDTO;
 import com.timelordtty.dca.dto.DraftPreviewDTO;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
 import com.timelordtty.dca.mapper.AccountMapper;
@@ -19,6 +24,8 @@ import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.DraftLedgerEntry;
 import com.timelordtty.dca.model.LedgerTxn;
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -330,6 +337,176 @@ class DraftLedgerEntryServiceTest {
         verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
         verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
         verify(mapper, never()).markConfirmed(any(), any(), any());
+    }
+
+    // ==== 草稿创建幂等重放（v0.6 可靠采集前置能力） ====
+
+    @Test
+    void createDraftReplayReturnsSameDraftIdForSameUserSource() {
+        enableStatefulIdempotencyStore();
+
+        DraftLedgerEntryDTO first = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", "hermes-msg-1"));
+        DraftLedgerEntryDTO replay = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", "hermes-msg-1"));
+
+        assertEquals(first.getId(), replay.getId());
+        assertEquals("DRAFT", replay.getStatus());
+        verify(statefulMapper, times(1)).insert(any());
+        verifyNoInteractions(statefulQuickEntryService);
+    }
+
+    @Test
+    void createDraftWithDifferentSourceRefCreatesSecondDraft() {
+        enableStatefulIdempotencyStore();
+
+        DraftLedgerEntryDTO first = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", "hermes-msg-1"));
+        DraftLedgerEntryDTO second = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", "hermes-msg-2"));
+
+        assertNotEquals(first.getId(), second.getId());
+        verify(statefulMapper, times(2)).insert(any());
+    }
+
+    @Test
+    void createDraftDoesNotReuseDraftAcrossUserAndFamily() {
+        enableStatefulIdempotencyStore();
+
+        DraftLedgerEntryDTO mine = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", "shared-ref"));
+        DraftLedgerEntryDTO others = statefulService.createDraft(11L, 21L, createRequest("HERMES_TEXT", "shared-ref"));
+
+        assertNotEquals(mine.getId(), others.getId());
+        verify(statefulMapper).selectVisibleBySource(10L, 20L, "HERMES_TEXT", "shared-ref");
+        verify(statefulMapper).selectVisibleBySource(11L, 21L, "HERMES_TEXT", "shared-ref");
+        verify(statefulMapper, times(2)).insert(any());
+    }
+
+    @Test
+    void createDraftWithoutSourceRefStaysNonIdempotent() {
+        enableStatefulIdempotencyStore();
+
+        DraftLedgerEntryDTO first = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", null));
+        DraftLedgerEntryDTO second = statefulService.createDraft(10L, 20L, createRequest("HERMES_TEXT", "   "));
+
+        assertNotEquals(first.getId(), second.getId());
+        verify(statefulMapper, never()).selectVisibleBySource(any(), any(), any(), any());
+        verify(statefulMapper, times(2)).insert(any());
+    }
+
+    @Test
+    void createDraftReplaysConfirmedDraftWithoutInsertingNewRow() {
+        DraftLedgerEntry existing = draft("CONFIRMED");
+        existing.setSourceType("HERMES_TEXT");
+        existing.setSourceRef("hermes-msg-9");
+        when(mapper.selectVisibleBySource(10L, 20L, "HERMES_TEXT", "hermes-msg-9")).thenReturn(existing);
+
+        DraftLedgerEntryDTO replayed = service.createDraft(10L, 20L, createRequest("HERMES_TEXT", "hermes-msg-9"));
+
+        assertEquals(1L, replayed.getId());
+        assertEquals("CONFIRMED", replayed.getStatus());
+        verify(mapper, never()).insert(any());
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void createDraftReplaysIgnoredDraftWithoutInsertingNewRow() {
+        DraftLedgerEntry existing = draft("IGNORED");
+        existing.setSourceType("PAYMENT_NOTIFICATION");
+        existing.setSourceRef("candidate-fingerprint-1");
+        when(mapper.selectVisibleBySource(10L, 20L, "PAYMENT_NOTIFICATION", "candidate-fingerprint-1")).thenReturn(existing);
+
+        DraftLedgerEntryDTO replayed = service.createDraft(10L, 20L, createRequest("PAYMENT_NOTIFICATION", "candidate-fingerprint-1"));
+
+        assertEquals(1L, replayed.getId());
+        assertEquals("IGNORED", replayed.getStatus());
+        verify(mapper, never()).insert(any());
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void createDraftDefaultsBlankSourceTypeToManualForIdempotencyKey() {
+        DraftLedgerEntry existing = draft("DRAFT");
+        existing.setSourceType("manual");
+        existing.setSourceRef("ref-manual");
+        when(mapper.selectVisibleBySource(10L, 20L, "manual", "ref-manual")).thenReturn(existing);
+
+        DraftLedgerEntryDTO replayed = service.createDraft(10L, 20L, createRequest(null, "ref-manual"));
+
+        assertEquals(1L, replayed.getId());
+        verify(mapper, never()).insert(any());
+    }
+
+    @Test
+    void createDraftInsertsNewRowAndDefaultsSourceTypeWhenNoMatch() {
+        when(mapper.selectVisibleBySource(10L, 20L, "manual", "ref-new")).thenReturn(null);
+        when(mapper.insert(any())).thenAnswer(invocation -> {
+            DraftLedgerEntry inserted = invocation.getArgument(0);
+            assertEquals("manual", inserted.getSourceType());
+            inserted.setId(5L);
+            return 1;
+        });
+        DraftLedgerEntry persisted = draft("DRAFT");
+        persisted.setId(5L);
+        when(mapper.selectVisibleById(5L, 10L, 20L)).thenReturn(persisted);
+
+        DraftLedgerEntryDTO created = service.createDraft(10L, 20L, createRequest(null, "ref-new"));
+
+        assertEquals(5L, created.getId());
+        verify(mapper).selectVisibleBySource(10L, 20L, "manual", "ref-new");
+        verify(mapper).insert(any());
+        verifyNoInteractions(quickEntryService);
+    }
+
+    private DraftLedgerEntryMapper statefulMapper;
+    private DraftLedgerEntryService statefulService;
+    private QuickEntryService statefulQuickEntryService;
+
+    /**
+     * 装配一个内存版草稿 Mapper，让幂等重放测试能观察真实发生的插入次数，而不是只看 mock 调用。
+     * 查找条件与 DraftLedgerEntryMapper.xml 的 VisibleCondition 一致：owner_user_id 或 owner_family_id 可见。
+     */
+    private void enableStatefulIdempotencyStore() {
+        List<DraftLedgerEntry> store = new ArrayList<>();
+        statefulMapper = mock(DraftLedgerEntryMapper.class);
+        statefulQuickEntryService = mock(QuickEntryService.class);
+        when(statefulMapper.selectVisibleBySource(any(), any(), any(), any()))
+                .thenAnswer(invocation -> visibleBySource(store, invocation.getArgument(0), invocation.getArgument(1),
+                        invocation.getArgument(2), invocation.getArgument(3)));
+        when(statefulMapper.insert(any())).thenAnswer(invocation -> {
+            DraftLedgerEntry inserted = invocation.getArgument(0);
+            inserted.setId((long) (store.size() + 1));
+            inserted.setStatus("DRAFT");
+            store.add(inserted);
+            return 1;
+        });
+        when(statefulMapper.selectVisibleById(any(), any(), any()))
+                .thenAnswer(invocation -> visibleById(store, invocation.getArgument(0)));
+        statefulService = new DraftLedgerEntryService(statefulMapper, mock(AccountMapper.class), statefulQuickEntryService, new ObjectMapper());
+    }
+
+    private DraftLedgerEntry visibleBySource(List<DraftLedgerEntry> store, Long userId, Long familyId,
+                                             String sourceType, String sourceRef) {
+        if (sourceRef == null || sourceRef.isBlank()) {
+            return null;
+        }
+        return store.stream()
+                .filter(entry -> sourceType.equals(entry.getSourceType()) && sourceRef.equals(entry.getSourceRef()))
+                .filter(entry -> entry.getOwnerUserId().equals(userId)
+                        || (familyId != null && familyId.equals(entry.getOwnerFamilyId())))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private DraftLedgerEntry visibleById(List<DraftLedgerEntry> store, Long id) {
+        return store.stream().filter(entry -> entry.getId().equals(id)).findFirst().orElse(null);
+    }
+
+    private CreateDraftRequest createRequest(String sourceType, String sourceRef) {
+        CreateDraftRequest request = new CreateDraftRequest();
+        request.setSourceType(sourceType);
+        request.setSourceRef(sourceRef);
+        request.setRawInput("午饭花了32.5，用余额宝生活费");
+        request.setParsedPayloadJson("{\"txnType\":\"EXPENSE\",\"amount\":32.5}");
+        request.setConfidence(new BigDecimal("0.70"));
+        request.setMissingFieldsJson("[\"accountId\"]");
+        return request;
     }
 
     private DraftLedgerEntry draft(String status) {
