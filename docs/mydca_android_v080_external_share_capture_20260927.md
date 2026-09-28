@@ -126,9 +126,11 @@ parse 不自动 draft；draft 不自动 preview；任何路径不自动 confirm 
 
 - 本地 Debug APK：55,800,680 bytes，SHA-256 `E5E6737C11C305BFF76639F3260E1FF1028FC28E32F8CF67387723E835C7236A`；APK 不提交到 Git。
 - 注意：debug APK 的本地字节不可复现（同一份源码连续两次 `assembleDebug` 的体积与 SHA-256 都会不同），因此上面的本机观察值与制品身份无关；只有 CI 工作流产出的 SHA-256 才可作为验收依据。
-- **CI 制品状态**：本轮执行进程只做本地提交、不推送，因此 GitHub Actions `Android test APK` 未被本次执行触发，
-  Run ID / Artifact ID / 文件名 / CI APK SHA-256 为 `NOT_PRODUCED`；
-  不得用上面的本地 APK 哈希冒充 CI artifact，推送后必须按真实工作流输出回填。
+- **CI 制品已真实产出**：GitHub Actions `Android test APK` Run ID `36329990920`，结果 `success`；
+  Artifact ID `10934923148`，Artifact `mydca-android-v0.8.0-e8af769bf5446daa15ccf849b15a5f17786c7fcc`；
+  APK `MyDCA-Board-v0.8.0-e8af769b.apk`；
+  CI APK SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`。
+  该 SHA 来自 CI artifact 内的 `SHA256SUMS.txt`，不是本地 APK 哈希。
 
 ## 9. 版本与制品
 

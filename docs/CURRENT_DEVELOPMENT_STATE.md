@@ -57,9 +57,14 @@
 ## Android CI APK 真实证据
 
 ### v0.8.0
-- 状态：`NOT_PRODUCED`（本次执行进程只做本地提交、不推送，工作流未被触发）。
-- 待真实推送 `v2` 触发 `Android test APK` 后回填 Run ID / Artifact ID / APK 文件名 / CI APK SHA-256。
-- 不得用本地 APK 哈希冒充 CI artifact。
+- source commit：`e8af769bf5446daa15ccf849b15a5f17786c7fcc`
+- GitHub Actions：`Android test APK`
+- Run ID：`36329990920`
+- 结论：`success`
+- Artifact ID：`10934923148`
+- Artifact：`mydca-android-v0.8.0-e8af769bf5446daa15ccf849b15a5f17786c7fcc`
+- APK：`MyDCA-Board-v0.8.0-e8af769b.apk`
+- CI APK SHA-256：`F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`
 
 ### v0.7.0
 - source commit：`6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`
@@ -100,10 +105,9 @@
 ## 当前真正未完成
 
 1. **真实设备体验验收**：系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **v0.8.0 CI 制品证据**：本地提交尚未推送，`Android test APK` 的 Run ID / Artifact ID / APK 文件名 / SHA-256 待真实工作流产出后回填。
-3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
-4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
+2. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
+3. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：**Android v0.8.0 真实设备验收与 CI 制品回填**（同一 Android 版本线，不改账本语义），或按 owner 决策进入 v0.9 采集入口扩展（桌面小组件 / 通知栏快捷入口）。两者都不需要生产凭据或真实账本写入。
+下一项普通、可自动化的业务任务：进入 **Android v0.9 系统级快速入口扩展**。优先采用不打扰用户、无需后台常驻的桌面小组件/启动快捷入口，把现有“记一笔”能力更快暴露到系统桌面；真机体验验收仍是人工验收项，不应伪装成后台自动任务。

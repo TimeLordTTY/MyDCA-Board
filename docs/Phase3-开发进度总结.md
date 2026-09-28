@@ -11,7 +11,8 @@
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
 - 采集链继续严格停在 DRAFT：手工/OCR/通知候选/Outbox 均不会自动 preview、confirm 或正式入账。
 - v0.8.0 外部分享快速采集已落地：系统 Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程，不自动 parse/OCR/draft/preview/confirm。
-- 下一普通工程目标：v0.8.0 真实设备验收与 CI 制品回填，或按 owner 决策进入 v0.9 采集入口扩展；数据库 migration 上线不与普通功能开发混在一起。
+- v0.8.0 CI APK 已真实产出：Run `36329990920`，Artifact `10934923148`，APK SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`。
+- 下一普通工程目标：Android v0.9 系统级快速入口扩展；数据库 migration 上线与真机人工验收都不与普通后台自动功能开发混在一起。
 
 ### 已被后续版本完成的旧待办
 

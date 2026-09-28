@@ -47,8 +47,12 @@ v0.7.0 已有真实成功制品：
 - APK `MyDCA-Board-v0.7.0-6098a972.apk`
 - SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`
 
-v0.8.0 的 CI 制品状态：`NOT_PRODUCED`（本地提交完成后再推送触发 `Android test APK`），
-Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 必须按真实工作流输出回填，不得用本地 APK 哈希冒充。
+v0.8.0 已有真实成功 CI 制品：
+- Run ID `36329990920`
+- Artifact ID `10934923148`
+- Artifact `mydca-android-v0.8.0-e8af769bf5446daa15ccf849b15a5f17786c7fcc`
+- APK `MyDCA-Board-v0.8.0-e8af769b.apk`
+- CI APK SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`
 
 ## 构建与验证
 
