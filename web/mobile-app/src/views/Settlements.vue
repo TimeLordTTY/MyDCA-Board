@@ -257,10 +257,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { settlementApi, productApi, navApi, orderApi } from '@wealth-hub/shared'
+import { settlementApi, productApi, navApi, orderApi, buildSettlementPreviewText, buildSettlementBlockingText } from '@wealth-hub/shared'
 import { formatCurrency, formatDate, formatNumber, getOrderTypeLabel } from '@wealth-hub/shared'
 import { showSuccessToast, showFailToast, showLoadingToast, closeToast, showConfirmDialog as showVantConfirmDialog } from 'vant'
-import type { Order, ProductMaster, OrderDetail } from '@wealth-hub/shared'
+import type { Order, ProductMaster, OrderDetail, SettlementPreviewRequest } from '@wealth-hub/shared'
 
 const refreshing = ref(false)
 const loading = ref(false)
@@ -577,7 +577,7 @@ async function handleSettleFromDetail() {
 
     // 对齐PC端：买入只传confirmShares，赎回只传confirmAmount
     const fee = parseFloat(detailForm.value.fee || '0')
-    await orderApi.confirmSettlement({
+    const input: SettlementPreviewRequest = {
       orderId: currentOrderDetail.value.orderId,
       confirmDate: detailForm.value.confirmDate,
       navDate: detailForm.value.navDate,
@@ -586,7 +586,25 @@ async function handleSettleFromDetail() {
       confirmAmount: !isBuy ? parseFloat(detailForm.value.amount || '0') : undefined,
       confirmFee: fee,
       note: '',
+    }
+
+    // v0.13.0：只读预览 -> 主人二次确认 -> 携带 freshPreviewToken 正式结算
+    const preview = await settlementApi.previewSettlement(input)
+    if (!preview.confirmSupported) {
+      closeToast()
+      showFailToast(buildSettlementBlockingText(preview))
+      return
+    }
+
+    closeToast()
+    await showVantConfirmDialog({
+      title: '确认结算',
+      message: buildSettlementPreviewText(preview),
+      confirmButtonText: '确认结算',
     })
+
+    showLoadingToast({ message: '处理中...', forbidClick: true })
+    await orderApi.confirmSettlement({ ...input, freshPreviewToken: preview.freshPreviewToken })
 
     closeToast()
     showSuccessToast('结算确认成功')
@@ -595,6 +613,7 @@ async function handleSettleFromDetail() {
     window.dispatchEvent(new CustomEvent('data-refresh'))
   } catch (error: any) {
     closeToast()
+    if (error === 'cancel' || error === 'close') return
     showFailToast(error.message || '操作失败')
   } finally {
     submitting.value = false

@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 fun OverviewScreen(
     wealthRepository: WealthRepository?,
     apiConfigError: String?,
+    refreshToken: Int = 0,
 ) {
     var state by remember { mutableStateOf(WealthOverviewUiState()) }
     val scope = rememberCoroutineScope()
@@ -46,7 +47,8 @@ fun OverviewScreen(
         scope.launch { state = holder.loadOverview(previous) }
     }
 
-    LaunchedEffect(wealthRepository, apiConfigError) {
+    // refreshToken 由人工结算成功后自增，用于在结算后重新拉取资产摘要。
+    LaunchedEffect(wealthRepository, apiConfigError, refreshToken) {
         refresh(showLoading = true)
     }
 

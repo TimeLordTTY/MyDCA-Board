@@ -3,12 +3,14 @@
 <!-- CURRENT-SNAPSHOT:START -->
 ## 当前发布状态（2026-09-28）
 
-- 当前 Android：`versionName=0.12.0`、`versionCode=13`。
+- 当前 Android：`versionName=0.13.0`、`versionCode=14`。
+- v0.13.0 人工结算预览与二次确认闭环已完成：新增「待结算」体验（总览 / 今日待办进入），先「生成结算预览」只读展示现金 / 持仓 / 手续费影响与 fresh 令牌，再「确认结算」并二次确认弹窗后才调用 `POST /api/v2/settlements/confirm`；修改任一字段会清除旧预览，未 preview 不能 confirm，成功后刷新订单 / 持仓 / 资产页面。四类 PENDING 订单（买入 / 申购 / 卖出 / 赎回）均支持；preview 只读不写业务数据，confirm 幂等且事务完整。
 - v0.12.0 投资卖出 / 赎回草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账 / 买入 / 申购 / 卖出 / 赎回，卖出 / 赎回表单支持真实产品 + 该产品真实持仓来源 + 份额 + 到账账户 + 备注，预览展示可用 / 本次 / 预计剩余份额与到账账户；确认弹窗明确「当前只创建内部待处理记录，不立即减少持仓，也不立即增加到账余额」。只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复建订单。
 - v0.11.0 投资买入 / 申购草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金来源账户、订单与 CASH / RECEIVABLE 资金影响预览与「确认创建【产品】买入/申购订单 ¥X？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复建订单。
 - v0.10.0 TRANSFER 转账草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账，转账表单支持转出 / 转入双账户、双账户影响预览与「确认将 ¥X 从 A 转到 B？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复记账。
 - v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
 - v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
+- v0.13.0 制品：待 owner push 后回填（普通自动任务只提交、不 push，本轮不声称 CI APK 已交付）。
 - v0.12.0 制品：待 owner push 后回填（普通自动任务只提交、不 push，本轮不声称 CI APK 已交付）。
 - v0.11.0 制品：待 owner push 后回填（普通自动任务只提交、不 push，本轮不声称 CI APK 已交付）。
 - v0.10.0 已有真实成功 CI 制品：
@@ -26,10 +28,11 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.12.0`（`versionCode = 13`），APK 制品命名为 `MyDCA-Board-v0.12.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.13.0`（`versionCode = 14`），APK 制品命名为 `MyDCA-Board-v0.13.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
 - 草稿确认支持支出 / 收入 / 转账 / 买入 / 申购 / 卖出 / 赎回：TRANSFER 需要转出账户 + 转入账户 + 金额；BUY / SUBSCRIPTION 需要主人明确选择的真实产品 + 单一资金来源账户 + 金额；SELL / REDEMPTION 需要主人明确选择的真实产品 + 该产品真实持仓来源账户 + 份额 + 到账账户；确认前必须先看到资金影响预览。确认投资买入 / 申购草稿会创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），但不结算、不生成最终持仓；确认卖出 / 赎回草稿只创建内部 PENDING 订单并登记份额占用，不生成账本流水、不改现金余额、不改持仓。
+- 待结算页调用 `GET /api/v2/settlements/pending` 列出 PENDING 订单，结算编辑后调用 `POST /api/v2/settlements/preview` 生成只读预览，主人二次确认后携带 `freshPreviewToken` 调用 `POST /api/v2/settlements/confirm` 生成内部结算落账；preview 不写任何业务数据，未 preview 不能 confirm，修改任一字段即失效。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
 - Android App 不接入真实大模型，不自动预览、不自动确认、不直接写数据库。
 
@@ -283,3 +286,18 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 230 项通过（由 221 项增至 230 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
 - Debug APK 本地字节不可复现，体积与 SHA-256 只作本机观察，不作为制品身份；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
 - 明确未做：不做自动 preview / confirm / 结算 / 交易，不做跨账户 / 跨产品份额拆分，不做自动匹配持仓来源，不新增数据库表或 migration，不新增系统权限。
+
+## v0.13.0 人工结算预览与二次确认闭环
+
+- 版本收口为 `versionName = 0.13.0`（`versionCode = 14`）；结算走既有安全链路：`PENDING 订单 → 只读 preview → 主人二次确认 → 携带 fresh 令牌 confirm → 内部结算落账`。
+- 新增「待结算」体验：从总览 / 今日待办进入待结算订单列表（`GET /api/v2/settlements/pending`），选择订单进入结算编辑页 / 弹层，填写真实结算结果。
+- 按 `orderType` 动态字段：BUY / SUBSCRIPTION 为确认日期 / 净值日期 / 实际净值 / 实际份额（可自动计算并展示计算值）/ 手续费；SELL / REDEMPTION 追加实际确认金额。
+- 结算输入经 `POST /api/v2/settlements/preview` 生成只读预览：中文展示「哪些账户 +/− 多少现金、哪些持仓 +/− 多少份额、手续费多少」，并返回 `freshPreviewToken` / `previewFingerprint`；preview 不写 `settlement_confirm` / 账本，也不改 `reserved_amount` / `initial_shares` / 订单状态。
+- 按钮流程固定为「生成结算预览」→ 展示详细影响 → 「确认结算」→ 再弹一次中文确认弹窗 → `POST /api/v2/settlements/confirm`；页面打开不自动 preview，更不自动 confirm。
+- fresh preview gate：修改任一结算字段即清除旧预览；只有 `preview.confirmSupported=true` 且携带与当前订单 / 资金 / 账户 / 输入一致的 `freshPreviewToken` 才可 confirm；后端会重新计算指纹并比对，任一变化即失效。
+- 结算语义与后端一致：BUY / SUBSCRIPTION 结算清理 `RECEIVABLE` 并形成 `POSITION` / 关联账户与手续费，不重复扣下单现金；SELL / REDEMPTION 结算才真正产生 `CASH` / `POSITION` / `FEE` 影响。confirm 幂等、异常整体回滚。
+- 新增 `SettlementRepository`、`SettlementEditState`、`SettlementUiState`（`PendingSettlementUiState` / `SettlementPreviewUiState` / `SettlementStateHolder`）与 `PendingSettlementScreen`；成功后通过 `onSettlementConfirmed` 刷新订单 / 持仓 / 资产相关页面。
+- 结算不会自动发生：手工 / OCR / 支付通知候选 / 系统分享 / 桌面小组件任何入口都不具备结算或交易能力，后端也不会在 parse 或创建 DRAFT 后自动 confirm。
+- 2026-09-28 验证：`testDebugUnitTest` 共 267 项通过（由 230 项增至 267 项）、`assembleDebug` 通过、`lintDebug` 通过、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
+- Debug APK 本地字节不可复现，体积与 SHA-256 只作本机观察，不作为制品身份；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
+- 明确未做：不做自动 preview / confirm / 结算 / 交易，不做跨账户 / 跨产品结算拆分，不新增数据库表或 migration，不新增系统权限。

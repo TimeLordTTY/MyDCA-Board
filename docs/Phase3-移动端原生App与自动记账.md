@@ -5,11 +5,11 @@
 
 本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-已落地：原生 Android 0.12.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环、BUY / SUBSCRIPTION 投资买入 / 申购草稿闭环与 SELL / REDEMPTION 投资卖出 / 赎回草稿闭环）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+已落地：原生 Android 0.13.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环、BUY / SUBSCRIPTION 投资买入 / 申购草稿闭环与 SELL / REDEMPTION 投资卖出 / 赎回草稿闭环）、PENDING 订单人工结算预览与二次确认闭环（只读 preview → 主人二次确认 → 携带 fresh 令牌 confirm 落内部账）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
 
 安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 
-投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环已在 v0.12.0 完成，四类投资动作（买入 / 申购 / 卖出 / 赎回）均已纳入草稿安全链路；完整结算 / 持仓影响闭环尚无 owner 授权任务，需单独规划与批准。真机体验验收（转账双账户、投资产品与资金账户选择、卖出 / 赎回持仓来源与可用份额预览、桌面小组件、系统分享）仍由主人在真实设备完成。
+投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环已在 v0.12.0 完成，人工结算预览与二次确认闭环已在 v0.13.0 完成：四类投资订单（买入 / 申购 / 卖出 / 赎回）的 PENDING 记录均可只读预览结算影响，主人二次确认后才在财富中枢内部落账，仍无任何外部交易能力。真机体验验收（转账双账户、投资产品与资金账户选择、卖出 / 赎回持仓来源与可用份额预览、结算预览与二次确认、桌面小组件、系统分享）仍由主人在真实设备完成。
 <!-- CURRENT-SNAPSHOT:END -->
 
 ## 阶段定位

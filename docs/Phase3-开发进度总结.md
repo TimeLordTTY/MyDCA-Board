@@ -5,7 +5,7 @@
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.12.0 / versionCode 13`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环、v0.11.0 投资买入 / 申购草稿闭环与 v0.12.0 投资卖出 / 赎回草稿闭环均已完成。
+- Android 当前版本：`0.13.0 / versionCode 14`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环、v0.11.0 投资买入 / 申购草稿闭环、v0.12.0 投资卖出 / 赎回草稿闭环与 v0.13.0 人工结算预览与二次确认闭环均已完成。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
@@ -20,7 +20,9 @@
 - v0.11.0 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）待 owner push 后回填（普通自动任务只提交、不 push）。
 - v0.12.0 投资卖出 / 赎回草稿闭环已落地：SELL / REDEMPTION 候选解析、真实产品 + 该产品真实持仓来源 + 份额 + 到账账户选择、可用份额只读预览（已扣除 PENDING 占用）、二次确认后经 OrderService 仅创建 PENDING 订单并登记 SOURCE / TARGET 资金线；确认阶段不生成账本流水、不改现金余额、不改持仓，不自动结算。
 - v0.12.0 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）待 owner push 后回填（普通自动任务只提交、不 push）。
-- 下一普通工程目标：四类投资动作（买入 / 申购 / 卖出 / 赎回）草稿闭环均已落地；下一步的完整结算 / 持仓影响闭环尚无 owner 授权任务，需单独规划与批准。数据库 migration 上线与真机人工验收继续独立处理。
+- v0.13.0 人工结算预览与二次确认闭环已落地：四类 PENDING 订单（买入 / 申购 / 卖出 / 赎回）先经只读 `POST /api/v2/settlements/preview` 展示现金 / 持仓 / 手续费影响与 fresh 令牌，主人二次确认后携带令牌 `POST /api/v2/settlements/confirm` 才生成内部 settlement_confirm 与账本 / 持仓影响；preview 只读、confirm 幂等且事务完整，不自动结算、不后台 confirm。
+- v0.13.0 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）待 owner push 后回填（普通自动任务只提交、不 push）。
+- 下一普通工程目标：四类投资动作（买入 / 申购 / 卖出 / 赎回）草稿闭环与人工结算预览 / 二次确认闭环均已落地；后续的策略建议 / 回测闭环尚无 owner 授权任务，需单独规划与批准。数据库 migration 上线与真机人工验收继续独立处理。
 
 ### 已被后续版本完成的旧待办
 
@@ -542,4 +544,12 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
 - 真机人工验收：卖出 / 赎回草稿的持仓来源选择、可用份额与剩余份额预览、到账账户过滤与二次确认文案。
 - 未做：跨账户 / 跨产品份额拆分、自动匹配持仓来源、完整结算 / 持仓影响确认（SettlementService 人工结算需单独授权任务）。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动下单、自动结算或自动正式入账。
+
+## 后续待办（v0.13.0 人工结算预览与二次确认闭环）
+
+- v0.13.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
+  工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
+- 真机人工验收：待结算列表加载、四类订单字段差异、结算影响预览中文文案、二次确认弹窗，以及成功后订单 / 持仓 / 资产刷新。
+- 未做：不做自动 preview / confirm / 结算 / 交易，不做跨账户 / 跨产品结算拆分，不新增数据库表或 migration，不新增系统权限。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动下单、自动结算或自动正式入账。

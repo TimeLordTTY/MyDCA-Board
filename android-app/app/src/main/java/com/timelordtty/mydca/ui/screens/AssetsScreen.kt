@@ -31,6 +31,7 @@ fun AssetsScreen(
     apiConfigError: String?,
     selectedFilter: AccountFundUsageFilter,
     onFilterChange: (AccountFundUsageFilter) -> Unit,
+    refreshToken: Int = 0,
 ) {
     var state by remember { mutableStateOf(AssetsUiState()) }
     var detailStates by remember { mutableStateOf<Map<Long, AccountDetailUiState>>(emptyMap()) }
@@ -73,7 +74,8 @@ fun AssetsScreen(
         }
     }
 
-    LaunchedEffect(wealthRepository, apiConfigError) {
+    // refreshToken 由人工结算成功后自增，用于在结算后重新拉取账户 / 持仓 / 流水。
+    LaunchedEffect(wealthRepository, apiConfigError, refreshToken) {
         refresh(showLoading = true)
     }
 

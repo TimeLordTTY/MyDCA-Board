@@ -34,6 +34,7 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.repository.AuthRepository
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.data.repository.DraftRepository
+import com.timelordtty.mydca.data.repository.SettlementRepository
 import com.timelordtty.mydca.data.repository.TodoRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.ui.screens.AssetsScreen
@@ -45,6 +46,7 @@ import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
 import com.timelordtty.mydca.ui.screens.OcrEntryMode
 import com.timelordtty.mydca.ui.screens.OcrDraftScreen
+import com.timelordtty.mydca.ui.screens.PendingSettlementScreen
 import com.timelordtty.mydca.ui.screens.QuickCaptureSheet
 import com.timelordtty.mydca.ui.state.AccountFundUsageFilter
 import com.timelordtty.mydca.notification.NotificationCandidateStore
@@ -188,11 +190,17 @@ private fun AuthenticatedApp(
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
         var accountFilterValue by rememberSaveable { mutableStateOf(AccountFundUsageFilter.ALL.name) }
         var draftEntryMode by remember { mutableStateOf<OcrEntryMode?>(null) }
+        // 待结算是有明确安全边界的子流程：进入后只加载列表，绝不自动 preview / confirm。
+        var settlementFlowOpen by remember { mutableStateOf(false) }
+        var settlementFocusOrderId by remember { mutableStateOf<String?>(null) }
+        // 人工结算成功后自增，驱动总览与资产页面重新拉取账户 / 持仓 / 资产摘要。
+        var assetsRefreshToken by remember { mutableStateOf(0) }
         var quickFocus by remember { mutableStateOf(QuickCaptureFocus.NONE) }
         var isQuickCaptureOpen by rememberSaveable { mutableStateOf(false) }
         val shareSession = remember { ExternalShareCaptureSession() }
         val todoRepository = remember(services.wealthHubApi) { TodoRepository(services.wealthHubApi) }
         val draftRepository = remember(services.wealthHubApi) { DraftRepository(services.wealthHubApi) }
+        val settlementRepository = remember(services.wealthHubApi) { SettlementRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
         val wealthRepository = remember(services.wealthHubApi) { WealthRepository(services.wealthHubApi) }
         val outboxScope = rememberCoroutineScope()
@@ -283,12 +291,12 @@ private fun AuthenticatedApp(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(currentRoute.title)
+                        Text(if (settlementFlowOpen) "待结算" else currentRoute.title)
                     }
                 )
             },
             floatingActionButton = {
-                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null)) {
+                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen)) {
                     ExtendedFloatingActionButton(onClick = { isQuickCaptureOpen = true }) {
                         Text("记一笔")
                     }
@@ -302,6 +310,8 @@ private fun AuthenticatedApp(
                             onClick = {
                                 currentRoute = route
                                 draftEntryMode = null
+                                settlementFlowOpen = false
+                                settlementFocusOrderId = null
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
                                 NotificationNavigationTarget.clear()
                                 shareSession.onManualNavigation()
@@ -323,20 +333,45 @@ private fun AuthenticatedApp(
                     AppRoute.Overview -> OverviewScreen(
                         wealthRepository = wealthRepository,
                         apiConfigError = apiConfigError,
+                        refreshToken = assetsRefreshToken,
                     )
-                    AppRoute.TodayTodo -> TodayTodoScreen(
-                        todoRepository = todoRepository,
-                        aiAccountingRepository = aiAccountingRepository,
-                        apiConfigError = apiConfigError,
-                        selectedCandidateId = notificationTarget,
-                        onOpenDraft = { draftId ->
-                            selectedDraftId = draftId
-                            currentRoute = AppRoute.Drafts
-                            quickFocus = QuickCaptureFocus.NONE
-                        },
-                        draftOutbox = draftOutbox,
-                        focusCandidates = quickFocus.notificationCandidates,
-                    )
+                    AppRoute.TodayTodo -> {
+                        if (settlementFlowOpen) {
+                            PendingSettlementScreen(
+                                settlementRepository = settlementRepository,
+                                wealthRepository = wealthRepository,
+                                apiConfigError = apiConfigError,
+                                focusOrderId = settlementFocusOrderId,
+                                onSettlementConfirmed = {
+                                    assetsRefreshToken += 1
+                                    settlementFocusOrderId = null
+                                },
+                                onClose = {
+                                    settlementFlowOpen = false
+                                    settlementFocusOrderId = null
+                                },
+                            )
+                        } else {
+                            TodayTodoScreen(
+                                todoRepository = todoRepository,
+                                aiAccountingRepository = aiAccountingRepository,
+                                apiConfigError = apiConfigError,
+                                selectedCandidateId = notificationTarget,
+                                onOpenDraft = { draftId ->
+                                    selectedDraftId = draftId
+                                    currentRoute = AppRoute.Drafts
+                                    quickFocus = QuickCaptureFocus.NONE
+                                },
+                                draftOutbox = draftOutbox,
+                                focusCandidates = quickFocus.notificationCandidates,
+                                settlementRepository = settlementRepository,
+                                onOpenSettlements = { orderId ->
+                                    settlementFocusOrderId = orderId
+                                    settlementFlowOpen = true
+                                },
+                            )
+                        }
+                    }
                     AppRoute.Drafts -> {
                         val entryMode = draftEntryMode
                         if (entryMode != null) {
@@ -377,6 +412,7 @@ private fun AuthenticatedApp(
                         apiConfigError = apiConfigError,
                         selectedFilter = AccountFundUsageFilter.fromSavedValue(accountFilterValue),
                         onFilterChange = { accountFilterValue = it.name },
+                        refreshToken = assetsRefreshToken,
                     )
                     AppRoute.Settings -> SettingsScreen(
                         baseUrl = baseUrl,

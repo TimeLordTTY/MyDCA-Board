@@ -22,6 +22,7 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import com.timelordtty.mydca.data.dto.TodoItemDto
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
+import com.timelordtty.mydca.data.repository.SettlementRepository
 import com.timelordtty.mydca.data.repository.TodoRepository
 import com.timelordtty.mydca.notification.DraftCreationGate
 import com.timelordtty.mydca.notification.NotificationCandidate
@@ -31,6 +32,7 @@ import com.timelordtty.mydca.notification.NotificationDraftInput
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
 import com.timelordtty.mydca.outbox.DraftOutboxOrigin
 import com.timelordtty.mydca.outbox.DraftOutboxQueue
+import com.timelordtty.mydca.ui.state.SettlementEditState
 import com.timelordtty.mydca.ui.state.TodayTodoStateHolder
 import com.timelordtty.mydca.ui.state.TodayTodoUiState
 import java.text.SimpleDateFormat
@@ -47,8 +49,12 @@ fun TodayTodoScreen(
     onOpenDraft: (Long) -> Unit,
     draftOutbox: DraftOutboxQueue? = null,
     focusCandidates: Boolean = false,
+    settlementRepository: SettlementRepository? = null,
+    onOpenSettlements: (String?) -> Unit = {},
 ) {
     var state by remember { mutableStateOf(TodayTodoUiState()) }
+    // 待结算笔数只从 /api/v2/settlements/pending 读取；今日待办接口本身不返回结算数量。
+    var pendingSettlementCount by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
     val holder = remember(todoRepository) { todoRepository?.let { TodayTodoStateHolder(it) } }
 
@@ -75,6 +81,15 @@ fun TodayTodoScreen(
         refresh(showLoading = true)
     }
 
+    LaunchedEffect(settlementRepository) {
+        val repository = settlementRepository ?: return@LaunchedEffect
+        when (val result = repository.listPendingSettlements()) {
+            is NetworkResult.Success -> pendingSettlementCount =
+                SettlementEditState.pendingCount(result.data)
+            is NetworkResult.Failure -> pendingSettlementCount = null
+        }
+    }
+
     PageScaffold {
         SafetyBanner("今日待办只负责发现和导航。移动端不会自动确认草稿、不会执行结算、不会写正式账本。")
         PaymentCandidateSection(
@@ -99,7 +114,14 @@ fun TodayTodoScreen(
                         onRetry = { refresh(showLoading = false) },
                     )
                 }
-                state.todos?.let { todos -> TodayTodoContent(todos, onOpenDraft) }
+                state.todos?.let { todos ->
+                    TodayTodoContent(
+                        todos = todos,
+                        onOpenDraft = onOpenDraft,
+                        pendingSettlementCount = pendingSettlementCount,
+                        onOpenSettlements = onOpenSettlements,
+                    )
+                }
             }
         }
     }
@@ -205,11 +227,29 @@ private fun PaymentCandidateCard(
 private fun TodayTodoContent(
     todos: TodayTodoDto,
     onOpenDraft: (Long) -> Unit,
+    pendingSettlementCount: Int? = null,
+    onOpenSettlements: (String?) -> Unit = {},
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         MetricCard("草稿", todos.draftCount.toString(), Modifier.weight(1f))
         MetricCard("结算", todos.settlementCount.toString(), Modifier.weight(1f))
         MetricCard("建议", todos.suggestionCount.toString(), Modifier.weight(1f))
+    }
+
+    SectionCard(
+        title = "待结算订单",
+        description = "待结算页需要主人先手动生成只读预览，看懂现金 / 持仓 / 手续费影响后二次确认，" +
+            "才会真正生成财富中枢内部账本；移动端不会自动结算。",
+    ) {
+        val count = pendingSettlementCount
+        if (count == null) {
+            StatusPill("待结算笔数未知，可打开待结算页查看")
+        } else {
+            StatusPill("还有  笔 PENDING 订单等待人工结算")
+        }
+        Button(onClick = { onOpenSettlements(null) }) {
+            Text("打开待结算")
+        }
     }
 
     SectionCard(

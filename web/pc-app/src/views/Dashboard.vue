@@ -457,11 +457,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElNotification } from 'element-plus'
+import { ElMessageBox, ElNotification } from 'element-plus'
 import * as echarts from 'echarts'
-import { dashboardApi, holdingApi, marketApi, navApi, orderApi, todoApi, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
-import { formatCurrency, formatNumber, formatDate, formatDateTime, getOrderTypeLabel } from '@wealth-hub/shared'
-import type { MarketQuoteRealtime, Nav, AssetOverview, Account, TodayTodo, TodoItem } from '@wealth-hub/shared'
+import { dashboardApi, holdingApi, marketApi, navApi, orderApi, settlementApi, todoApi, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
+import { formatCurrency, formatNumber, formatDate, formatDateTime, getOrderTypeLabel, buildSettlementPreviewText, buildSettlementBlockingText, buildSettlementConfirmTitle } from '@wealth-hub/shared'
+import type { MarketQuoteRealtime, Nav, AssetOverview, Account, TodayTodo, TodoItem, SettlementPreviewRequest } from '@wealth-hub/shared'
 
 const router = useRouter()
 const accountStore = useAccountStore()
@@ -954,6 +954,37 @@ function calculateSettlementFromForm() {
   }
 }
 
+/**
+ * v0.13.0 人工结算安全链：只读预览 -> 主人二次确认 -> 携带 freshPreviewToken 正式结算。
+ * 返回 true 表示已成功确认结算，false 表示主人取消或预览被阻断。
+ */
+async function previewAndConfirmSettlement(input: SettlementPreviewRequest): Promise<boolean> {
+  const preview = await settlementApi.previewSettlement(input)
+  if (!preview.confirmSupported) {
+    ElNotification.error({
+      title: '无法结算',
+      message: buildSettlementBlockingText(preview),
+      position: 'bottom-right',
+      duration: 6000,
+    })
+    return false
+  }
+
+  // 主人二次确认：展示现金 / 持仓 / 手续费影响
+  try {
+    await ElMessageBox.confirm(buildSettlementPreviewText(preview), buildSettlementConfirmTitle(preview), {
+      confirmButtonText: '确认结算',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch (e) {
+    return false
+  }
+
+  await orderApi.confirmSettlement({ ...input, freshPreviewToken: preview.freshPreviewToken })
+  return true
+}
+
 async function handleConfirmSettlementFromDashboard() {
   if (!settlementOrder.value) return
 
@@ -986,7 +1017,7 @@ async function handleConfirmSettlementFromDashboard() {
   }
 
   try {
-    await orderApi.confirmSettlement({
+    const input: SettlementPreviewRequest = {
       orderId: settlementOrder.value.orderId,
       confirmDate: settlementForm.value.confirmDate,
       navDate: settlementForm.value.navDate,
@@ -995,7 +1026,11 @@ async function handleConfirmSettlementFromDashboard() {
       confirmAmount: !isBuy ? settlementForm.value.confirmAmount : undefined,
       confirmFee: settlementForm.value.confirmFee || 0,
       note: settlementForm.value.note || '',
-    })
+    }
+
+    // v0.13.0：只读预览 -> 主人二次确认 -> 携带 freshPreviewToken 正式结算
+    const confirmed = await previewAndConfirmSettlement(input)
+    if (!confirmed) return
     ElNotification.success({ title: '成功', message: '结算成功', position: 'bottom-right' })
     settlementVisible.value = false
     // 重新加载数据，刷新今日建议/待结算清单等

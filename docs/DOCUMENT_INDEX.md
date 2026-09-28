@@ -32,5 +32,6 @@
 - v0.10.0 转账草稿闭环：`docs/mydca_v010_transfer_draft_loop_20260928.md`
 - v0.11.0 投资买入 / 申购草稿闭环：`docs/mydca_v011_invest_buy_draft_loop_20260928.md`
 - v0.12.0 投资卖出 / 赎回草稿闭环：`docs/mydca_v012_invest_sell_redeem_draft_loop_20260928.md`
+- v0.13.0 人工结算预览与二次确认闭环：`docs/mydca_v013_manual_settlement_preview_confirm_20260928.md`
 - v0.8 后端强幂等：`docs/mydca_v08_draft_strong_idempotency_20260927.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。

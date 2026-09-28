@@ -1,5 +1,7 @@
 package com.timelordtty.dca.controller;
 
+import com.timelordtty.dca.dto.SettlementPreviewDTO;
+import com.timelordtty.dca.dto.SettlementPreviewRequest;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.SettlementConfirm;
 import com.timelordtty.dca.service.OrderService;
@@ -7,13 +9,14 @@ import com.timelordtty.dca.service.SettlementService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 结算控制器
+ *
+ * <p>v0.13.0 起，人工结算的客户端必须走「只读 preview -> 主人二次确认 -> 携带 fresh preview 令牌 confirm」链路。
+ * preview 不产生任何业务写入；confirm 才会真正生成 settlement_confirm 与内部账本，并且必须携带 preview 返回的令牌。</p>
  */
 @RestController
 @RequestMapping("/api/v2/settlements")
@@ -46,24 +49,58 @@ public class SettlementController {
     }
 
     /**
+     * 人工结算只读预览。
+     *
+     * <p>校验订单状态与归属、产品、资金来源行与输入参数，并返回现金 / 持仓 / 手续费影响与 fresh preview 令牌。
+     * 该接口不会写 settlement_confirm、ledger_txn / ledger_posting，也不会改 reserved_amount、
+     * initial_shares 或 order.status。</p>
+     */
+    @PostMapping("/preview")
+    public ResponseEntity<SettlementPreviewDTO> previewSettlement(@RequestBody SettlementPreviewRequest request) {
+        SettlementPreviewDTO preview = settlementService.previewSettlement(
+                request.getOrderId(),
+                parseDate(request.getConfirmDate()),
+                parseDate(request.getNavDate()),
+                request.getConfirmNav(),
+                request.getConfirmShares(),
+                request.getConfirmAmount(),
+                request.getConfirmFee());
+        return ResponseEntity.ok(preview);
+    }
+
+    /**
      * 确认订单成交结算，写入结算明细并交由服务层生成账本影响。
+     *
+     * <p>必须携带同一组结算输入与 freshPreviewToken；服务端会重新计算并比对指纹，任何关键输入、
+     * 订单、资金来源或账户快照变化都会阻断本次确认。</p>
      */
     @PostMapping("/confirm")
-    public ResponseEntity<SettlementConfirm> confirmSettlement(@RequestBody Map<String, Object> request) {
-        String orderId = request.get("orderId").toString();
-        LocalDate confirmDate = LocalDate.parse(request.get("confirmDate").toString());
-        LocalDate navDate = LocalDate.parse(request.get("navDate").toString());
-        BigDecimal confirmNav = new BigDecimal(request.get("confirmNav").toString());
-        BigDecimal confirmShares = request.containsKey("confirmShares") ? 
-            new BigDecimal(request.get("confirmShares").toString()) : null;
-        BigDecimal confirmAmount = request.containsKey("confirmAmount") ? 
-            new BigDecimal(request.get("confirmAmount").toString()) : null;
-        BigDecimal confirmFee = request.containsKey("confirmFee") ? 
-            new BigDecimal(request.get("confirmFee").toString()) : BigDecimal.ZERO;
-
+    public ResponseEntity<SettlementConfirm> confirmSettlement(@RequestBody SettlementPreviewRequest request) {
         SettlementConfirm settlement = settlementService.confirmSettlement(
-                orderId, confirmDate, navDate, confirmNav, confirmShares, confirmAmount, confirmFee);
+                request.getOrderId(),
+                parseDate(request.getConfirmDate()),
+                parseDate(request.getNavDate()),
+                request.getConfirmNav(),
+                request.getConfirmShares(),
+                request.getConfirmAmount(),
+                request.getConfirmFee(),
+                request.getFreshPreviewToken());
         return ResponseEntity.ok(settlement);
     }
-}
 
+    /** 宽松解析 ISO 日期；非法 / 空值返回 null，由服务层作为阻断原因返回。 */
+    private static LocalDate parseDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String normalized = value.trim();
+        if (normalized.length() > 10) {
+            normalized = normalized.substring(0, 10);
+        }
+        try {
+            return LocalDate.parse(normalized);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}

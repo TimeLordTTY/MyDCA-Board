@@ -14,7 +14,11 @@ import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
 import com.timelordtty.mydca.data.dto.MobileTransactionDto
 import com.timelordtty.mydca.data.dto.ParseTextRequestDto
+import com.timelordtty.mydca.data.dto.PendingSettlementOrderDto
 import com.timelordtty.mydca.data.dto.ProductDto
+import com.timelordtty.mydca.data.dto.SettlementConfirmDto
+import com.timelordtty.mydca.data.dto.SettlementPreviewDto
+import com.timelordtty.mydca.data.dto.SettlementPreviewRequestDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 import kotlinx.coroutines.test.runTest
@@ -103,4 +107,7 @@ private open class FakeWealthHubApi : WealthHubApi {
     override suspend fun getMobileHoldings(page: Int, pageSize: Int): MobilePageDto<MobileHoldingDto> = throw UnsupportedOperationException()
     override suspend fun getProducts(keyword: String?, assetType: String?, channel: String?): List<ProductDto> = throw UnsupportedOperationException()
     override suspend fun getProductHoldingsByAccount(productId: Long): List<MobileHoldingByAccountDto> = throw UnsupportedOperationException()
+    override suspend fun getPendingSettlements(): List<PendingSettlementOrderDto> = throw UnsupportedOperationException()
+    override suspend fun previewSettlement(request: SettlementPreviewRequestDto): SettlementPreviewDto = throw UnsupportedOperationException()
+    override suspend fun confirmSettlement(request: SettlementPreviewRequestDto): SettlementConfirmDto = throw UnsupportedOperationException()
 }

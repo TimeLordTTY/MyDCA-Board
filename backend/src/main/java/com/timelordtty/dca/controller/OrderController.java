@@ -230,6 +230,9 @@ public class OrderController {
 
     /**
      * 按订单 ID 写入成交结算信息，确认金额、份额和费用后交由结算服务生成系统内账本影响；不调用真实交易接口。
+     *
+     * <p>v0.13.0 起必须携带 `/api/v2/settlements/preview` 返回的 freshPreviewToken：服务端会重新计算并比对
+     * 指纹，订单、资金来源、账户或输入参数任一变化都会阻断本次结算。</p>
      */
     @PostMapping("/{orderId}/settle")
     public ResponseEntity<Map<String, Object>> settleOrder(@PathVariable String orderId, @RequestBody Map<String, Object> request) {
@@ -243,9 +246,12 @@ public class OrderController {
         // 如果前端传递了confirmFee（包括0），使用传递的值；如果未传递，传递null让后端自动计算
         BigDecimal confirmFee = request.containsKey("confirmFee") && request.get("confirmFee") != null
             ? new BigDecimal(request.get("confirmFee").toString()) : null;
+        // v0.13.0：confirm 入口必须携带只读 preview 返回的 fresh preview 令牌，禁止仅凭 orderId 直接结算
+        String freshPreviewToken = request.containsKey("freshPreviewToken") && request.get("freshPreviewToken") != null
+            ? request.get("freshPreviewToken").toString() : null;
 
         com.timelordtty.dca.model.SettlementConfirm settlement = settlementService.confirmSettlement(
-            orderId, confirmDate, navDate, confirmNav, confirmShares, confirmAmount, confirmFee
+            orderId, confirmDate, navDate, confirmNav, confirmShares, confirmAmount, confirmFee, freshPreviewToken
         );
 
         Map<String, Object> result = new java.util.HashMap<>();

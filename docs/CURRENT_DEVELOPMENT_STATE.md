@@ -11,10 +11,10 @@
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.12.0`
-- `versionCode = 13`
+- `versionName = 0.13.0`
+- `versionCode = 14`
 
-“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.12.0` 是投资卖出 / 赎回草稿闭环版本（上一版 `0.11.0` 为投资买入 / 申购草稿闭环，更早 `0.10.0` 为 TRANSFER 转账草稿闭环、`0.9.0` 为桌面快速记账小组件、`0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
+“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.13.0` 是人工结算预览与二次确认闭环版本（上一版 `0.12.0` 为投资卖出 / 赎回草稿闭环，`0.11.0` 为投资买入 / 申购草稿闭环，更早 `0.10.0` 为 TRANSFER 转账草稿闭环、`0.9.0` 为桌面快速记账小组件、`0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
 ## 已完成的 Phase3 主能力
 
@@ -30,6 +30,7 @@
 - v0.10.0 TRANSFER 转账草稿闭环：文本候选识别转账、双账户（转出 / 转入）影响预览、主人二次确认后经 `QuickEntryService.quickTransfer` 生成一笔正式转账流水；重复确认不重复记账。
 - v0.11.0 投资买入 / 申购草稿闭环：BUY / SUBSCRIPTION 候选解析、真实产品 + 单一资金来源账户选择、只读订单与 CASH / RECEIVABLE 资金影响预览、主人二次确认后经 `OrderService.createInvestmentDraftOrder` 创建 PENDING 订单并生成付款账本；不自动结算、不生成最终持仓、重复确认不重复建单。
 - v0.12.0 投资卖出 / 赎回草稿闭环：SELL / REDEMPTION 候选解析、真实产品 + 该产品真实持仓来源 + 份额 + 到账账户选择、只读可用份额预览（已扣除 PENDING 占用）、主人二次确认后经 `OrderService.createSellRedeemDraftOrder` 仅创建 PENDING 订单并登记 SOURCE / TARGET 资金线；确认阶段不生成账本流水、不改现金余额、不改持仓，不自动结算、重复确认不重复建单。
+- v0.13.0 人工结算预览与二次确认闭环：四类 PENDING 订单（BUY / SUBSCRIPTION / SELL / REDEMPTION）先经只读 `POST /api/v2/settlements/preview` 展示现金 / 持仓 / 手续费影响与 fresh 令牌，主人二次确认后携带令牌 `POST /api/v2/settlements/confirm` 才生成内部 `settlement_confirm` 与账本 / 持仓影响；preview 不写任何业务数据、不改 `reserved_amount` / `initial_shares` / 订单状态，confirm 幂等且事务完整，不自动结算、不后台 confirm、不调用真实交易渠道。
 
 ## v0.8 强幂等（已完成）
 
@@ -108,7 +109,23 @@
 - confirm：SELL / REDEMPTION 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用安全入口；订单 ID 写回 `confirmOrderId`，重复确认幂等，异常整体回滚且草稿保持 DRAFT，`IGNORED` 不可确认，不存在自动 preview / confirm / settle。
 - Android：`versionName = 0.12.0`（`versionCode = 13`）；草稿编辑新增卖出 / 赎回，表单为真实产品 + 持仓来源 + 份额 + 到账账户 + 备注，产品选定后复用 `GET /api/v2/holdings/product/{productId}/by-account` 展示持仓来源；确认文案明确「当前只创建内部待处理记录，不立即减少持仓，也不立即增加到账余额」；切换到其它交易类型会清理 SELL / REDEMPTION 专属字段。PC / shared 同步卖出 / 赎回类型与预览字段，PC 草稿箱支持查看 / 编辑 / preview / 二次确认。
 - 本轮未新增数据库表 / migration，未连接任何数据库；后端 145 项测试、Android 230 项测试、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1`（成功静默）全部通过。
+
+## v0.13.0 人工结算预览与二次确认闭环（已完成）
+
+- 任务：`task-mydca-v013-manual-settlement-preview-confirm-20260928`
+- 详细说明：`docs/mydca_v013_manual_settlement_preview_confirm_20260928.md`
+
+- 统一四类投资订单的 settlement 语义：不再另造第二套结算引擎，把既有 `SettlementService` 的结算计算 / 校验抽成无副作用 preview，preview 与 confirm 复用同一套纯函数规则（`runSettlement`）。BUY / SUBSCRIPTION 下单阶段已有付款账本（CASH CREDIT + RECEIVABLE DEBIT），结算阶段不重复扣下单现金，清理 RECEIVABLE 并形成最终 POSITION / 关联账户与手续费；SELL / REDEMPTION 下单阶段无账本，结算阶段才真正产生 CASH / POSITION / FEE 影响。
+- 只读预览 API：新增 `POST /api/v2/settlements/preview`，接受 `orderId` / `confirmDate` / `navDate` / `confirmNav` / `confirmShares` / `confirmAmount` / `confirmFee`（null 表示按 `BrokerFeeService` 估算、显式 0 用 0），校验订单存在且 PENDING、owner scope、产品启用、资金来源行完整且账户可见、日期非空、净值 > 0、份额 / 金额 / 手续费非负；不写 `settlement_confirm` / `ledger_txn` / `ledger_posting`，不改 `reserved_amount` / `initial_shares` / `order.status`。返回 `SettlementPreviewDTO`（`postingsPreview[]` / `summaryLines[]` / `confirmSupported` / `blockingReasons` / `willCreateSettlementConfirm` / `willCreateLedgerTxn` / `willChangeHolding` / `willChangeCash` / `freshPreviewToken`），全部中文文案。
+- fresh preview gate：`freshPreviewToken`（同时作为 `previewFingerprint`）由订单（含 `updated_at` / `status`）、owner 作用域、输入参数、资金来源行、关键账户快照与计算结果取 SHA-256；confirm 重新计算并逐字比对，任一变化即失效。令牌不落库、不新增数据库字段、不做 migration。
+- 人工确认 API：新增 `POST /api/v2/settlements/confirm`，复用同一输入并携带 `freshPreviewToken`；令牌校验通过后才创建虚拟 / 持仓账户，写入唯一一条 `settlement_confirm`、释放资金来源行 `reserved_amount`、更新关联账户 `initial_shares`、只生成一套 `ledger_txn` / `ledger_posting`，订单置 `CONFIRMED`；全程 `@Transactional`，重复确认幂等、异常整体回滚、`CANCELLED` / `FAILED` / `CONFIRMED` 不可再次结算。
+- Android：`versionName = 0.13.0`（`versionCode = 14`）；新增「待结算」体验（总览 / 今日待办进入，待结算列表 → 结算编辑 → 只读预览 → 二次确认弹窗 → confirm → 成功刷新），按 `orderType` 动态字段，修改字段即清除旧预览，未 preview 不能 confirm，新增 `SettlementRepository` / `SettlementEditState` / `SettlementUiState` / `PendingSettlementScreen`。PC / shared 同步 `SettlementPreview` 类型、`previewSettlement` API 与 `SettlementConfirmModal` / `Settlements` 安全链。
+- 本轮未新增数据库表 / migration，未连接任何数据库；后端 169 项测试、Android 267 项测试、`assembleDebug`、`lintDebug`、`scripts/post-task-compile-hook.ps1`（成功静默）全部通过。
+
 ## Android CI APK 真实证据
+
+### v0.13.0
+- source commit / Run ID / Artifact ID / APK 文件名 / CI APK SHA-256：待 owner push 后回填（普通自动任务只提交、不 push）。
 
 ### v0.12.0
 - source commit / Run ID / Artifact ID / APK 文件名 / CI APK SHA-256：待 owner push 后回填（普通自动任务只提交、不 push）。
@@ -184,11 +201,11 @@
 
 ## 当前真正未完成
 
-1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，投资卖出 / 赎回草稿的持仓来源选择 / 可用份额预览 / 到账账户过滤 / 二次确认文案，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **投资订单类草稿确认**：BUY / SUBSCRIPTION 已纳入草稿确认闭环（v0.11.0），SELL / REDEMPTION 已在 v0.12.0 纳入。既有 OrderService 真实语义必须保持：BUY / SUBSCRIPTION 创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；SELL / REDEMPTION 只创建 PENDING 订单并登记 SOURCE / TARGET 资金线与份额占用，不生成账本、不改现金余额、不改持仓。两类都仍不自动结算、不生成最终持仓、不调用真实交易渠道。
+1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，投资卖出 / 赎回草稿的持仓来源选择 / 可用份额预览 / 到账账户过滤 / 二次确认文案，待结算的结算编辑 / 现金与持仓影响预览 / 二次确认弹窗 / 成功后订单与持仓刷新，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
+2. **投资订单结算**：BUY / SUBSCRIPTION 已纳入草稿确认闭环（v0.11.0），SELL / REDEMPTION 已在 v0.12.0 纳入；v0.13.0 起四类 PENDING 订单均可人工生成只读结算预览（`POST /api/v2/settlements/preview`）并经主人二次确认后携带 fresh 令牌 confirm（`POST /api/v2/settlements/confirm`）落内部账。既有 OrderService 真实语义保持不变：BUY / SUBSCRIPTION 创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），结算时清理 RECEIVABLE 并形成 POSITION / 关联账户与手续费、不重复扣下单现金；SELL / REDEMPTION 只创建 PENDING 订单并登记 SOURCE / TARGET 资金线与份额占用，结算时才产生 CASH / POSITION / FEE 影响。全流程不自动结算、不后台 confirm、不调用真实交易渠道。
 3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
-4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
+4. **长期能力**：策略建议与回测闭环，以及结算后的更多持仓影响场景继续按设计推进。
 
 ## 下一工程任务
 
-v0.12.0 已完成投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环，v0.11.0 已完成投资买入 / 申购（BUY / SUBSCRIPTION）草稿闭环，四类投资动作（买入 / 申购 / 卖出 / 赎回）均已纳入草稿安全链路。下一步的完整结算 / 持仓影响闭环（SettlementService 人工结算）尚无对应 owner 授权任务，需单独规划与批准后才能推进。投资订单类确认始终复用既有 OrderService 与安全边界：输入的解析只产生候选与 DRAFT，preview 必须明确区分「会生成付款账本」与「只登记内部份额占用」。不自动结算、不生成最终持仓、不调用任何真实交易渠道。
+v0.13.0 已完成四类投资订单（买入 / 申购 / 卖出 / 赎回）的人工结算预览与二次确认闭环：PENDING 订单先经只读 preview 展示现金 / 持仓 / 手续费影响与 fresh 令牌，主人二次确认后携带令牌 confirm 才在财富中枢内部生成 `settlement_confirm` 与账本 / 持仓影响；preview 只读、confirm 幂等且事务完整。结算仍复用既有 `SettlementService`，不另造第二套结算引擎，不自动结算、不后台 confirm、不调用任何真实交易渠道。后续普通工程任务（策略建议 / 回测闭环、数据库 migration 上线、真机验收）需由 owner 单独规划与批准。
