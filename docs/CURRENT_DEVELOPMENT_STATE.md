@@ -69,11 +69,15 @@
 
 ## Android CI APK 真实证据
 
-### v0.9.0（NOT_PRODUCED，待回填）
-- source commit：本轮提交（按调度要求只提交、未推送，因此没有 CI 运行）
+### v0.9.0
+- source commit：`7fe07527a8d793018d4d7f284a5643359873ddd0`
 - GitHub Actions：`Android test APK`
-- 结论：`NOT_PRODUCED`——未触发工作流，Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待真实推送后回填。
-- 不得用本地 debug APK 的 SHA-256 代替 CI 制品证据。
+- Run ID：`36367375440`
+- 结论：`success`
+- Artifact ID：`10946904834`
+- Artifact：`mydca-android-v0.9.0-7fe07527a8d793018d4d7f284a5643359873ddd0`
+- APK：`MyDCA-Board-v0.9.0-7fe07527.apk`
+- CI APK SHA-256：`5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
 
 ### v0.8.0
 - source commit：`e8af769bf5446daa15ccf849b15a5f17786c7fcc`
@@ -102,7 +106,7 @@
 - APK：`MyDCA-Board-v0.6.0-a732c3bc.apk`
 - CI APK SHA-256：`2298E56D4B9DF18218CAD17A1CCFA3EA094592364F2AFA2FD5E5582B103BB0CD`
 
-旧文档中“v0.6/v0.7/v0.8.0 CI 制品 NOT_PRODUCED / 待回填”的表述已经过期；v0.9.0 的 CI 证据仍以真实工作流结果为准（本轮尚未推送）。
+旧文档中“v0.6/v0.7/v0.8.0/v0.9.0 CI 制品 NOT_PRODUCED / 待回填”的表述均已过期；以上以真实 GitHub Actions / Artifact 证据为准。
 
 ## 自动开发与交付
 
@@ -124,9 +128,10 @@
 ## 当前真正未完成
 
 1. **真实设备体验验收**：桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
-3. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
+2. **转账草稿闭环**：当前草稿正式确认仍只支持 EXPENSE / INCOME；TRANSFER 的双账户预览、人工确认与 Android 编辑流程尚未落地。
+3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
+4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：**Android v0.9.0 真实设备验收与 CI 制品回填**。v0.9.0 桌面小组件已落地，但必须在真机确认桌面添加、不同厂商 launcher 的尺寸回调与点击跳转，并在推送触发 `Android test APK` 后回填真实 Run ID / Artifact ID / CI APK SHA-256；真机体验验收仍是人工验收项，不应伪装成后台自动任务。
+下一项普通、可自动化的业务任务：**Android / 后端 v0.10.0 转账草稿闭环**。在不改变“DRAFT → fresh preview → 用户二次确认 → 正式账本”的安全边界下，补齐 TRANSFER 的双账户编辑、影响预览与人工确认；真机桌面小组件体验验收继续保留为人工验收项。

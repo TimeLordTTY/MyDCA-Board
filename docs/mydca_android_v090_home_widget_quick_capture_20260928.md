@@ -157,13 +157,16 @@
 
 ### CI 真实制品状态
 
-**`NOT_PRODUCED`（待回填）**：本次执行按调度要求**只提交、不推送**，因此尚未触发 GitHub Actions，无法给出 Run ID / 结论 / Artifact ID / APK 文件名 / CI APK SHA-256。
+- source commit：`7fe07527a8d793018d4d7f284a5643359873ddd0`
+- GitHub Actions：`Android test APK`
+- Run ID：`36367375440`
+- 结论：`success`
+- Artifact ID：`10946904834`
+- Artifact：`mydca-android-v0.9.0-7fe07527a8d793018d4d7f284a5643359873ddd0`
+- APK：`MyDCA-Board-v0.9.0-7fe07527.apk`
+- CI APK SHA-256：`5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
 
-不得用上面的本地 APK SHA-256 代替 CI 制品证据。推送 `v2` 后需按以下步骤回填：
-
-1. 触发/等待 `Android test APK`（推送命中 `android-app/**` 即自动触发）。
-2. 记录 workflow 结论、Run ID、Artifact ID / 名称、APK 文件名，并从 artifact 内 `SHA256SUMS.txt` 取 CI APK SHA-256。
-3. 把上述真实值写入 `docs/CURRENT_DEVELOPMENT_STATE.md`、`README.md`、`android-app/README.md` 与本文第 7 节。
+该 SHA-256 来自 CI Artifact 内的 `SHA256SUMS.txt`，不使用本地 debug APK 哈希冒充 CI 制品。
 
 ## 8. 在 Android 桌面添加该小组件
 

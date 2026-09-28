@@ -5,12 +5,13 @@
 
 - 当前 Android：`versionName=0.9.0`、`versionCode=10`。
 - v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
-- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程；CI 制品：Run `36329990920` / Artifact `10934923148` / APK `MyDCA-Board-v0.8.0-e8af769b.apk` / SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`。
-- v0.7 快速采集中心 result commit：`6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`（CI Run `36320197608` / Artifact `10931548073` / SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`）。
-- v0.9.0 CI 制品：`NOT_PRODUCED`（本轮按调度要求只提交、未推送），Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待真实工作流回填。
-- 下一 Android 普通工程目标：v0.9.0 真实设备验收与 CI 制品回填（桌面小组件添加、尺寸回调、点击跳转）。
+- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程；CI 真实制品：
+- Run ID `36367375440`
+- Artifact ID `10946904834`
+- Artifact `mydca-android-v0.9.0-7fe07527a8d793018d4d7f284a5643359873ddd0`
+- APK `MyDCA-Board-v0.9.0-7fe07527.apk`
+- CI APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
 
-> 本文历史章节中“CI NOT_PRODUCED / 待回填”的 v0.6/v0.7/v0.8.0 描述已被真实 GitHub Actions 证据取代；v0.9.0 仍以真实工作流输出为准。
 <!-- CURRENT-SNAPSHOT:END -->
 
 MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待办、草稿查看、草稿预览和用户手动确认体验。

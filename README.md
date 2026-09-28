@@ -55,10 +55,12 @@ v0.8.0 已有真实成功 CI 制品：
 - APK `MyDCA-Board-v0.8.0-e8af769b.apk`
 - CI APK SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`
 
-v0.9.0 桌面快速记账小组件本轮按调度要求**只提交、未推送**，CI 制品状态为 `NOT_PRODUCED`（待回填）：
-
-- Run ID / 结论 / Artifact ID / APK 文件名 / CI APK SHA-256 需在真实推送触发 `Android test APK` 后回填。
-- 不得用本地构建的 APK SHA-256 代替 CI 制品证据。
+v0.9.0 已有真实成功 CI 制品：
+- Run ID `36367375440`
+- Artifact ID `10946904834`
+- Artifact `mydca-android-v0.9.0-7fe07527a8d793018d4d7f284a5643359873ddd0`
+- APK `MyDCA-Board-v0.9.0-7fe07527.apk`
+- CI APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
 
 ## 构建与验证
 
