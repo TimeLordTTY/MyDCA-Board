@@ -86,7 +86,11 @@ export interface UpdateDraftRequest {
 export interface DraftPreview {
   /** 草稿主键。 */
   draftId: number
-  /** 候选流水类型：EXPENSE / INCOME / TRANSFER；TRANSFER 需补齐转出与转入账户后方可确认。 */
+  /**
+   * 候选流水类型：EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION。
+   * TRANSFER 需补齐转出与转入账户；BUY / SUBSCRIPTION 需补齐真实产品与单一资金来源账户。
+   * SELL / REDEMPTION 仍不支持。
+   */
   txnType?: string | null
   /** 候选转出（来源）账户 ID。 */
   accountId?: number | null
@@ -112,11 +116,36 @@ export interface DraftPreview {
   accountDelta?: number | null
   /** 转账时对转入账户余额的预计变动金额，通常为正数；非 TRANSFER 草稿为空。 */
   targetAccountDelta?: number | null
-  /** 确认后是否会生成正式流水；预览阶段始终不会写正式账本。 */
+  /** 投资草稿的订单类型：BUY（场内买入）或 SUBSCRIPTION（场外申购）；非投资草稿为空。 */
+  orderType?: string | null
+  /** 投资草稿选定的真实产品 ID；必须由主人明确选择，绝不由文本自动匹配。 */
+  productId?: number | null
+  /** 投资草稿产品名称。 */
+  productName?: string | null
+  /** 投资草稿产品代码。 */
+  productCode?: string | null
+  /** 投资草稿产品资产类型，例如 ETF、FUND、BOND_REPO。 */
+  productAssetType?: string | null
+  /** 投资草稿产品币种，必须与付款账户币种一致。 */
+  productCurrency?: string | null
+  /** 付款账户在本次确认前的可用余额（余额 - 已占用）。 */
+  availableBefore?: number | null
+  /** 确认后待结算应收的变动金额；买入 / 申购为正数。 */
+  receivableDelta?: number | null
+  /** 预计净值日（可选）。 */
+  expectedNavDate?: string | null
+  /** 预计确认日（可选）。 */
+  expectedConfirmDate?: string | null
+  /** 资金来源中文提示，便于确认前复核付款账户与可用余额。 */
+  fundingMessage?: string | null
+  /**
+   * 确认后是否会生成正式流水；预览阶段始终不会写正式账本。
+   * BUY / SUBSCRIPTION 确认会立即生成付款账本（付款账户 CASH CREDIT + 待结算应收 RECEIVABLE DEBIT）。
+   */
   willCreateLedgerTxn?: boolean | null
-  /** 首版草稿确认是否会生成订单。 */
+  /** 草稿确认是否会生成订单；BUY / SUBSCRIPTION 确认后会创建系统内 PENDING 订单。 */
   willCreateOrder?: boolean | null
-  /** 首版草稿确认是否会生成待结算记录。 */
+  /** 草稿确认是否会生成结算记录；BUY / SUBSCRIPTION 当前不会自动结算。 */
   willCreateSettlement?: boolean | null
   /** 首版草稿确认是否会影响持仓。 */
   willAffectHolding?: boolean | null

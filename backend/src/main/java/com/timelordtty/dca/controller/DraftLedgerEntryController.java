@@ -23,7 +23,8 @@ import java.util.List;
 /**
  * Phase3 草稿流水控制器，提供候选记账草稿的创建、查询、预览、确认和忽略 API。
  *
- * <p>除确认接口委托服务层走 QuickEntryService 外，其余接口只操作草稿表，不影响正式账本。</p>
+ * <p>除确认接口委托服务层走 QuickEntryService（EXPENSE / INCOME / TRANSFER）或 OrderService（BUY / SUBSCRIPTION）外，
+ * 其余接口只操作草稿表，不影响正式账本；preview 接口始终只写草稿的 preview JSON。</p>
  */
 @RestController
 @RequestMapping("/api/v2/drafts")
@@ -93,7 +94,7 @@ public class DraftLedgerEntryController {
     }
 
     /**
-     * 确认草稿；首版仅支持 EXPENSE/INCOME，并且必须走 QuickEntryService 统一记账。
+     * 确认草稿；支持 EXPENSE/INCOME/TRANSFER（QuickEntryService）与 BUY/SUBSCRIPTION（OrderService）统一记账。
      */
     @PostMapping("/{draftId}/confirm")
     public ResponseEntity<DraftLedgerEntryDTO> confirmDraft(@PathVariable Long draftId) {

@@ -14,6 +14,10 @@ import okio.Buffer
  * Android 草稿编辑表单状态。
  *
  * accountId 是后端真实账户 ID；accountNameHint 只作为人工提示，不参与账户匹配。
+ * productId 同样是后端真实 product_master.id；productNameHint 只作为人工提示，不参与产品匹配。
+ *
+ * 投资草稿（BUY / SUBSCRIPTION）本轮只支持单资金来源账户，且确认后会立即生成付款账本
+ * （付款账户 CASH CREDIT + 待结算应收 RECEIVABLE DEBIT），但不会自动结算、不会生成最终持仓。
  */
 data class DraftEditForm(
     val txnType: String = "EXPENSE",
@@ -22,6 +26,12 @@ data class DraftEditForm(
     val accountId: String = "",
     val targetAccountId: String = "",
     val accountNameHint: String = "",
+    /** 投资草稿（BUY / SUBSCRIPTION）选定的真实产品 ID；由主人明确选择，不做文本自动匹配。 */
+    val productId: String = "",
+    /** 产品名称提示，只供复核，不可代替 productId。 */
+    val productNameHint: String = "",
+    val expectedNavDate: String = "",
+    val expectedConfirmDate: String = "",
 )
 
 /**
@@ -39,6 +49,9 @@ data class DraftEditRequestResult(
  * 集中维护草稿编辑、保存后预览和确认按钮的安全规则，便于 UI 与单元测试复用。
  */
 object DraftEditState {
+    /** 后端 confirm 当前支持的草稿类型；SELL / REDEMPTION 仍由后端拒绝。 */
+    val SUPPORTED_TXN_TYPES = setOf("EXPENSE", "INCOME", "TRANSFER", "BUY", "SUBSCRIPTION")
+
     private val moshi = Moshi.Builder().build()
     private val mapType = Types.newParameterizedType(
         Map::class.java,
@@ -57,15 +70,42 @@ object DraftEditState {
             firstScalar(payload, "targetAccountId", "toAccountId", "destinationAccountId").orEmpty()
         val note = firstString(payload, "note", "remark", "description") ?: draft.rawInput.orEmpty()
         val accountNameHint = firstString(payload, "accountNameHint").orEmpty()
+        val productId = firstScalar(payload, "productId").orEmpty()
+        val productNameHint = firstString(payload, "productNameHint").orEmpty()
+        val expectedNavDate = firstString(payload, "expectedNavDate").orEmpty()
+        val expectedConfirmDate = firstString(payload, "expectedConfirmDate").orEmpty()
         return DraftEditForm(
-            txnType = normalizedType.takeIf { it == "EXPENSE" || it == "INCOME" || it == "TRANSFER" } ?: "EXPENSE",
+            txnType = normalizedType.takeIf { it in SUPPORTED_TXN_TYPES } ?: "EXPENSE",
             amount = amount,
             note = note,
             accountId = accountId,
             targetAccountId = targetAccountId,
             accountNameHint = accountNameHint,
+            productId = productId,
+            productNameHint = productNameHint,
+            expectedNavDate = expectedNavDate,
+            expectedConfirmDate = expectedConfirmDate,
         )
     }
+
+    /** 切换交易类型：非转账清空转入账户，非投资清空投资字段，避免残留字段污染候选载荷。 */
+    fun switchTxnType(form: DraftEditForm, txnType: String): DraftEditForm {
+        val normalized = txnType.trim().uppercase()
+        val cleared = form.copy(txnType = normalized)
+        val withoutTransfer = if (normalized == "TRANSFER") cleared else cleared.copy(targetAccountId = "")
+        return if (isInvestmentType(normalized)) withoutTransfer else withoutInvestmentFields(withoutTransfer)
+    }
+
+    /** 投资候选类型：本轮只支持 BUY（场内买入）与 SUBSCRIPTION（场外申购）。 */
+    fun isInvestmentType(txnType: String?): Boolean =
+        txnType?.trim()?.uppercase() in setOf("BUY", "SUBSCRIPTION")
+
+    private fun withoutInvestmentFields(form: DraftEditForm): DraftEditForm = form.copy(
+        productId = "",
+        productNameHint = "",
+        expectedNavDate = "",
+        expectedConfirmDate = "",
+    )
 
     fun buildUpdateRequest(draft: DraftLedgerEntryDto, form: DraftEditForm): DraftEditRequestResult {
         if (!draft.isDraft()) {
@@ -73,8 +113,10 @@ object DraftEditState {
         }
 
         val normalizedType = form.txnType.trim().uppercase()
-        if (normalizedType !in setOf("EXPENSE", "INCOME", "TRANSFER")) {
-            return DraftEditRequestResult(error = "交易类型必须是 EXPENSE、INCOME 或 TRANSFER。")
+        if (normalizedType !in SUPPORTED_TXN_TYPES) {
+            return DraftEditRequestResult(
+                error = "交易类型必须是 EXPENSE、INCOME、TRANSFER、BUY 或 SUBSCRIPTION。",
+            )
         }
 
         val amount = parseAmount(form.amount)
@@ -96,6 +138,16 @@ object DraftEditState {
             return DraftEditRequestResult(error = "转出账户与转入账户不能相同，请重新选择转入账户。")
         }
 
+        val isInvestment = isInvestmentType(normalizedType)
+        val productId = if (isInvestment) {
+            parseAccountId(form.productId)
+                ?: return DraftEditRequestResult(
+                    error = "投资草稿必须选择真实产品，productId 必须是大于 0 的正整数。",
+                )
+        } else {
+            null
+        }
+
         val normalizedNote = form.note.trim()
         val normalizedAccountNameHint = form.accountNameHint.trim()
         val request = UpdateDraftRequestDto(
@@ -109,6 +161,10 @@ object DraftEditState {
                 accountId = accountId,
                 accountNameHint = normalizedAccountNameHint,
                 targetAccountId = targetAccountId,
+                productId = productId,
+                productNameHint = form.productNameHint.trim(),
+                expectedNavDate = form.expectedNavDate.trim(),
+                expectedConfirmDate = form.expectedConfirmDate.trim(),
             ),
             confidence = draft.confidence,
             missingFieldsJson = buildStringArrayJson(emptyList()),
@@ -164,6 +220,10 @@ object DraftEditState {
         accountId: Long,
         accountNameHint: String,
         targetAccountId: Long?,
+        productId: Long?,
+        productNameHint: String,
+        expectedNavDate: String,
+        expectedConfirmDate: String,
     ): String {
         return writeJsonObject {
             name("txnType").value(txnType)
@@ -172,11 +232,23 @@ object DraftEditState {
             if (targetAccountId != null) {
                 name("targetAccountId").value(targetAccountId)
             }
+            if (productId != null) {
+                name("productId").value(productId)
+            }
             if (note.isNotBlank()) {
                 name("note").value(note)
             }
             if (accountNameHint.isNotBlank()) {
                 name("accountNameHint").value(accountNameHint)
+            }
+            if (productNameHint.isNotBlank()) {
+                name("productNameHint").value(productNameHint)
+            }
+            if (expectedNavDate.isNotBlank()) {
+                name("expectedNavDate").value(expectedNavDate)
+            }
+            if (expectedConfirmDate.isNotBlank()) {
+                name("expectedConfirmDate").value(expectedConfirmDate)
             }
         }
     }

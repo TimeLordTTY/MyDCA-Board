@@ -25,6 +25,7 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
+import com.timelordtty.mydca.data.dto.ProductDto
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.outbox.DraftCreationGateway
@@ -66,6 +67,7 @@ fun DraftInboxScreen(
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showIgnoreDialog by remember { mutableStateOf(false) }
     var selectableAccounts by remember { mutableStateOf<List<MobileAccountDto>>(emptyList()) }
+    var selectableProducts by remember { mutableStateOf<List<ProductDto>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
     fun setCurrentDraft(draft: DraftLedgerEntryDto?) {
@@ -328,6 +330,11 @@ fun DraftInboxScreen(
                 is NetworkResult.Success -> selectableAccounts = result.data.items.filter { it.leaf }
                 is NetworkResult.Failure -> actionMessage = "账户选择器加载失败：${result.message}"
             }
+            // 只读拉取产品主数据，供主人明确选择真实产品；移动端不会用产品名称自动匹配 productId。
+            when (val productResult = wealthRepository.getProducts()) {
+                is NetworkResult.Success -> selectableProducts = productResult.data.filter { it.isActive != false }
+                is NetworkResult.Failure -> actionMessage = "产品选择器加载失败：${productResult.message}"
+            }
         }
     }
 
@@ -393,6 +400,7 @@ fun DraftInboxScreen(
             canConfirm = canConfirm,
             editForm = editForm,
             selectableAccounts = selectableAccounts,
+            selectableProducts = selectableProducts,
             editError = editError,
             isEditDirty = isEditDirty,
             isSavingDraft = isSavingDraft,
@@ -491,6 +499,7 @@ private fun DraftDetailSection(
     canConfirm: Boolean,
     editForm: DraftEditForm,
     selectableAccounts: List<MobileAccountDto>,
+    selectableProducts: List<ProductDto>,
     editError: String?,
     isEditDirty: Boolean,
     isSavingDraft: Boolean,
@@ -531,6 +540,7 @@ private fun DraftDetailSection(
                 selectedDraft = selectedDraft,
                 editForm = editForm,
                 selectableAccounts = selectableAccounts,
+                selectableProducts = selectableProducts,
                 editError = editError,
                 isEditDirty = isEditDirty,
                 isSavingDraft = isSavingDraft,
@@ -601,6 +611,7 @@ private fun DraftEditSection(
     selectedDraft: DraftLedgerEntryDto,
     editForm: DraftEditForm,
     selectableAccounts: List<MobileAccountDto>,
+    selectableProducts: List<ProductDto>,
     editError: String?,
     isEditDirty: Boolean,
     isSavingDraft: Boolean,
@@ -629,29 +640,33 @@ private fun DraftEditSection(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = {
-                    onEditFormChange(
-                        editForm.copy(txnType = DraftAccountSelection.EXPENSE, targetAccountId = ""),
-                    )
-                },
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.EXPENSE)) },
             ) {
                 Text(if (editForm.txnType == DraftAccountSelection.EXPENSE) "支出 EXPENSE ✓" else "支出 EXPENSE")
             }
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = {
-                    onEditFormChange(
-                        editForm.copy(txnType = DraftAccountSelection.INCOME, targetAccountId = ""),
-                    )
-                },
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.INCOME)) },
             ) {
                 Text(if (editForm.txnType == DraftAccountSelection.INCOME) "收入 INCOME ✓" else "收入 INCOME")
             }
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = { onEditFormChange(editForm.copy(txnType = DraftAccountSelection.TRANSFER)) },
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.TRANSFER)) },
             ) {
                 Text(if (editForm.txnType == DraftAccountSelection.TRANSFER) "转账 TRANSFER ✓" else "转账 TRANSFER")
+            }
+            OutlinedButton(
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.BUY)) },
+            ) {
+                Text(if (editForm.txnType == DraftAccountSelection.BUY) "买入 BUY ✓" else "买入 BUY")
+            }
+            OutlinedButton(
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.SUBSCRIPTION)) },
+            ) {
+                Text(if (editForm.txnType == DraftAccountSelection.SUBSCRIPTION) "申购 SUBSCRIPTION ✓" else "申购 SUBSCRIPTION")
             }
         }
 
@@ -665,16 +680,41 @@ private fun DraftEditSection(
             modifier = Modifier.fillMaxWidth(),
         )
         val isTransferForm = editForm.txnType == DraftAccountSelection.TRANSFER
+        val isInvestmentForm = DraftEditState.isInvestmentType(editForm.txnType)
         val editEnabled = !isSavingDraft && !isPreviewingDraft
+        val selectedProduct = selectableProducts.firstOrNull { it.id.toString() == editForm.productId.trim() }
+        if (isInvestmentForm) {
+            ProductPickerSection(
+                selectedProductId = editForm.productId,
+                products = selectableProducts,
+                enabled = editEnabled,
+                onPick = { product ->
+                    onEditFormChange(
+                        editForm.copy(
+                            productId = product.id.toString(),
+                            productNameHint = product.productName ?: editForm.productNameHint,
+                        ),
+                    )
+                },
+            )
+        }
         AccountPickerSection(
-            title = if (isTransferForm) "选择转出账户" else "选择叶子账户",
-            description = if (isTransferForm) {
-                "转账可能是主人主动调整资金分区：SPENDABLE / RESERVED / INVESTABLE 之间都可以转移，只需选择真实叶子账户。"
-            } else {
-                "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。"
+            title = when {
+                isTransferForm -> "选择转出账户"
+                isInvestmentForm -> "选择付款账户"
+                else -> "选择叶子账户"
+            },
+            description = when {
+                isTransferForm ->
+                    "转账可能是主人主动调整资金分区：SPENDABLE / RESERVED / INVESTABLE 之间都可以转移，只需选择真实叶子账户。"
+                isInvestmentForm ->
+                    "投资买入 / 申购只允许 INVESTABLE 真实叶子账户；国债逆回购 BOND_REPO 才允许使用 RESERVED 专款。确认后会立即扣减该账户并增加待结算应收。"
+                else ->
+                    "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。"
             },
             txnType = editForm.txnType,
             accounts = selectableAccounts,
+            productAssetType = selectedProduct?.assetType,
             enabled = editEnabled,
             onPick = { account ->
                 onEditFormChange(
@@ -703,7 +743,15 @@ private fun DraftEditSection(
             value = editForm.accountId,
             onValueChange = { onEditFormChange(editForm.copy(accountId = it)) },
             enabled = !isSavingDraft && !isPreviewingDraft,
-            label = { Text(if (isTransferForm) "转出账户 ID accountId" else "真实账户 ID accountId") },
+            label = {
+                Text(
+                    when {
+                        isTransferForm -> "转出账户 ID accountId"
+                        isInvestmentForm -> "付款账户 ID accountId"
+                        else -> "真实账户 ID accountId"
+                    },
+                )
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
@@ -727,6 +775,41 @@ private fun DraftEditSection(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
+        if (isInvestmentForm) {
+            OutlinedTextField(
+                value = editForm.productId,
+                onValueChange = { onEditFormChange(editForm.copy(productId = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("真实产品 ID productId（必填）") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = editForm.productNameHint,
+                onValueChange = { onEditFormChange(editForm.copy(productNameHint = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("产品名称提示 productNameHint（仅提示）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = editForm.expectedNavDate,
+                onValueChange = { onEditFormChange(editForm.copy(expectedNavDate = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("预计净值日 expectedNavDate（可选）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = editForm.expectedConfirmDate,
+                onValueChange = { onEditFormChange(editForm.copy(expectedConfirmDate = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("预计确认日 expectedConfirmDate（可选）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         OutlinedTextField(
             value = editForm.note,
             onValueChange = { onEditFormChange(editForm.copy(note = it)) },
@@ -769,6 +852,17 @@ private fun PreviewContent(preview: DraftPreviewDto) {
         KeyValueRow("资金用途", preview.fundUsage ?: "未知")
         KeyValueRow("影响方向", preview.impactDirection ?: "未知")
         KeyValueRow("账户变动", preview.accountDelta?.toString() ?: "未知")
+        if (preview.txnType?.trim()?.uppercase() in setOf("BUY", "SUBSCRIPTION")) {
+            KeyValueRow("订单类型", preview.orderType ?: preview.txnType ?: "未知")
+            KeyValueRow("产品", preview.productName ?: "未选择")
+            KeyValueRow("产品代码", preview.productCode ?: "无")
+            KeyValueRow("产品类型", preview.productAssetType ?: "未知")
+            KeyValueRow("产品币种", preview.productCurrency ?: "未知")
+            KeyValueRow("可用余额", preview.availableBefore?.toString() ?: "未知")
+            KeyValueRow("待结算应收变动", preview.receivableDelta?.toString() ?: "未知")
+            KeyValueRow("预计净值日", preview.expectedNavDate ?: "未设置")
+            KeyValueRow("预计确认日", preview.expectedConfirmDate ?: "未设置")
+        }
         if (preview.txnType?.equals("TRANSFER", ignoreCase = true) == true) {
             KeyValueRow("转入账户", preview.targetAccountName ?: "未匹配")
             KeyValueRow("转入账户类型", preview.targetAccountType ?: "未知")
@@ -779,6 +873,11 @@ private fun PreviewContent(preview: DraftPreviewDto) {
         KeyValueRow("会生成订单", if (preview.willCreateOrder) "是" else "否")
         KeyValueRow("会生成结算", if (preview.willCreateSettlement) "是" else "否")
         KeyValueRow("会影响持仓", if (preview.willAffectHolding) "是" else "否")
+        val investmentLines = DraftReview.investmentImpactLines(preview)
+        if (investmentLines.isNotEmpty()) {
+            Text("投资付款账本影响：")
+            investmentLines.forEach { line -> Text(line) }
+        }
         val transferLines = DraftReview.transferImpactLines(preview)
         if (transferLines.isNotEmpty()) {
             Text("转账双账户影响：")
@@ -850,10 +949,15 @@ private fun AccountPickerSection(
     accounts: List<MobileAccountDto>,
     enabled: Boolean,
     onPick: (MobileAccountDto) -> Unit,
+    productAssetType: String? = null,
 ) {
     SectionCard(title = title, description = description) {
-        val candidates = accounts.filter { account -> DraftAccountSelection.isSelectable(txnType, account) }
-        val blocked = accounts.filterNot { account -> DraftAccountSelection.isSelectable(txnType, account) }
+        val candidates = accounts.filter { account ->
+            DraftAccountSelection.isSelectable(txnType, account, productAssetType)
+        }
+        val blocked = accounts.filterNot { account ->
+            DraftAccountSelection.isSelectable(txnType, account, productAssetType)
+        }
         if (candidates.isEmpty()) {
             StatusPill("暂无符合当前交易类型的可选账户")
         } else {
@@ -873,9 +977,43 @@ private fun AccountPickerSection(
             Text("以下账户受保护，当前交易类型不可选择：")
             blocked.forEach { account ->
                 Text(
-                    text = "${account.accountName}：${DraftAccountSelection.rejectionReason(txnType, account)}",
+                    text = "${account.accountName}：${DraftAccountSelection.rejectionReason(txnType, account, productAssetType)}",
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProductPickerSection(
+    selectedProductId: String,
+    products: List<ProductDto>,
+    enabled: Boolean,
+    onPick: (ProductDto) -> Unit,
+) {
+    SectionCard(
+        title = "选择真实产品",
+        description = "产品来自 GET /api/v2/products，只展示启用中的产品；必须由主人明确选择，绝不用产品名称自动匹配 productId。",
+    ) {
+        if (products.isEmpty()) {
+            StatusPill("暂无可用产品，请先在 PC 端维护产品主数据")
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                products.forEach { product ->
+                    val selected = product.id.toString() == selectedProductId.trim()
+                    OutlinedButton(
+                        enabled = enabled,
+                        onClick = { onPick(product) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            (if (selected) "已选 " else "") +
+                                "${product.productName ?: "未命名产品"} · ${product.productCode ?: "无代码"} · " +
+                                "${product.assetType ?: "未知类型"} · ${product.currency ?: "未知币种"}",
+                        )
+                    }
+                }
             }
         }
     }

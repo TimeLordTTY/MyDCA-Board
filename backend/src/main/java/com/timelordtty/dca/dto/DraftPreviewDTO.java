@@ -12,9 +12,9 @@ import java.util.List;
 public class DraftPreviewDTO {
     /** 草稿 ID，用于前端把预览结果与候选记录对应起来。 */
     private Long draftId;
-    /** 候选流水类型，支持 EXPENSE / INCOME / TRANSFER。 */
+    /** 候选流水类型，支持 EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION。 */
     private String txnType;
-    /** 候选现金账户 ID；TRANSFER 时表示转出账户，确认时会传给 QuickEntryService。 */
+    /** 候选现金账户 ID；TRANSFER 时表示转出账户，BUY / SUBSCRIPTION 时表示付款资金账户。 */
     private Long accountId;
     /** 候选账户名称，用于确认前复核本次草稿会影响哪个真实账户。 */
     private String accountName;
@@ -34,17 +34,39 @@ public class DraftPreviewDTO {
     private BigDecimal amount;
     /** 对候选（转出）账户余额的影响方向：DECREASE、INCREASE 或 NONE。 */
     private String impactDirection;
-    /** 对候选账户余额的预计变动金额：支出为负数，收入为正数，TRANSFER 转出为负数。 */
+    /** 对候选账户余额的预计变动金额：支出为负数，收入为正数，TRANSFER 转出为负数，投资买入为负数。 */
     private BigDecimal accountDelta;
     /** TRANSFER 对转入账户余额的预计变动金额，为正数；其他类型的可确认预览为 0。 */
     private BigDecimal targetAccountDelta;
+    /** BUY / SUBSCRIPTION 的订单类型，与 txnType 保持一致，便于前端按订单语义展示。 */
+    private String orderType;
+    /** BUY / SUBSCRIPTION 候选的真实产品 ID，必须由用户在 App / PC 明确选择。 */
+    private Long productId;
+    /** BUY / SUBSCRIPTION 候选的产品名称，来自产品主数据，仅用于展示。 */
+    private String productName;
+    /** BUY / SUBSCRIPTION 候选的产品代码，来自产品主数据，仅用于展示。 */
+    private String productCode;
+    /** BUY / SUBSCRIPTION 候选的产品资产类型，例如 ETF、FUND、BOND_REPO。 */
+    private String productAssetType;
+    /** BUY / SUBSCRIPTION 候选的产品币种，必须与资金账户币种一致。 */
+    private String productCurrency;
+    /** BUY / SUBSCRIPTION 确认前资金账户的可用余额（balance - reserved_amount）。 */
+    private BigDecimal availableBefore;
+    /** BUY / SUBSCRIPTION 确认后待结算应收的预计变动金额，为正数。 */
+    private BigDecimal receivableDelta;
+    /** BUY / SUBSCRIPTION 可选预期净值日期，仅作提示。 */
+    private String expectedNavDate;
+    /** BUY / SUBSCRIPTION 可选预期确认日期，仅作提示。 */
+    private String expectedConfirmDate;
+    /** BUY / SUBSCRIPTION 的付款说明文案，明确确认后会立即生成付款账本。 */
+    private String fundingMessage;
     /** 确认后是否会生成正式流水；预览阶段始终不会写正式账本。 */
     private Boolean willCreateLedgerTxn;
-    /** 首版草稿确认不会生成订单。 */
+    /** 确认后是否会生成 PENDING 订单；EXPENSE/INCOME/TRANSFER 为 false。 */
     private Boolean willCreateOrder;
-    /** 首版草稿确认不会生成待结算记录。 */
+    /** 确认后是否会生成待结算记录；首版所有类型都为 false。 */
     private Boolean willCreateSettlement;
-    /** 首版草稿确认不会影响持仓。 */
+    /** 确认后是否会影响持仓；首版所有类型都为 false，持仓仍由后续结算决定。 */
     private Boolean willAffectHolding;
     /** 候选备注，会传递给正式流水的 note 字段。 */
     private String note;
@@ -52,7 +74,7 @@ public class DraftPreviewDTO {
     private Boolean confirmSupported;
     /** 不能确认或需要补齐时的提示文案。 */
     private String message;
-    /** 预览阶段识别出的缺失字段，例如 accountId、targetAccountId、amount。 */
+    /** 预览阶段识别出的缺失字段，例如 accountId、targetAccountId、productId、amount。 */
     private List<String> missingFields;
     /** 预览阶段提示或风险说明，供用户确认前复核。 */
     private List<String> warnings;

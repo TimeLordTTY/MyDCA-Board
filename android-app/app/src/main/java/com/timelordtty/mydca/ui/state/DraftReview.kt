@@ -60,6 +60,8 @@ object DraftReview {
         "EXPENSE" -> "支出 EXPENSE"
         "INCOME" -> "收入 INCOME"
         "TRANSFER" -> "转账 TRANSFER"
+        "BUY" -> "买入 BUY"
+        "SUBSCRIPTION" -> "申购 SUBSCRIPTION"
         else -> txnType?.trim().orEmpty().ifBlank { "类型待补充" }
     }
 
@@ -75,21 +77,63 @@ object DraftReview {
         )
     }
 
-    /** 确认弹窗标题：TRANSFER 明确「确认将 ¥X 从 A 转到 B？」，其它类型保持通用标题。 */
+    /**
+     * 投资买入 / 申购预览的中文影响行：产品、资金来源、可用余额、付款账户与待结算应收变动。
+     * 非投资预览返回空列表。
+     */
+    fun investmentImpactLines(preview: DraftPreviewDto?): List<String> {
+        if (preview == null || !isInvestment(preview)) return emptyList()
+        val lines = mutableListOf(
+            "产品：${preview.productName ?: "未选择"} / ${preview.productCode ?: "无代码"} / ${preview.productAssetType ?: "未知类型"}",
+            "资金来源：${preview.accountName ?: "未匹配"} / ${displayFundUsage(preview.fundUsage)}",
+            "可用余额：${formatPreviewAmount(preview.availableBefore)}",
+            "本次金额：${formatPreviewAmount(preview.amount)}",
+            "付款账户变动：${formatSignedAmount(preview.accountDelta)}",
+            "待结算应收变动：${formatSignedAmount(preview.receivableDelta)}",
+        )
+        preview.fundingMessage?.takeIf { it.isNotBlank() }?.let { lines += it }
+        return lines
+    }
+
+    /** 投资确认弹窗标题：明确「确认创建【产品】买入 / 申购订单 ¥X？」。 */
     fun confirmDialogTitle(preview: DraftPreviewDto?): String {
-        if (preview == null || !isTransfer(preview)) return "确认正式记账？"
+        if (preview == null) return "确认正式记账？"
+        if (isInvestment(preview)) {
+            val action = investmentActionLabel(preview.txnType)
+            return "确认创建【${preview.productName ?: "未选择产品"}】${action}订单 " +
+                "¥${formatPreviewAmount(preview.amount)}？"
+        }
+        if (!isTransfer(preview)) return "确认正式记账？"
         return "确认将 ¥${formatPreviewAmount(preview.amount)} 从 ${preview.accountName ?: "转出账户"}" +
             " 转到 ${preview.targetAccountName ?: "转入账户"}？"
     }
 
-    /** 确认弹窗正文：明确告知会生成正式转账流水；没有 fresh preview 时说明已被阻止。 */
+    /**
+     * 确认弹窗正文：
+     * - 投资草稿明确「会立即扣减付款账户并增加同额待结算应收，仍需后续结算，不会自动成交」；
+     * - 转账草稿明确会生成正式转账流水；
+     * - 没有 fresh preview 时说明已被阻止。
+     */
     fun confirmDialogMessage(preview: DraftPreviewDto?, canConfirm: Boolean): String {
         if (!canConfirm) return "当前草稿没有可确认预览，移动端已阻止本次确认。"
+        if (preview != null && isInvestment(preview)) {
+            val account = preview.accountName ?: "付款账户"
+            return "确认后将立即从【$account】扣除 ¥${formatPreviewAmount(preview.amount)}，" +
+                "并增加同额待结算应收；订单仍需后续结算，不会自动成交。"
+        }
         if (preview != null && isTransfer(preview)) {
             return "本操作会调用后端 confirm 接口，生成一笔从转出账户到转入账户的正式转账流水；请再次确认金额与账户。"
         }
         return "本操作会调用后端 confirm 接口。请确认预览内容无误后再继续。"
     }
+
+    private fun investmentActionLabel(txnType: String?): String = when (txnType?.trim()?.uppercase()) {
+        "SUBSCRIPTION" -> "申购"
+        else -> "买入"
+    }
+
+    private fun isInvestment(preview: DraftPreviewDto): Boolean =
+        preview.txnType?.trim()?.uppercase() in setOf("BUY", "SUBSCRIPTION")
 
     private fun isTransfer(preview: DraftPreviewDto): Boolean =
         preview.txnType?.trim()?.equals("TRANSFER", ignoreCase = true) == true

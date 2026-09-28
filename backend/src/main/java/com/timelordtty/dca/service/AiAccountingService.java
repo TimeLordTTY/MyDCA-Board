@@ -52,7 +52,12 @@ public class AiAccountingService {
         intent.setRawInput(normalizedText);
         String txnType = detectTxnType(normalizedText);
         intent.setTxnType(txnType);
-        intent.setAmount(txnType == null ? null : extractAmount(normalizedText));
+        if (isInvestmentType(txnType)) {
+            intent.setProductNameHint(extractProductNameHint(normalizedText));
+            intent.setAmount(extractInvestmentAmount(normalizedText));
+        } else {
+            intent.setAmount(txnType == null ? null : extractAmount(normalizedText));
+        }
         if ("TRANSFER".equals(txnType)) {
             intent.setAccountNameHint(extractTransferSourceHint(normalizedText));
             intent.setTargetAccountNameHint(extractTransferTargetHint(normalizedText));
@@ -60,7 +65,7 @@ public class AiAccountingService {
             intent.setAccountNameHint(extractAccountNameHint(normalizedText));
         }
         intent.setNote(extractNote(normalizedText, intent.getAmount(), intent.getAccountNameHint(),
-                intent.getTargetAccountNameHint()));
+                intent.getTargetAccountNameHint(), intent.getProductNameHint()));
         intent.setConfidence(calculateConfidence(intent));
         intent.setMissingFields(buildMissingFields(intent));
         intent.setParsedPayloadJson(toIntentJson(intent));
@@ -103,6 +108,10 @@ public class AiAccountingService {
         intent.setAccountNameHint(input.getAccountNameHint());
         intent.setTargetAccountId(input.getTargetAccountId());
         intent.setTargetAccountNameHint(input.getTargetAccountNameHint());
+        intent.setProductId(input.getProductId());
+        intent.setProductNameHint(input.getProductNameHint());
+        intent.setExpectedNavDate(input.getExpectedNavDate());
+        intent.setExpectedConfirmDate(input.getExpectedConfirmDate());
         intent.setConfidence(input.getConfidence() == null ? calculateConfidence(input) : input.getConfidence());
         intent.setMissingFields(input.getMissingFields() == null || input.getMissingFields().isEmpty()
                 ? buildMissingFields(intent)
@@ -114,6 +123,10 @@ public class AiAccountingService {
     private String detectTxnType(String text) {
         if (detectTransfer(text)) {
             return "TRANSFER";
+        }
+        String investmentType = detectInvestment(text);
+        if (investmentType != null) {
+            return investmentType;
         }
         if (containsAny(text, "花了", "支出", "买", "消费", "付款", "支付")) {
             return "EXPENSE";
@@ -132,6 +145,71 @@ public class AiAccountingService {
             return true;
         }
         return text.contains("从") && text.contains("到");
+    }
+
+    /**
+     * 识别明确投资语义：买入 / 申购 / 定投。
+     *
+     * <p>优先级高于 EXPENSE 关键词，避免“买入 XXX 1000”被“买”误判成支出；“买奶茶 30”不含“买入”，仍是 EXPENSE。</p>
+     */
+    private String detectInvestment(String text) {
+        if (text.contains("买入")) {
+            return "BUY";
+        }
+        if (text.contains("申购") || text.contains("定投")) {
+            return "SUBSCRIPTION";
+        }
+        return null;
+    }
+
+    /** 判断候选类型是否为投资买入 / 申购，规则解析只负责识别，不负责匹配真实产品。 */
+    private boolean isInvestmentType(String txnType) {
+        return "BUY".equals(txnType) || "SUBSCRIPTION".equals(txnType);
+    }
+
+    /**
+     * 提取 BUY / SUBSCRIPTION 产品名称提示：取“买入 / 申购 / 定投”之后、金额或分隔符之前的内容。
+     *
+     * <p>只作为人工提示，禁止用它自动匹配真实 productId。</p>
+     */
+    private String extractProductNameHint(String text) {
+        for (String keyword : List.of("买入", "申购", "定投")) {
+            int index = text.indexOf(keyword);
+            if (index < 0) {
+                continue;
+            }
+            String rest = text.substring(index + keyword.length()).trim();
+            String withoutLeadingAmount = rest.replaceFirst("^[0-9]+(\\.[0-9]{1,2})?\\s*", "").trim();
+            String hint = readUntilSeparator(withoutLeadingAmount);
+            if (!hint.isBlank()) {
+                return hint;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 提取 BUY / SUBSCRIPTION 金额：先剔除产品名称提示，再取剩余文本中最后一个安全金额候选。
+     *
+     * <p>这样“买入沪深300ETF 1000”取到 1000，而不会把产品名里的 300 误当成金额。</p>
+     */
+    private BigDecimal extractInvestmentAmount(String text) {
+        String hint = extractProductNameHint(text);
+        String scoped = text;
+        if (hint != null && !hint.isBlank()) {
+            int index = text.indexOf(hint);
+            if (index >= 0) {
+                scoped = text.substring(0, index) + " " + text.substring(index + hint.length());
+            }
+        }
+        BigDecimal last = null;
+        Matcher matcher = AMOUNT_PATTERN.matcher(scoped);
+        while (matcher.find()) {
+            if (isSafeAmountCandidate(scoped, matcher.start(1), matcher.end(1), matcher.group(1))) {
+                last = new BigDecimal(matcher.group(1));
+            }
+        }
+        return last;
     }
 
     private BigDecimal extractAmount(String text) {
@@ -231,10 +309,14 @@ public class AiAccountingService {
         return text.substring(0, end).trim();
     }
 
-    private String extractNote(String text, BigDecimal amount, String accountNameHint, String targetAccountNameHint) {
+    private String extractNote(String text, BigDecimal amount, String accountNameHint, String targetAccountNameHint,
+                               String productNameHint) {
         String note = text;
         if (amount != null) {
             note = note.replaceFirst(Pattern.quote(amount.stripTrailingZeros().toPlainString()), "");
+        }
+        if (productNameHint != null && !productNameHint.isBlank()) {
+            note = note.replaceFirst(Pattern.quote(productNameHint), "");
         }
         if (accountNameHint != null) {
             note = note.replaceFirst("(用|从|转到|转入|转出|到)" + Pattern.quote(accountNameHint), "");
@@ -243,6 +325,9 @@ public class AiAccountingService {
             note = note.replaceFirst("(转到|转入|到)" + Pattern.quote(targetAccountNameHint), "");
         }
         note = note.replaceAll("[，,。；;]", " ")
+                .replace("买入", "")
+                .replace("申购", "")
+                .replace("定投", "")
                 .replace("花了", "")
                 .replace("支出", "")
                 .replace("消费", "")
@@ -267,6 +352,9 @@ public class AiAccountingService {
         if ("TRANSFER".equals(intent.getTxnType()) && intent.getTargetAccountId() == null) {
             missingFields.add("targetAccountId");
         }
+        if (isInvestmentType(intent.getTxnType()) && intent.getProductId() == null) {
+            missingFields.add("productId");
+        }
         return missingFields;
     }
 
@@ -288,6 +376,10 @@ public class AiAccountingService {
         payload.put("accountNameHint", intent.getAccountNameHint());
         payload.put("targetAccountId", intent.getTargetAccountId());
         payload.put("targetAccountNameHint", intent.getTargetAccountNameHint());
+        payload.put("productId", intent.getProductId());
+        payload.put("productNameHint", intent.getProductNameHint());
+        payload.put("expectedNavDate", intent.getExpectedNavDate());
+        payload.put("expectedConfirmDate", intent.getExpectedConfirmDate());
         payload.put("confidence", intent.getConfidence());
         payload.put("missingFields", intent.getMissingFields());
         return toJson(payload);

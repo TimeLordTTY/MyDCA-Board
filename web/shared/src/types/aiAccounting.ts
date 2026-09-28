@@ -31,8 +31,11 @@ export interface AccountingIntent {
   sourceRef?: string | null
   /** 原始输入文本。 */
   rawInput: string
-  /** 候选交易类型：EXPENSE / INCOME / TRANSFER；不确定时为空。 */
-  txnType?: 'EXPENSE' | 'INCOME' | 'TRANSFER' | string | null
+  /**
+   * 候选交易类型：EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION；不确定时为空。
+   * BUY（买入）/ SUBSCRIPTION（申购、定投）只给出产品名称提示，真实 productId 必须由主人选择。
+   */
+  txnType?: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'BUY' | 'SUBSCRIPTION' | string | null
   /** 候选金额，不确定时为空。 */
   amount?: number | null
   /** 候选备注。 */
@@ -41,12 +44,20 @@ export interface AccountingIntent {
   accountId?: number | null
   /** 转出账户名称提示，只供复核，不自动当成账户 ID。 */
   accountNameHint?: string | null
+  /** 投资候选（BUY / SUBSCRIPTION）的真实产品 ID；规则解析不会自动匹配，通常为空，等待主人补齐。 */
+  productId?: number | null
+  /** 投资候选的产品名称提示，只供复核，不可替代 productId。 */
+  productNameHint?: string | null
   /** 转账时的转入（目标）账户 ID；规则解析不会自动映射真实账户，通常为空。 */
   targetAccountId?: number | null
   /** 转账时的转入账户名称提示，只供复核，不自动当成账户 ID。 */
   targetAccountNameHint?: string | null
   /** 规则解析置信度。 */
   confidence?: number | null
+  /** 投资候选预计净值日（可选）。 */
+  expectedNavDate?: string | null
+  /** 投资候选预计确认日（可选）。 */
+  expectedConfirmDate?: string | null
   /** 仍需补齐的字段。 */
   missingFields: string[]
   /** 后端生成的标准化 intent JSON。 */

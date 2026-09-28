@@ -199,6 +199,164 @@ class DraftEditStateTest {
         assertFalse(DraftEditState.canConfirm(transferDraft, freshPreview.copy(draftId = 11), false, false, false, false))
         assertFalse(DraftEditState.canConfirm(transferDraft, freshPreview, editDirty = true, saving = false, previewing = false, confirming = false))
     }
+    @Test
+    fun investmentFormReadsBackRealProductFields() {
+        val form = DraftEditState.formFromDraft(
+            draft(
+                parsedPayloadJson = """{"txnType":"BUY","amount":1000,"accountId":7,"productId":5,"productNameHint":"纳指ETF","expectedNavDate":"2026-09-29","expectedConfirmDate":"2026-09-30"}""",
+            ),
+        )
+
+        assertEquals("BUY", form.txnType)
+        assertEquals("1000", form.amount)
+        assertEquals("7", form.accountId)
+        assertEquals("5", form.productId)
+        assertEquals("纳指ETF", form.productNameHint)
+        assertEquals("2026-09-29", form.expectedNavDate)
+        assertEquals("2026-09-30", form.expectedConfirmDate)
+    }
+
+    @Test
+    fun buyAndSubscriptionAreSupportedTypes() {
+        val buy = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "BUY", amount = "1000", accountId = "7", productId = "5"),
+        )
+        val subscription = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "SUBSCRIPTION", amount = "500", accountId = "7", productId = "6"),
+        )
+
+        assertTrue(buy.isValid)
+        assertTrue(subscription.isValid)
+        assertTrue(DraftEditState.isInvestmentType("buy"))
+        assertTrue(DraftEditState.isInvestmentType(" subscription "))
+        assertFalse(DraftEditState.isInvestmentType("EXPENSE"))
+    }
+
+    @Test
+    fun investmentFormRequiresRealProductId() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "BUY", amount = "1000", accountId = "7", productId = ""),
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.error.orEmpty().contains("productId"))
+    }
+
+    @Test
+    fun sellRemainsUnsupportedAndBlocksSave() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "SELL", amount = "1000", accountId = "7", productId = "5"),
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.error.orEmpty().contains("BUY"))
+        assertFalse(DraftEditState.SUPPORTED_TXN_TYPES.contains("SELL"))
+    }
+
+    @Test
+    fun investmentPayloadCarriesProductAndDropsTargetAccount() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(
+                txnType = "SUBSCRIPTION",
+                amount = "500",
+                accountId = "7",
+                productId = "6",
+                productNameHint = "兴全合润",
+                expectedNavDate = "2026-09-29",
+                expectedConfirmDate = "2026-09-30",
+                targetAccountId = "9",
+            ),
+        )
+
+        assertTrue(result.isValid)
+        val payload = DraftEditState.parsePayloadJson(result.request?.parsedPayloadJson)
+        assertEquals("SUBSCRIPTION", payload["txnType"])
+        assertEquals(7L, (payload["accountId"] as Number).toLong())
+        assertEquals(6L, (payload["productId"] as Number).toLong())
+        assertEquals("兴全合润", payload["productNameHint"])
+        assertEquals("2026-09-29", payload["expectedNavDate"])
+        assertEquals("2026-09-30", payload["expectedConfirmDate"])
+        assertFalse(payload.containsKey("targetAccountId"))
+    }
+
+    @Test
+    fun switchingBackToOrdinaryTypesClearsInvestmentFields() {
+        val investmentForm = DraftEditForm(
+            txnType = "BUY",
+            amount = "1000",
+            accountId = "7",
+            productId = "5",
+            productNameHint = "纳指ETF",
+            expectedNavDate = "2026-09-29",
+            expectedConfirmDate = "2026-09-30",
+        )
+
+        val expense = DraftEditState.switchTxnType(investmentForm, "EXPENSE")
+
+        assertEquals("EXPENSE", expense.txnType)
+        assertEquals("", expense.productId)
+        assertEquals("", expense.productNameHint)
+        assertEquals("", expense.expectedNavDate)
+        assertEquals("", expense.expectedConfirmDate)
+        assertTrue(expense.accountId.isNotBlank())
+    }
+
+    @Test
+    fun switchingFromTransferToInvestmentDropsTargetAccount() {
+        val transfer = DraftEditForm(
+            txnType = "TRANSFER",
+            amount = "100",
+            accountId = "7",
+            targetAccountId = "8",
+        )
+
+        val investment = DraftEditState.switchTxnType(transfer, "BUY")
+
+        assertEquals("BUY", investment.txnType)
+        assertEquals("", investment.targetAccountId)
+    }
+
+    @Test
+    fun stalePreviewCannotConfirmInvestmentDraft() {
+        val buyDraft = draft(
+            id = 10,
+            parsedPayloadJson = """{"txnType":"BUY","productId":5,"accountId":7,"amount":1000}""",
+        )
+        val freshPreview = DraftPreviewDto(
+            draftId = 10,
+            txnType = "BUY",
+            productId = 5,
+            confirmSupported = true,
+        )
+
+        assertTrue(DraftEditState.canConfirm(buyDraft, freshPreview, false, false, false, false))
+        assertFalse(
+            DraftEditState.canConfirm(
+                buyDraft,
+                freshPreview.copy(confirmSupported = false),
+                false,
+                false,
+                false,
+                false,
+            ),
+        )
+        assertFalse(
+            DraftEditState.canConfirm(
+                buyDraft,
+                freshPreview,
+                editDirty = true,
+                saving = false,
+                previewing = false,
+                confirming = false,
+            ),
+        )
+    }
+
     private fun draft(
         id: Long = 1L,
         status: String = "DRAFT",

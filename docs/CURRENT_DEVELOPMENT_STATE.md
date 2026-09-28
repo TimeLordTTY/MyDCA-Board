@@ -11,10 +11,10 @@
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.10.0`
-- `versionCode = 11`
+- `versionName = 0.11.0`
+- `versionCode = 12`
 
-“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.10.0` 是 TRANSFER 转账草稿闭环版本（上一版 `0.9.0` 为桌面快速记账小组件，更早 `0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
+“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.11.0` 是投资买入 / 申购草稿闭环版本（上一版 `0.10.0` 为 TRANSFER 转账草稿闭环，更早 `0.9.0` 为桌面快速记账小组件、`0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
 ## 已完成的 Phase3 主能力
 
@@ -28,6 +28,7 @@
 - v0.8.0 外部分享快速采集：系统 Share Sheet 的文本 / 单张图片只预填到现有人工采集流程，不自动 parse/OCR/draft/preview/confirm。
 - v0.9.0 桌面快速记账小组件：四个静态中文入口（记一笔 / 手工记账 / 图片识别 / 草稿箱）只打开既有页面，不联网、不读写账本、不自动记账。
 - v0.10.0 TRANSFER 转账草稿闭环：文本候选识别转账、双账户（转出 / 转入）影响预览、主人二次确认后经 `QuickEntryService.quickTransfer` 生成一笔正式转账流水；重复确认不重复记账。
+- v0.11.0 投资买入 / 申购草稿闭环：BUY / SUBSCRIPTION 候选解析、真实产品 + 单一资金来源账户选择、只读订单与 CASH / RECEIVABLE 资金影响预览、主人二次确认后经 `OrderService.createInvestmentDraftOrder` 创建 PENDING 订单并生成付款账本；不自动结算、不生成最终持仓、重复确认不重复建单。
 
 ## v0.8 强幂等（已完成）
 
@@ -82,7 +83,22 @@
 - PC / shared：`web/shared` 同步 TRANSFER 与 target 字段类型；PC 草稿箱可查看 / 预览双账户与双 delta，并补齐最小安全编辑，不再把 TRANSFER 显示成不支持类型。
 - 本轮未新增数据库表 / migration，未连接任何数据库；后端 95 项测试、Android 206 项测试、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1`（成功静默）全部通过。
 
+## v0.11.0 投资买入 / 申购草稿闭环（已完成）
+
+- 任务：`task-mydca-v011-invest-buy-draft-loop-20260928`
+- 详细说明：`docs/mydca_v011_invest_buy_draft_loop_20260928.md`
+
+- 候选结构统一为 `txnType=BUY / SUBSCRIPTION` + `productId`（必须由主人明确选择）+ `productNameHint`（仅提示）+ `amount` + `accountId`（本轮单资金来源）+ `accountNameHint` + `note` + 可选 `expectedNavDate` / `expectedConfirmDate`。
+- 文本解析：`买入` → BUY，`申购` / `定投` → SUBSCRIPTION，判定优先级高于 `买` / `付款` / `支付` 等 EXPENSE 关键词；`买奶茶 30` 仍为 EXPENSE。规则解析只识别语义、提取金额与产品名称提示，禁止把名称提示映射成真实 `productId`；缺 ID 时只生成 DRAFT 并把 `productId` / `accountId` 写入 `missingFields`。
+- 只读预览：产品必须存在且启用、币种与资金账户一致；资金账户必须当前 user / family 可见、active REAL、叶子账户、可用余额足够；资金用途一般投资只允许 `INVESTABLE`，`BOND_REPO` 额外允许 `RESERVED`，`SPENDABLE` / 普通 `RESERVED` / 父账户 / VIRTUAL 一律阻断。投资影响口径为 `accountDelta = -amount`、`receivableDelta = +amount`，`willCreateOrder=true`、`willCreateLedgerTxn=true`、`willCreateSettlement=false`、`willAffectHolding=false`。preview 不调用 `OrderService` / `LedgerService` / `SettlementService`。
+- 正式入账：新增 `OrderService.createInvestmentDraftOrder(...)` 安全入口（只允许 BUY / SUBSCRIPTION，重新校验产品、币种、资金用途、账户可见性与可用余额），复用既有 `createOrder` 创建 `status=PENDING` 订单并生成下单付款账本（CASH CREDIT + RECEIVABLE DEBIT）；订单仍需后续 SettlementService 才能结算并影响持仓。
+- confirm：BUY / SUBSCRIPTION 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用安全入口；订单 ID 写回 `confirmOrderId`，重复确认幂等，`IGNORED` 不可确认，不存在自动 preview / confirm / settle。
+- Android：`versionName = 0.11.0`（`versionCode = 12`）；草稿编辑支持支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金账户，确认弹窗为「确认创建【产品】买入/申购订单 ¥X？」。PC / shared 同步投资类型与预览字段。
+- 本轮未新增数据库表 / migration，未连接任何数据库；后端 121 项测试、Android 221 项测试、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1`（成功静默）全部通过。
 ## Android CI APK 真实证据
+
+### v0.11.0
+- source commit / Run ID / Artifact ID / APK 文件名 / CI APK SHA-256：待 owner push 后回填（普通自动任务只提交、不 push）。
 
 ### v0.10.0
 - source commit：`e5c544db7d90f82858ddc03a1ca285ec7659e037`
@@ -153,10 +169,10 @@
 ## 当前真正未完成
 
 1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **投资订单类草稿确认**：当前 BUY / SUBSCRIPTION / SELL / REDEMPTION 仍未纳入草稿确认闭环；下一步先做买入 / 申购。现有 OrderService 对 BUY / SUBSCRIPTION 的真实语义是：创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；因此新 preview 必须把该资金影响明确展示出来，不能把它描述成“只占用资金”。仍不自动结算、不生成最终持仓、不调用真实交易渠道。
+2. **投资订单类草稿确认**：BUY / SUBSCRIPTION 已纳入草稿确认闭环（v0.11.0）；SELL / REDEMPTION 仍未纳入，作为下一阶段独立任务。现有 OrderService 对 BUY / SUBSCRIPTION 的真实语义是：创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；preview 已明确展示该资金影响，不把它描述成只占用资金。仍不自动结算、不生成最终持仓、不调用真实交易渠道。
 3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
 4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：**v0.11.0 投资买入 / 申购草稿闭环**。在不改变“输入/解析 → DRAFT → fresh preview → 主人二次确认”的安全边界下，BUY / SUBSCRIPTION 的确认要复用现有 OrderService；preview 必须明确显示“将创建 PENDING 订单，并同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）”。不自动结算、不生成最终持仓、不调用任何真实交易渠道。
+下一项普通、可自动化的业务任务是**投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环**，作为独立任务推进；本轮 v0.11.0 已完成 BUY / SUBSCRIPTION，SELL / REDEMPTION 尚未支持。投资订单类确认始终复用既有 OrderService 与安全边界：输入的解析只产生候选与 DRAFT，preview 必须明确显示将创建 PENDING 订单并同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）。不自动结算、不生成最终持仓、不调用任何真实交易渠道。

@@ -21,6 +21,7 @@ import com.timelordtty.dca.dto.DraftLedgerEntryDTO;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.DraftLedgerEntryMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.DraftLedgerEntry;
 import java.math.BigDecimal;
 import java.sql.SQLIntegrityConstraintViolationException;
@@ -47,8 +48,10 @@ class DraftLedgerEntryConcurrentReplayTest {
     private final DraftLedgerEntryMapper mapper = mock(DraftLedgerEntryMapper.class);
     private final AccountMapper accountMapper = mock(AccountMapper.class);
     private final QuickEntryService quickEntryService = mock(QuickEntryService.class);
+    private final ProductMasterMapper productMasterMapper = mock(ProductMasterMapper.class);
+    private final OrderService orderService = mock(OrderService.class);
     private final DraftLedgerEntryService service =
-            new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper());
+            new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService);
 
     @Test
     void concurrentReplayInSameUserScopeKeepsSingleDraftAndReturnsExistingOne() {

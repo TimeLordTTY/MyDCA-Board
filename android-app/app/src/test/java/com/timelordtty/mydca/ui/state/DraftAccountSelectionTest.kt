@@ -83,6 +83,48 @@ class DraftAccountSelectionTest {
         assertNull(DraftAccountSelection.transferValidationMessage(cny, anotherCny))
         assertNull(DraftAccountSelection.transferValidationMessage(null, anotherCny))
     }
+    @Test
+    fun investmentOnlyAllowsInvestableLeafAccounts() {
+        val selectable = DraftAccountSelection.selectableFor("BUY", all)
+
+        assertEquals(listOf(3L), selectable.map { it.id })
+        assertTrue(DraftAccountSelection.isSelectable("BUY", investable))
+        assertTrue(DraftAccountSelection.isSelectable("subscription", investable))
+        assertFalse(DraftAccountSelection.isSelectable("BUY", spendable))
+        assertFalse(DraftAccountSelection.isSelectable("BUY", reserved))
+        assertFalse(DraftAccountSelection.isSelectable("BUY", unallocated))
+        assertFalse(DraftAccountSelection.isSelectable("BUY", parent))
+    }
+
+    @Test
+    fun bondRepoMayUseReservedAccountOnly() {
+        assertTrue(DraftAccountSelection.isSelectable("BUY", reserved, "BOND_REPO"))
+        assertTrue(DraftAccountSelection.isSelectable("SUBSCRIPTION", reserved, "bond_repo"))
+        assertTrue(DraftAccountSelection.isEligibleInvestmentAccount(reserved, "BOND_REPO"))
+        assertNull(DraftAccountSelection.rejectionReason("BUY", reserved, "BOND_REPO"))
+
+        assertFalse(DraftAccountSelection.isSelectable("BUY", reserved, "FUND"))
+        assertFalse(DraftAccountSelection.isSelectable("BUY", spendable, "BOND_REPO"))
+        assertFalse(DraftAccountSelection.isSelectable("BUY", parent, "BOND_REPO"))
+    }
+
+    @Test
+    fun investmentRejectionReasonsExplainTheProtectedAccount() {
+        assertNull(DraftAccountSelection.rejectionReason("BUY", investable))
+        assertTrue(
+            DraftAccountSelection.rejectionReason("BUY", spendable).orEmpty().contains("SPENDABLE"),
+        )
+        assertTrue(
+            DraftAccountSelection.rejectionReason("SUBSCRIPTION", reserved).orEmpty().contains("RESERVED"),
+        )
+        assertTrue(
+            DraftAccountSelection.rejectionReason("BUY", unallocated).orEmpty().contains("待分配"),
+        )
+        assertTrue(
+            DraftAccountSelection.rejectionReason("BUY", parent).orEmpty().contains("父账户"),
+        )
+    }
+
     private fun account(
         id: Long,
         name: String,

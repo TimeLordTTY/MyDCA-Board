@@ -5,7 +5,7 @@
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.10.0 / versionCode 11`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件与 v0.10.0 TRANSFER 转账草稿闭环均已完成。
+- Android 当前版本：`0.11.0 / versionCode 12`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环与 v0.11.0 投资买入 / 申购草稿闭环均已完成。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
@@ -16,7 +16,9 @@
 - v0.9.0 CI APK 已真实产出：Run `36367375440`，Artifact `10946904834`，APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`。
 - v0.10.0 转账草稿闭环已落地：文本候选识别 TRANSFER、双账户影响预览、二次确认后经 `QuickEntryService.quickTransfer` 生成一笔正式转账流水，重复确认不重复记账。
 - v0.10.0 CI APK 已真实产出：Run `36369966197`，Artifact `10949105553`，APK SHA-256 `FD39508EA408807DB5ECEEBAFD2B2F4630D766447398E29D1397D8721A5304F0`。
-- 下一普通工程目标：v0.11.0 投资买入 / 申购草稿闭环；确认前必须预览现有 OrderService 会产生的 PENDING 订单与付款账本影响，确认后仍不自动结算、不生成最终持仓。数据库 migration 上线与真机人工验收继续独立处理。
+- v0.11.0 投资买入 / 申购草稿闭环已落地：BUY / SUBSCRIPTION 候选解析、真实产品 + 单一资金来源账户选择、只读订单与 CASH / RECEIVABLE 资金影响预览、二次确认后经 OrderService 创建 PENDING 订单并生成付款账本；不自动结算、不生成最终持仓。
+- v0.11.0 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）待 owner push 后回填（普通自动任务只提交、不 push）。
+- 下一普通工程目标：投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环，作为独立任务推进；本轮 v0.11.0 已完成买入 / 申购，SELL / REDEMPTION 尚未支持。数据库 migration 上线与真机人工验收继续独立处理。
 
 ### 已被后续版本完成的旧待办
 
@@ -425,6 +427,30 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 本地 Debug APK：55,821,214 bytes，SHA-256 `4D5C1443EE30B0A8315ECBB848A3FFAD62ED3B675861236361B8971552C087DB`（本机观察，debug APK 本地字节不可复现，不作为制品身份）；
   本进程未推送，CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地哈希冒充。
 
+## Android / 后端 v0.11.0 投资买入 / 申购草稿闭环（2026-09-28）
+
+- 对应任务 `task-mydca-v011-invest-buy-draft-loop-20260928`（owner 直接批准，L3），详细说明见 `docs/mydca_v011_invest_buy_draft_loop_20260928.md`。
+- 目标：把草稿正式确认从 EXPENSE / INCOME / TRANSFER 扩展到投资 BUY（场内买入）与 SUBSCRIPTION（场外申购），
+  让主人可以补齐真实产品 + 单一资金来源账户、先看到订单与资金影响预览、再二次确认创建系统内 PENDING 订单；
+  不改变「DRAFT → fresh preview → 主人二次确认 → 正式订单 / 账本」的安全边界。
+- 候选结构：`txnType=BUY / SUBSCRIPTION` + `productId`（必须由主人明确选择）+ `productNameHint`（仅提示）+ `amount`
+  + `accountId`（本轮单资金来源）+ `accountNameHint` + `note` + 可选 `expectedNavDate` / `expectedConfirmDate`。
+- 文本解析：`买入` → BUY，`申购` / `定投` → SUBSCRIPTION，优先级高于 `买` / `付款` / `支付` 等 EXPENSE 关键词，
+  `买奶茶 30` 仍为 EXPENSE；规则解析只识别语义、提取金额与产品名称提示，禁止把名称提示映射成真实 `productId`，
+  缺 ID 时只生成 DRAFT 并把 `productId` / `accountId` 记入 `missingFields`。
+- 只读预览：产品必须存在且启用、币种与资金账户一致；资金账户必须可见、active REAL、叶子、可用余额足够；
+  资金用途一般投资只允许 `INVESTABLE`，`BOND_REPO` 额外允许 `RESERVED`，`SPENDABLE` / 普通 `RESERVED` / 父账户 / VIRTUAL 一律阻断；
+  影响口径为 `accountDelta = -amount`、`receivableDelta = +amount`，`willCreateSettlement=false`、`willAffectHolding=false`；
+  preview 绝不调用 `OrderService` / `LedgerService` / `SettlementService`。
+- 正式入账：新增 `OrderService.createInvestmentDraftOrder(...)` 安全入口（只允许 BUY / SUBSCRIPTION，重新校验产品、币种、资金用途、
+  账户可见性与可用余额），复用既有 `createOrder` 创建 `status=PENDING` 订单并生成下单付款账本（CASH CREDIT + RECEIVABLE DEBIT）；
+  订单仍需后续 SettlementService 结算并影响持仓；未新增表或 migration。
+- confirm：BUY / SUBSCRIPTION 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用安全入口；订单 ID 写回 `confirmOrderId`，
+  重复确认幂等，`IGNORED` 草稿不可确认，不存在自动 preview / confirm / settle。
+- Android `versionName = 0.11.0`（`versionCode = 12`）：草稿编辑支持支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金账户，
+  确认弹窗标题为「确认创建【产品】买入/申购订单 ¥X？」；PC `web/shared` 与草稿箱同步投资类型与预览字段。
+- 本轮验证：后端 `mvn -B test` 121 项通过（由 95 项增至 121 项）、Android `testDebugUnitTest` 35 类 221 项通过（由 206 项增至 221 项）、
+  `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 服务端 `draft_ledger_entry` 唯一约束缺口已收敛：该缺口最初因为 `allowed_paths` 不含 `sql/**` 而遗留，
@@ -471,3 +497,11 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 真机人工验收：转账的双账户选择、确认弹窗文案，以及正式确认后流水页的转出 / 转入两条视图。
 - 未做：跨币种转账、投资订单 / 结算类草稿确认、持仓影响确认；PC 未重做整套转账编辑 UI（只做最小查看 / 预览与安全编辑兼容）。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动转账或自动正式入账。
+
+## 后续待办（v0.11.0 投资买入 / 申购草稿闭环）
+
+- v0.11.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
+  工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
+- 真机人工验收：投资草稿的产品选择、资金账户过滤、付款账户 / 待结算应收预览与二次确认文案。
+- 未做：SELL / REDEMPTION、多资金来源组合投资、完整结算 / 持仓影响确认；PC 未重做整套投资编辑 UI。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动下单、自动结算或自动正式入账。

@@ -3,10 +3,12 @@
 <!-- CURRENT-SNAPSHOT:START -->
 ## 当前发布状态（2026-09-28）
 
-- 当前 Android：`versionName=0.10.0`、`versionCode=11`。
+- 当前 Android：`versionName=0.11.0`、`versionCode=12`。
+- v0.11.0 投资买入 / 申购草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金来源账户、订单与 CASH / RECEIVABLE 资金影响预览与「确认创建【产品】买入/申购订单 ¥X？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复建订单。SELL / REDEMPTION 尚未支持。
 - v0.10.0 TRANSFER 转账草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账，转账表单支持转出 / 转入双账户、双账户影响预览与「确认将 ¥X 从 A 转到 B？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复记账。
 - v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
 - v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
+- v0.11.0 制品：待 owner push 后回填（普通自动任务只提交、不 push，本轮不声称 CI APK 已交付）。
 - v0.10.0 已有真实成功 CI 制品：
 - Run ID `36369966197`
 - Artifact ID `10949105553`
@@ -22,10 +24,10 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.10.0`（`versionCode = 11`），APK 制品命名为 `MyDCA-Board-v0.10.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.11.0`（`versionCode = 12`），APK 制品命名为 `MyDCA-Board-v0.11.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
-- 草稿确认支持支出 / 收入 / 转账：TRANSFER 需要转出账户 + 转入账户 + 金额，确认前必须先看到双账户影响预览。
+- 草稿确认支持支出 / 收入 / 转账 / 买入 / 申购：TRANSFER 需要转出账户 + 转入账户 + 金额；BUY / SUBSCRIPTION 需要主人明确选择的真实产品 + 单一资金来源账户 + 金额；确认前必须先看到资金影响预览。确认投资草稿会创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），但不结算、不生成最终持仓。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
 - Android App 不接入真实大模型，不自动预览、不自动确认、不直接写数据库。
 
@@ -87,6 +89,7 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 确认按钮必须同时满足：当前草稿为 `DRAFT`、当前预览 `draftId` 与草稿 ID 一致、`preview.confirmSupported=true`。
 - 点击确认前仍会弹出二次确认。
 - 最终校验仍由后端 `/api/v2/drafts/{draftId}/confirm` 统一完成。
+- 投资草稿（BUY / SUBSCRIPTION）确认后由后端创建 PENDING 订单并同步生成付款账本，但不调用 SettlementService、不生成最终持仓；SELL / REDEMPTION 尚未支持。
 
 ## 安全边界
 
@@ -249,3 +252,16 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 206 项通过（由 195 项增至 206 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
 - Debug APK：大小 55,821,214 bytes，SHA-256：`4D5C1443EE30B0A8315ECBB848A3FFAD62ED3B675861236361B8971552C087DB`（debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察，不作为制品身份）；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
 - 明确未做：不做自动 preview / confirm / 转账 / 交易，不做跨币种转账，不做投资订单 / 结算类草稿确认，不新增数据库表或 migration，不新增系统权限。
+
+## v0.11.0 投资买入 / 申购草稿闭环
+
+- 版本收口为 `versionName = 0.11.0`（`versionCode = 12`）；投资草稿继续走既有安全链路：`DRAFT → fresh preview → 主人二次确认 → 正式订单 / 账本`。
+- 草稿编辑新增「买入 BUY」与「申购 SUBSCRIPTION」类型：必须由主人明确选择真实产品（`productId`）、单一资金来源账户（`accountId`）、金额，可选备注 / 预期净值日期 / 预期确认日期；产品名称提示只作人工提示，禁止自动匹配真实 `productId`。
+- 投资资金账户过滤：只允许 `INVESTABLE` 真实叶子账户；`BOND_REPO` 额外允许 `RESERVED`；`SPENDABLE` / 普通 `RESERVED` / 父账户 / VIRTUAL 一律阻断并给出中文提示；产品币种必须与账户币种一致，最终以后端 preview 为准。
+- 投资预览中文展示「产品 / 资金来源 / 可用余额 / 付款账户变动 / 待结算应收变动」；确认弹窗标题为「确认创建【产品】买入/申购订单 ¥X？」，正文为「确认后将立即从【账户】扣除 ¥X，并增加同额待结算应收；订单仍需后续结算，不会自动成交。」。
+- 只有主人二次确认后，后端才复用既有 `OrderService.createInvestmentDraftOrder` 创建 `status=PENDING` 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；`willCreateSettlement=false`、`willAffectHolding=false`，不自动结算、不生成最终持仓、不调用真实交易渠道。
+- 确认仍受 fresh preview gate 控制：必须当前草稿为 `DRAFT`、preview 匹配当前草稿且 `preview.confirmSupported=true`，再由用户二次确认；重复确认不重复建订单或付款账本，`IGNORED` 草稿不可确认。
+- 投资不会自动发生：手工 / OCR / 支付通知候选 / 系统分享 / 桌面小组件任何入口都不具备投资下单能力，后端也不会在 parse 或创建 DRAFT 后自动 confirm。
+- 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 221 项通过（由 206 项增至 221 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
+- Debug APK 本地字节不可复现，体积与 SHA-256 只作本机观察，不作为制品身份；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
+- 明确未做：不做 SELL / REDEMPTION，不做自动 preview / confirm / 结算 / 交易，不做多资金来源组合投资，不新增数据库表或 migration，不新增系统权限。

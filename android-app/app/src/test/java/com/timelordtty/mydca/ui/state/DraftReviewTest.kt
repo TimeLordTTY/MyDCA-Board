@@ -129,6 +129,88 @@ class DraftReviewTest {
         assertTrue(DraftReview.transferImpactLines(null).isEmpty())
         assertEquals("确认正式记账？", DraftReview.confirmDialogTitle(preview))
     }
+    @Test
+    fun investmentPreviewShowsProductFundingAccountAndReceivable() {
+        val preview = DraftPreviewDto(
+            draftId = 4,
+            txnType = "BUY",
+            orderType = "BUY",
+            productId = 5,
+            productName = "纳指ETF",
+            productCode = "513100",
+            productAssetType = "ETF",
+            productCurrency = "CNY",
+            accountName = "证券投资账户",
+            fundUsage = "INVESTABLE",
+            availableBefore = 5000.0,
+            amount = 1000.0,
+            accountDelta = -1000.0,
+            receivableDelta = 1000.0,
+            impactDirection = "DECREASE",
+            confirmSupported = true,
+            fundingMessage = "从【证券投资账户】扣款 1000 元，增加同额待结算应收。",
+        )
+
+        assertEquals("买入 BUY", DraftReview.txnTypeLabel("buy"))
+        assertEquals("申购 SUBSCRIPTION", DraftReview.txnTypeLabel("SUBSCRIPTION"))
+        assertEquals(
+            listOf(
+                "产品：纳指ETF / 513100 / ETF",
+                "资金来源：证券投资账户 / INVESTABLE",
+                "可用余额：5000",
+                "本次金额：1000",
+                "付款账户变动：-1000",
+                "待结算应收变动：+1000",
+                "从【证券投资账户】扣款 1000 元，增加同额待结算应收。",
+            ),
+            DraftReview.investmentImpactLines(preview),
+        )
+        assertTrue(DraftReview.transferImpactLines(preview).isEmpty())
+        assertTrue(DraftReview.investmentImpactLines(null).isEmpty())
+    }
+
+    @Test
+    fun buyConfirmDialogStatesImmediatePaymentLedgerImpact() {
+        val preview = DraftPreviewDto(
+            draftId = 4,
+            txnType = "BUY",
+            productName = "纳指ETF",
+            accountName = "证券投资账户",
+            amount = 1000.0,
+            confirmSupported = true,
+        )
+
+        assertEquals("确认创建【纳指ETF】买入订单 ¥1000？", DraftReview.confirmDialogTitle(preview))
+        val message = DraftReview.confirmDialogMessage(preview, canConfirm = true)
+        assertTrue(message.contains("立即从【证券投资账户】扣除 ¥1000"))
+        assertTrue(message.contains("待结算应收"))
+        assertTrue(message.contains("不会自动成交"))
+        assertTrue(DraftReview.confirmDialogMessage(preview, canConfirm = false).contains("阻止"))
+    }
+
+    @Test
+    fun subscriptionConfirmDialogUsesSubscriptionWording() {
+        val preview = DraftPreviewDto(
+            draftId = 5,
+            txnType = "SUBSCRIPTION",
+            productName = "兴全合润",
+            accountName = "基金投资账户",
+            amount = 500.0,
+            confirmSupported = true,
+        )
+
+        assertEquals("确认创建【兴全合润】申购订单 ¥500？", DraftReview.confirmDialogTitle(preview))
+        assertTrue(DraftReview.confirmDialogMessage(preview, canConfirm = true).contains("基金投资账户"))
+    }
+
+    @Test
+    fun expensePreviewHasNoInvestmentLines() {
+        val preview = DraftPreviewDto(draftId = 1, txnType = "EXPENSE", amount = 12.3, confirmSupported = true)
+
+        assertTrue(DraftReview.investmentImpactLines(preview).isEmpty())
+        assertEquals("确认正式记账？", DraftReview.confirmDialogTitle(preview))
+    }
+
     private fun draft(
         id: Long = 1L,
         status: String = "DRAFT",

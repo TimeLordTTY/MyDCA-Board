@@ -8,6 +8,7 @@ import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
 import com.timelordtty.mydca.data.dto.MobileTransactionDto
+import com.timelordtty.mydca.data.dto.ProductDto
 
 open class WealthRepository(
     private val api: WealthHubApi,
@@ -33,4 +34,10 @@ open class WealthRepository(
     open suspend fun getHoldings(page: Int, pageSize: Int): NetworkResult<MobilePageDto<MobileHoldingDto>> = safeNetworkCall {
         api.getMobileHoldings(page, pageSize)
     }
+
+    /** 只读拉取产品主数据列表，供投资草稿选择真实产品；不做任何自动匹配或下单。 */
+    open suspend fun getProducts(keyword: String? = null, assetType: String? = null): NetworkResult<List<ProductDto>> =
+        safeNetworkCall {
+            api.getProducts(keyword, assetType, null)
+        }
 }

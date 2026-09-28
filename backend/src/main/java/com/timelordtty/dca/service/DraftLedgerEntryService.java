@@ -8,9 +8,12 @@ import com.timelordtty.dca.dto.DraftPreviewDTO;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.DraftLedgerEntryMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.DraftLedgerEntry;
 import com.timelordtty.dca.model.LedgerTxn;
+import com.timelordtty.dca.model.Order;
+import com.timelordtty.dca.model.ProductMaster;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +27,8 @@ import java.util.Map;
 /**
  * 草稿流水服务，负责 Phase3 自动记账候选记录的保存、预览、确认和忽略。
  *
- * <p>除 confirmDraft 明确调用 QuickEntryService 外，本服务不会写入正式账本、账户余额、持仓成本或订单数据。</p>
+ * <p>除 confirmDraft 明确调用 QuickEntryService（EXPENSE / INCOME / TRANSFER）或 OrderService（BUY / SUBSCRIPTION）
+ * 外，本服务不会写入正式账本、账户余额、持仓成本或订单数据；previewDraft 始终是只读的。</p>
  */
 @Service
 public class DraftLedgerEntryService {
@@ -36,18 +40,26 @@ public class DraftLedgerEntryService {
     private final QuickEntryService quickEntryService;
     /** JSON 编解码器，用于解析候选载荷并生成前端可展示的预览信息。 */
     private final ObjectMapper objectMapper;
+    /** 产品主数据只读入口，用于投资草稿校验真实 productId、启用状态和币种。 */
+    private final ProductMasterMapper productMasterMapper;
+    /** 订单服务入口，只有主人二次确认投资草稿后才创建 PENDING 订单并生成付款账本。 */
+    private final OrderService orderService;
 
     /**
-     * 装配草稿 Mapper、快速记账服务和 JSON 编解码器。
+     * 装配草稿 Mapper、快速记账服务、产品只读入口、订单服务和 JSON 编解码器。
      */
     public DraftLedgerEntryService(DraftLedgerEntryMapper draftLedgerEntryMapper,
                                    AccountMapper accountMapper,
                                    QuickEntryService quickEntryService,
-                                   ObjectMapper objectMapper) {
+                                   ObjectMapper objectMapper,
+                                   ProductMasterMapper productMasterMapper,
+                                   OrderService orderService) {
         this.draftLedgerEntryMapper = draftLedgerEntryMapper;
         this.accountMapper = accountMapper;
         this.quickEntryService = quickEntryService;
         this.objectMapper = objectMapper;
+        this.productMasterMapper = productMasterMapper;
+        this.orderService = orderService;
     }
 
     /**
@@ -187,7 +199,10 @@ public class DraftLedgerEntryService {
     }
 
     /**
-     * 确认草稿并转为正式流水；支持 EXPENSE / INCOME / TRANSFER，且必须通过 QuickEntryService。
+     * 确认草稿并转为正式流水；支持 EXPENSE / INCOME / TRANSFER（QuickEntryService）与 BUY / SUBSCRIPTION（OrderService）。
+     *
+     * <p>确认前会重新生成 fresh preview 并复用同一套校验规则；confirmSupported=false 时直接拒绝。
+     * 投资草稿确认只创建 PENDING 订单并生成付款账本，不结算、不生成最终持仓。</p>
      */
     @Transactional
     public DraftLedgerEntryDTO confirmDraft(Long userId, Long familyId, Long draftId) {
@@ -208,19 +223,30 @@ public class DraftLedgerEntryService {
             throw new RuntimeException(preview.getMessage());
         }
 
-        LedgerTxn txn;
+        String confirmedTxnId = null;
+        String confirmedOrderId = null;
         if ("EXPENSE".equals(preview.getTxnType())) {
-            txn = quickEntryService.quickExpense(userId, preview.getAccountId(), preview.getAmount(), preview.getNote());
+            LedgerTxn txn = quickEntryService.quickExpense(userId, preview.getAccountId(), preview.getAmount(), preview.getNote());
+            confirmedTxnId = txn.getTxnId();
         } else if ("INCOME".equals(preview.getTxnType())) {
-            txn = quickEntryService.quickIncome(userId, preview.getAccountId(), preview.getAmount(), preview.getNote());
+            LedgerTxn txn = quickEntryService.quickIncome(userId, preview.getAccountId(), preview.getAmount(), preview.getNote());
+            confirmedTxnId = txn.getTxnId();
         } else if ("TRANSFER".equals(preview.getTxnType())) {
-            txn = quickEntryService.quickTransfer(userId, draft.getOwnerFamilyId(), preview.getAccountId(),
+            LedgerTxn txn = quickEntryService.quickTransfer(userId, draft.getOwnerFamilyId(), preview.getAccountId(),
                     preview.getTargetAccountId(), preview.getAmount(), preview.getNote());
+            confirmedTxnId = txn.getTxnId();
+        } else if (isInvestmentType(preview.getTxnType())) {
+            // 只有这里会在主人二次确认后创建 PENDING 订单，并复用 OrderService 既有的付款账本语义；
+            // 本服务绝不调用 SettlementService，也不生成最终持仓。
+            Order order = orderService.createInvestmentDraftOrder(userId, draft.getOwnerFamilyId(),
+                    preview.getProductId(), preview.getTxnType(), preview.getAmount(), preview.getAccountId(),
+                    preview.getExpectedNavDate(), preview.getExpectedConfirmDate(), preview.getNote());
+            confirmedOrderId = order.getOrderId();
         } else {
-            throw new RuntimeException("草稿确认仅支持 EXPENSE/INCOME/TRANSFER 快速记账");
+            throw new RuntimeException("草稿确认仅支持 EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION");
         }
 
-        int updated = draftLedgerEntryMapper.markConfirmed(draftId, txn.getTxnId(), null);
+        int updated = draftLedgerEntryMapper.markConfirmed(draftId, confirmedTxnId, confirmedOrderId);
         if (updated != 1) {
             throw new RuntimeException("草稿确认状态更新失败，事务已回滚");
         }
@@ -262,7 +288,9 @@ public class DraftLedgerEntryService {
     }
 
     /**
-     * 基于 parsed_payload_json 生成确认预览，支持 EXPENSE / INCOME / TRANSFER 的必要字段校验。
+     * 基于 parsed_payload_json 生成确认预览，支持 EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION 的必要字段校验。
+     *
+     * <p>本方法只读：不创建订单、不写正式账本、不结算。preview 与 confirm 复用同一套规则，避免规则漂移。</p>
      */
     private DraftPreviewDTO buildPreview(DraftLedgerEntry draft) {
         Map<String, Object> payload = parsePayload(draft.getParsedPayloadJson());
@@ -276,6 +304,10 @@ public class DraftLedgerEntryService {
         preview.setWillCreateOrder(false);
         preview.setWillCreateSettlement(false);
         preview.setWillAffectHolding(false);
+
+        if (isInvestmentType(preview.getTxnType())) {
+            return buildInvestmentPreview(preview, payload, draft);
+        }
 
         boolean transfer = "TRANSFER".equals(preview.getTxnType());
 
@@ -373,7 +405,7 @@ public class DraftLedgerEntryService {
             preview.setMessage("可确认：将通过 QuickEntryService 生成正式" + preview.getTxnType() + "流水");
             warnings.add("预览阶段不会写入正式账本；只有点击确认后才会生成正式流水。");
         } else if (!supportedType) {
-            preview.setMessage("草稿确认仅支持 EXPENSE/INCOME/TRANSFER 快速记账");
+            preview.setMessage("草稿确认仅支持 EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION 记账");
         } else if (accountUnavailable) {
             preview.setMessage("草稿账户不存在、已停用或当前用户/家庭不可见，请重新选择账户。");
         } else if (targetAccountUnavailable) {
@@ -387,6 +419,164 @@ public class DraftLedgerEntryService {
         }
         preview.setWarnings(warnings);
         return preview;
+    }
+
+    /** 判断草稿类型是否为投资买入 / 申购；本轮只支持 BUY 与 SUBSCRIPTION。 */
+    private boolean isInvestmentType(String txnType) {
+        return "BUY".equals(txnType) || "SUBSCRIPTION".equals(txnType);
+    }
+
+    /**
+     * 只读生成 BUY / SUBSCRIPTION 确认预览，与 confirm 复用同一套安全规则。
+     *
+     * <p>本方法绝不调用 OrderService.createOrder、LedgerService.createTransaction 或 SettlementService，
+     * 不创建订单、不写正式账本、不结算、不影响持仓。</p>
+     */
+    private DraftPreviewDTO buildInvestmentPreview(DraftPreviewDTO preview, Map<String, Object> payload,
+                                                   DraftLedgerEntry draft) {
+        boolean buy = "BUY".equals(preview.getTxnType());
+        preview.setOrderType(preview.getTxnType());
+        preview.setProductId(firstLong(payload, "productId"));
+        String productNameHint = firstString(payload, "productNameHint");
+        preview.setExpectedNavDate(firstString(payload, "expectedNavDate"));
+        preview.setExpectedConfirmDate(firstString(payload, "expectedConfirmDate"));
+
+        List<String> missing = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        boolean amountInvalid = preview.getAmount() == null || preview.getAmount().compareTo(BigDecimal.ZERO) <= 0;
+        if (amountInvalid) {
+            missing.add("amount");
+        }
+        if (preview.getAccountId() == null) {
+            missing.add("accountId");
+        }
+        if (preview.getProductId() == null) {
+            missing.add("productId");
+        }
+
+        ProductMaster product = null;
+        if (preview.getProductId() != null) {
+            product = productMasterMapper.selectById(preview.getProductId());
+            if (product == null) {
+                addIfAbsent(missing, "productId");
+                warnings.add("产品不存在或已被删除，请重新选择启用的产品。");
+            } else if (!Boolean.TRUE.equals(product.getIsActive())) {
+                addIfAbsent(missing, "productId");
+                warnings.add("产品已停用，不能再用于买入 / 申购草稿，请重新选择启用产品。");
+            } else {
+                preview.setProductName(product.getProductName());
+                preview.setProductCode(product.getProductCode());
+                preview.setProductAssetType(product.getAssetType());
+                preview.setProductCurrency(product.getCurrency());
+            }
+        } else {
+            addIfAbsent(missing, "productId");
+            String hintSuffix = productNameHint == null ? "" :
+                    "当前产品名称提示“" + productNameHint + "”只作参考。";
+            warnings.add("请在 App / PC 明确选择真实产品；系统不会按产品名称自动匹配 productId。" + hintSuffix);
+        }
+
+        Account account = null;
+        if (preview.getAccountId() != null) {
+            account = accountMapper.selectVisibleRealById(preview.getAccountId(), draft.getOwnerUserId(), draft.getOwnerFamilyId());
+            if (account == null) {
+                addIfAbsent(missing, "accountId");
+                warnings.add("付款资金账户不存在、已停用或当前用户/家庭不可见，请重新选择可用账户。");
+            } else {
+                preview.setAccountName(account.getAccountName());
+                preview.setAccountType(account.getAccountType());
+                preview.setFundUsage(account.getFundUsage());
+                String ruleViolation = investmentAccountRuleViolation(product, account);
+                if (ruleViolation != null) {
+                    addIfAbsent(missing, "accountId");
+                    warnings.add(ruleViolation);
+                }
+                if (product != null && !currencyEquals(account.getCurrency(), product.getCurrency())) {
+                    addIfAbsent(missing, "accountId");
+                    warnings.add("资金账户币种与产品币种不一致，请选择币种一致的资金账户。");
+                }
+                BigDecimal available = availableAmount(account);
+                preview.setAvailableBefore(available);
+                if (!amountInvalid && available.compareTo(preview.getAmount()) < 0) {
+                    addIfAbsent(missing, "accountId");
+                    warnings.add("资金账户可用余额不足（可用 " + available.stripTrailingZeros().toPlainString()
+                            + "）；请先通过 TRANSFER 调整资金到该账户。");
+                }
+            }
+        }
+        if (amountInvalid) {
+            warnings.add("金额 amount 必须大于 0，才能确认买入 / 申购订单。");
+        }
+
+        preview.setMissingFields(missing);
+        if (amountInvalid) {
+            preview.setImpactDirection("NONE");
+            preview.setAccountDelta(BigDecimal.ZERO);
+            preview.setReceivableDelta(BigDecimal.ZERO);
+        } else {
+            preview.setImpactDirection("DECREASE");
+            preview.setAccountDelta(preview.getAmount().negate());
+            preview.setReceivableDelta(preview.getAmount());
+        }
+
+        boolean ready = missing.isEmpty();
+        preview.setConfirmSupported(ready);
+        preview.setWillCreateLedgerTxn(ready);
+        preview.setWillCreateOrder(ready);
+        preview.setWillCreateSettlement(false);
+        preview.setWillAffectHolding(false);
+
+        String action = buy ? "买入" : "申购";
+        String productLabel = preview.getProductName() != null ? preview.getProductName()
+                : (productNameHint != null ? productNameHint : "所选产品");
+        String accountLabel = preview.getAccountName() != null ? preview.getAccountName() : "所选资金账户";
+        if (ready) {
+            String amountText = preview.getAmount().stripTrailingZeros().toPlainString();
+            preview.setFundingMessage("确认后将立即从【" + accountLabel + "】扣除 ¥" + amountText
+                    + "，并增加同额待结算应收；订单仍需后续结算，不会自动成交。");
+            preview.setMessage("可确认：将创建 PENDING " + action + "订单，并立即生成下单付款账本；资金账户减少 ¥"
+                    + amountText + "，待结算应收增加 ¥" + amountText + "。此时尚未结算，也不会生成最终持仓。");
+            warnings.add("预览阶段不会创建订单、写入账本或结算；只有主人再次确认后才会创建 PENDING 订单并生成付款账本。");
+        } else if (!warnings.isEmpty()) {
+            preview.setMessage(warnings.get(0));
+        } else {
+            preview.setMessage("草稿缺少必要字段：" + String.join(", ", missing));
+        }
+        preview.setWarnings(warnings);
+        return preview;
+    }
+
+    /**
+     * 资金用途安全规则：一般投资只允许 INVESTABLE；BOND_REPO 额外允许 RESERVED；SPENDABLE 与父账户一律阻断。
+     *
+     * <p>与 Account 设计保持一致：SPENDABLE 需先通过 TRANSFER 调整到 INVESTABLE；RESERVED 除逆回购外不允许普通投资。</p>
+     */
+    private String investmentAccountRuleViolation(ProductMaster product, Account account) {
+        if (!accountMapper.selectChildren(account.getId()).isEmpty()) {
+            return "父账户仅用于聚合展示，不能作为投资资金账户；请选择其下可用的叶子账户。";
+        }
+        String fundUsage = account.getFundUsage();
+        boolean bondRepo = product != null && "BOND_REPO".equalsIgnoreCase(product.getAssetType());
+        if ("INVESTABLE".equals(fundUsage)) {
+            return null;
+        }
+        if ("RESERVED".equals(fundUsage) && bondRepo) {
+            return null;
+        }
+        if ("SPENDABLE".equals(fundUsage)) {
+            return "SPENDABLE 账户不直接用于投资；请先通过 TRANSFER 调整到 INVESTABLE 叶子账户。";
+        }
+        if ("RESERVED".equals(fundUsage)) {
+            return "专款 RESERVED 账户除国债逆回购外不得用于普通投资；请选择 INVESTABLE 叶子账户。";
+        }
+        return "该账户未完成资金分区，不得直接用于投资；请先选择 INVESTABLE 叶子账户。";
+    }
+
+    /** 可用余额 = balance - reserved_amount，空值按 0 处理，与后端真实下单校验保持一致。 */
+    private BigDecimal availableAmount(Account account) {
+        BigDecimal balance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+        BigDecimal reserved = account.getReservedAmount() != null ? account.getReservedAmount() : BigDecimal.ZERO;
+        return balance.subtract(reserved);
     }
 
     private String expenseAccountRuleMessage(String fundUsage) {

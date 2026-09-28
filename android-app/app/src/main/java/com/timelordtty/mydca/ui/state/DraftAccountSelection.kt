@@ -8,6 +8,8 @@ import com.timelordtty.mydca.data.dto.MobileAccountDto
  * 普通消费（EXPENSE）只允许后端标记为可支出的真实叶子账户；父账户、RESERVED、INVESTABLE
  * 与待分配账户都不作为消费来源。转账（TRANSFER）可能是主人主动做资金分区，
  * SPENDABLE / RESERVED / INVESTABLE 之间都允许转移，前端不按资金用途阻断。
+ * 投资（BUY / SUBSCRIPTION）只允许 INVESTABLE 真实叶子账户；只有国债逆回购（BOND_REPO）
+ * 才允许使用 RESERVED 专款，且仍必须是真实叶子账户。
  *
  * 这里只负责前端提示和过滤，最终安全边界仍由后端 preview / confirm 重新校验，
  * 移动端不会代替后端放行。
@@ -16,20 +18,44 @@ object DraftAccountSelection {
     const val EXPENSE = "EXPENSE"
     const val INCOME = "INCOME"
     const val TRANSFER = "TRANSFER"
+    const val BUY = "BUY"
+    const val SUBSCRIPTION = "SUBSCRIPTION"
 
     private const val SPENDABLE = "SPENDABLE"
     private const val RESERVED = "RESERVED"
     private const val INVESTABLE = "INVESTABLE"
 
     /** 按交易类型返回当前可选择的真实账户，规则与后端草稿安全规则保持一致。 */
-    fun selectableFor(txnType: String?, accounts: List<MobileAccountDto>): List<MobileAccountDto> {
-        return accounts.filter { account -> isSelectable(txnType, account) }
+    fun selectableFor(
+        txnType: String?,
+        accounts: List<MobileAccountDto>,
+        productAssetType: String? = null,
+    ): List<MobileAccountDto> {
+        return accounts.filter { account -> isSelectable(txnType, account, productAssetType) }
     }
 
     /** 判断单个账户在当前交易类型下是否可以选择。 */
-    fun isSelectable(txnType: String?, account: MobileAccountDto): Boolean {
+    fun isSelectable(
+        txnType: String?,
+        account: MobileAccountDto,
+        productAssetType: String? = null,
+    ): Boolean {
         if (!account.selectableForDraft) return false
-        return normalizeType(txnType) != EXPENSE || isEligibleExpenseAccount(account)
+        return when (normalizeType(txnType)) {
+            EXPENSE -> isEligibleExpenseAccount(account)
+            BUY, SUBSCRIPTION -> isEligibleInvestmentAccount(account, productAssetType)
+            else -> true
+        }
+    }
+
+    /**
+     * 投资买入 / 申购的资金来源必须是 INVESTABLE 真实叶子账户；
+     * 国债逆回购（BOND_REPO）允许使用 RESERVED 专款，其它产品不得动用专款。
+     */
+    fun isEligibleInvestmentAccount(account: MobileAccountDto, productAssetType: String? = null): Boolean {
+        if (!account.leaf || !account.selectableForDraft) return false
+        if (account.fundUsage.equals(INVESTABLE, ignoreCase = true)) return true
+        return isBondRepo(productAssetType) && account.fundUsage.equals(RESERVED, ignoreCase = true)
     }
 
     /** 普通消费必须同时满足：叶子账户、草稿可选、消费可选、资金用途为 SPENDABLE。 */
@@ -41,7 +67,11 @@ object DraftAccountSelection {
     }
 
     /** 返回该账户不能用于当前交易类型的原因；可以正常选择时返回 null。 */
-    fun rejectionReason(txnType: String?, account: MobileAccountDto): String? {
+    fun rejectionReason(
+        txnType: String?,
+        account: MobileAccountDto,
+        productAssetType: String? = null,
+    ): String? {
         if (!account.selectableForDraft) {
             return if (account.leaf) {
                 "该账户当前不可用于草稿记账。"
@@ -49,9 +79,15 @@ object DraftAccountSelection {
                 "父账户只做只读聚合，不能作为记账账户。"
             }
         }
-        if (normalizeType(txnType) != EXPENSE || isEligibleExpenseAccount(account)) {
-            return null
+        return when (normalizeType(txnType)) {
+            EXPENSE -> expenseRejectionReason(account)
+            BUY, SUBSCRIPTION -> investmentRejectionReason(account, productAssetType)
+            else -> null
         }
+    }
+
+    private fun expenseRejectionReason(account: MobileAccountDto): String? {
+        if (isEligibleExpenseAccount(account)) return null
         return when {
             !account.leaf -> "父账户只做只读聚合，不能作为日常消费账户。"
             account.fundUsage.equals(RESERVED, ignoreCase = true) -> "专款 RESERVED 不得用于日常消费。"
@@ -60,6 +96,21 @@ object DraftAccountSelection {
             else -> "普通消费只允许 SPENDABLE 叶子账户。"
         }
     }
+
+    private fun investmentRejectionReason(account: MobileAccountDto, productAssetType: String?): String? {
+        if (isEligibleInvestmentAccount(account, productAssetType)) return null
+        return when {
+            !account.leaf -> "父账户只做只读聚合，不能作为投资资金来源账户。"
+            account.fundUsage.equals(SPENDABLE, ignoreCase = true) -> "日常消费 SPENDABLE 账户不得用于投资买入 / 申购。"
+            account.fundUsage.equals(RESERVED, ignoreCase = true) ->
+                "专款 RESERVED 仅允许用于国债逆回购，不得用于普通买入 / 申购。"
+            account.fundUsage.isNullOrBlank() -> "待分配账户未完成资金分区，不得直接用于投资。"
+            else -> "投资买入 / 申购只允许 INVESTABLE 真实叶子账户。"
+        }
+    }
+
+    private fun isBondRepo(productAssetType: String?): Boolean =
+        productAssetType?.trim()?.equals("BOND_REPO", ignoreCase = true) == true
 
     /**
      * 转账的前端提示：转出 / 转入不能相同，币种不一致时提前提示。

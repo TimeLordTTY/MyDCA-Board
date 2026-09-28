@@ -186,6 +186,8 @@
                   <el-option label="支出" value="EXPENSE" />
                   <el-option label="收入" value="INCOME" />
                   <el-option label="转账" value="TRANSFER" />
+                  <el-option label="买入" value="BUY" />
+                  <el-option label="申购" value="SUBSCRIPTION" />
                 </el-select>
               </label>
 
@@ -198,9 +200,56 @@
                 />
               </label>
 
+              <label v-if="isInvestmentEdit" class="form-field form-field-wide">
+                <span class="field-label">真实产品（必选）</span>
+                <el-select
+                  v-model="draftEditForm.productId"
+                  filterable
+                  clearable
+                  :loading="productStore.loading"
+                  placeholder="请选择真实产品"
+                >
+                  <el-option
+                    v-for="product in productOptions"
+                    :key="product.id"
+                    :label="formatProductOption(product)"
+                    :value="product.id"
+                  >
+                    <div class="account-option">
+                      <span>{{ product.productName }}</span>
+                      <small>{{ formatProductMeta(product) }}</small>
+                    </div>
+                  </el-option>
+                </el-select>
+              </label>
+
+              <label v-if="isInvestmentEdit" class="form-field form-field-wide">
+                <span class="field-label">产品名称提示（仅复核）</span>
+                <el-input
+                  v-model="draftEditForm.productNameHint"
+                  placeholder="保留 AI/文本给出的产品提示，不可替代真实产品 ID"
+                />
+              </label>
+
+              <label v-if="isInvestmentEdit" class="form-field">
+                <span class="field-label">预计净值日（可选）</span>
+                <el-input v-model="draftEditForm.expectedNavDate" placeholder="例如 2026-09-29" />
+              </label>
+
+              <label v-if="isInvestmentEdit" class="form-field">
+                <span class="field-label">预计确认日（可选）</span>
+                <el-input v-model="draftEditForm.expectedConfirmDate" placeholder="例如 2026-09-30" />
+              </label>
+
               <label class="form-field form-field-wide">
                 <span class="field-label">
-                  {{ isTransferEdit ? '转出账户' : '现金/活钱账户' }}
+                  {{
+                    isTransferEdit
+                      ? '转出账户'
+                      : isInvestmentEdit
+                        ? '付款账户（投资只允许单一资金来源）'
+                        : '现金/活钱账户'
+                  }}
                 </span>
                 <el-select
                   v-model="draftEditForm.accountId"
@@ -210,7 +259,7 @@
                   placeholder="请选择实际记账账户"
                 >
                   <el-option
-                    v-for="account in rankedAccountOptions"
+                    v-for="account in accountOptionsForEdit"
                     :key="account.id"
                     :label="formatAccountOption(account)"
                     :value="account.id"
@@ -308,8 +357,24 @@
                 <strong>{{ formatAmount(preview.amount) }}</strong>
               </div>
               <div>
-                <span class="field-label">{{ isTransferPreview ? '转出账户' : '账户' }}</span>
+                <span class="field-label">
+                  {{
+                    isTransferPreview
+                      ? '转出账户'
+                      : isInvestmentPreview
+                        ? '付款账户'
+                        : '账户'
+                  }}
+                </span>
                 <strong>{{ formatPreviewAccount(preview.accountId) }}</strong>
+              </div>
+              <div v-if="isInvestmentPreview">
+                <span class="field-label">产品</span>
+                <strong>
+                  {{ preview.productName || '未选择' }}
+                  <span v-if="preview.productCode"> / {{ preview.productCode }}</span>
+                  <span v-if="preview.productAssetType"> / {{ preview.productAssetType }}</span>
+                </strong>
               </div>
               <div v-if="isTransferPreview">
                 <span class="field-label">转入账户</span>
@@ -343,6 +408,12 @@
                 </p>
                 <em>{{ formatSignedAmount(preview.targetAccountDelta) }}</em>
               </div>
+              <div v-if="isInvestmentPreview" class="impact-card">
+                <span class="field-label">待结算应收影响</span>
+                <strong>应收增加</strong>
+                <p>付款账户立即减少，同额待结算应收增加</p>
+                <em>{{ formatSignedAmount(preview.receivableDelta) }}</em>
+              </div>
               <div class="impact-card">
                 <span class="field-label">正式对象影响</span>
                 <p>正式流水：{{ formatBooleanImpact(preview.willCreateLedgerTxn) }}</p>
@@ -354,6 +425,10 @@
             <div class="intent-note">
               <span class="field-label">提示</span>
               <p>{{ preview.message || '预览完成，请确认内容无误后再正式记账。' }}</p>
+            </div>
+            <div v-if="isInvestmentPreview && preview.fundingMessage" class="intent-note">
+              <span class="field-label">资金来源</span>
+              <p>{{ preview.fundingMessage }}</p>
             </div>
             <div v-if="preview.warnings?.length" class="warning-list">
               <span class="field-label">风险 / 提示</span>
@@ -482,16 +557,17 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
-import { aiAccountingApi, draftApi, useAccountStore } from '@wealth-hub/shared'
+import { aiAccountingApi, draftApi, useAccountStore, useProductStore } from '@wealth-hub/shared'
 import type {
   Account,
   AccountingIntent,
   DraftLedgerEntry,
   DraftLedgerStatus,
   DraftPreview,
+  ProductMaster,
 } from '@wealth-hub/shared'
 
-type DraftTxnType = 'EXPENSE' | 'INCOME' | 'TRANSFER' | ''
+type DraftTxnType = 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'BUY' | 'SUBSCRIPTION' | ''
 
 interface DraftEditForm {
   txnType: DraftTxnType
@@ -501,9 +577,16 @@ interface DraftEditForm {
   targetAccountId?: number
   accountNameHint: string
   targetAccountNameHint: string
+  /** 投资草稿（BUY / SUBSCRIPTION）选定的真实产品 ID；必须由主人明确选择。 */
+  productId?: number
+  /** 产品名称提示，只供复核，不可代替 productId。 */
+  productNameHint: string
+  expectedNavDate: string
+  expectedConfirmDate: string
 }
 
 const accountStore = useAccountStore()
+const productStore = useProductStore()
 const route = useRoute()
 const textInput = ref('')
 const parsedIntent = ref<AccountingIntent | null>(null)
@@ -561,36 +644,115 @@ const transferTargetAccountOptions = computed(() =>
   )
 )
 
+/** 投资编辑态只允许 INVESTABLE 叶子账户；BOND_REPO 额外允许 RESERVED 专款。 */
+const accountOptionsForEdit = computed(() =>
+  isInvestmentEdit.value ? investmentAccountOptions.value : rankedAccountOptions.value
+)
+
 /** 转账编辑态：只有 TRANSFER 才显示转入账户，避免目标账户残留到 EXPENSE / INCOME。 */
 const isTransferEdit = computed(() => draftEditForm.value.txnType === 'TRANSFER')
+
+/** 投资编辑态：本轮只支持 BUY（场内买入）与 SUBSCRIPTION（场外申购）。 */
+const isInvestmentEdit = computed(
+  () => draftEditForm.value.txnType === 'BUY' || draftEditForm.value.txnType === 'SUBSCRIPTION'
+)
+
+/** 投资预览态：SELL / REDEMPTION 仍不支持，PC 不把 BUY / SUBSCRIPTION 当成不支持类型。 */
+const isInvestmentPreview = computed(
+  () => {
+    const type = preview.value?.txnType?.trim().toUpperCase()
+    return type === 'BUY' || type === 'SUBSCRIPTION'
+  }
+)
+
+/** 只展示启用中的产品；产品 ID 必须由主人明确选择，不使用名称自动匹配。 */
+const productOptions = computed(() =>
+  productStore.products.filter((product) => product.isActive !== false)
+)
+
+const selectedProduct = computed(() => {
+  const productId = Number(draftEditForm.value.productId)
+  if (!Number.isInteger(productId) || productId <= 0) return undefined
+  return productOptions.value.find((product) => product.id === productId)
+})
+
+const selectedProductAssetType = computed(() => selectedProduct.value?.assetType || '')
+
+/** 投资资金来源：只有 INVESTABLE 叶子账户；国债逆回购 BOND_REPO 额外允许 RESERVED 专款。 */
+const investmentAccountOptions = computed(() => {
+  const bondRepo = selectedProductAssetType.value === 'BOND_REPO'
+  return accountStore
+    .getAllLeafAccounts()
+    .filter((account) => account.isActive !== false && account.accountKind === 'REAL')
+    .filter((account) => {
+      if (account.fundUsage === 'INVESTABLE') return true
+      return bondRepo && account.fundUsage === 'RESERVED'
+    })
+    .sort((left, right) => left.accountName.localeCompare(right.accountName, 'zh-Hans-CN'))
+})
 
 /** 转账预览态：PC 只做查看 / 预览兼容，不把 TRANSFER 当成不支持类型。 */
 const isTransferPreview = computed(
   () => preview.value?.txnType?.trim().toUpperCase() === 'TRANSFER'
 )
 
-/** 转账确认弹窗标题：明确「确认将 X 从 A 转到 B？」。 */
-const transferConfirmTitle = computed(() => {
+/**
+ * 确认弹窗标题：
+ * - 投资明确「确认创建【产品】买入 / 申购订单 ￥X？」；
+ * - 转账明确「确认将 X 从 A 转到 B？」；
+ * - 其它类型保持通用标题。
+ */
+const confirmDialogTitle = computed(() => {
   const current = preview.value
+  if (current && isInvestmentPreview.value) {
+    const action = current.txnType?.trim().toUpperCase() === 'SUBSCRIPTION' ? '申购' : '买入'
+    const product = current.productName || '未选择产品'
+    return `确认创建【${product}】${action}订单 ￥${formatPlainAmount(current.amount)}？`
+  }
   if (!current || !isTransferPreview.value) return '确认正式记账'
   const from = current.accountName || `账户 #${current.accountId ?? '-'}`
   const to = current.targetAccountName || `账户 #${current.targetAccountId ?? '-'}`
   return `确认将 ￥${formatPlainAmount(current.amount)} 从 ${from} 转到 ${to}？`
 })
 
-/** 转账确认弹窗正文：明确会生成一笔正式转账流水；非转账保持原文案。 */
-const transferConfirmMessage = computed(() =>
-  isTransferPreview.value
-    ? '本操作会通过后端统一记账入口生成一笔从转出账户到转入账户的正式转账流水，并影响正式账本统计。请先确认金额与账户无误。'
-    : '确认后将通过后端统一记账入口生成正式流水，并影响正式账本统计。请确认草稿内容无误。'
-)
+/**
+ * 确认弹窗正文：
+ * - 投资明确会立即扣减付款账户并增加同额待结算应收，仍需后续结算、不会自动成交；
+ * - 转账明确会生成一笔正式转账流水；
+ * - 其它类型保持原文案。
+ */
+const confirmDialogMessage = computed(() => {
+  const current = preview.value
+  if (current && isInvestmentPreview.value) {
+    const account = current.accountName || '付款账户'
+    return `确认后将立即从【${account}】扣除 ￥${formatPlainAmount(current.amount)}，并增加同额待结算应收；订单仍需后续结算，不会自动成交。`
+  }
+  if (isTransferPreview.value) {
+    return '本操作会通过后端统一记账入口生成一笔从转出账户到转入账户的正式转账流水，并影响正式账本统计。请先确认金额与账户无误。'
+  }
+  return '确认后将通过后端统一记账入口生成正式流水，并影响正式账本统计。请确认草稿内容无误。'
+})
 
-/** 切换交易类型时清掉转入账户残留，保证非转账 payload 不含 target 字段。 */
+/** 切换交易类型时清掉不属于该类型的残留字段，保证候选 payload 干净。 */
 function handleEditTxnTypeChange(type: DraftTxnType) {
   if (type !== 'TRANSFER') {
     draftEditForm.value.targetAccountId = undefined
     draftEditForm.value.targetAccountNameHint = ''
   }
+  if (type !== 'BUY' && type !== 'SUBSCRIPTION') {
+    draftEditForm.value.productId = undefined
+    draftEditForm.value.productNameHint = ''
+    draftEditForm.value.expectedNavDate = ''
+    draftEditForm.value.expectedConfirmDate = ''
+    return
+  }
+  void ensureProductsLoaded()
+}
+
+/** 只读加载启用中的产品主数据；PC 绝不用产品名称自动匹配 productId。 */
+async function ensureProductsLoaded() {
+  if (productStore.products.length > 0 || productStore.loading) return
+  await productStore.fetchProducts()
 }
 
 function formatPlainAmount(amount?: number | null): string {
@@ -751,6 +913,19 @@ async function openEditDraft(draft: DraftLedgerEntry) {
       position: 'bottom-right',
     })
   }
+
+  // 投资草稿需要主人明确选择真实产品，这里只做只读加载，不会自动匹配或下单。
+  if (isInvestmentEdit.value) {
+    try {
+      await ensureProductsLoaded()
+    } catch (error: any) {
+      ElNotification.error({
+        title: '产品加载失败',
+        message: getErrorMessage(error, '无法加载产品列表'),
+        position: 'bottom-right',
+      })
+    }
+  }
 }
 
 function cancelEditDraft() {
@@ -886,7 +1061,7 @@ async function handleConfirm(draft: DraftLedgerEntry) {
   }
 
   try {
-    await ElMessageBox.confirm(transferConfirmMessage.value, transferConfirmTitle.value, {
+    await ElMessageBox.confirm(confirmDialogMessage.value, confirmDialogTitle.value, {
       confirmButtonText: '确认记账',
       cancelButtonText: '取消',
       type: 'warning',
@@ -925,6 +1100,10 @@ function emptyDraftEditForm(): DraftEditForm {
     targetAccountId: undefined,
     accountNameHint: '',
     targetAccountNameHint: '',
+    productId: undefined,
+    productNameHint: '',
+    expectedNavDate: '',
+    expectedConfirmDate: '',
   }
 }
 
@@ -940,6 +1119,8 @@ function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
     asNumber(payload?.toAccountId) ??
     asNumber(payload?.destinationAccountId)
 
+  const productId = asNumber(payload?.productId)
+
   return {
     txnType: normalizeEditTxnType(asString(payload?.txnType)),
     amount: amount === null ? '' : String(amount),
@@ -948,6 +1129,10 @@ function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
     targetAccountId: targetAccountId === null ? undefined : targetAccountId,
     accountNameHint: asString(payload?.accountNameHint) || '',
     targetAccountNameHint: asString(payload?.targetAccountNameHint) || '',
+    productId: productId === null ? undefined : productId,
+    productNameHint: asString(payload?.productNameHint) || '',
+    expectedNavDate: asString(payload?.expectedNavDate) || '',
+    expectedConfirmDate: asString(payload?.expectedConfirmDate) || '',
   }
 }
 
@@ -967,6 +1152,13 @@ function validateDraftEditForm(): string | null {
     }
     if (targetAccountId === accountId) {
       return '转出账户与转入账户不能相同，请重新选择转入账户。'
+    }
+  }
+
+  if (isInvestmentEdit.value) {
+    const productId = Number(draftEditForm.value.productId)
+    if (!Number.isInteger(productId) || productId <= 0) {
+      return '投资买入 / 申购必须选择真实产品。'
     }
   }
 
@@ -993,6 +1185,19 @@ function buildUpdatedPayload(draft: DraftLedgerEntry, amount: number): Record<st
     delete payload.targetAccountId
     delete payload.targetAccountNameHint
   }
+  if (isInvestmentEdit.value) {
+    payload.productId = draftEditForm.value.productId
+    payload.productNameHint = draftEditForm.value.productNameHint.trim() || null
+    payload.expectedNavDate = draftEditForm.value.expectedNavDate.trim() || null
+    payload.expectedConfirmDate = draftEditForm.value.expectedConfirmDate.trim() || null
+    payload.orderType = draftEditForm.value.txnType
+  } else {
+    delete payload.productId
+    delete payload.productNameHint
+    delete payload.expectedNavDate
+    delete payload.expectedConfirmDate
+    delete payload.orderType
+  }
   payload.missingFields = calculateMissingFields(payload)
 
   return payload
@@ -1013,6 +1218,11 @@ function calculateMissingFields(payload: Record<string, unknown>): string[] {
     if (targetAccountId === null || targetAccountId <= 0) missingFields.push('targetAccountId')
   }
 
+  if (txnType === 'BUY' || txnType === 'SUBSCRIPTION') {
+    const productId = asNumber(payload.productId)
+    if (productId === null || productId <= 0) missingFields.push('productId')
+  }
+
   return missingFields
 }
 
@@ -1025,7 +1235,9 @@ function summarizeDraft(draft: DraftLedgerEntry): string {
   const accountLabel =
     targetAccountId === null ? account : `${account} → ${formatPreviewAccount(targetAccountId)}`
   const note = asString(payload?.note) || draft.rawInput || '-'
-  return `${txnType} / ${amount} / ${accountLabel} / ${note}`
+  const productId = asNumber(payload?.productId)
+  const productLabel = productId === null ? '' : ` / 产品 #${productId}`
+  return `${txnType} / ${amount} / ${accountLabel}${productLabel} / ${note}`
 }
 
 function parseMissingFields(raw?: string | null): string[] {
@@ -1090,6 +1302,9 @@ function normalizeEditTxnType(type?: string | null): DraftTxnType {
   if (normalized === 'EXPENSE' || normalized === 'INCOME' || normalized === 'TRANSFER') {
     return normalized
   }
+  if (normalized === 'BUY' || normalized === 'SUBSCRIPTION') {
+    return normalized
+  }
   return ''
 }
 
@@ -1121,6 +1336,8 @@ function formatTxnType(type?: string | null): string {
     EXPENSE: '支出',
     INCOME: '收入',
     TRANSFER: '转账',
+    BUY: '买入',
+    SUBSCRIPTION: '申购',
   }
   return type ? labels[type] || type : '-'
 }
@@ -1196,6 +1413,15 @@ function formatSignedAmount(amount?: number | null): string {
 
 function formatBooleanImpact(value?: boolean | null): string {
   return value ? '会生成' : '不会生成'
+}
+
+function formatProductOption(product: ProductMaster): string {
+  return `${product.productName} / ${product.productCode} / ${product.assetType} / ${product.currency}`
+}
+
+function formatProductMeta(product?: ProductMaster): string {
+  if (!product) return '未选择产品'
+  return `${product.productCode} · ${product.assetType} · ${product.currency}`
 }
 
 function formatAccountOption(account: Account): string {

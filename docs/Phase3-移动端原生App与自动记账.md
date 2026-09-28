@@ -5,11 +5,11 @@
 
 本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-已落地：原生 Android 0.10.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+已落地：原生 Android 0.11.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环与 BUY / SUBSCRIPTION 投资草稿闭环）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
 
 安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 
-下一普通移动端任务：v0.11.0 投资买入 / 申购草稿闭环。BUY / SUBSCRIPTION 仍需先生成 DRAFT，再由主人查看订单与资金影响预览并二次确认；确认后复用现有 OrderService 创建 PENDING 订单并生成付款账本，不自动结算、不生成最终持仓、不连接真实交易渠道。转账与桌面小组件真机体验验收仍由主人在真实设备完成。
+下一普通移动端任务：投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环，作为独立任务推进；本轮 v0.11.0 已完成买入 / 申购，SELL / REDEMPTION 尚未支持。真机体验验收（转账双账户、投资产品与资金账户选择、桌面小组件、系统分享）仍由主人在真实设备完成。
 <!-- CURRENT-SNAPSHOT:END -->
 
 ## 阶段定位
@@ -75,6 +75,7 @@
 - App 只提供投资补录入口，不把复杂投资行为直接简化成普通生活流水。
 - 对于涉及 T+N、手续费、确认净值、确认份额的投资行为，建议优先生成 `Order` / `Settlement` 流程，而不是直接写普通生活流水。
 - 这部分与现有订单、结算模块衔接；原生 App 在 M1/M2 可先提供入口和预填确认页，M3 再完善与订单/结算的闭环。
+- 已实现（v0.11.0）：BUY（场内买入）/ SUBSCRIPTION（场外申购）已可作为草稿闭环：主人明确选择真实产品 + 单一资金来源账户后，二次确认才经 OrderService 创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；仍未结算、未生成最终持仓、未接任何真实交易渠道。SELL / REDEMPTION 尚未支持。
 
 ## 服务端新增表
 
@@ -463,6 +464,22 @@ CREATE TABLE `draft_ledger_entry` (
   确认弹窗标题为「确认将 ¥X 从 A 转到 B？」，确认按钮仍受 fresh preview gate 控制。
 - 明确未做：不做自动 preview / confirm / 转账 / 交易，不做跨币种转账，不做投资订单 / 结算类草稿确认，不新增数据库表或 migration。
 
+### 当前已实现（v0.11.0 投资买入 / 申购草稿闭环）
+
+- 候选结构与写入字段：`txnType=BUY / SUBSCRIPTION` + `productId`（必须由主人明确选择）+ `productNameHint`（仅提示）+ `amount`
+  + `accountId`（本轮单资金来源）+ `accountNameHint` + `note` + 可选 `expectedNavDate` / `expectedConfirmDate`。
+- 文本解析：`买入` → BUY，`申购` / `定投` → SUBSCRIPTION，优先级高于 `买` / `付款` / `支付` 等 EXPENSE 关键词，`买奶茶 30` 仍为 EXPENSE；
+  解析只输出候选与 DRAFT，禁止把产品名称提示映射成真实 `productId`，缺 `productId` / `accountId` 时写入 `missingFields`。
+- 预览：产品必须存在且启用、币种与资金账户一致；资金账户必须可见、active REAL、叶子、可用余额足够；资金用途一般投资只允许 `INVESTABLE`，
+  `BOND_REPO` 额外允许 `RESERVED`，`SPENDABLE` / 普通 `RESERVED` / 父账户 / VIRTUAL 一律阻断；影响口径为 `accountDelta = -amount`、
+  `receivableDelta = +amount`，`willCreateSettlement=false`、`willAffectHolding=false`，preview 不调用 `OrderService` / `LedgerService` / `SettlementService`。
+- 正式入账：`OrderService.createInvestmentDraftOrder` 经既有 `createOrder` 创建 `status=PENDING` 订单并生成下单付款账本
+  （CASH CREDIT + RECEIVABLE DEBIT）；订单仍需后续 SettlementService 结算并影响持仓；未新增表或 migration。
+- confirm：BUY / SUBSCRIPTION 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用安全入口；订单 ID 写回 `confirmOrderId`，
+  重复确认幂等，`IGNORED` 草稿不可确认，不存在解析后自动 confirm 或建档后自动 confirm。
+- Android：草稿编辑支持支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金账户；投资预览中文展示「产品 / 资金来源 / 可用余额 / 付款账户变动 / 待结算应收变动」；
+  确认弹窗标题为「确认创建【产品】买入/申购订单 ¥X？」，确认按钮仍受 fresh preview gate 控制。
+- 明确未做：不做 SELL / REDEMPTION，不做多资金来源组合投资，不做自动 preview / confirm / 下单 / 结算 / 交易，不新增数据库表或 migration。
 ### 批量确认幂等
 
 - 已 `CONFIRMED` 的草稿再次确认，应返回 `duplicate` / `already_confirmed`，不重复生成正式流水。

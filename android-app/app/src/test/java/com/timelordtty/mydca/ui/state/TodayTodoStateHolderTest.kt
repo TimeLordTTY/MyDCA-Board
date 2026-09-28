@@ -14,6 +14,7 @@ import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
 import com.timelordtty.mydca.data.dto.MobileTransactionDto
 import com.timelordtty.mydca.data.dto.ParseTextRequestDto
+import com.timelordtty.mydca.data.dto.ProductDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 import com.timelordtty.mydca.data.repository.TodoRepository
@@ -111,5 +112,8 @@ private class TodoApiFixture(
         throw UnsupportedOperationException()
 
     override suspend fun getMobileHoldings(page: Int, pageSize: Int): MobilePageDto<MobileHoldingDto> =
+        throw UnsupportedOperationException()
+
+    override suspend fun getProducts(keyword: String?, assetType: String?, channel: String?): List<ProductDto> =
         throw UnsupportedOperationException()
 }

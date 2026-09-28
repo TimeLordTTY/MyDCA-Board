@@ -13,6 +13,7 @@ import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
 import com.timelordtty.mydca.data.dto.MobileTransactionDto
 import com.timelordtty.mydca.data.dto.ParseTextRequestDto
+import com.timelordtty.mydca.data.dto.ProductDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
 import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 import retrofit2.http.Body
@@ -63,6 +64,14 @@ interface WealthHubApi {
 
     @POST("api/v2/ai/accounting/draft-from-intent")
     suspend fun draftFromIntent(@Body request: DraftFromIntentRequestDto): DraftFromIntentResponseDto
+
+    /** 产品主数据只读列表，仅用于投资草稿让主人明确选择真实产品。 */
+    @GET("api/v2/products")
+    suspend fun getProducts(
+        @Query("keyword") keyword: String? = null,
+        @Query("assetType") assetType: String? = null,
+        @Query("channel") channel: String? = null,
+    ): List<ProductDto>
 
     @GET("api/v2/mobile/overview")
     suspend fun getMobileOverview(): MobileOverviewDto

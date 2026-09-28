@@ -22,9 +22,11 @@ import com.timelordtty.dca.dto.DraftPreviewDTO;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.DraftLedgerEntryMapper;
+import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.DraftLedgerEntry;
 import com.timelordtty.dca.model.LedgerTxn;
+import com.timelordtty.dca.model.ProductMaster;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +40,9 @@ class DraftLedgerEntryServiceTest {
     private final DraftLedgerEntryMapper mapper = mock(DraftLedgerEntryMapper.class);
     private final AccountMapper accountMapper = mock(AccountMapper.class);
     private final QuickEntryService quickEntryService = mock(QuickEntryService.class);
-    private final DraftLedgerEntryService service = new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper());
+    private final ProductMasterMapper productMasterMapper = mock(ProductMasterMapper.class);
+    private final OrderService orderService = mock(OrderService.class);
+    private final DraftLedgerEntryService service = new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService);
 
     @Test
     void previewDraftOnlyUpdatesPreviewPayloadAndDoesNotPostLedger() {
@@ -245,7 +249,8 @@ class DraftLedgerEntryServiceTest {
     @Test
     void previewUnsupportedTypeKeepsImpactAndLedgerCreationDisabled() {
         DraftLedgerEntry draft = draft("DRAFT");
-        draft.setParsedPayloadJson("{\"txnType\":\"BUY\",\"accountId\":7,\"amount\":12.34}");
+        // SELL / REDEMPTION 属于下一阶段的独立任务，本版本仍不支持，用它验证“不支持类型”分支。
+        draft.setParsedPayloadJson("{\"txnType\":\"SELL\",\"accountId\":7,\"amount\":12.34}");
         when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(draft);
         when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "证券账户", "BROKER", "INVESTABLE"));
 
@@ -304,7 +309,8 @@ class DraftLedgerEntryServiceTest {
     @Test
     void confirmUnsupportedTypeFailsWithoutPostingLedger() {
         DraftLedgerEntry draft = draft("DRAFT");
-        draft.setParsedPayloadJson("{\"txnType\":\"BUY\",\"accountId\":7,\"amount\":12.34}");
+        // SELL / REDEMPTION 属于下一阶段的独立任务，本版本仍不支持，用它验证“不支持类型”分支。
+        draft.setParsedPayloadJson("{\"txnType\":\"SELL\",\"accountId\":7,\"amount\":12.34}");
         when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(draft);
         when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "证券账户", "BROKER", "INVESTABLE"));
 
@@ -687,7 +693,7 @@ class DraftLedgerEntryServiceTest {
         });
         when(statefulMapper.selectVisibleById(any(), any(), any()))
                 .thenAnswer(invocation -> visibleById(store, invocation.getArgument(0)));
-        statefulService = new DraftLedgerEntryService(statefulMapper, mock(AccountMapper.class), statefulQuickEntryService, new ObjectMapper());
+        statefulService = new DraftLedgerEntryService(statefulMapper, mock(AccountMapper.class), statefulQuickEntryService, new ObjectMapper(), mock(ProductMasterMapper.class), mock(OrderService.class));
     }
 
     private DraftLedgerEntry visibleBySource(List<DraftLedgerEntry> store, Long userId, Long familyId,

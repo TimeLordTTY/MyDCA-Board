@@ -27,20 +27,23 @@ import java.util.UUID;
  * 
  * 职责：订单创建、取消与查询。订单代表用户的交易意图，实际资金/份额变动以结算确认（SettlementConfirm）和记账为准。
  * 
- * 关键点：
- * - 下单时需校验账户可用余额并增加账户的 reserved_amount（占用）
- * - 取消或确认时需相应释放/消耗 reserved_amount
+ * 关键点（与当前代码事实一致）：
+ * - BUY / SUBSCRIPTION 下单时立即生成付款账本：CASH CREDIT（付款账户余额减少）+ RECEIVABLE DEBIT（待结算应收增加），
+ *   不再增加 account.reserved_amount；余额可用性校验仍为 account.balance - account.reserved_amount >= 出资金额
+ * - SELL / REDEMPTION 下单时不生成流水（锁定的是份额而非金额）
+ * - 取消 PENDING 订单时会反向恢复下单付款流水余额，并兼容清理历史遗留的 reserved_amount
  * - 支持组合支付（多个账户共同出资）
  * 
  * 组合支付说明：
- * - 创建订单时：写入order_funding_line记录，分别增加各account.reserved_amount
- * - 取消订单时：逐条释放各account.reserved_amount，删除order_funding_line记录
- * - 确认结算时：按order_funding_line生成多条CASH CREDIT分录，并清零对应account.reserved_amount
+ * - 创建订单时：写入order_funding_line记录；BUY / SUBSCRIPTION 立即按资金来源生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）
+ * - 取消订单时：删除与订单关联的下单付款流水并恢复余额，删除order_funding_line记录
+ * - 确认结算时：由 SettlementService 按order_funding_line把 RECEIVABLE 转为 POSITION / 关联现金账户，并处理手续费
  * 
  * 业务规则：
  * 1. 组合支付总额必须等于订单金额：Σ(order_funding_line.amount) = orders.amount（应用层校验）
  * 2. 每个资金来源账户的可用余额必须足够：account.balance - account.reserved_amount >= funding_line.amount（应用层校验）
  * 3. account_id必须是叶子账户（应用层校验）
+ * 4. 草稿投资确认必须走 createInvestmentDraftOrder，重新校验产品、币种、资金用途与账户可见性
  * 
  * @author timelordtty
  * @since 1.0.0
@@ -362,6 +365,97 @@ public class OrderService {
     }
 
     /**
+     * 草稿投资确认的安全入口：只允许 BUY / SUBSCRIPTION，并在创建订单前再次完成全部安全校验。
+     *
+     * <p>该入口不依赖“知道 accountId 就能下单”的弱边界：会重新校验 user/family 账户可见性、叶子账户、
+     * 产品启用、产品与账户币种、资金用途（一般投资只允许 INVESTABLE，BOND_REPO 额外允许 RESERVED）以及可用余额。
+     * 校验通过后复用 createOrder 的既有订单与付款账本语义，创建 PENDING 订单并生成下单付款流水。</p>
+     *
+     * <p>本方法不自动结算、不生成最终持仓，也不调用任何真实交易渠道。</p>
+     *
+     * @param userId 发起用户 ID
+     * @param familyId 家庭 ID，可为空
+     * @param productId 真实产品 ID，必须由用户明确选择
+     * @param orderType 订单类型，只允许 BUY / SUBSCRIPTION
+     * @param amount 下单金额，必须大于 0
+     * @param accountId 单一资金来源叶子账户 ID
+     * @param expectedNavDate 预期净值日期（ISO 字符串，可空）
+     * @param expectedConfirmDate 预期确认日期（ISO 字符串，可空）
+     * @param note 备注，仅用于调用方追踪；订单流水备注仍由订单付款模板生成
+     * @return 创建的 PENDING 订单
+     */
+    @Transactional
+    public Order createInvestmentDraftOrder(Long userId, Long familyId, Long productId, String orderType,
+                                            BigDecimal amount, Long accountId, String expectedNavDate,
+                                            String expectedConfirmDate, String note) {
+        if (!"BUY".equals(orderType) && !"SUBSCRIPTION".equals(orderType)) {
+            throw new RuntimeException("草稿投资确认只支持 BUY / SUBSCRIPTION 订单");
+        }
+        if (productId == null) {
+            throw new RuntimeException("投资草稿必须由主人明确选择真实产品，不能按产品名称自动匹配");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("投资订单金额必须大于 0");
+        }
+        if (accountId == null) {
+            throw new RuntimeException("投资草稿必须指定单一资金来源账户");
+        }
+
+        ProductMaster product = productMasterMapper.selectById(productId);
+        if (product == null || !Boolean.TRUE.equals(product.getIsActive())) {
+            throw new RuntimeException("产品不存在或已停用，不能用于买入 / 申购订单");
+        }
+
+        Account account = accountMapper.selectVisibleRealById(accountId, userId, familyId);
+        if (account == null) {
+            throw new RuntimeException("资金来源账户不存在、已停用或当前用户/家庭不可见");
+        }
+        if (!accountService.isLeafAccount(accountId)) {
+            throw new RuntimeException("资金来源账户必须是叶子账户");
+        }
+
+        boolean bondRepo = "BOND_REPO".equalsIgnoreCase(product.getAssetType());
+        String fundUsage = account.getFundUsage();
+        if (!"INVESTABLE".equals(fundUsage) && !("RESERVED".equals(fundUsage) && bondRepo)) {
+            throw new RuntimeException(
+                    "资金来源账户资金用途不允许普通投资，请使用 INVESTABLE 叶子账户（BOND_REPO 可用 RESERVED）");
+        }
+        if (!currencyEquals(account.getCurrency(), product.getCurrency())) {
+            throw new RuntimeException("资金账户币种与产品币种必须一致");
+        }
+
+        BigDecimal balance = account.getBalance() != null ? account.getBalance() : BigDecimal.ZERO;
+        BigDecimal reserved = account.getReservedAmount() != null ? account.getReservedAmount() : BigDecimal.ZERO;
+        BigDecimal available = balance.subtract(reserved);
+        if (available.compareTo(amount) < 0) {
+            throw new RuntimeException(String.format("账户[%d]可用余额不足: 可用=%s, 需要=%s", accountId, available, amount));
+        }
+
+        return createOrder(userId, productId, orderType, amount, null, accountId, null,
+                parseOptionalDate(expectedNavDate), parseOptionalDate(expectedConfirmDate), null, null);
+    }
+
+    /** 解析可选 ISO 日期；空值或无法解析时返回 null，不阻断订单创建。 */
+    private LocalDate parseOptionalDate(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 比较两个币种是否一致；双方都为空时视为一致，避免因历史空值误阻断。 */
+    private boolean currencyEquals(String left, String right) {
+        if (left == null || left.isBlank()) {
+            return right == null || right.isBlank();
+        }
+        return left.equalsIgnoreCase(right);
+    }
+
+    /**
      * 买入/申购下单时立即生成付款流水
      * 
      * 分录模板（保持借贷平衡）：
@@ -504,8 +598,9 @@ public class OrderService {
         // 查询order_funding_line，获取所有资金来源行
         List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(orderId);
         
-        // 逐条释放各账户的reserved_amount（恢复可用余额）
-        // 注意：这是取消订单的核心操作，因为订单创建时只增加了reserved_amount，没有扣减balance
+        // 逐条释放各账户的reserved_amount（历史兼容）
+        // 注意：当前 BUY / SUBSCRIPTION 下单已改为直接生成付款账本并扣减 balance，
+        // 这里只清理历史遗留或被其它流程写入的 reserved_amount，避免残留占用。
         for (OrderFundingLine fundingLine : fundingLines) {
             Account account = accountMapper.selectById(fundingLine.getAccountId());
             if (account != null && fundingLine.getAmount() != null) {
