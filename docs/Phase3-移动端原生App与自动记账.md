@@ -1,15 +1,15 @@
 # Phase 3 开发进度总结（对话优先草稿闭环与移动端基础）
 
 <!-- CURRENT-SNAPSHOT:START -->
-## 当前实现快照（2026-09-27）
+## 当前实现快照（2026-09-28）
 
 本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-已落地：原生 Android 0.8.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+已落地：原生 Android 0.9.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
 
 安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 
-下一普通移动端任务：v0.8.0 真实设备验收与 CI 制品回填，或按 owner 决策进入 v0.9 采集入口扩展（桌面小组件 / 通知栏快捷入口）；任何新入口都继续只到 DRAFT。
+下一普通移动端任务：v0.9.0 真实设备验收与 CI 制品回填（桌面小组件添加 / 尺寸回调 / 点击跳转）；通知栏快捷入口仍是后续独立任务，任何新入口都继续只到 DRAFT。
 <!-- CURRENT-SNAPSHOT:END -->
 
 ## 阶段定位
@@ -429,7 +429,22 @@ CREATE TABLE `draft_ledger_entry` (
 - 一次性导航状态收口：返回 / 取消、主动切换底部导航、成功生成 DRAFT 都会清空 share target，
   并与 `selectedDraftId` / `NotificationNavigationTarget` / `QuickCaptureFocus` 相互清除，避免残留串扰。
 - 明确未做：不自动解析、不自动 OCR、不自动创建草稿、不自动 preview、不自动 confirm、不自动正式入账；
-  未新增后台常驻服务、桌面小组件或通知栏快捷入口。
+  未新增后台常驻服务或通知栏快捷入口。
+
+### 当前已实现（Android v0.9.0 桌面快速记账小组件）
+
+- 新增系统 `AppWidgetProvider` + `RemoteViews` 桌面小组件（未引入 Glance、未做架构重构）：
+  完整尺寸提供“记一笔 / 手工记账 / 图片识别 / 草稿箱”四个静态中文入口，空间不足时折叠为“记一笔 + 草稿箱”。
+- 点击只构造指向本 App `MainActivity` 的显式 Intent：action 只能取自受控枚举 `WidgetNavigationTarget`，
+  不接受任意外部 route 字符串，Intent 不携带账户、草稿、通知原文、图片 URI、Token 或 Cookie。
+- `onCreate` 与 `onNewIntent` 共用同一解析规则；同一目标只消费一次；消费后立即清空 pending，
+  并同时清掉 `ExternalSharePendingStore`、`NotificationNavigationTarget`、`selectedDraftId` 与 `QuickCaptureFocus`。
+- 三个一次性系统入口优先级固定为“桌面小组件 > 外部分享 > 通知候选”，`MyDcaApp` 只有一个仲裁消费点，
+  不会出现“先跳目标页、再被残留目标二次跳转”。
+- 未登录时目标只在当前进程保留，登录后消费一次；进程被杀导致目标丢失时安全回到普通首页，不做跨进程持久化。
+- 小组件层没有 repository / network / parse / draft / preview / confirm 能力；`updatePeriodMillis=0`，
+  无后台轮询 / Alarm / WorkManager / 前台服务 / 常驻通知；未申请任何新权限，`MainActivity` 未新增 intent-filter。
+- 明确未做：不做桌面余额 / 资产展示，不做动态计数与后台刷新，不做通知栏常驻入口，不做 Quick Settings Tile。
 
 ### 批量确认幂等
 

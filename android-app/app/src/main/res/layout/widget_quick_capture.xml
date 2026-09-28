@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  完整尺寸布局：记一笔 / 手工记账 / 图片识别 / 草稿箱 四个静态入口（2x2）。
+  文案由 QuickCaptureWidgetProvider 按 WidgetNavigationTarget.label 写入，布局本身不写死文字，
+  这样“显示的文案”只有一个来源，也不会在这里混入余额、持仓或通知原文等隐私数据。
+
+  这里刻意使用两层 LinearLayout 权重（行权重 + 行内列权重）来完成 2x2 自适应：
+  本布局只有 4 个静态 TextView、嵌套深度仅为 2，多一次测量的代价可以忽略，
+  换来的是任何摆放尺寸下按钮都能均匀铺满，因此对 NestedWeights 显式声明为可接受。
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_surface_bg"
+    android:orientation="vertical"
+    android:padding="6dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        tools:ignore="NestedWeights">
+
+        <TextView
+            android:id="@+id/widget_entry_quick_capture"
+            style="@style/WidgetEntry"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_margin="2dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/widget_entry_manual_text"
+            style="@style/WidgetEntry"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_margin="2dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        tools:ignore="NestedWeights">
+
+        <TextView
+            android:id="@+id/widget_entry_image_ocr"
+            style="@style/WidgetEntry"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_margin="2dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/widget_entry_drafts"
+            style="@style/WidgetEntry"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_margin="2dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+</LinearLayout>

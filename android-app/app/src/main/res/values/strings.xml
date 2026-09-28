@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MyDCA Board</string>
+    <!-- 桌面小组件在系统小组件选择器里显示的名字。 -->
+    <string name="widget_quick_capture_name">MyDCA 快速记账</string>
 </resources>

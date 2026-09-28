@@ -1,15 +1,16 @@
 # MyDCA Android App
 
 <!-- CURRENT-SNAPSHOT:START -->
-## 当前发布状态（2026-09-27）
+## 当前发布状态（2026-09-28）
 
-- 当前 Android：`versionName=0.8.0`、`versionCode=9`。
-- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
+- 当前 Android：`versionName=0.9.0`、`versionCode=10`。
+- v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
+- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程；CI 制品：Run `36329990920` / Artifact `10934923148` / APK `MyDCA-Board-v0.8.0-e8af769b.apk` / SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`。
 - v0.7 快速采集中心 result commit：`6098a9728f23dc6e0b6bbd5b7d0460c5630f4252`（CI Run `36320197608` / Artifact `10931548073` / SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`）。
-- v0.8.0 CI 制品：`NOT_PRODUCED`（本地提交后再推送触发 `Android test APK`），Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待真实工作流回填。
-- 下一 Android 普通工程目标：v0.8.0 真实设备验收与 CI 制品回填，或按 owner 决策进入 v0.9 采集入口扩展。
+- v0.9.0 CI 制品：`NOT_PRODUCED`（本轮按调度要求只提交、未推送），Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待真实工作流回填。
+- 下一 Android 普通工程目标：v0.9.0 真实设备验收与 CI 制品回填（桌面小组件添加、尺寸回调、点击跳转）。
 
-> 本文历史章节中“CI NOT_PRODUCED / 待回填”的 v0.6/v0.7 描述已被真实 GitHub Actions 证据取代；v0.8.0 仍以真实工作流输出为准。
+> 本文历史章节中“CI NOT_PRODUCED / 待回填”的 v0.6/v0.7/v0.8.0 描述已被真实 GitHub Actions 证据取代；v0.9.0 仍以真实工作流输出为准。
 <!-- CURRENT-SNAPSHOT:END -->
 
 MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待办、草稿查看、草稿预览和用户手动确认体验。
@@ -18,7 +19,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.8.0`（`versionCode = 9`），APK 制品命名为 `MyDCA-Board-v0.8.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.9.0`（`versionCode = 10`），APK 制品命名为 `MyDCA-Board-v0.9.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
@@ -216,3 +217,18 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 2026-09-27 验证：`testDebugUnitTest` 28 个测试类共 156 项通过（由 24 类 119 项增至 28 类 156 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
 - Debug APK：大小 55,800,680 bytes，SHA-256：`E5E6737C11C305BFF76639F3260E1FF1028FC28E32F8CF67387723E835C7236A`（debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察，不作为制品身份）；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
 - 明确未做：不自动解析分享内容、不自动 OCR、不自动创建草稿、不自动 preview / confirm / 正式入账；未新增后台常驻服务、桌面小组件或通知栏快捷入口。
+
+## v0.9.0 桌面快速记账小组件
+
+- 版本收口为 `versionName = 0.9.0`（`versionCode = 10`）；已构建 APK 经 `aapt2 dump badging` 实测为 `versionCode='10' versionName='0.9.0'`。
+- 使用系统 `AppWidgetProvider` + `RemoteViews`，未引入 Jetpack Glance，也未做架构重构；新增 `widget/` 包与 `res/layout/widget_quick_capture*.xml`、`res/xml/widget_quick_capture_info.xml`。
+- 完整尺寸（`minWidth ≥ 180dp` 且 `minHeight ≥ 110dp`）提供四个静态中文入口：`记一笔` / `手工记账` / `图片识别` / `草稿箱`；尺寸不足时折叠为 `记一笔` + `草稿箱`。
+- 点击只构造显式 Intent（`Intent(context, MainActivity::class.java)`）并只把固定 action 交给 `WidgetNavigationResolver`；action 只能取自受控枚举 `WidgetNavigationTarget`，不接受任意外部 route 字符串，Intent **不带任何 extra**。
+- 四个入口使用独立 `requestCode`（4201–4204）与独立 action，`PendingIntent` 使用 `FLAG_IMMUTABLE | FLAG_UPDATE_CURRENT`，启动标志为 `NEW_TASK | CLEAR_TOP | SINGLE_TOP`；`onCreate` 与 `onNewIntent` 共用同一解析规则。
+- 一次性优先级：**桌面小组件 > 外部分享 > 通知候选**（`WidgetNavigationArbiter`）；`MyDcaApp` 只有一个仲裁消费点，接管时同时清空 `ExternalSharePendingStore`、`NotificationNavigationTarget`、`selectedDraftId` 与 `QuickCaptureFocus`。
+- 未登录时目标只在当前进程保留，登录后消费一次；进程被杀导致丢失时安全回到普通首页，不做跨进程持久化。
+- 小组件层在类型层面没有 repository / network / parse / draft / preview / confirm 能力；`updatePeriodMillis=0`，无后台轮询、Alarm、WorkManager、前台服务或常驻通知；不申请任何新权限，`MainActivity` 未新增 intent-filter。
+- 新增 7 个测试类 39 项：`WidgetNavigationTargetTest` 8、`WidgetNavigationResolverTest` 4、`WidgetNavigationPendingStoreTest` 6、`WidgetNavigationHubTest` 6、`WidgetNavigationArbiterTest` 4、`WidgetSizePolicyTest` 5、`WidgetManifestContractTest` 6；覆盖解析与安全忽略、一次性消费、登录前后消费、主动导航清理、优先级仲裁、尺寸折叠、PendingIntent 身份独立，以及 Manifest / appwidget-provider / 布局静态契约。
+- 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 195 项通过（由 28 类 156 项增至 35 类 195 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
+- Debug APK：大小 55,816,715 bytes，SHA-256：`C2CC3CBD10EFCD20177450CC367ACAF2C273A0E8C050BBCAFBEF58E704116617`（debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察，不作为制品身份）；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
+- 明确未做：不做桌面余额 / 资产展示，不做动态计数或后台刷新，不做通知栏常驻入口，不做 Quick Settings Tile，不自动 parse / OCR / draft / preview / confirm，不自动正式入账、不自动交易，不新增广泛系统权限。

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  桌面小组件声明：
+  - updatePeriodMillis=0：不做任何周期性后台刷新，只按用户操作 / 尺寸变化重绘；
+  - resizeMode：允许用户自由调整大小，尺寸变小会自动折叠成两个主入口；
+  - 只声明 home_screen，不注册 keyguard 等额外场景。
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/widget_quick_capture"
+    android:minHeight="110dp"
+    android:minResizeHeight="40dp"
+    android:minResizeWidth="110dp"
+    android:minWidth="180dp"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

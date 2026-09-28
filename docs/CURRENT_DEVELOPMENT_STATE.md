@@ -1,7 +1,7 @@
 # 财富中枢当前开发状态
 
 - **作者**：ChatGPT（依据 v2 代码、AiCore Delivery Manifest 与 GitHub Actions 证据同步）
-- **更新时间**：2026-09-27 23:40 +08:00
+- **更新时间**：2026-09-28 +08:00
 - **工程仓库**：`TimeLordTTY/MyDCA-Board@v2`
 
 > 本文件是“当前实现状态”的首要事实源。长篇设计文档、版本专项报告和 Phase1/Phase2 历史总结保留设计/历史价值；若其中的“当前状态、下一步、尚未实现”与本文件冲突，以本文件和实际代码为准。
@@ -11,10 +11,10 @@
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.8.0`
-- `versionCode = 9`
+- `versionName = 0.9.0`
+- `versionCode = 10`
 
-“v0.8 草稿强幂等”是后端可靠性里程碑；Android `0.8.0` 是外部分享快速采集版本，二者版本号相同但属于不同层，互不依赖即可独立发布。
+“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.9.0` 是桌面快速记账小组件版本（上一版 `0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
 ## 已完成的 Phase3 主能力
 
@@ -26,6 +26,7 @@
 - v0.6 加密 Draft Outbox：可恢复网络/5xx 失败只重试“创建 DRAFT”，401/403 暂停，业务 4xx 不循环。
 - v0.7 全局“记一笔”快速采集中心：手工、OCR、支付通知候选、Outbox 四入口统一导航。
 - v0.8.0 外部分享快速采集：系统 Share Sheet 的文本 / 单张图片只预填到现有人工采集流程，不自动 parse/OCR/draft/preview/confirm。
+- v0.9.0 桌面快速记账小组件：四个静态中文入口（记一笔 / 手工记账 / 图片识别 / 草稿箱）只打开既有页面，不联网、不读写账本、不自动记账。
 
 ## v0.8 强幂等（已完成）
 
@@ -54,7 +55,25 @@
 - 未新增任何广泛权限；`ACTION_SEND_MULTIPLE` 明确不支持。
 - Android 28 个测试类 / 156 项通过、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 全部通过。
 
+## Android v0.9.0 桌面快速记账小组件（已完成）
+
+- 任务：`task-mydca-android-v090-home-widget-quick-capture-20260928`
+- 详细说明：`docs/mydca_android_v090_home_widget_quick_capture_20260928.md`
+
+- 使用系统 `AppWidgetProvider` + `RemoteViews`（不引入 Glance、未做架构重构）：完整尺寸提供「记一笔 / 手工记账 / 图片识别 / 草稿箱」四个静态中文入口，尺寸不足自动折叠为「记一笔 + 草稿箱」。
+- 点击只构造显式 Intent 指向本 App `MainActivity`，action 只能取自受控枚举 `WidgetNavigationTarget`：不接受任意外部 route 字符串，Intent 不携带任何 extra。
+- 小组件层没有 repository / network / `parse` / `draft` / `preview` / `confirm` 能力；`updatePeriodMillis=0`，无后台轮询 / Alarm / WorkManager / 前台服务 / 常驻通知。
+- 三个一次性系统入口优先级：桌面小组件 > 外部分享 > 通知候选；被接管目标与 `selectedDraftId` / `QuickCaptureFocus` 同时清空。
+- 未登录时目标只在当前进程保留一次；未申请任何新权限，`MainActivity` 未新增 intent-filter。
+- Android 35 个测试类 / 195 项通过、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 全部通过。
+
 ## Android CI APK 真实证据
+
+### v0.9.0（NOT_PRODUCED，待回填）
+- source commit：本轮提交（按调度要求只提交、未推送，因此没有 CI 运行）
+- GitHub Actions：`Android test APK`
+- 结论：`NOT_PRODUCED`——未触发工作流，Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待真实推送后回填。
+- 不得用本地 debug APK 的 SHA-256 代替 CI 制品证据。
 
 ### v0.8.0
 - source commit：`e8af769bf5446daa15ccf849b15a5f17786c7fcc`
@@ -83,7 +102,7 @@
 - APK：`MyDCA-Board-v0.6.0-a732c3bc.apk`
 - CI APK SHA-256：`2298E56D4B9DF18218CAD17A1CCFA3EA094592364F2AFA2FD5E5582B103BB0CD`
 
-旧文档中“v0.6/v0.7 CI 制品 NOT_PRODUCED / 待回填”的表述已经过期；v0.8.0 的 CI 证据仍以真实工作流结果为准。
+旧文档中“v0.6/v0.7/v0.8.0 CI 制品 NOT_PRODUCED / 待回填”的表述已经过期；v0.9.0 的 CI 证据仍以真实工作流结果为准（本轮尚未推送）。
 
 ## 自动开发与交付
 
@@ -104,10 +123,10 @@
 
 ## 当前真正未完成
 
-1. **真实设备体验验收**：系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
+1. **真实设备体验验收**：桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
 2. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
 3. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：进入 **Android v0.9 系统级快速入口扩展**。优先采用不打扰用户、无需后台常驻的桌面小组件/启动快捷入口，把现有“记一笔”能力更快暴露到系统桌面；真机体验验收仍是人工验收项，不应伪装成后台自动任务。
+下一项普通、可自动化的业务任务：**Android v0.9.0 真实设备验收与 CI 制品回填**。v0.9.0 桌面小组件已落地，但必须在真机确认桌面添加、不同厂商 launcher 的尺寸回调与点击跳转，并在推送触发 `Android test APK` 后回填真实 Run ID / Artifact ID / CI APK SHA-256；真机体验验收仍是人工验收项，不应伪装成后台自动任务。

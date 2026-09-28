@@ -37,5 +37,22 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+
+        <!--
+          桌面快速记账小组件：按系统 AppWidget 协议最小开放。
+          只声明系统 APPWIDGET_UPDATE action + provider meta-data，不新增自定义广播 action、
+          不申请任何权限，也不暴露可注入 route 的组件：四个入口都是固定 action 的受控枚举。
+        -->
+        <receiver
+            android:name=".widget.QuickCaptureWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_quick_capture_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_quick_capture_info" />
+        </receiver>
     </application>
 </manifest>

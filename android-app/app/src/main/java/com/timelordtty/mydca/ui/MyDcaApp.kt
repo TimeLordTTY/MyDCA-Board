@@ -52,6 +52,9 @@ import com.timelordtty.mydca.notification.NotificationNavigationTarget
 import com.timelordtty.mydca.outbox.AndroidDraftOutbox
 import com.timelordtty.mydca.outbox.DraftOutboxOrigin
 import com.timelordtty.mydca.share.ExternalSharePendingStore
+import com.timelordtty.mydca.widget.WidgetNavigationArbiter
+import com.timelordtty.mydca.widget.WidgetNavigationHub
+import com.timelordtty.mydca.widget.WidgetNavigationPendingStore
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
@@ -207,27 +210,55 @@ private fun AuthenticatedApp(
             outboxScope.launch { draftOutbox.retryDueEntries(aiAccountingRepository) }
         }
         val notificationTarget by NotificationNavigationTarget.candidateId.collectAsState()
-        LaunchedEffect(notificationTarget) {
-            if (notificationTarget != null) {
-                currentRoute = AppRoute.TodayTodo
-                draftEntryMode = null
-                quickFocus = QuickCaptureFocus.NONE
-                shareSession.onManualNavigation()
-            }
-        }
         val pendingShare by ExternalSharePendingStore.instance.pending.collectAsState()
+        val pendingWidgetTarget by WidgetNavigationPendingStore.instance.pending.collectAsState()
         val sharedCapture by shareSession.active.collectAsState()
-        LaunchedEffect(pendingShare) {
-            // 一次性消费外部分享：本效果只在已登录分支内运行，因此未登录时会保留到登录后再消费一次。
-            val capture = pendingShare ?: return@LaunchedEffect
-            ExternalSharePendingStore.instance.consume()
-            val destination = ExternalShareHub.destinationFor(capture.payload)
-            shareSession.adopt(capture)
-            selectedDraftId = null
-            NotificationNavigationTarget.clear()
-            quickFocus = QuickCaptureFocus.NONE
-            draftEntryMode = destination.entryMode
-            currentRoute = destination.route
+        // 桌面小组件 / 外部分享 / 通知候选共用一个确定优先级的消费点：
+        // 每次只应用优先级最高的那一个目标，并立即清掉被接管的其余目标，避免同一次点击被重复跳转。
+        LaunchedEffect(pendingWidgetTarget, pendingShare, notificationTarget) {
+            when (
+                WidgetNavigationArbiter.arbitrate(
+                    hasWidgetTarget = pendingWidgetTarget != null,
+                    hasShareTarget = pendingShare != null,
+                    hasNotificationTarget = notificationTarget != null,
+                )
+            ) {
+                WidgetNavigationArbiter.Chosen.WIDGET -> {
+                    val target = pendingWidgetTarget?.target ?: return@LaunchedEffect
+                    WidgetNavigationPendingStore.instance.consume()
+                    val decision = WidgetNavigationHub.decide(target)
+                    NotificationNavigationTarget.clear()
+                    ExternalSharePendingStore.instance.clear()
+                    shareSession.onManualNavigation()
+                    selectedDraftId = null
+                    draftEntryMode = decision.entryMode
+                    quickFocus = decision.focus
+                    isQuickCaptureOpen = decision.openQuickCapturePanel
+                    decision.route?.let { currentRoute = it }
+                }
+
+                WidgetNavigationArbiter.Chosen.EXTERNAL_SHARE -> {
+                    // 一次性消费外部分享：只在已登录分支内运行，未登录时会保留到登录后再消费一次。
+                    val capture = pendingShare ?: return@LaunchedEffect
+                    ExternalSharePendingStore.instance.consume()
+                    val destination = ExternalShareHub.destinationFor(capture.payload)
+                    shareSession.adopt(capture)
+                    selectedDraftId = null
+                    NotificationNavigationTarget.clear()
+                    quickFocus = QuickCaptureFocus.NONE
+                    draftEntryMode = destination.entryMode
+                    currentRoute = destination.route
+                }
+
+                WidgetNavigationArbiter.Chosen.NOTIFICATION_CANDIDATE -> {
+                    currentRoute = AppRoute.TodayTodo
+                    draftEntryMode = null
+                    quickFocus = QuickCaptureFocus.NONE
+                    shareSession.onManualNavigation()
+                }
+
+                WidgetNavigationArbiter.Chosen.NONE -> Unit
+            }
         }
         val notificationCandidates by NotificationCandidateStore.candidates.collectAsState()
         val outboxEntries by draftOutbox.entries.collectAsState()
@@ -241,6 +272,7 @@ private fun AuthenticatedApp(
             val decision = QuickCaptureHub.decide(action)
             if (decision.clearSelectedDraftId) selectedDraftId = null
             if (decision.clearSelectedCandidateId) NotificationNavigationTarget.clear()
+            WidgetNavigationPendingStore.instance.clear()
             shareSession.onCaptureExit()
             draftEntryMode = decision.entryMode
             quickFocus = decision.focus
@@ -273,6 +305,7 @@ private fun AuthenticatedApp(
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
                                 NotificationNavigationTarget.clear()
                                 shareSession.onManualNavigation()
+                                WidgetNavigationPendingStore.instance.clear()
                             },
                             label = { Text(route.navLabel) },
                             icon = { Text(route.navLabel.take(1)) },

@@ -1,18 +1,19 @@
 # Phase3 开发进度总结
 
 <!-- CURRENT-SNAPSHOT:START -->
-## 当前实现快照（2026-09-27）
+## 当前实现快照（2026-09-28）
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.8.0 / versionCode 9`，v0.7 全局“记一笔”快速采集中心与 v0.8.0 系统分享快速采集均已完成。
+- Android 当前版本：`0.9.0 / versionCode 10`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集与 v0.9.0 桌面快速记账小组件均已完成。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
 - 采集链继续严格停在 DRAFT：手工/OCR/通知候选/Outbox 均不会自动 preview、confirm 或正式入账。
 - v0.8.0 外部分享快速采集已落地：系统 Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程，不自动 parse/OCR/draft/preview/confirm。
 - v0.8.0 CI APK 已真实产出：Run `36329990920`，Artifact `10934923148`，APK SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`。
-- 下一普通工程目标：Android v0.9 系统级快速入口扩展；数据库 migration 上线与真机人工验收都不与普通后台自动功能开发混在一起。
+- v0.9.0 桌面快速记账小组件已落地：只做系统级入口，点击后仅打开既有页面，不联网、不读写账本、不自动记账；CI 制品为 `NOT_PRODUCED`（本轮只提交、未推送）。
+- 下一普通工程目标：Android v0.9.0 真实设备验收与 CI 制品回填；数据库 migration 上线与真机人工验收都不与普通后台自动功能开发混在一起。
 
 ### 已被后续版本完成的旧待办
 
@@ -373,6 +374,32 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   `lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
 - 本地 Debug APK：55,800,680 bytes，SHA-256 `E5E6737C11C305BFF76639F3260E1FF1028FC28E32F8CF67387723E835C7236A`（本机真实构建输出，但 debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察；APK 不提交到 Git）；
   本进程未推送，CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地哈希冒充。
+
+## Android v0.9.0 桌面快速记账小组件（2026-09-28）
+
+- 对应任务 `task-mydca-android-v090-home-widget-quick-capture-20260928`（owner 直接批准，L3，`allowed_paths` 为 `android-app/**`、`docs/**`、
+  `README.md`、`.github/workflows/android-test-apk.yml`），详细说明见 `docs/mydca_android_v090_home_widget_quick_capture_20260928.md`。
+- 目标：新增一个安静、不打扰的桌面快速记账小组件，把现有“记一笔”能力暴露到系统桌面，并发布 v0.9.0；只新增系统级入口，不新增任何自动记账逻辑。
+- 形态：系统 `AppWidgetProvider` + `RemoteViews`（未引入 Jetpack Glance、未做架构重构）；完整尺寸四个静态中文入口，
+  尺寸不足按 `WidgetSizePolicy` 折叠为“记一笔 + 草稿箱”。
+- 导航：新增 `widget/` 纯 Kotlin 层（`WidgetNavigationTarget`、`WidgetNavigationResolver`、`WidgetNavigationPendingStore`、
+  `WidgetNavigationHub`、`WidgetNavigationArbiter`、`WidgetSizePolicy`、`WidgetEntryPoints`、`WidgetEntryViews`、`WidgetNavigationIntents`）+
+  `QuickCaptureWidgetProvider`；点击只构造显式 Intent 指向本 App `MainActivity`，action 只取自受控枚举，Intent 不带任何 extra。
+- 一次性优先级固定为“桌面小组件 > 外部分享 > 通知候选”：`MyDcaApp` 把三个入口合并为一个仲裁消费点，
+  接管时同时清空 `ExternalSharePendingStore`、`NotificationNavigationTarget`、`selectedDraftId` 与 `QuickCaptureFocus`，
+  主动切换底部导航与进入快速采集也会清空小组件目标，避免一次性导航状态互相残留。
+- 安全：小组件层无 repository / network / parse / draft / preview / confirm 能力；`updatePeriodMillis=0`，
+  无后台轮询 / Alarm / WorkManager / 前台服务 / 常驻通知；receiver 只按系统 AppWidget 协议最小开放，
+  不申请新权限，`MainActivity` 未新增 intent-filter；未登录时目标只在当前进程保留一次。
+- 版本：`versionName = 0.9.0`、`versionCode = 10`（`aapt2 dump badging` 实测 `versionCode='10' versionName='0.9.0'`）；
+  工作流制品名与文件名同步为 `mydca-android-v0.9.0-<sha>` / `MyDCA-Board-v0.9.0-<short-sha>.apk`，仍为一次性 debug 签名且不提交 APK。
+- 新增 7 个测试类 39 项，覆盖解析与安全忽略、一次性消费、登录前后消费、主动导航清理、优先级仲裁、尺寸折叠、
+  PendingIntent 身份独立，以及 Manifest / appwidget-provider / 布局静态契约。
+- 本轮验证：`testDebugUnitTest` 35 类 195 项通过（由 28 类 156 项增至 35 类 195 项）、`assembleDebug` 通过、
+  `lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
+- 本地 Debug APK：55,816,715 bytes，SHA-256 `C2CC3CBD10EFCD20177450CC367ACAF2C273A0E8C050BBCAFBEF58E704116617`（本机观察，debug APK 本地字节不可复现，不作为制品身份）；
+  本进程未推送，CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地哈希冒充。
+
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 服务端 `draft_ledger_entry` 唯一约束缺口已收敛：该缺口最初因为 `allowed_paths` 不含 `sql/**` 而遗留，
@@ -400,5 +427,14 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
 - 系统 Share Sheet 的文本 / 单图需要真机人工验收：不同厂商 Share Sheet 行为、临时 `content://` URI 授权时长、
   以及“未登录时先登录再消费一次”的端到端体验。
-- 未实现 `ACTION_SEND_MULTIPLE` 多选分享、桌面小组件、通知栏快捷入口；任何后续入口都继续只到 DRAFT。
+- 未实现 `ACTION_SEND_MULTIPLE` 多选分享与通知栏快捷入口（桌面小组件已由 v0.9.0 补齐）；任何后续入口都继续只到 DRAFT。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
+
+## 后续待办（Android v0.9.0 桌面快速记账小组件）
+
+- v0.9.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
+  工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
+- 桌面小组件需要真机人工验收：桌面添加、不同厂商 launcher 的尺寸回调与折叠行为、点击后跳转，
+  以及“未登录时先登录再消费一次”的端到端体验。
+- 未实现 Quick Settings Tile、通知栏常驻入口、桌面余额 / 资产展示、动态计数与后台刷新；任何后续入口都继续只到 DRAFT。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
