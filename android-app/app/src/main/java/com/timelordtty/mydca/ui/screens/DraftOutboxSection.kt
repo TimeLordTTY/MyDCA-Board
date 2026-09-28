@@ -35,6 +35,7 @@ fun DraftOutboxSection(
     gateway: DraftCreationGateway?,
     onOpenDraft: (Long) -> Unit,
     onDraftCreated: () -> Unit,
+    onEdit: (DraftOutboxEntry) -> Unit = {},
     highlighted: Boolean = false,
 ) {
     if (outbox == null) return
@@ -76,6 +77,7 @@ fun DraftOutboxSection(
                     outbox.discard(entry.id)
                     onDraftCreated()
                 },
+                onEdit = { outbox.pauseForEdit(entry.id)?.let(onEdit) },
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -107,6 +109,7 @@ private fun DraftOutboxEntryCard(
     retryEnabled: Boolean,
     onRetry: () -> Unit,
     onDiscard: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     SectionCard(
         title = "${entry.origin.label} · ${formatOutboxTime(entry.createdAt)}",
@@ -114,6 +117,7 @@ private fun DraftOutboxEntryCard(
     ) {
         KeyValueRow("来源类型", entry.sourceType)
         KeyValueRow("队列状态", entry.status.label)
+        KeyValueRow("需要登录恢复", if (entry.status == DraftOutboxStatus.AUTH_PAUSED) "是" else "否")
         KeyValueRow("重试次数", entry.retryCount.toString())
         KeyValueRow(
             "下次自动重试",
@@ -123,14 +127,15 @@ private fun DraftOutboxEntryCard(
                 "不自动重试"
             },
         )
-        KeyValueRow("最近失败原因", entry.lastErrorMessage ?: "尚未记录")
+        KeyValueRow("最近错误类别", entry.lastErrorCategory?.label ?: "尚未记录")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(enabled = retryEnabled && !busy, onClick = onRetry) {
                 Text(if (busy) "重试中" else "立即重试")
             }
             OutlinedButton(enabled = !busy, onClick = onDiscard) {
-                Text("丢弃")
+                Text("取消并删除")
             }
+            OutlinedButton(enabled = !busy, onClick = onEdit) { Text("重新编辑") }
         }
     }
 }

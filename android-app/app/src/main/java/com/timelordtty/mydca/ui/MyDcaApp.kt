@@ -53,6 +53,7 @@ import com.timelordtty.mydca.notification.NotificationCandidateStore
 import com.timelordtty.mydca.notification.NotificationNavigationTarget
 import com.timelordtty.mydca.outbox.AndroidDraftOutbox
 import com.timelordtty.mydca.outbox.DraftOutboxOrigin
+import com.timelordtty.mydca.outbox.DraftOutboxEntry
 import com.timelordtty.mydca.share.ExternalSharePendingStore
 import com.timelordtty.mydca.widget.WidgetNavigationArbiter
 import com.timelordtty.mydca.widget.WidgetNavigationHub
@@ -190,6 +191,7 @@ private fun AuthenticatedApp(
         var selectedDraftId by rememberSaveable { mutableStateOf<Long?>(null) }
         var accountFilterValue by rememberSaveable { mutableStateOf(AccountFundUsageFilter.ALL.name) }
         var draftEntryMode by remember { mutableStateOf<OcrEntryMode?>(null) }
+        var editingOutboxEntry by remember { mutableStateOf<DraftOutboxEntry?>(null) }
         // 待结算是有明确安全边界的子流程：进入后只加载列表，绝不自动 preview / confirm。
         var settlementFlowOpen by remember { mutableStateOf(false) }
         var settlementFocusOrderId by remember { mutableStateOf<String?>(null) }
@@ -207,7 +209,9 @@ private fun AuthenticatedApp(
         val draftOutbox = remember(context) {
             AndroidDraftOutbox.createQueue(context) { entry, draftId ->
                 if (entry.origin == DraftOutboxOrigin.PAYMENT_NOTIFICATION) {
-                    NotificationCandidateStore.markDraftCreated(entry.sourceRef, draftId)
+                    NotificationCandidateStore.candidates.value
+                        .firstOrNull { it.fingerprint == entry.sourceRef }
+                        ?.let { NotificationCandidateStore.markDraftCreated(it.id, draftId) }
                 }
             }
         }
@@ -291,7 +295,7 @@ private fun AuthenticatedApp(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(if (settlementFlowOpen) "待结算" else currentRoute.title)
+                        Text(if (settlementFlowOpen) "待结算" else if (outboxEntries.isNotEmpty()) "${currentRoute.title} · 待发送 ${outboxEntries.size}" else currentRoute.title)
                     }
                 )
             },
@@ -310,6 +314,7 @@ private fun AuthenticatedApp(
                             onClick = {
                                 currentRoute = route
                                 draftEntryMode = null
+                                editingOutboxEntry = null
                                 settlementFlowOpen = false
                                 settlementFocusOrderId = null
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
@@ -380,16 +385,19 @@ private fun AuthenticatedApp(
                                 entryMode = entryMode,
                                 onClose = {
                                     draftEntryMode = null
+                                    editingOutboxEntry = null
                                     shareSession.onCaptureExit()
                                 },
                                 onOpenDraft = { draftId ->
                                     selectedDraftId = draftId
                                     draftEntryMode = null
+                                    editingOutboxEntry = null
                                     shareSession.onCaptureExit()
                                 },
                                 draftOutbox = draftOutbox,
                                 externalShare = sharedCapture,
                                 onExternalShareSettled = { shareSession.onDraftCreated() },
+                                editingOutboxEntry = editingOutboxEntry,
                             )
                         } else {
                             DraftInboxScreen(
@@ -400,6 +408,10 @@ private fun AuthenticatedApp(
                                 onDraftHandled = { selectedDraftId = null },
                                 onOpenImageOcr = { draftEntryMode = OcrEntryMode.Image },
                                 onOpenManualEntry = { draftEntryMode = OcrEntryMode.ManualText },
+                                onEditOutboxEntry = { entry ->
+                                    editingOutboxEntry = entry
+                                    draftEntryMode = OcrEntryMode.ManualText
+                                },
                                 onOpenDraft = { draftId -> selectedDraftId = draftId },
                                 onOpenSettlementAudit = { orderId ->
                                     settlementFocusOrderId = orderId

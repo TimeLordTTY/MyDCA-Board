@@ -76,6 +76,53 @@ class DraftOutboxQueueTest {
     }
 
     @Test
+    fun editSurvivesRestartAndKeepsTheOriginalSourceRef() = runTest {
+        val queue = newQueue()
+        val entry = queue.enqueue(accountingIntent(), DraftOutboxOrigin.OCR, "姓名和卡号 123456", networkFailure(IOException("private")))!!
+        queue.pauseForEdit(entry.id)
+        val edited = entry.intent.copy(rawInput = "早餐 20 元", amount = 20.0)
+        assertTrue(queue.updateEditedIntent(entry.id, edited))
+
+        val restored = newQueue()
+        assertEquals(DraftOutboxStatus.BLOCKED, restored.entries.value.single().status)
+        assertEquals("android-ocr-request-1", restored.entries.value.single().intent.sourceRef)
+        assertEquals("早餐 20 元", restored.entries.value.single().intent.rawInput)
+        assertFalse(restored.entries.value.single().summary.contains("123456"))
+        assertFalse(restored.entries.value.single().lastErrorMessage.orEmpty().contains("private"))
+        assertEquals(0, restored.retryDueEntries(RecordingDraftGateway(), FIXED_NOW + 86_400_000L))
+    }
+
+    @Test
+    fun editedCreationCompletesTheOriginalQueueItem() {
+        val queue = newQueue()
+        val entry = queue.enqueue(accountingIntent(), DraftOutboxOrigin.PAYMENT_NOTIFICATION, "敏感通知", networkFailure(IOException("offline")))!!
+        queue.pauseForEdit(entry.id)
+        queue.completeEditedCreation(entry.id, 91L, "DRAFT")
+        assertTrue(queue.entries.value.isEmpty())
+        assertEquals(91L, queue.lastOutcome.value?.draftId)
+        assertEquals(DraftOutboxOrigin.PAYMENT_NOTIFICATION, queue.lastOutcome.value?.origin)
+    }
+
+    @Test
+    fun duplicateManualRetryWhileRequestIsRunningOnlyCallsGatewayOnce() = runTest {
+        val queue = newQueue()
+        val entry = queue.enqueue(accountingIntent(), DraftOutboxOrigin.OCR, "摘要", networkFailure(IOException("offline")))!!
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val gateway = RecordingDraftGateway {
+            started.complete(Unit)
+            release.await()
+            NetworkResult.Success(draftResponse(draftId = 9L))
+        }
+        val first = async { queue.retryEntry(entry.id, gateway) }
+        started.await()
+        assertFalse(queue.retryEntry(entry.id, gateway))
+        release.complete(Unit)
+        assertTrue(first.await())
+        assertEquals(1, gateway.calls)
+    }
+
+    @Test
     fun retryRespectsBackoffThenSucceedsAndDequeues() = runTest {
         val policy = DraftOutboxRetryPolicy(backoffSeconds = listOf(30L))
         val queue = newQueue(policy)
@@ -157,7 +204,7 @@ class DraftOutboxQueueTest {
         val entry = queue.entries.value.single()
         assertEquals(DraftOutboxStatus.BLOCKED, entry.status)
         assertEquals(DraftOutboxErrorCategory.BUSINESS, entry.lastErrorCategory)
-        assertTrue(entry.lastErrorMessage.orEmpty().contains("400"))
+        assertEquals(DraftOutboxErrorCategory.BUSINESS.label, entry.lastErrorMessage)
 
         now += 24 * 60 * 60 * 1000L
         val gateway = RecordingDraftGateway()

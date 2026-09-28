@@ -28,8 +28,5 @@ object DraftOutboxErrorClassifier {
         category == DraftOutboxErrorCategory.RETRYABLE
 
     /** 展示给用户的失败原因；不包含 Token、密码或通知原文。 */
-    fun messageFor(category: DraftOutboxErrorCategory, serverMessage: String?): String {
-        val detail = serverMessage?.takeIf { it.isNotBlank() }
-        return if (detail == null) category.label else "${category.label}：$detail"
-    }
+    fun messageFor(category: DraftOutboxErrorCategory, serverMessage: String?): String = category.label
 }

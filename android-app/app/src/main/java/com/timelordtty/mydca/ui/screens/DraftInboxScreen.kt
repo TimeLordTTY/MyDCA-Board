@@ -32,6 +32,7 @@ import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.outbox.DraftCreationGateway
 import com.timelordtty.mydca.outbox.DraftOutboxQueue
+import com.timelordtty.mydca.outbox.DraftOutboxEntry
 import com.timelordtty.mydca.ui.state.AsyncState
 import com.timelordtty.mydca.ui.state.DraftAccountSelection
 import com.timelordtty.mydca.ui.state.DraftEditForm
@@ -48,6 +49,7 @@ fun DraftInboxScreen(
     onDraftHandled: () -> Unit,
     onOpenImageOcr: () -> Unit,
     onOpenManualEntry: () -> Unit,
+    onEditOutboxEntry: (DraftOutboxEntry) -> Unit = {},
     onOpenDraft: (Long) -> Unit,
     onOpenSettlementAudit: (String) -> Unit = {},
     draftOutbox: DraftOutboxQueue? = null,
@@ -449,6 +451,7 @@ fun DraftInboxScreen(
             gateway = draftCreationGateway,
             onOpenDraft = onOpenDraft,
             onDraftCreated = { refreshDrafts() },
+            onEdit = onEditOutboxEntry,
             highlighted = focusOutbox,
         )
 

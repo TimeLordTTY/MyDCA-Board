@@ -59,10 +59,10 @@ class DraftOutboxErrorClassifierTest {
     }
 
     @Test
-    fun messageKeepsUserFacingReason() {
+    fun messageDoesNotKeepServerText() {
         assertEquals(
-            "${DraftOutboxErrorCategory.AUTH_REQUIRED.label}：登录已失效，请重新登录",
-            DraftOutboxErrorClassifier.messageFor(DraftOutboxErrorCategory.AUTH_REQUIRED, "登录已失效，请重新登录"),
+            DraftOutboxErrorCategory.AUTH_REQUIRED.label,
+            DraftOutboxErrorClassifier.messageFor(DraftOutboxErrorCategory.AUTH_REQUIRED, "卡号 123456"),
         )
         assertEquals(
             DraftOutboxErrorCategory.RETRYABLE.label,

@@ -32,6 +32,7 @@ data class OcrDraftUiState(
     val message: String? = null,
     /** 本次采集固定的 sourceRef；为空时回落到既有 android-ocr-<requestId> 规则。 */
     val sourceRef: String? = null,
+    val sourceType: String? = null,
 )
 
 /**
@@ -61,11 +62,12 @@ class OcrDraftCoordinator {
      * 本方法不调用任何接口，只准备可编辑文本。
      */
     @Synchronized
-    fun startTextEntry(requestId: String, text: String, sourceRef: String? = null) {
+    fun startTextEntry(requestId: String, text: String, sourceRef: String? = null, sourceType: String? = null) {
         mutableState.value = OcrDraftUiState(
             stage = OcrDraftStage.Recognized,
             requestId = requestId,
             sourceRef = sourceRef,
+            sourceType = sourceType,
             recognizedText = text.trim(),
         )
     }
@@ -140,7 +142,7 @@ class OcrDraftCoordinator {
                 is NetworkResult.Success -> current.copy(
                     stage = OcrDraftStage.IntentReady,
                     intent = result.data.copy(
-                        sourceType = "APP_FORM",
+                        sourceType = current.sourceType ?: "APP_FORM",
                         sourceRef = submission.third,
                         rawInput = submission.second,
                         parsedPayloadJson = null,
@@ -161,6 +163,7 @@ class OcrDraftCoordinator {
         gateway: DraftCreationGateway,
         outbox: DraftOutboxQueue? = null,
         origin: DraftOutboxOrigin = DraftOutboxOrigin.OCR,
+        editingOutboxId: String? = null,
     ) {
         val submission = synchronized(this) {
             val current = mutableState.value
@@ -169,14 +172,30 @@ class OcrDraftCoordinator {
             mutableState.value = current.copy(stage = OcrDraftStage.CreatingDraft, message = null)
             Pair(current.requestId ?: return, intent)
         }
+        if (editingOutboxId == null && outbox?.containsSource(submission.second.sourceType, submission.second.sourceRef) == true) {
+            synchronized(this) {
+                mutableState.value = mutableState.value.copy(stage = OcrDraftStage.IntentReady, message = "同一采集已在本地待发送列表，请在那里重试或重新编辑")
+            }
+            return
+        }
+        if (editingOutboxId != null && outbox?.updateEditedIntent(editingOutboxId, submission.second) != true) {
+            synchronized(this) {
+                mutableState.value = mutableState.value.copy(stage = OcrDraftStage.IntentReady, message = "本地待发送项已不存在，请重新打开采集入口")
+            }
+            return
+        }
         val result = gateway.createDraft(submission.second)
         val queued = if (result is NetworkResult.Failure) {
-            outbox?.enqueue(
-                intent = submission.second,
-                origin = origin,
-                summary = submission.second.rawInput.orEmpty(),
-                failure = result,
-            )
+            if (editingOutboxId != null) {
+                outbox?.recordEditedFailure(editingOutboxId, result)
+            } else {
+                outbox?.enqueue(
+                    intent = submission.second,
+                    origin = origin,
+                    summary = submission.second.rawInput.orEmpty(),
+                    failure = result,
+                )
+            }
         } else {
             null
         }
@@ -198,6 +217,9 @@ class OcrDraftCoordinator {
                     message = "DRAFT 草稿已创建，尚未预览或正式入账",
                 )
             }
+        }
+        if (result is NetworkResult.Success && editingOutboxId != null) {
+            outbox?.completeEditedCreation(editingOutboxId, result.data.draft.id, result.data.draft.status)
         }
     }
 }

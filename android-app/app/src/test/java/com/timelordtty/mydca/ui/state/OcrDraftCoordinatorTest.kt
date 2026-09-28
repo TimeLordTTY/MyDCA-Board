@@ -209,8 +209,8 @@ class OcrDraftCoordinatorTest {
         coordinator.createDraft(gateway, outbox, DraftOutboxOrigin.OCR)
         coordinator.createDraft(gateway, outbox, DraftOutboxOrigin.OCR)
 
-        assertEquals(2, gateway.createCalls)
-        assertEquals(listOf("android-ocr-attempt-9", "android-ocr-attempt-9"), gateway.createdIntents.map { it.sourceRef })
+        assertEquals(1, gateway.createCalls)
+        assertEquals(listOf("android-ocr-attempt-9"), gateway.createdIntents.map { it.sourceRef })
         assertEquals(1, outbox.entries.value.size)
     }
 

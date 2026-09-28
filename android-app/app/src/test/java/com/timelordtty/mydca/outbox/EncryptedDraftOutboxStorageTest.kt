@@ -108,7 +108,7 @@ class EncryptedDraftOutboxStorageTest {
 
         val restored = DraftOutboxQueue(storage, clock = { FIXED_NOW }).entries.value.single()
         assertEquals("fingerprint-1", restored.sourceRef)
-        assertEquals(NotificationDraftInput.summary(candidate), restored.summary)
+        assertEquals("支付通知候选采集（内容仅在编辑时查看）", restored.summary)
         assertTrue(restored.summary.length <= NotificationDraftInput.SUMMARY_MAX_LENGTH)
         assertFalse(restored.intent.rawInput.orEmpty().contains(rawNotificationBody))
     }

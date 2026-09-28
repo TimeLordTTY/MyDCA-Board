@@ -7,7 +7,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * 本地“待创建草稿”队列。
@@ -61,7 +60,7 @@ class DraftOutboxQueue(
             sourceType = sourceType,
             sourceRef = sourceRef,
             origin = origin,
-            summary = summary.trim().take(SUMMARY_MAX_LENGTH),
+            summary = safeSummary(origin),
             intent = intent,
             createdAt = now,
             retryCount = 0,
@@ -78,11 +77,46 @@ class DraftOutboxQueue(
     /** 用户主动丢弃；返回是否真的移除了条目。 */
     @Synchronized
     fun discard(id: String): Boolean {
+        if (retryLock.isLocked) return false
         val current = mutableEntries.value
         val remaining = current.filterNot { it.id == id }
         if (remaining.size == current.size) return false
         persist(remaining)
         return true
+    }
+
+    /** 编辑后直接创建成功时，与重试成功走同一来源完成回调。 */
+    @Synchronized
+    fun completeEditedCreation(id: String, draftId: Long, draftStatus: String?) {
+        val entry = entries.value.firstOrNull { it.id == id } ?: return
+        remove(id)
+        onDraftCreated(entry, draftId)
+        mutableLastOutcome.value = DraftOutboxOutcome(entry.id, entry.origin, draftId, draftStatus)
+    }
+
+    /** 编辑期间停止自动重试；保留原请求和 sourceRef，取消编辑后仍可手动恢复。 */
+    @Synchronized
+    fun pauseForEdit(id: String): DraftOutboxEntry? {
+        if (retryLock.isLocked) return null
+        val entry = entries.value.firstOrNull { it.id == id } ?: return null
+        persist(entries.value.map { if (it.id == id) it.copy(status = DraftOutboxStatus.BLOCKED) else it })
+        return entry
+    }
+
+    /** 已复核的编辑结果替换加密请求，继续使用原 sourceRef。 */
+    @Synchronized
+    fun updateEditedIntent(id: String, intent: AccountingIntentDto): Boolean {
+        val entry = entries.value.firstOrNull { it.id == id } ?: return false
+        if (intent.sourceType != entry.sourceType || intent.sourceRef != entry.sourceRef) return false
+        persist(entries.value.map { if (it.id == id) it.copy(intent = intent, status = DraftOutboxStatus.BLOCKED) else it })
+        return true
+    }
+
+    @Synchronized
+    fun recordEditedFailure(id: String, failure: NetworkResult.Failure): DraftOutboxEntry? {
+        val entry = entries.value.firstOrNull { it.id == id } ?: return null
+        recordFailure(entry, failure, clock())
+        return entries.value.firstOrNull { it.id == id }
     }
 
     @Synchronized
@@ -94,10 +128,18 @@ class DraftOutboxQueue(
     /** 当前可自动重试的到期条目数，供 UI 展示。 */
     fun dueCount(now: Long = clock()): Int = entries.value.count { policy.isDue(it, now) }
 
+    fun containsSource(sourceType: String?, sourceRef: String?): Boolean =
+        entries.value.any { it.sourceType == sourceType && it.sourceRef == sourceRef }
+
     /** 用户“立即重试”单条；与批量重试互斥，重试成功即出队。 */
-    suspend fun retryEntry(id: String, gateway: DraftCreationGateway): Boolean = retryLock.withLock {
-        val entry = entries.value.firstOrNull { it.id == id } ?: return@withLock false
-        attempt(entry, gateway)
+    suspend fun retryEntry(id: String, gateway: DraftCreationGateway): Boolean {
+        if (!retryLock.tryLock()) return false
+        return try {
+            val entry = entries.value.firstOrNull { it.id == id } ?: return false
+            attempt(entry, gateway)
+        } finally {
+            retryLock.unlock()
+        }
     }
 
     /**
@@ -143,15 +185,20 @@ class DraftOutboxQueue(
 
     @Synchronized
     private fun recordFailure(entry: DraftOutboxEntry, failure: NetworkResult.Failure, now: Long) {
+        val current = mutableEntries.value.firstOrNull { it.id == entry.id } ?: return
         val failedAttempts = entry.retryCount + 1
         val category = DraftOutboxErrorClassifier.classify(failure.cause)
-        val updated = entry.copy(
+        val updated = current.copy(
             retryCount = failedAttempts,
             lastAttemptAt = now,
             lastErrorCategory = category,
             lastErrorMessage = DraftOutboxErrorClassifier.messageFor(category, failure.message),
             nextRetryAt = nextRetryAt(category, now, failedAttempts),
-            status = statusFor(category, failedAttempts),
+            status = if (current.status == DraftOutboxStatus.BLOCKED && entry.status != DraftOutboxStatus.BLOCKED) {
+                DraftOutboxStatus.BLOCKED
+            } else {
+                statusFor(category, failedAttempts)
+            },
         )
         persist(mutableEntries.value.map { if (it.id == entry.id) updated else it })
     }
@@ -192,10 +239,11 @@ class DraftOutboxQueue(
 
     private fun normalize(entries: List<DraftOutboxEntry>): List<DraftOutboxEntry> = entries
         .filter { it.sourceType.isNotBlank() && it.sourceRef.isNotBlank() }
+        .map { it.copy(summary = safeSummary(it.origin), lastErrorMessage = it.lastErrorCategory?.label) }
         .distinctBy { it.sourceType to it.sourceRef }
         .sortedBy { it.createdAt }
 
     private companion object {
-        const val SUMMARY_MAX_LENGTH = 48
+        fun safeSummary(origin: DraftOutboxOrigin): String = "${origin.label}采集（内容仅在编辑时查看）"
     }
 }

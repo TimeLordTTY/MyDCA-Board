@@ -167,12 +167,14 @@ private fun PaymentCandidateCard(
     var confirm by remember(candidate.id) { mutableStateOf(false) }
     var creating by remember(candidate.id) { mutableStateOf(false) }
     var message by remember(candidate.id) { mutableStateOf<String?>(null) }
-    val canCreate = NotificationDraftInput.canCreateDraft(candidate, repository != null && apiConfigError.isNullOrBlank(), candidate.createdDraftId)
+    val alreadyQueued = draftOutbox?.containsSource("PAYMENT_NOTIFICATION", candidate.fingerprint) == true
+    val canCreate = NotificationDraftInput.canCreateDraft(candidate, repository != null && apiConfigError.isNullOrBlank(), candidate.createdDraftId) && !alreadyQueued
     SectionCard(candidate.sourceHint ?: candidate.appLabel ?: "支付应用", candidate.textSnippet ?: candidate.titleSnippet ?: "已脱敏通知") {
         KeyValueRow("时间", SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(Date(candidate.postedAt)))
         KeyValueRow("金额", "${candidate.amount ?: "未识别"} 元")
         KeyValueRow("状态", candidate.status.name)
         message?.let { Text(it) }
+        if (alreadyQueued) Text("已在本地待发送列表，可在那里重试或重新编辑")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(enabled = canCreate && !creating, onClick = { confirm = true }) { Text(if (creating) "生成中" else "生成草稿") }
             candidate.createdDraftId?.let { id -> OutlinedButton(onClick = { onOpenDraft(id) }) { Text("打开草稿") } }

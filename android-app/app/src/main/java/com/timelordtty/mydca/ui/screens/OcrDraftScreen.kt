@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.ocr.MlKitImageTextRecognizer
 import com.timelordtty.mydca.outbox.DraftOutboxOrigin
+import com.timelordtty.mydca.outbox.DraftOutboxEntry
 import com.timelordtty.mydca.outbox.DraftOutboxQueue
 import com.timelordtty.mydca.share.ExternalShareCapture
 import com.timelordtty.mydca.share.ExternalSharePayload
@@ -57,6 +58,7 @@ fun OcrDraftScreen(
     draftOutbox: DraftOutboxQueue? = null,
     externalShare: ExternalShareCapture? = null,
     onExternalShareSettled: () -> Unit = {},
+    editingOutboxEntry: DraftOutboxEntry? = null,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -84,8 +86,14 @@ fun OcrDraftScreen(
         }
     }
 
-    LaunchedEffect(entryMode, externalShare) {
+    LaunchedEffect(entryMode, externalShare, editingOutboxEntry?.id) {
         when {
+            editingOutboxEntry != null -> coordinator.startTextEntry(
+                requestId = editingOutboxEntry.id,
+                text = editingOutboxEntry.intent.rawInput.orEmpty(),
+                sourceRef = editingOutboxEntry.sourceRef,
+                sourceType = editingOutboxEntry.sourceType,
+            )
             sharedText != null -> coordinator.startTextEntry(
                 requestId = sharedRequestId,
                 text = sharedText,
@@ -238,7 +246,7 @@ fun OcrDraftScreen(
                     enabled = state.stage == OcrDraftStage.IntentReady,
                     onClick = {
                         val origin = if (manualEntry) DraftOutboxOrigin.MANUAL_TEXT else DraftOutboxOrigin.OCR
-                        scope.launch { coordinator.createDraft(repository, draftOutbox, origin) }
+                        scope.launch { coordinator.createDraft(repository, draftOutbox, origin, editingOutboxEntry?.id) }
                     },
                 ) {
                     Text(if (state.stage == OcrDraftStage.CreatingDraft) "创建中" else "确认生成 DRAFT")
