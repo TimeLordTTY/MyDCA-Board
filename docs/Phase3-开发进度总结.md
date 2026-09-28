@@ -5,7 +5,8 @@
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.13.0 / versionCode 14`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环、v0.11.0 投资买入 / 申购草稿闭环、v0.12.0 投资卖出 / 赎回草稿闭环与 v0.13.0 人工结算预览与二次确认闭环均已完成。
+- Android 当前版本：`0.14.0 / versionCode 15`；草稿历史与安全恢复、Outbox 恢复控制、只读策略实验室和发布硬化已写入代码。此前 v0.7 至 v0.13 的采集、转账、投资与人工结算能力仍在。
+- v0.14 发布验证与待办见 `docs/mydca_v014_release_hardening_20260929.md`；真机体验、生产 migration 与真实 CI APK 制品仍需独立验收。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。

@@ -13,8 +13,8 @@
       <button :disabled="loading || !data" @click="run">{{ loading ? '计算中…' : '运行只读回测' }}</button>
     </section>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
-    <p v-if="!datasets.length && !loading" class="empty">暂无可用历史数据。请由管理员将 CSV 放入回测数据目录。</p>
-    <p v-if="!results.length && !error" class="empty">运行回测后，结果将显示在这里。</p>
+    <p v-if="!datasets.length && !loading && !error" class="empty">暂无可用历史数据。请由管理员将 CSV 放入回测数据目录。</p>
+    <p v-if="!results.length && !error && !loading" class="empty">运行回测后，结果将显示在这里。</p>
     <section v-for="result in results" :key="result.run_id" class="panel result">
       <div class="heading"><h2>{{ result.strategy.name }} v{{ result.strategy.version }}</h2><small>{{ result.data_range.start }} 至 {{ result.data_range.end }} · {{ result.data_range.rows }} 条 · {{ result.run_id }}</small></div>
       <div class="metrics"><div v-for="[label, value] in metrics(result)" :key="label"><span>{{ label }}</span><strong>{{ value }}</strong></div></div>
@@ -40,7 +40,7 @@ const fraction = ref(0.25)
 const results = ref<Result[]>([])
 const loading = ref(true)
 const error = ref('')
-onMounted(async () => { try { datasets.value = (await apiClient.get<string[]>('/backtest-lab/datasets')).data; data.value = datasets.value[0] || ''; results.value = (await apiClient.get<Result[]>('/backtest-lab/recent')).data.reverse() } catch { error.value = '回测数据加载失败，请稍后重试' } finally { loading.value = false } })
+onMounted(async () => { try { datasets.value = (await apiClient.get<string[]>('/backtest-lab/datasets')).data; data.value = datasets.value[0] || ''; results.value = (await apiClient.get<Result[]>('/backtest-lab/recent')).data.reverse() } catch (e: any) { error.value = e?.response?.status === 403 ? '没有策略实验室访问权限，请联系管理员。' : '回测数据加载失败，请稍后重试' } finally { loading.value = false } })
 async function run() {
   loading.value = true; error.value = ''
   const params: Record<string, number> = { contribution: contribution.value, interval_days: interval.value }
@@ -48,7 +48,7 @@ async function run() {
   if (strategy.value.startsWith('profit_recycle')) Object.assign(params, {profit_threshold: threshold.value, sell_fraction: fraction.value})
   const [name, version = '1'] = strategy.value.split(':')
   try { const result = (await apiClient.post<Result>('/backtest-lab/runs', {data: data.value, strategy: name, version, params})).data; results.value = [result, ...results.value.filter(x => x.run_id !== result.run_id)] }
-  catch (e: any) { error.value = e?.response?.data?.message || '回测失败，请检查参数与历史数据' }
+  catch (e: any) { error.value = e?.response?.status === 403 ? '没有运行策略回测的权限，请联系管理员。' : e?.response?.data?.message || '回测失败，请检查参数与历史数据' }
   finally { loading.value = false }
 }
 const number = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString('zh-CN', {maximumFractionDigits: 4})

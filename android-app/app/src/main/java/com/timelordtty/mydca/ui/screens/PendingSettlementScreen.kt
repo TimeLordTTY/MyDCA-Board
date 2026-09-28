@@ -280,7 +280,7 @@ fun PendingSettlementScreen(
             OutlinedButton(onClick = ::loadHistory) { Text("刷新历史") }
             if (historyLoading) Text("正在加载结算历史...")
             historyError?.let { Text(it) }
-            if (!historyLoading && history.isEmpty()) Text("暂无结算历史")
+            if (!historyLoading && historyError == null && history.isEmpty()) Text("暂无结算历史")
             history.forEach { item ->
                 OutlinedButton(onClick = { loadAudit(item.orderId) }, modifier = Modifier.fillMaxWidth()) {
                     Text("${item.orderId} · ${item.productName ?: item.orderType ?: "订单"} · ${auditStatusLabel(item.reconciliationStatus)}")

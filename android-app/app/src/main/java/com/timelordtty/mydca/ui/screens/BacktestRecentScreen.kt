@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,15 +27,24 @@ import java.util.Locale
 fun BacktestRecentScreen(api: WealthHubApi) {
     var results by remember { mutableStateOf<List<BacktestResultDto>>(emptyList()) }
     var message by remember { mutableStateOf("加载最近回测中…") }
-    LaunchedEffect(api) {
+    var loadAttempt by remember { mutableStateOf(0) }
+    var loadFailed by remember { mutableStateOf(false) }
+    LaunchedEffect(api, loadAttempt) {
+        message = "加载最近回测中…"
+        loadFailed = false
         try {
             results = api.recentBacktests().reversed()
             message = if (results.isEmpty()) "暂无回测结果，请在 PC 策略实验室运行历史回测。" else ""
-        } catch (_: Exception) { message = "最近回测加载失败，请稍后重试。" }
+        } catch (_: Exception) {
+            results = emptyList()
+            loadFailed = true
+            message = "最近回测加载失败，请检查网络或登录状态后重试。"
+        }
     }
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("历史回测不代表未来表现；此处仅展示结果。") }
         if (message.isNotEmpty()) item { Text(message) }
+        if (loadFailed) item { OutlinedButton(onClick = { loadAttempt++ }) { Text("重试加载") } }
         items(results, key = { it.run_id }) { result ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

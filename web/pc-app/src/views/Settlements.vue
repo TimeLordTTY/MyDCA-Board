@@ -35,6 +35,9 @@
             <tr v-if="loading">
               <td colspan="6" class="td-muted" style="text-align: center">加载中...</td>
             </tr>
+            <tr v-else-if="listError">
+              <td colspan="6" class="td-muted" style="text-align: center" role="alert">{{ listError }} <button class="btn" @click="loadSettlements">重试</button></td>
+            </tr>
             <tr v-else-if="pendingSettlements.length === 0">
               <td colspan="6" class="td-muted" style="text-align: center">暂无待结算订单</td>
             </tr>
@@ -86,12 +89,12 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ElNotification } from 'element-plus'
 import { settlementApi, getOrderTypeLabel, formatCurrency, formatDate } from '@wealth-hub/shared'
 import type { Order, SettlementAudit } from '@wealth-hub/shared'
 import SettlementConfirmModal from '../components/SettlementConfirmModal.vue'
 
 const loading = ref(false)
+const listError = ref<string | null>(null)
 const pendingSettlements = ref<Order[]>([])
 const route = useRoute()
 const history = ref<SettlementAudit[]>([])
@@ -119,10 +122,12 @@ async function loadAudit(orderId: string) {
 
 async function loadSettlements() {
   loading.value = true
+  listError.value = null
   try {
     pendingSettlements.value = await settlementApi.getPendingSettlements()
   } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
+    pendingSettlements.value = []
+    listError.value = error?.response?.status === 403 ? '没有查看待结算订单的权限，请联系管理员。' : '待结算订单加载失败，请重试。'
   } finally {
     loading.value = false
   }

@@ -14,6 +14,8 @@
 - `versionName = 0.14.0`
 - `versionCode = 15`
 
+v0.14 发布硬化已对齐 GitHub Actions APK 制品名与 Android 版本，并补齐 Android 最近回测、PC 待结算和策略实验室的失败态。完整验证与未完成的真机/生产迁移边界见 `docs/mydca_v014_release_hardening_20260929.md`。
+
 v0.14 草稿生命周期审计与安全恢复已写入代码；需要部署 `sql/updatesql/20260928/01_create_draft_lifecycle_event.sql` 后才可使用事件持久化。详细边界见 `docs/mydca_v014_draft_lifecycle_audit_20260928.md`。
 
 v0.14 人工结算历史与只读对账已写入代码；新结算精确流水关联和展示用预览摘要依赖部署 `sql/updatesql/20260929/01_settlement_audit_link.sql`。历史旧记录、关联账户份额无法可靠回溯时显示 `WARNING`，不会自动修复。详见 `docs/mydca_v014_settlement_audit_reconciliation_20260929.md`。
