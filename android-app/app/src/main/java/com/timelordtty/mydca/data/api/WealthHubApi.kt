@@ -1,6 +1,7 @@
 package com.timelordtty.mydca.data.api
 
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
+import com.timelordtty.mydca.data.dto.DraftLifecycleEventDto
 import com.timelordtty.mydca.data.dto.AccountingIntentDto
 import com.timelordtty.mydca.data.dto.DraftFromIntentRequestDto
 import com.timelordtty.mydca.data.dto.DraftFromIntentResponseDto
@@ -45,6 +46,15 @@ interface WealthHubApi {
 
     @GET("api/v2/drafts/{draftId}")
     suspend fun getDraft(@Path("draftId") draftId: Long): DraftLedgerEntryDto
+
+    @GET("api/v2/drafts/{draftId}/history")
+    suspend fun draftHistory(@Path("draftId") draftId: Long): List<DraftLifecycleEventDto>
+
+    @POST("api/v2/drafts/{draftId}/reopen")
+    suspend fun reopenDraft(@Path("draftId") draftId: Long): DraftLedgerEntryDto
+
+    @POST("api/v2/drafts/{draftId}/copy")
+    suspend fun copyConfirmedDraft(@Path("draftId") draftId: Long): DraftLedgerEntryDto
 
     @PUT("api/v2/drafts/{draftId}")
     suspend fun updateDraft(

@@ -8,13 +8,16 @@ import com.timelordtty.dca.dto.DraftPreviewDTO;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
 import com.timelordtty.dca.mapper.AccountMapper;
 import com.timelordtty.dca.mapper.DraftLedgerEntryMapper;
+import com.timelordtty.dca.mapper.DraftLifecycleEventMapper;
 import com.timelordtty.dca.mapper.ProductMasterMapper;
 import com.timelordtty.dca.model.Account;
 import com.timelordtty.dca.model.DraftLedgerEntry;
+import com.timelordtty.dca.model.DraftLifecycleEvent;
 import com.timelordtty.dca.model.LedgerTxn;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.ProductMaster;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * 草稿流水服务，负责 Phase3 自动记账候选记录的保存、预览、确认和忽略。
@@ -47,6 +51,10 @@ public class DraftLedgerEntryService {
     private final OrderService orderService;
     /** 持仓只读入口，用于 SELL / REDEMPTION 校验真实持仓来源与当前可用份额。 */
     private final HoldingService holdingService;
+    @Autowired(required = false)
+    private DraftLifecycleEventMapper lifecycleEvents;
+    @Autowired(required = false)
+    private DraftFailureAuditService failureAudit;
 
     /**
      * 装配草稿 Mapper、快速记账服务、产品只读入口、订单服务、持仓只读入口和 JSON 编解码器。
@@ -77,6 +85,7 @@ public class DraftLedgerEntryService {
      * <p>应用层“先查后插”之外还有数据库唯一键兜底：两个请求同时查不到、随后同时插入时，后写的一方会收到唯一键冲突，
      * 本方法不在这种情况下抛错，而是按同一可见作用域重新查询并返回先写入的那条草稿，因此并发重放最多只落一条草稿。</p>
      */
+    @Transactional
     public DraftLedgerEntryDTO createDraft(Long userId, Long familyId, CreateDraftRequest request) {
         String sourceType = defaultIfBlank(request.getSourceType(), "manual");
         String sourceRef = normalizeSourceRef(request.getSourceRef());
@@ -101,6 +110,7 @@ public class DraftLedgerEntryService {
             return DraftLedgerEntryDTO.fromModel(replayExistingDraftAfterDuplicateKey(
                     userId, familyId, sourceType, sourceRef, duplicateKey));
         }
+        audit(draft, userId, "create", null, "DRAFT", "创建草稿；来源：" + sourceType);
         return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draft.getId()));
     }
 
@@ -188,6 +198,7 @@ public class DraftLedgerEntryService {
         if (updated != 1) {
             throw new RuntimeException("草稿更新失败，请刷新后重试");
         }
+        audit(existing, userId, "edit", "DRAFT", "DRAFT", "修改候选字段；旧预览已失效");
         return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draftId));
     }
 
@@ -199,7 +210,10 @@ public class DraftLedgerEntryService {
         DraftLedgerEntry draft = getVisibleDraft(userId, familyId, draftId);
         requireDraftStatus(draft, "只有 DRAFT 状态草稿允许生成预览");
         DraftPreviewDTO preview = buildPreview(draft);
-        draftLedgerEntryMapper.updatePreview(draftId, toJson(preview));
+        if (draftLedgerEntryMapper.updatePreview(draftId, toJson(preview)) != 1) {
+            throw new RuntimeException("草稿状态已变化，请刷新后重试");
+        }
+        audit(draft, userId, "preview", "DRAFT", "DRAFT", "只读影响预览；可确认：" + Boolean.TRUE.equals(preview.getConfirmSupported()));
         return preview;
     }
 
@@ -222,6 +236,11 @@ public class DraftLedgerEntryService {
         if ("IGNORED".equals(draft.getStatus())) {
             throw new RuntimeException("已忽略草稿不能确认");
         }
+
+        if (failureAudit != null) {
+            failureAudit.write(draftId, userId, draft.getSourceType(), "confirm_attempt");
+        }
+        try {
 
         DraftPreviewDTO preview = buildPreview(draft);
         draftLedgerEntryMapper.updatePreview(draftId, toJson(preview));
@@ -264,7 +283,14 @@ public class DraftLedgerEntryService {
         if (updated != 1) {
             throw new RuntimeException("草稿确认状态更新失败，事务已回滚");
         }
+        audit(draft, userId, "confirmed", "DRAFT", "CONFIRMED", "确认成功；正式结果关联已写入草稿");
         return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draftId));
+        } catch (RuntimeException failure) {
+            if (failureAudit != null) {
+                failureAudit.write(draftId, userId, draft.getSourceType(), "confirm_failed");
+            }
+            throw failure;
+        }
     }
 
     /**
@@ -278,7 +304,75 @@ public class DraftLedgerEntryService {
         if (updated != 1) {
             throw new RuntimeException("草稿忽略失败，请刷新后重试");
         }
+        audit(draft, userId, "ignored", "DRAFT", "IGNORED", "主人忽略草稿");
         return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draftId));
+    }
+
+    public List<DraftLifecycleEvent> history(Long userId, Long familyId, Long draftId) {
+        getVisibleDraft(userId, familyId, draftId);
+        return lifecycleEvents.selectByDraftId(draftId);
+    }
+
+    @Transactional
+    public DraftLedgerEntryDTO reopen(Long userId, Long familyId, Long draftId) {
+        DraftLedgerEntry draft = lockedDraft(userId, familyId, draftId);
+        if ("DRAFT".equals(draft.getStatus())) {
+            return DraftLedgerEntryDTO.fromModel(draft);
+        }
+        if (!"IGNORED".equals(draft.getStatus()) || draft.getConfirmTxnId() != null || draft.getConfirmOrderId() != null) {
+            throw new RuntimeException("只有未入账的已忽略草稿可以恢复");
+        }
+        if (draft.getSourceRef() != null) {
+            DraftLedgerEntry source = findReplayableDraft(userId, familyId, draft.getSourceType(), draft.getSourceRef());
+            if (source == null || !draftId.equals(source.getId())) {
+                throw new RuntimeException("草稿来源已被占用，不能恢复");
+            }
+        }
+        if (draftLedgerEntryMapper.reopenIgnored(draftId) != 1) {
+            throw new RuntimeException("草稿状态已变化，请刷新后重试");
+        }
+        audit(draft, userId, "reopen", "IGNORED", "DRAFT", "主人恢复草稿；必须重新预览与确认");
+        return DraftLedgerEntryDTO.fromModel(getVisibleDraft(userId, familyId, draftId));
+    }
+
+    @Transactional
+    public DraftLedgerEntryDTO copyConfirmed(Long userId, Long familyId, Long draftId) {
+        DraftLedgerEntry original = lockedDraft(userId, familyId, draftId);
+        if (!"CONFIRMED".equals(original.getStatus())) {
+            throw new RuntimeException("只有已确认草稿可以复制为新草稿");
+        }
+        CreateDraftRequest copy = new CreateDraftRequest();
+        copy.setSourceType("manual-copy");
+        copy.setSourceRef("copy-" + UUID.randomUUID());
+        copy.setRawInput(original.getRawInput());
+        copy.setParsedPayloadJson(original.getParsedPayloadJson());
+        copy.setConfidence(original.getConfidence());
+        copy.setMissingFieldsJson(original.getMissingFieldsJson());
+        DraftLedgerEntryDTO created = createDraft(userId, familyId, copy);
+        if (draftId.equals(created.getId()) || !copy.getSourceRef().equals(created.getSourceRef())) {
+            throw new RuntimeException("新草稿来源发生冲突，请重试复制");
+        }
+        audit(original, userId, "copy", "CONFIRMED", "CONFIRMED", "显式复制到新草稿 #" + created.getId());
+        return created;
+    }
+
+    private DraftLedgerEntry lockedDraft(Long userId, Long familyId, Long draftId) {
+        DraftLedgerEntry draft = draftLedgerEntryMapper.selectVisibleByIdForUpdate(draftId, userId, familyId);
+        if (draft == null) throw new RuntimeException("草稿不存在或无权限访问");
+        return draft;
+    }
+
+    private void audit(DraftLedgerEntry draft, Long userId, String type, String before, String after, String summary) {
+        if (lifecycleEvents == null) return;
+        DraftLifecycleEvent event = new DraftLifecycleEvent();
+        event.setDraftId(draft.getId());
+        event.setEventType(type);
+        event.setActorUserId(userId);
+        event.setSourceType(draft.getSourceType());
+        event.setStatusBefore(before);
+        event.setStatusAfter(after);
+        event.setSummary(summary);
+        lifecycleEvents.insert(event);
     }
 
     /**

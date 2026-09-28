@@ -133,6 +133,9 @@
           </div>
 
           <div class="detail-actions">
+            <el-button @click="loadHistory(selectedDraft.id)">查看历史</el-button>
+            <el-button v-if="selectedDraft.status === 'IGNORED'" @click="handleReopen(selectedDraft)">恢复草稿</el-button>
+            <el-button v-if="selectedDraft.status === 'CONFIRMED'" @click="handleCopy(selectedDraft)">复制为新草稿</el-button>
             <el-button
               type="primary"
               plain
@@ -160,6 +163,17 @@
             >
               确认记账
             </el-button>
+          </div>
+
+          <div v-if="historyVisible" class="detail-section">
+            <h4>草稿历史</h4>
+            <p v-if="historyLoading">正在加载历史…</p>
+            <p v-else-if="historyError">历史加载失败：{{ historyError }}</p>
+            <p v-else-if="!history.length">暂无历史记录</p>
+            <div v-else v-for="event in history" :key="event.id" class="detail-row">
+              <span>{{ formatDateTime(event.createdAt) }} · {{ eventLabel(event.eventType) }}</span>
+              <strong>{{ historyStatus(event.statusBefore) }} → {{ historyStatus(event.statusAfter) }} · {{ event.summary }}</strong>
+            </div>
           </div>
 
           <div v-if="selectedDraft.status !== 'DRAFT'" class="edit-disabled-tip">
@@ -670,6 +684,7 @@ import type {
   AccountHoldingInfo,
   AccountingIntent,
   DraftLedgerEntry,
+  DraftLifecycleEvent,
   DraftLedgerStatus,
   DraftPreview,
   ProductMaster,
@@ -714,6 +729,10 @@ const textInput = ref('')
 const parsedIntent = ref<AccountingIntent | null>(null)
 const drafts = ref<DraftLedgerEntry[]>([])
 const selectedDraft = ref<DraftLedgerEntry | null>(null)
+const history = ref<DraftLifecycleEvent[]>([])
+const historyVisible = ref(false)
+const historyLoading = ref(false)
+const historyError = ref('')
 const preview = ref<DraftPreview | null>(null)
 const statusFilter = ref<DraftLedgerStatus | ''>('DRAFT')
 const loadingDrafts = ref(false)
@@ -1093,8 +1112,61 @@ function resetTextEntry() {
 
 function selectDraft(draft: DraftLedgerEntry) {
   selectedDraft.value = draft
+  historyVisible.value = false
+  history.value = []
   preview.value = null
   editingDraft.value = false
+}
+
+function eventLabel(type: string): string {
+  return ({ create: '创建', edit: '编辑', preview: '预览', ignored: '忽略', reopen: '恢复',
+    confirm_attempt: '尝试确认', confirmed: '确认成功', confirm_failed: '确认失败', copy: '复制' } as Record<string, string>)[type] || type
+}
+
+function historyStatus(status?: string | null): string {
+  return ({ DRAFT: '待确认', IGNORED: '已忽略', CONFIRMED: '已确认' } as Record<string, string>)[status || ''] || '无'
+}
+
+async function loadHistory(draftId: number) {
+  historyVisible.value = true
+  historyLoading.value = true
+  historyError.value = ''
+  try {
+    const rows = await draftApi.history(draftId)
+    if (selectedDraft.value?.id === draftId) history.value = rows
+  } catch (error: any) {
+    historyError.value = getErrorMessage(error, '无法读取草稿历史')
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function handleReopen(draft: DraftLedgerEntry) {
+  try {
+    await ElMessageBox.confirm('恢复后仍需重新预览和二次确认，是否恢复？', '恢复草稿', {
+      confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'warning',
+    })
+    selectedDraft.value = await draftApi.reopen(draft.id)
+    preview.value = null
+    await loadDrafts()
+    await loadHistory(draft.id)
+  } catch (error: any) {
+    if (error !== 'cancel' && error !== 'close') ElNotification.error({ title: '恢复失败', message: getErrorMessage(error, '无法恢复草稿') })
+  }
+}
+
+async function handleCopy(draft: DraftLedgerEntry) {
+  try {
+    await ElMessageBox.confirm('将生成新的草稿和来源标识，仍需预览和二次确认。', '复制为新草稿', {
+      confirmButtonText: '确认复制', cancelButtonText: '取消', type: 'warning',
+    })
+    const created = await draftApi.copyConfirmed(draft.id)
+    statusFilter.value = 'DRAFT'
+    await loadDrafts()
+    selectDraft(created)
+  } catch (error: any) {
+    if (error !== 'cancel' && error !== 'close') ElNotification.error({ title: '复制失败', message: getErrorMessage(error, '无法复制草稿') })
+  }
 }
 
 async function openEditDraft(draft: DraftLedgerEntry) {

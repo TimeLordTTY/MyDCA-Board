@@ -31,11 +31,17 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 
 /**
  * 验证 Phase3 草稿流水服务的安全边界：草稿不进正式账本，确认必须走统一记账入口。
  */
 class DraftLedgerEntryServiceTest {
+
+    @BeforeEach
+    void stubPreviewUpdate() {
+        org.mockito.Mockito.lenient().when(mapper.updatePreview(any(Long.class), any(String.class))).thenReturn(1);
+    }
 
     private final DraftLedgerEntryMapper mapper = mock(DraftLedgerEntryMapper.class);
     private final AccountMapper accountMapper = mock(AccountMapper.class);

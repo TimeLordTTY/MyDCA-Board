@@ -51,6 +51,7 @@ class DraftLedgerEntryServiceSellRedeemTest {
 
     @BeforeEach
     void stubDefaults() {
+        lenient().when(mapper.updatePreview(anyLong(), anyString())).thenReturn(1);
         // 默认所有账户都是叶子账户；需要父账户场景的用例再单独覆盖 selectChildren。
         lenient().when(accountMapper.selectChildren(anyLong())).thenReturn(List.of());
         // 默认没有 PENDING 占用；需要观察可用份额扣减的用例再单独覆盖。

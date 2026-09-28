@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
+import com.timelordtty.mydca.data.dto.DraftLifecycleEventDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.dto.MobileHoldingByAccountDto
@@ -67,6 +68,9 @@ fun DraftInboxScreen(
     var isConfirmingDraft by remember { mutableStateOf(false) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var showIgnoreDialog by remember { mutableStateOf(false) }
+    var showReopenDialog by remember { mutableStateOf(false) }
+    var showCopyDialog by remember { mutableStateOf(false) }
+    var historyState by remember { mutableStateOf<AsyncState<List<DraftLifecycleEventDto>>?>(null) }
     var selectableAccounts by remember { mutableStateOf<List<MobileAccountDto>>(emptyList()) }
     var selectableProducts by remember { mutableStateOf<List<ProductDto>>(emptyList()) }
     var productHoldings by remember { mutableStateOf<List<MobileHoldingByAccountDto>>(emptyList()) }
@@ -85,8 +89,60 @@ fun DraftInboxScreen(
 
     fun selectDraft(draft: DraftLedgerEntryDto) {
         setCurrentDraft(draft)
+        historyState = null
         previewState = null
         actionMessage = null
+    }
+
+    fun loadHistory() {
+        val draftId = selectedDraft?.id ?: return
+        val repository = draftRepository ?: return
+        historyState = AsyncState.Loading
+        scope.launch {
+            val result = repository.history(draftId)
+            if (selectedDraft?.id == draftId) historyState = when (result) {
+                is NetworkResult.Success -> AsyncState.Success(result.data)
+                is NetworkResult.Failure -> AsyncState.Error(result.message)
+            }
+        }
+    }
+
+    fun reopenSelected() {
+        val draftId = selectedDraft?.takeIf { it.status == "IGNORED" }?.id ?: return
+        showReopenDialog = false
+        val repository = draftRepository ?: return
+        scope.launch {
+            when (val result = repository.reopen(draftId)) {
+                is NetworkResult.Success -> {
+                    setCurrentDraft(result.data)
+                    previewState = null
+                    historyState = null
+                    actionMessage = "草稿已恢复，请重新预览并二次确认"
+                    val current = (draftsState as? AsyncState.Success)?.data.orEmpty()
+                    draftsState = AsyncState.Success(current.map { if (it.id == draftId) result.data else it })
+                }
+                is NetworkResult.Failure -> actionMessage = "恢复失败：${result.message}"
+            }
+        }
+    }
+
+    fun copySelected() {
+        val draftId = selectedDraft?.takeIf { it.status == "CONFIRMED" }?.id ?: return
+        showCopyDialog = false
+        val repository = draftRepository ?: return
+        scope.launch {
+            when (val result = repository.copyConfirmed(draftId)) {
+                is NetworkResult.Success -> {
+                    setCurrentDraft(result.data)
+                    previewState = null
+                    historyState = null
+                    actionMessage = "已复制为新草稿，请预览并二次确认"
+                    val current = (draftsState as? AsyncState.Success)?.data.orEmpty()
+                    draftsState = AsyncState.Success(listOf(result.data) + current)
+                }
+                is NetworkResult.Failure -> actionMessage = "复制失败：${result.message}"
+            }
+        }
     }
 
     fun refreshDrafts(preferredDraftId: Long? = selectedDraft?.id) {
@@ -442,6 +498,10 @@ fun DraftInboxScreen(
             onPreview = ::previewSelectedDraft,
             onIgnore = { showIgnoreDialog = true },
             onConfirm = { showConfirmDialog = true },
+            historyState = historyState,
+            onHistory = ::loadHistory,
+            onReopen = { showReopenDialog = true },
+            onCopy = { showCopyDialog = true },
         )
     }
 
@@ -461,6 +521,24 @@ fun DraftInboxScreen(
             onDismiss = { showIgnoreDialog = false },
         )
     }
+    if (showReopenDialog) {
+        AlertDialog(
+            onDismissRequest = { showReopenDialog = false },
+            title = { Text("恢复草稿") },
+            text = { Text("恢复后仍需重新预览并二次确认，是否继续？") },
+            confirmButton = { Button(onClick = ::reopenSelected) { Text("确认恢复") } },
+            dismissButton = { OutlinedButton(onClick = { showReopenDialog = false }) { Text("取消") } },
+        )
+    }
+    if (showCopyDialog) {
+        AlertDialog(
+            onDismissRequest = { showCopyDialog = false },
+            title = { Text("复制为新草稿") },
+            text = { Text("将生成新的草稿和来源标识，仍需预览并二次确认。") },
+            confirmButton = { Button(onClick = ::copySelected) { Text("确认复制") } },
+            dismissButton = { OutlinedButton(onClick = { showCopyDialog = false }) { Text("取消") } },
+        )
+    }
 }
 
 @Composable
@@ -474,8 +552,8 @@ private fun DraftListSection(
     onSelectDraft: (DraftLedgerEntryDto) -> Unit,
 ) {
     SectionCard(
-        title = "待确认草稿",
-        description = "来自 GET /api/v2/drafts?status=DRAFT。列表只展示草稿，不会自动确认或入账。",
+        title = "草稿箱与历史",
+        description = "可查看待确认、已忽略和已确认草稿；任何操作都不会自动入账。",
     ) {
         RefreshBar(
             lastUpdatedAt = lastUpdatedAt,
@@ -491,7 +569,7 @@ private fun DraftListSection(
             )
         }
         if (drafts.isEmpty()) {
-            StatusPill("暂无 DRAFT 草稿")
+            StatusPill("暂无草稿")
         } else {
             StatusPill("待人工确认 ${DraftReview.pendingDraftCount(drafts)} 条")
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -537,6 +615,10 @@ private fun DraftDetailSection(
     onPreview: () -> Unit,
     onIgnore: () -> Unit,
     onConfirm: () -> Unit,
+    historyState: AsyncState<List<DraftLifecycleEventDto>>?,
+    onHistory: () -> Unit,
+    onReopen: () -> Unit,
+    onCopy: () -> Unit,
 ) {
     SectionCard(
         title = "草稿预览与确认",
@@ -561,6 +643,27 @@ private fun DraftDetailSection(
             }
         )
         ParsedInfoSection(selectedDraft)
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onHistory) { Text("查看历史") }
+            if (selectedDraft.status == "IGNORED") {
+                OutlinedButton(onClick = onReopen) { Text("恢复草稿") }
+            }
+            if (selectedDraft.status == "CONFIRMED") {
+                OutlinedButton(onClick = onCopy) { Text("复制为新草稿") }
+            }
+        }
+        when (historyState) {
+            null -> Unit
+            AsyncState.Loading -> Text("正在加载历史")
+            is AsyncState.Error -> Text("历史加载失败：${historyState.message}")
+            is AsyncState.Success -> {
+                if (historyState.data.isEmpty()) Text("暂无历史记录")
+                historyState.data.forEach { event ->
+                    Text("${formatDateTime(event.createdAt)} · ${draftEventLabel(event.eventType)} · ${event.summary ?: ""}")
+                }
+            }
+        }
 
         if (DraftReview.isDraft(selectedDraft)) {
             DraftEditSection(
@@ -613,6 +716,19 @@ private fun DraftDetailSection(
             is AsyncState.Success -> PreviewContent(previewState.data)
         }
     }
+}
+
+private fun draftEventLabel(type: String): String = when (type) {
+    "create" -> "创建"
+    "edit" -> "编辑"
+    "preview" -> "预览"
+    "ignored" -> "忽略"
+    "reopen" -> "恢复"
+    "confirm_attempt" -> "尝试确认"
+    "confirmed" -> "确认成功"
+    "confirm_failed" -> "确认失败"
+    "copy" -> "复制"
+    else -> type
 }
 
 @Composable

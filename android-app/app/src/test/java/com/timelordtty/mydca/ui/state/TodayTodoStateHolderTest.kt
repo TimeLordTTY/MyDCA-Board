@@ -77,6 +77,9 @@ private class TodoApiFixture(
     private val todo: TodayTodoDto? = null,
     private val fail: Boolean = false,
 ) : WealthHubApi {
+    override suspend fun draftHistory(draftId: Long): List<com.timelordtty.mydca.data.dto.DraftLifecycleEventDto> = throw UnsupportedOperationException()
+    override suspend fun reopenDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()
+    override suspend fun copyConfirmedDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()
     override suspend fun getTodayTodos(): TodayTodoDto {
         if (fail) throw IllegalStateException("待办加载失败")
         return todo ?: TodayTodoDto()

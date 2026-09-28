@@ -10,11 +10,24 @@ import type {
   DraftLedgerEntry,
   DraftPreview,
   DraftQueryParams,
+  DraftLifecycleEvent,
   IgnoreDraftRequest,
   UpdateDraftRequest,
 } from '../types'
 
 export const draftApi = {
+  history: async (draftId: number): Promise<DraftLifecycleEvent[]> => {
+    const response = await apiClient.get<DraftLifecycleEvent[]>(`/drafts/${draftId}/history`)
+    return response.data
+  },
+  reopen: async (draftId: number): Promise<DraftLedgerEntry> => {
+    const response = await apiClient.post<DraftLedgerEntry>(`/drafts/${draftId}/reopen`)
+    return response.data
+  },
+  copyConfirmed: async (draftId: number): Promise<DraftLedgerEntry> => {
+    const response = await apiClient.post<DraftLedgerEntry>(`/drafts/${draftId}/copy`)
+    return response.data
+  },
   /**
    * 创建一条待确认草稿，不触发正式账本入账。
    */

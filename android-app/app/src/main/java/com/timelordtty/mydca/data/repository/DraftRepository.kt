@@ -3,6 +3,7 @@ package com.timelordtty.mydca.data.repository
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
+import com.timelordtty.mydca.data.dto.DraftLifecycleEventDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
@@ -15,7 +16,19 @@ class DraftRepository(
     private val api: WealthHubApi,
 ) {
     suspend fun listDrafts(): NetworkResult<List<DraftLedgerEntryDto>> = safeCall {
-        api.listDrafts(status = "DRAFT")
+        api.listDrafts(status = null)
+    }
+
+    suspend fun history(draftId: Long): NetworkResult<List<DraftLifecycleEventDto>> = safeCall {
+        api.draftHistory(draftId)
+    }
+
+    suspend fun reopen(draftId: Long): NetworkResult<DraftLedgerEntryDto> = safeCall {
+        api.reopenDraft(draftId)
+    }
+
+    suspend fun copyConfirmed(draftId: Long): NetworkResult<DraftLedgerEntryDto> = safeCall {
+        api.copyConfirmedDraft(draftId)
     }
 
     suspend fun getDraft(draftId: Long): NetworkResult<DraftLedgerEntryDto> = safeCall {

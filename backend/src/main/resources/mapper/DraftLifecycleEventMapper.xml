@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.timelordtty.dca.mapper.DraftLifecycleEventMapper">
+    <insert id="insert" parameterType="com.timelordtty.dca.model.DraftLifecycleEvent">
+        INSERT INTO draft_lifecycle_event
+        (draft_id, event_type, actor_user_id, source_type, status_before, status_after, summary, created_at)
+        VALUES (#{draftId}, #{eventType}, #{actorUserId}, #{sourceType}, #{statusBefore}, #{statusAfter}, #{summary}, NOW())
+    </insert>
+    <select id="selectByDraftId" resultType="com.timelordtty.dca.model.DraftLifecycleEvent">
+        SELECT id, draft_id AS draftId, event_type AS eventType, actor_user_id AS actorUserId,
+               source_type AS sourceType, status_before AS statusBefore, status_after AS statusAfter,
+               summary, created_at AS createdAt
+        FROM draft_lifecycle_event WHERE draft_id = #{draftId} ORDER BY id ASC
+    </select>
+</mapper>

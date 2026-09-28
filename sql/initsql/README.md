@@ -26,6 +26,10 @@ sql/initsql/
 
 请查看 `../updatesql/` 目录下的补丁脚本，按日期（YYYYMM）和编号顺序执行。
 
+### v0.14 草稿事件表
+
+全新环境完成主 DDL 与既有 Phase3 草稿表初始化后，可使用 `20260928_draft_lifecycle_event.sql`。既有环境只使用 `../updatesql/20260928/01_create_draft_lifecycle_event.sql`。两者是互斥路径；本工程任务均不执行。
+
 **执行原则**：
 1. 按日期顺序：从最早的日期目录开始
 2. 按编号顺序：在同一日期目录内，按文件编号（01、02、03...）顺序执行

@@ -32,6 +32,33 @@ import retrofit2.Response
 
 class WealthRepositoryTest {
     @Test
+    fun draftHistoryLoadsEmptyAndReportsFailure() = runTest {
+        val empty = DraftRepository(object : FakeWealthHubApi() {
+            override suspend fun draftHistory(draftId: Long) = emptyList<com.timelordtty.mydca.data.dto.DraftLifecycleEventDto>()
+        })
+        val failure = DraftRepository(object : FakeWealthHubApi() {
+            override suspend fun draftHistory(draftId: Long): List<com.timelordtty.mydca.data.dto.DraftLifecycleEventDto> {
+                throw IllegalStateException("历史不可用")
+            }
+        })
+        assertTrue((empty.history(7L) as NetworkResult.Success).data.isEmpty())
+        assertEquals("历史不可用", (failure.history(7L) as NetworkResult.Failure).message)
+    }
+
+    @Test
+    fun draftRecoveryAndCopyRemainDraftOnly() = runTest {
+        val repository = DraftRepository(object : FakeWealthHubApi() {
+            override suspend fun reopenDraft(draftId: Long) = DraftLedgerEntryDto(id = draftId, status = "DRAFT")
+            override suspend fun copyConfirmedDraft(draftId: Long) = DraftLedgerEntryDto(id = 8L, sourceRef = "copy-new", status = "DRAFT")
+        })
+        assertEquals("DRAFT", (repository.reopen(7L) as NetworkResult.Success).data.status)
+        val copied = (repository.copyConfirmed(7L) as NetworkResult.Success).data
+        assertEquals(8L, copied.id)
+        assertEquals("copy-new", copied.sourceRef)
+        assertEquals("DRAFT", copied.status)
+    }
+
+    @Test
     fun getOverviewReturnsSuccess() = runTest {
         val repository = WealthRepository(
             api = object : FakeWealthHubApi() {
@@ -90,6 +117,9 @@ class WealthRepositoryTest {
 }
 
 private open class FakeWealthHubApi : WealthHubApi {
+    override suspend fun draftHistory(draftId: Long): List<com.timelordtty.mydca.data.dto.DraftLifecycleEventDto> = throw UnsupportedOperationException()
+    override suspend fun reopenDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()
+    override suspend fun copyConfirmedDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()
     override suspend fun getTodayTodos(): TodayTodoDto = throw UnsupportedOperationException()
     override suspend fun listDrafts(status: String?, page: Int, pageSize: Int): List<DraftLedgerEntryDto> = throw UnsupportedOperationException()
     override suspend fun getDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()

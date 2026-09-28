@@ -132,4 +132,11 @@
         WHERE id = #{id}
           AND status = 'DRAFT'
     </update>
+    <update id="reopenIgnored">
+        UPDATE draft_ledger_entry
+        SET status = 'DRAFT', preview_payload_json = NULL, ignore_reason = NULL,
+            ignored_at = NULL, updated_at = NOW()
+        WHERE id = #{id} AND status = 'IGNORED'
+          AND confirm_txn_id IS NULL AND confirm_order_id IS NULL
+    </update>
 </mapper>

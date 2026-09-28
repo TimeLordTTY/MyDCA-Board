@@ -7,6 +7,19 @@
 /** 草稿状态：待确认、已确认或已忽略。 */
 export type DraftLedgerStatus = 'DRAFT' | 'CONFIRMED' | 'IGNORED'
 
+/** 不包含原文或完整候选数据的只读生命周期事件。 */
+export interface DraftLifecycleEvent {
+  id: number
+  draftId: number
+  eventType: string
+  actorUserId: number
+  sourceType: string
+  statusBefore?: string | null
+  statusAfter?: string | null
+  summary?: string | null
+  createdAt: string
+}
+
 /** 草稿来源类型，允许后续扩展微信、导入、OCR 等来源。 */
 export type DraftSourceType = 'manual' | 'wechat' | 'import' | 'ocr' | string
 

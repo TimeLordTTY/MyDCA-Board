@@ -72,4 +72,7 @@ public interface DraftLedgerEntryMapper {
      * 将 DRAFT 草稿标记为 IGNORED，并记录人工忽略原因。
      */
     int markIgnored(@Param("id") Long id, @Param("ignoreReason") String ignoreReason);
+
+    /** 只允许已忽略草稿恢复；清除旧预览，重新经过预览与确认。 */
+    int reopenIgnored(@Param("id") Long id);
 }

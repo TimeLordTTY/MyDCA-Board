@@ -51,6 +51,7 @@ class DraftLedgerEntryServiceInvestmentTest {
 
     @BeforeEach
     void stubDefaultAccountChildren() {
+        lenient().when(mapper.updatePreview(anyLong(), anyString())).thenReturn(1);
         // 默认所有账户都是叶子账户；需要父账户场景的用例再单独覆盖 selectChildren。
         lenient().when(accountMapper.selectChildren(anyLong())).thenReturn(List.of());
     }

@@ -17,6 +17,19 @@ data class DraftLedgerEntryDto(
     val updatedAt: String? = null,
 )
 
+/** 草稿历史只包含安全摘要。 */
+data class DraftLifecycleEventDto(
+    val id: Long,
+    val draftId: Long,
+    val eventType: String,
+    val actorUserId: Long,
+    val sourceType: String,
+    val statusBefore: String? = null,
+    val statusAfter: String? = null,
+    val summary: String? = null,
+    val createdAt: String? = null,
+)
+
 /**
  * 更新草稿请求体。
  * Android 只更新 DRAFT 草稿候选内容，不直接写正式账本；preview 会由用户保存后重新生成。

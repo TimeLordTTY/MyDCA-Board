@@ -6,6 +6,7 @@ import com.timelordtty.dca.dto.DraftLedgerEntryDTO;
 import com.timelordtty.dca.dto.DraftPreviewDTO;
 import com.timelordtty.dca.dto.IgnoreDraftRequest;
 import com.timelordtty.dca.dto.UpdateDraftRequest;
+import com.timelordtty.dca.model.DraftLifecycleEvent;
 import com.timelordtty.dca.service.DraftLedgerEntryService;
 import com.timelordtty.dca.service.UserService;
 import org.springframework.http.ResponseEntity;
@@ -71,6 +72,24 @@ public class DraftLedgerEntryController {
     public ResponseEntity<DraftLedgerEntryDTO> getDraft(@PathVariable Long draftId) {
         AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         return ResponseEntity.ok(draftLedgerEntryService.getDraft(currentUser.getId(), currentUser.getFamilyId(), draftId));
+    }
+
+    @GetMapping("/{draftId}/history")
+    public ResponseEntity<List<DraftLifecycleEvent>> history(@PathVariable Long draftId) {
+        AuthResponse.UserInfo user = userService.getCurrentUser();
+        return ResponseEntity.ok(draftLedgerEntryService.history(user.getId(), user.getFamilyId(), draftId));
+    }
+
+    @PostMapping("/{draftId}/reopen")
+    public ResponseEntity<DraftLedgerEntryDTO> reopen(@PathVariable Long draftId) {
+        AuthResponse.UserInfo user = userService.getCurrentUser();
+        return ResponseEntity.ok(draftLedgerEntryService.reopen(user.getId(), user.getFamilyId(), draftId));
+    }
+
+    @PostMapping("/{draftId}/copy")
+    public ResponseEntity<DraftLedgerEntryDTO> copy(@PathVariable Long draftId) {
+        AuthResponse.UserInfo user = userService.getCurrentUser();
+        return ResponseEntity.ok(draftLedgerEntryService.copyConfirmed(user.getId(), user.getFamilyId(), draftId));
     }
 
     /**
