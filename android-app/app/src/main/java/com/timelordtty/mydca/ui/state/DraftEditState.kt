@@ -18,6 +18,8 @@ import okio.Buffer
  *
  * 投资草稿（BUY / SUBSCRIPTION）本轮只支持单资金来源账户，且确认后会立即生成付款账本
  * （付款账户 CASH CREDIT + 待结算应收 RECEIVABLE DEBIT），但不会自动结算、不会生成最终持仓。
+ * 卖出 / 赎回草稿（SELL / REDEMPTION）只需份额、持仓来源与到账账户；确认后只登记内部 PENDING
+ * 记录，不会立即减少持仓或增加到账余额，也不生成任何账本流水。
  */
 data class DraftEditForm(
     val txnType: String = "EXPENSE",
@@ -30,6 +32,12 @@ data class DraftEditForm(
     val productId: String = "",
     /** 产品名称提示，只供复核，不可代替 productId。 */
     val productNameHint: String = "",
+    /** 卖出 / 赎回草稿本次份额；只用于 SELL / REDEMPTION。 */
+    val shares: String = "",
+    /** 卖出 / 赎回草稿的持仓来源账户 ID；只用于 SELL / REDEMPTION。 */
+    val sourceAccountId: String = "",
+    /** 持仓来源账户名称提示，只供复核，不可代替 sourceAccountId。 */
+    val sourceAccountNameHint: String = "",
     val expectedNavDate: String = "",
     val expectedConfirmDate: String = "",
 )
@@ -49,8 +57,9 @@ data class DraftEditRequestResult(
  * 集中维护草稿编辑、保存后预览和确认按钮的安全规则，便于 UI 与单元测试复用。
  */
 object DraftEditState {
-    /** 后端 confirm 当前支持的草稿类型；SELL / REDEMPTION 仍由后端拒绝。 */
-    val SUPPORTED_TXN_TYPES = setOf("EXPENSE", "INCOME", "TRANSFER", "BUY", "SUBSCRIPTION")
+    /** 后端 confirm 当前支持的草稿类型；v0.12 起包含 SELL / REDEMPTION。 */
+    val SUPPORTED_TXN_TYPES =
+        setOf("EXPENSE", "INCOME", "TRANSFER", "BUY", "SUBSCRIPTION", "SELL", "REDEMPTION")
 
     private val moshi = Moshi.Builder().build()
     private val mapType = Types.newParameterizedType(
@@ -74,6 +83,9 @@ object DraftEditState {
         val productNameHint = firstString(payload, "productNameHint").orEmpty()
         val expectedNavDate = firstString(payload, "expectedNavDate").orEmpty()
         val expectedConfirmDate = firstString(payload, "expectedConfirmDate").orEmpty()
+        val shares = firstScalar(payload, "shares").orEmpty()
+        val sourceAccountId = firstScalar(payload, "sourceAccountId").orEmpty()
+        val sourceAccountNameHint = firstString(payload, "sourceAccountNameHint").orEmpty()
         return DraftEditForm(
             txnType = normalizedType.takeIf { it in SUPPORTED_TXN_TYPES } ?: "EXPENSE",
             amount = amount,
@@ -83,28 +95,49 @@ object DraftEditState {
             accountNameHint = accountNameHint,
             productId = productId,
             productNameHint = productNameHint,
+            shares = shares,
+            sourceAccountId = sourceAccountId,
+            sourceAccountNameHint = sourceAccountNameHint,
             expectedNavDate = expectedNavDate,
             expectedConfirmDate = expectedConfirmDate,
         )
     }
 
-    /** 切换交易类型：非转账清空转入账户，非投资清空投资字段，避免残留字段污染候选载荷。 */
+    /**
+     * 切换交易类型：只有 TRANSFER / SELL / REDEMPTION 保留到账账户，非投资与非卖出赎回清空投资字段，
+     * 非卖出赎回清空份额与持仓来源，避免残留字段污染候选载荷。
+     */
     fun switchTxnType(form: DraftEditForm, txnType: String): DraftEditForm {
         val normalized = txnType.trim().uppercase()
-        val cleared = form.copy(txnType = normalized)
-        val withoutTransfer = if (normalized == "TRANSFER") cleared else cleared.copy(targetAccountId = "")
-        return if (isInvestmentType(normalized)) withoutTransfer else withoutInvestmentFields(withoutTransfer)
+        var updated = form.copy(txnType = normalized)
+        if (normalized != "TRANSFER" && !isSellRedeemType(normalized)) {
+            updated = updated.copy(targetAccountId = "")
+        }
+        if (!isInvestmentType(normalized) && !isSellRedeemType(normalized)) {
+            updated = withoutInvestmentFields(updated)
+        }
+        return if (isSellRedeemType(normalized)) updated else withoutSellRedeemFields(updated)
     }
 
-    /** 投资候选类型：本轮只支持 BUY（场内买入）与 SUBSCRIPTION（场外申购）。 */
+    /** 投资候选类型：本轮支持 BUY（场内买入）与 SUBSCRIPTION（场外申购）。 */
     fun isInvestmentType(txnType: String?): Boolean =
         txnType?.trim()?.uppercase() in setOf("BUY", "SUBSCRIPTION")
+
+    /** 卖出 / 赎回候选类型：SELL（卖出）与 REDEMPTION（赎回）。 */
+    fun isSellRedeemType(txnType: String?): Boolean =
+        txnType?.trim()?.uppercase() in setOf("SELL", "REDEMPTION")
 
     private fun withoutInvestmentFields(form: DraftEditForm): DraftEditForm = form.copy(
         productId = "",
         productNameHint = "",
         expectedNavDate = "",
         expectedConfirmDate = "",
+    )
+
+    private fun withoutSellRedeemFields(form: DraftEditForm): DraftEditForm = form.copy(
+        shares = "",
+        sourceAccountId = "",
+        sourceAccountNameHint = "",
     )
 
     fun buildUpdateRequest(draft: DraftLedgerEntryDto, form: DraftEditForm): DraftEditRequestResult {
@@ -115,8 +148,13 @@ object DraftEditState {
         val normalizedType = form.txnType.trim().uppercase()
         if (normalizedType !in SUPPORTED_TXN_TYPES) {
             return DraftEditRequestResult(
-                error = "交易类型必须是 EXPENSE、INCOME、TRANSFER、BUY 或 SUBSCRIPTION。",
+                error = "交易类型必须是 EXPENSE、INCOME、TRANSFER、BUY、SUBSCRIPTION、SELL 或 REDEMPTION。",
             )
+        }
+
+        val normalizedNote = form.note.trim()
+        if (isSellRedeemType(normalizedType)) {
+            return buildSellRedeemRequest(draft, form, normalizedType, normalizedNote)
         }
 
         val amount = parseAmount(form.amount)
@@ -148,7 +186,6 @@ object DraftEditState {
             null
         }
 
-        val normalizedNote = form.note.trim()
         val normalizedAccountNameHint = form.accountNameHint.trim()
         val request = UpdateDraftRequestDto(
             sourceType = draft.sourceType,
@@ -157,9 +194,59 @@ object DraftEditState {
             parsedPayloadJson = buildParsedPayloadJson(
                 txnType = normalizedType,
                 amount = amount,
+                shares = null,
                 note = normalizedNote,
                 accountId = accountId,
                 accountNameHint = normalizedAccountNameHint,
+                sourceAccountId = null,
+                sourceAccountNameHint = "",
+                targetAccountId = targetAccountId,
+                productId = productId,
+                productNameHint = form.productNameHint.trim(),
+                expectedNavDate = form.expectedNavDate.trim(),
+                expectedConfirmDate = form.expectedConfirmDate.trim(),
+            ),
+            confidence = draft.confidence,
+            missingFieldsJson = buildStringArrayJson(emptyList()),
+        )
+        return DraftEditRequestResult(request = request)
+    }
+
+    /** 构造 SELL / REDEMPTION 保存请求：只写入份额、真实产品、持仓来源与到账账户，不写金额。 */
+    private fun buildSellRedeemRequest(
+        draft: DraftLedgerEntryDto,
+        form: DraftEditForm,
+        normalizedType: String,
+        normalizedNote: String,
+    ): DraftEditRequestResult {
+        val shares = parseShares(form.shares)
+            ?: return DraftEditRequestResult(error = "份额必须是大于 0 且最多四位小数的数字。")
+        val productId = parseAccountId(form.productId)
+            ?: return DraftEditRequestResult(
+                error = "卖出 / 赎回草稿必须选择真实产品，productId 必须是大于 0 的正整数。",
+            )
+        val sourceAccountId = parseAccountId(form.sourceAccountId)
+            ?: return DraftEditRequestResult(
+                error = "持仓来源 sourceAccountId 必须是后端真实账户 ID，且为大于 0 的正整数。",
+            )
+        val targetAccountId = parseAccountId(form.targetAccountId)
+            ?: return DraftEditRequestResult(
+                error = "到账账户 targetAccountId 必须是后端真实账户 ID，且为大于 0 的正整数。",
+            )
+
+        val request = UpdateDraftRequestDto(
+            sourceType = draft.sourceType,
+            sourceRef = draft.sourceRef,
+            rawInput = normalizedNote.ifBlank { draft.rawInput.orEmpty() },
+            parsedPayloadJson = buildParsedPayloadJson(
+                txnType = normalizedType,
+                amount = null,
+                shares = shares,
+                note = normalizedNote,
+                accountId = null,
+                accountNameHint = "",
+                sourceAccountId = sourceAccountId,
+                sourceAccountNameHint = form.sourceAccountNameHint.trim(),
                 targetAccountId = targetAccountId,
                 productId = productId,
                 productNameHint = form.productNameHint.trim(),
@@ -205,6 +292,18 @@ object DraftEditState {
         return amount.setScale(amount.scale().coerceAtLeast(0), RoundingMode.UNNECESSARY)
     }
 
+    private fun parseShares(value: String): BigDecimal? {
+        val trimmed = value.trim()
+        if (!Regex("""^\d+(\.\d{1,4})?$""").matches(trimmed)) {
+            return null
+        }
+        val shares = trimmed.toBigDecimalOrNull() ?: return null
+        if (shares <= BigDecimal.ZERO || shares.scale() > 4) {
+            return null
+        }
+        return shares.setScale(shares.scale().coerceAtLeast(0), RoundingMode.UNNECESSARY)
+    }
+
     private fun parseAccountId(value: String): Long? {
         val trimmed = value.trim()
         if (!Regex("""^\d+$""").matches(trimmed)) {
@@ -215,10 +314,13 @@ object DraftEditState {
 
     private fun buildParsedPayloadJson(
         txnType: String,
-        amount: BigDecimal,
+        amount: BigDecimal?,
+        shares: BigDecimal?,
         note: String,
-        accountId: Long,
+        accountId: Long?,
         accountNameHint: String,
+        sourceAccountId: Long?,
+        sourceAccountNameHint: String,
         targetAccountId: Long?,
         productId: Long?,
         productNameHint: String,
@@ -227,8 +329,21 @@ object DraftEditState {
     ): String {
         return writeJsonObject {
             name("txnType").value(txnType)
-            name("amount").value(amount.stripTrailingZeros())
-            name("accountId").value(accountId)
+            if (amount != null) {
+                name("amount").value(amount.stripTrailingZeros())
+            }
+            if (shares != null) {
+                name("shares").value(shares.stripTrailingZeros())
+            }
+            if (accountId != null) {
+                name("accountId").value(accountId)
+            }
+            if (sourceAccountId != null) {
+                name("sourceAccountId").value(sourceAccountId)
+            }
+            if (sourceAccountNameHint.isNotBlank()) {
+                name("sourceAccountNameHint").value(sourceAccountNameHint)
+            }
             if (targetAccountId != null) {
                 name("targetAccountId").value(targetAccountId)
             }

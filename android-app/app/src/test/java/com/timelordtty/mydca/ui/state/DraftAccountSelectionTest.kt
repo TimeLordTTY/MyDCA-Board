@@ -125,6 +125,29 @@ class DraftAccountSelectionTest {
         )
     }
 
+    @Test
+    fun sellRedeemTargetOnlyAllowsRealLeafNonPositionMatchingCurrency() {
+        val selectable = DraftAccountSelection.selectableFor("SELL", all)
+
+        assertEquals(listOf(1L, 2L, 3L, 4L), selectable.map { it.id })
+        assertTrue(DraftAccountSelection.isSelectable("SELL", investable))
+        assertTrue(DraftAccountSelection.isSelectable("redemption", reserved))
+        assertFalse(DraftAccountSelection.isSelectable("SELL", parent))
+        assertNull(DraftAccountSelection.rejectionReason("REDEMPTION", spendable))
+
+        val position = account(8, "证券持仓账户", "INVESTABLE").copy(accountType = "POSITION")
+        assertFalse(DraftAccountSelection.isSelectable("SELL", position))
+        assertTrue(DraftAccountSelection.rejectionReason("SELL", position).orEmpty().contains("POSITION"))
+
+        val cny = spendable.copy(currency = "CNY")
+        val usd = account(9, "美元账户", "SPENDABLE").copy(currency = "USD")
+        assertTrue(DraftAccountSelection.isSelectable("SELL", cny, productCurrency = "CNY"))
+        assertFalse(DraftAccountSelection.isSelectable("SELL", usd, productCurrency = "CNY"))
+        assertTrue(
+            DraftAccountSelection.rejectionReason("SELL", usd, productCurrency = "CNY").orEmpty().contains("币种"),
+        )
+    }
+
     private fun account(
         id: Long,
         name: String,

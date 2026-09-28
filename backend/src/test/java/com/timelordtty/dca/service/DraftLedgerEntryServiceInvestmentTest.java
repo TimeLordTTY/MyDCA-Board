@@ -45,8 +45,9 @@ class DraftLedgerEntryServiceInvestmentTest {
     private final QuickEntryService quickEntryService = mock(QuickEntryService.class);
     private final ProductMasterMapper productMasterMapper = mock(ProductMasterMapper.class);
     private final OrderService orderService = mock(OrderService.class);
+    private final HoldingService holdingService = mock(HoldingService.class);
     private final DraftLedgerEntryService service = new DraftLedgerEntryService(
-            mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService);
+            mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService, holdingService);
 
     @BeforeEach
     void stubDefaultAccountChildren() {

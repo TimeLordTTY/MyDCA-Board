@@ -8,6 +8,7 @@ import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.dto.MobileCashFlowDto
+import com.timelordtty.mydca.data.dto.MobileHoldingByAccountDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -172,4 +173,5 @@ private class FailingWealthApi : WealthHubApi {
     override suspend fun getMobileTransactions(page: Int, pageSize: Int): MobilePageDto<MobileTransactionDto> = throw UnsupportedOperationException()
     override suspend fun getMobileHoldings(page: Int, pageSize: Int): MobilePageDto<MobileHoldingDto> = throw UnsupportedOperationException()
     override suspend fun getProducts(keyword: String?, assetType: String?, channel: String?): List<ProductDto> = throw UnsupportedOperationException()
+    override suspend fun getProductHoldingsByAccount(productId: Long): List<MobileHoldingByAccountDto> = throw UnsupportedOperationException()
 }

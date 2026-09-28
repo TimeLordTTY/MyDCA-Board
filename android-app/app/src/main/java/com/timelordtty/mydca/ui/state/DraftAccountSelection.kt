@@ -10,6 +10,8 @@ import com.timelordtty.mydca.data.dto.MobileAccountDto
  * SPENDABLE / RESERVED / INVESTABLE 之间都允许转移，前端不按资金用途阻断。
  * 投资（BUY / SUBSCRIPTION）只允许 INVESTABLE 真实叶子账户；只有国债逆回购（BOND_REPO）
  * 才允许使用 RESERVED 专款，且仍必须是真实叶子账户。
+ * 卖出 / 赎回（SELL / REDEMPTION）的到账账户必须是真实叶子账户、非 POSITION 持仓账户且币种与
+ * 产品一致；持仓来源由持仓接口返回，不在这里按资金用途过滤。
  *
  * 这里只负责前端提示和过滤，最终安全边界仍由后端 preview / confirm 重新校验，
  * 移动端不会代替后端放行。
@@ -20,18 +22,22 @@ object DraftAccountSelection {
     const val TRANSFER = "TRANSFER"
     const val BUY = "BUY"
     const val SUBSCRIPTION = "SUBSCRIPTION"
+    const val SELL = "SELL"
+    const val REDEMPTION = "REDEMPTION"
 
     private const val SPENDABLE = "SPENDABLE"
     private const val RESERVED = "RESERVED"
     private const val INVESTABLE = "INVESTABLE"
+    private const val POSITION = "POSITION"
 
     /** 按交易类型返回当前可选择的真实账户，规则与后端草稿安全规则保持一致。 */
     fun selectableFor(
         txnType: String?,
         accounts: List<MobileAccountDto>,
         productAssetType: String? = null,
+        productCurrency: String? = null,
     ): List<MobileAccountDto> {
-        return accounts.filter { account -> isSelectable(txnType, account, productAssetType) }
+        return accounts.filter { account -> isSelectable(txnType, account, productAssetType, productCurrency) }
     }
 
     /** 判断单个账户在当前交易类型下是否可以选择。 */
@@ -39,13 +45,28 @@ object DraftAccountSelection {
         txnType: String?,
         account: MobileAccountDto,
         productAssetType: String? = null,
+        productCurrency: String? = null,
     ): Boolean {
         if (!account.selectableForDraft) return false
         return when (normalizeType(txnType)) {
             EXPENSE -> isEligibleExpenseAccount(account)
             BUY, SUBSCRIPTION -> isEligibleInvestmentAccount(account, productAssetType)
+            SELL, REDEMPTION -> isEligibleSellRedeemTarget(account, productCurrency)
             else -> true
         }
+    }
+
+    /**
+     * 卖出 / 赎回的到账账户必须是真实叶子账户，且不能是 POSITION 持仓账户；
+     * 产品币种已知时还要求币种一致。持仓来源由持仓接口单独返回，不走这里过滤。
+     */
+    fun isEligibleSellRedeemTarget(account: MobileAccountDto, productCurrency: String? = null): Boolean {
+        if (!account.leaf || !account.selectableForDraft) return false
+        if (account.accountType.equals(POSITION, ignoreCase = true)) return false
+        val targetCurrency = account.currency?.trim().orEmpty()
+        val wantedCurrency = productCurrency?.trim().orEmpty()
+        if (targetCurrency.isEmpty() || wantedCurrency.isEmpty()) return true
+        return targetCurrency.equals(wantedCurrency, ignoreCase = true)
     }
 
     /**
@@ -71,6 +92,7 @@ object DraftAccountSelection {
         txnType: String?,
         account: MobileAccountDto,
         productAssetType: String? = null,
+        productCurrency: String? = null,
     ): String? {
         if (!account.selectableForDraft) {
             return if (account.leaf) {
@@ -82,7 +104,18 @@ object DraftAccountSelection {
         return when (normalizeType(txnType)) {
             EXPENSE -> expenseRejectionReason(account)
             BUY, SUBSCRIPTION -> investmentRejectionReason(account, productAssetType)
+            SELL, REDEMPTION -> sellRedeemRejectionReason(account, productCurrency)
             else -> null
+        }
+    }
+
+    private fun sellRedeemRejectionReason(account: MobileAccountDto, productCurrency: String?): String? {
+        if (isEligibleSellRedeemTarget(account, productCurrency)) return null
+        return when {
+            !account.leaf -> "父账户只做只读聚合，不能作为到账账户。"
+            account.accountType.equals(POSITION, ignoreCase = true) ->
+                "POSITION 持仓账户不能作为到账账户，请选择现金类 REAL 叶子账户。"
+            else -> "到账账户币种必须与产品币种一致，请重新选择。"
         }
     }
 

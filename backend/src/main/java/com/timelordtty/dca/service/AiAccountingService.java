@@ -23,6 +23,8 @@ import java.util.regex.Pattern;
 @Service
 public class AiAccountingService {
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("(?<![A-Za-z0-9.])([0-9]+(?:\\.[0-9]{1,2})?)");
+    /** 份额候选：形如 500份 / 1000.5份；只用于 SELL / REDEMPTION 候选提示。 */
+    private static final Pattern SHARES_PATTERN = Pattern.compile("(?<![A-Za-z0-9.])([0-9]+(?:\\.[0-9]{1,4})?)\\s*份");
     private static final BigDecimal HIGH_CONFIDENCE = new BigDecimal("0.70");
     private static final BigDecimal MEDIUM_CONFIDENCE = new BigDecimal("0.55");
 
@@ -55,17 +57,21 @@ public class AiAccountingService {
         if (isInvestmentType(txnType)) {
             intent.setProductNameHint(extractProductNameHint(normalizedText));
             intent.setAmount(extractInvestmentAmount(normalizedText));
+        } else if (isSellRedeemType(txnType)) {
+            // 卖出 / 赎回只提取份额与产品名称提示；productId / 持仓来源 / 到账账户一律交给主人在 App / PC 明确选择。
+            intent.setProductNameHint(extractSellRedeemProductNameHint(normalizedText));
+            intent.setShares(extractShares(normalizedText));
         } else {
             intent.setAmount(txnType == null ? null : extractAmount(normalizedText));
         }
         if ("TRANSFER".equals(txnType)) {
             intent.setAccountNameHint(extractTransferSourceHint(normalizedText));
             intent.setTargetAccountNameHint(extractTransferTargetHint(normalizedText));
-        } else {
+        } else if (!isSellRedeemType(txnType)) {
             intent.setAccountNameHint(extractAccountNameHint(normalizedText));
         }
-        intent.setNote(extractNote(normalizedText, intent.getAmount(), intent.getAccountNameHint(),
-                intent.getTargetAccountNameHint(), intent.getProductNameHint()));
+        intent.setNote(extractNote(normalizedText, intent.getAmount(), intent.getShares(),
+                intent.getAccountNameHint(), intent.getTargetAccountNameHint(), intent.getProductNameHint()));
         intent.setConfidence(calculateConfidence(intent));
         intent.setMissingFields(buildMissingFields(intent));
         intent.setParsedPayloadJson(toIntentJson(intent));
@@ -110,6 +116,9 @@ public class AiAccountingService {
         intent.setTargetAccountNameHint(input.getTargetAccountNameHint());
         intent.setProductId(input.getProductId());
         intent.setProductNameHint(input.getProductNameHint());
+        intent.setShares(input.getShares());
+        intent.setSourceAccountId(input.getSourceAccountId());
+        intent.setSourceAccountNameHint(input.getSourceAccountNameHint());
         intent.setExpectedNavDate(input.getExpectedNavDate());
         intent.setExpectedConfirmDate(input.getExpectedConfirmDate());
         intent.setConfidence(input.getConfidence() == null ? calculateConfidence(input) : input.getConfidence());
@@ -148,9 +157,10 @@ public class AiAccountingService {
     }
 
     /**
-     * 识别明确投资语义：买入 / 申购 / 定投。
+     * 识别明确投资语义：买入 / 申购 / 定投 / 卖出 / 赎回。
      *
-     * <p>优先级高于 EXPENSE 关键词，避免“买入 XXX 1000”被“买”误判成支出；“买奶茶 30”不含“买入”，仍是 EXPENSE。</p>
+     * <p>优先级高于 EXPENSE 关键词，避免“买入 XXX 1000”被“买”误判成支出；“买奶茶 30”不含“买入”，仍是 EXPENSE。
+     * 卖出 / 赎回同样只识别候选类型与份额，不匹配真实产品、持仓来源或到账账户。</p>
      */
     private String detectInvestment(String text) {
         if (text.contains("买入")) {
@@ -159,12 +169,60 @@ public class AiAccountingService {
         if (text.contains("申购") || text.contains("定投")) {
             return "SUBSCRIPTION";
         }
+        if (text.contains("卖出")) {
+            return "SELL";
+        }
+        if (text.contains("赎回")) {
+            return "REDEMPTION";
+        }
         return null;
     }
 
     /** 判断候选类型是否为投资买入 / 申购，规则解析只负责识别，不负责匹配真实产品。 */
     private boolean isInvestmentType(String txnType) {
         return "BUY".equals(txnType) || "SUBSCRIPTION".equals(txnType);
+    }
+
+    /** 判断候选类型是否为卖出 / 赎回；规则解析只提取份额与产品名称提示。 */
+    private boolean isSellRedeemType(String txnType) {
+        return "SELL".equals(txnType) || "REDEMPTION".equals(txnType);
+    }
+
+    /**
+     * 提取 SELL / REDEMPTION 产品名称提示：取“卖出 / 赎回”之后、数量或分隔符之前的内容。
+     *
+     * <p>只作为人工提示，禁止用它自动匹配真实 productId 或持仓来源。</p>
+     */
+    private String extractSellRedeemProductNameHint(String text) {
+        for (String keyword : List.of("卖出", "赎回")) {
+            int index = text.indexOf(keyword);
+            if (index < 0) {
+                continue;
+            }
+            String rest = text.substring(index + keyword.length()).trim();
+            String hint = readUntilSeparator(rest).replaceFirst("^[0-9]+(\\.[0-9]+)?\\s*份?", "").trim();
+            hint = hint.replaceFirst("[0-9]+(\\.[0-9]+)?\\s*份?$", "").trim();
+            if (!hint.isBlank()) {
+                return hint;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 提取 SELL / REDEMPTION 份额：取文本中最后一个形如 “500份” 的安全数量候选。
+     *
+     * <p>只作候选份额提示，最终可用份额必须由后端按真实持仓重新校验；这里不会自动占用份额。</p>
+     */
+    private BigDecimal extractShares(String text) {
+        Matcher matcher = SHARES_PATTERN.matcher(text);
+        BigDecimal last = null;
+        while (matcher.find()) {
+            if (isSafeAmountCandidate(text, matcher.start(1), matcher.end(1), matcher.group(1))) {
+                last = new BigDecimal(matcher.group(1));
+            }
+        }
+        return last;
     }
 
     /**
@@ -309,11 +367,14 @@ public class AiAccountingService {
         return text.substring(0, end).trim();
     }
 
-    private String extractNote(String text, BigDecimal amount, String accountNameHint, String targetAccountNameHint,
-                               String productNameHint) {
+    private String extractNote(String text, BigDecimal amount, BigDecimal shares, String accountNameHint,
+                               String targetAccountNameHint, String productNameHint) {
         String note = text;
         if (amount != null) {
             note = note.replaceFirst(Pattern.quote(amount.stripTrailingZeros().toPlainString()), "");
+        }
+        if (shares != null) {
+            note = note.replaceFirst(Pattern.quote(shares.stripTrailingZeros().toPlainString()) + "份?", "");
         }
         if (productNameHint != null && !productNameHint.isBlank()) {
             note = note.replaceFirst(Pattern.quote(productNameHint), "");
@@ -328,6 +389,8 @@ public class AiAccountingService {
                 .replace("买入", "")
                 .replace("申购", "")
                 .replace("定投", "")
+                .replace("卖出", "")
+                .replace("赎回", "")
                 .replace("花了", "")
                 .replace("支出", "")
                 .replace("消费", "")
@@ -340,19 +403,30 @@ public class AiAccountingService {
 
     private List<String> buildMissingFields(AccountingIntentDTO intent) {
         List<String> missingFields = new ArrayList<>();
+        boolean sellRedeem = isSellRedeemType(intent.getTxnType());
         if (intent.getTxnType() == null || intent.getTxnType().isBlank()) {
             missingFields.add("txnType");
         }
-        if (intent.getAmount() == null || intent.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+        if (sellRedeem) {
+            if (intent.getShares() == null || intent.getShares().compareTo(BigDecimal.ZERO) <= 0) {
+                missingFields.add("shares");
+            }
+            if (intent.getSourceAccountId() == null && intent.getAccountId() == null) {
+                missingFields.add("sourceAccountId");
+            }
+            if (intent.getTargetAccountId() == null) {
+                missingFields.add("targetAccountId");
+            }
+        } else if (intent.getAmount() == null || intent.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             missingFields.add("amount");
         }
-        if (intent.getAccountId() == null) {
+        if (!sellRedeem && intent.getAccountId() == null) {
             missingFields.add("accountId");
         }
         if ("TRANSFER".equals(intent.getTxnType()) && intent.getTargetAccountId() == null) {
             missingFields.add("targetAccountId");
         }
-        if (isInvestmentType(intent.getTxnType()) && intent.getProductId() == null) {
+        if ((isInvestmentType(intent.getTxnType()) || sellRedeem) && intent.getProductId() == null) {
             missingFields.add("productId");
         }
         return missingFields;
@@ -360,7 +434,8 @@ public class AiAccountingService {
 
     private BigDecimal calculateConfidence(AccountingIntentDTO intent) {
         boolean hasType = intent.getTxnType() != null && !intent.getTxnType().isBlank();
-        boolean hasAmount = intent.getAmount() != null && intent.getAmount().compareTo(BigDecimal.ZERO) > 0;
+        BigDecimal measure = isSellRedeemType(intent.getTxnType()) ? intent.getShares() : intent.getAmount();
+        boolean hasAmount = measure != null && measure.compareTo(BigDecimal.ZERO) > 0;
         return hasType && hasAmount ? HIGH_CONFIDENCE : MEDIUM_CONFIDENCE;
     }
 
@@ -378,6 +453,9 @@ public class AiAccountingService {
         payload.put("targetAccountNameHint", intent.getTargetAccountNameHint());
         payload.put("productId", intent.getProductId());
         payload.put("productNameHint", intent.getProductNameHint());
+        payload.put("shares", intent.getShares());
+        payload.put("sourceAccountId", intent.getSourceAccountId());
+        payload.put("sourceAccountNameHint", intent.getSourceAccountNameHint());
         payload.put("expectedNavDate", intent.getExpectedNavDate());
         payload.put("expectedConfirmDate", intent.getExpectedConfirmDate());
         payload.put("confidence", intent.getConfidence());

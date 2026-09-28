@@ -32,12 +32,24 @@ export interface AccountingIntent {
   /** 原始输入文本。 */
   rawInput: string
   /**
-   * 候选交易类型：EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION；不确定时为空。
+   * 候选交易类型：EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION / SELL / REDEMPTION；不确定时为空。
    * BUY（买入）/ SUBSCRIPTION（申购、定投）只给出产品名称提示，真实 productId 必须由主人选择。
+   * SELL（卖出）/ REDEMPTION（赎回）只给出 shares 与产品名称提示，真实产品、持仓来源与到账账户必须由主人选择。
    */
-  txnType?: 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'BUY' | 'SUBSCRIPTION' | string | null
-  /** 候选金额，不确定时为空。 */
+  txnType?:
+    | 'EXPENSE'
+    | 'INCOME'
+    | 'TRANSFER'
+    | 'BUY'
+    | 'SUBSCRIPTION'
+    | 'SELL'
+    | 'REDEMPTION'
+    | string
+    | null
+  /** 候选金额，不确定时为空；卖出 / 赎回候选通常为空。 */
   amount?: number | null
+  /** 卖出 / 赎回候选份额，不确定时为空；只提取数字，不自动匹配真实产品与持仓来源。 */
+  shares?: number | null
   /** 候选备注。 */
   note?: string | null
   /** 候选转出（来源）账户 ID；规则解析不会自动映射真实账户，通常为空，等待用户补齐。 */
@@ -48,6 +60,10 @@ export interface AccountingIntent {
   productId?: number | null
   /** 投资候选的产品名称提示，只供复核，不可替代 productId。 */
   productNameHint?: string | null
+  /** 卖出 / 赎回候选的持仓来源账户 ID；规则解析不会自动映射真实账户，通常为空，等待主人补齐。 */
+  sourceAccountId?: number | null
+  /** 卖出 / 赎回候选持仓来源账户名称提示，只供复核，不可替代 sourceAccountId。 */
+  sourceAccountNameHint?: string | null
   /** 转账时的转入（目标）账户 ID；规则解析不会自动映射真实账户，通常为空。 */
   targetAccountId?: number | null
   /** 转账时的转入账户名称提示，只供复核，不自动当成账户 ID。 */

@@ -80,6 +80,56 @@ class AiAccountingServiceInvestmentTest {
         assertTrue(intent.getParsedPayloadJson().contains("\"productId\":null"));
     }
 
+    @Test
+    void parseSellTextProducesSellCandidateWithSharesAndProductHint() {
+        AccountingIntentDTO intent = service.parseText(text("卖出半导体ETF 500份"));
+
+        assertEquals("SELL", intent.getTxnType());
+        assertEquals(new BigDecimal("500"), intent.getShares());
+        assertEquals("半导体ETF", intent.getProductNameHint());
+        assertNull(intent.getAmount());
+        assertNull(intent.getProductId());
+        assertTrue(intent.getMissingFields().contains("productId"));
+        assertTrue(intent.getMissingFields().contains("sourceAccountId"));
+        assertTrue(intent.getMissingFields().contains("targetAccountId"));
+        assertFalse(intent.getMissingFields().contains("amount"));
+        assertEquals(new BigDecimal("0.70"), intent.getConfidence());
+        verifyNoInteractions(draftLedgerEntryService);
+    }
+
+    @Test
+    void parseRedeemTextProducesRedemptionCandidateWithSharesAndProductHint() {
+        AccountingIntentDTO intent = service.parseText(text("赎回兴全合润 1000份"));
+
+        assertEquals("REDEMPTION", intent.getTxnType());
+        assertEquals(new BigDecimal("1000"), intent.getShares());
+        assertEquals("兴全合润", intent.getProductNameHint());
+        assertNull(intent.getAmount());
+        assertTrue(intent.getMissingFields().contains("productId"));
+        assertTrue(intent.getMissingFields().contains("sourceAccountId"));
+        assertTrue(intent.getMissingFields().contains("targetAccountId"));
+    }
+
+    @Test
+    void sellTextWithoutSharesReportsMissingShares() {
+        AccountingIntentDTO intent = service.parseText(text("卖出半导体ETF"));
+
+        assertEquals("SELL", intent.getTxnType());
+        assertNull(intent.getShares());
+        assertTrue(intent.getMissingFields().contains("shares"));
+    }
+
+    @Test
+    void sellIntentJsonNeverContainsAutoMatchedProductOrAccounts() {
+        AccountingIntentDTO intent = service.parseText(text("卖出纳指ETF 500份"));
+
+        assertTrue(intent.getParsedPayloadJson().contains("\"shares\":500"));
+        assertTrue(intent.getParsedPayloadJson().contains("\"productNameHint\":\"纳指ETF\""));
+        assertTrue(intent.getParsedPayloadJson().contains("\"productId\":null"));
+        assertTrue(intent.getParsedPayloadJson().contains("\"sourceAccountId\":null"));
+        assertTrue(intent.getParsedPayloadJson().contains("\"targetAccountId\":null"));
+    }
+
     private ParseTextRequest text(String value) {
         ParseTextRequest request = new ParseTextRequest();
         request.setText(value);

@@ -89,6 +89,19 @@ data class MobileHoldingDto(
     val unrealizedPnl: String? = null,
 )
 
+/**
+ * 指定产品在各账户的持仓明细，对齐后端 GET /api/v2/holdings/product/{productId}/by-account。
+ * 用于卖出 / 赎回草稿让主人明确选择真实持仓来源；只读展示，不参与任何自动匹配。
+ */
+@JsonClass(generateAdapter = true)
+data class MobileHoldingByAccountDto(
+    val accountId: Long? = null,
+    val accountName: String? = null,
+    val parentAccountName: String? = null,
+    val shares: Double? = null,
+    val marketValue: Double? = null,
+)
+
 @JsonClass(generateAdapter = true)
 data class MobileTransactionDto(
     val txnId: String,

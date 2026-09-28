@@ -4,6 +4,7 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.dto.MobileCashFlowDto
+import com.timelordtty.mydca.data.dto.MobileHoldingByAccountDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -39,5 +40,11 @@ open class WealthRepository(
     open suspend fun getProducts(keyword: String? = null, assetType: String? = null): NetworkResult<List<ProductDto>> =
         safeNetworkCall {
             api.getProducts(keyword, assetType, null)
+        }
+
+    /** 只读拉取指定产品在各账户的真实持仓来源，供卖出 / 赎回草稿让主人明确选择持仓来源账户。 */
+    open suspend fun getProductHoldingsByAccount(productId: Long): NetworkResult<List<MobileHoldingByAccountDto>> =
+        safeNetworkCall {
+            api.getProductHoldingsByAccount(productId)
         }
 }

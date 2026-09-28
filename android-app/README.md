@@ -3,11 +3,13 @@
 <!-- CURRENT-SNAPSHOT:START -->
 ## 当前发布状态（2026-09-28）
 
-- 当前 Android：`versionName=0.11.0`、`versionCode=12`。
-- v0.11.0 投资买入 / 申购草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金来源账户、订单与 CASH / RECEIVABLE 资金影响预览与「确认创建【产品】买入/申购订单 ¥X？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复建订单。SELL / REDEMPTION 尚未支持。
+- 当前 Android：`versionName=0.12.0`、`versionCode=13`。
+- v0.12.0 投资卖出 / 赎回草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账 / 买入 / 申购 / 卖出 / 赎回，卖出 / 赎回表单支持真实产品 + 该产品真实持仓来源 + 份额 + 到账账户 + 备注，预览展示可用 / 本次 / 预计剩余份额与到账账户；确认弹窗明确「当前只创建内部待处理记录，不立即减少持仓，也不立即增加到账余额」。只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复建订单。
+- v0.11.0 投资买入 / 申购草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金来源账户、订单与 CASH / RECEIVABLE 资金影响预览与「确认创建【产品】买入/申购订单 ¥X？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复建订单。
 - v0.10.0 TRANSFER 转账草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账，转账表单支持转出 / 转入双账户、双账户影响预览与「确认将 ¥X 从 A 转到 B？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复记账。
 - v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
 - v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
+- v0.12.0 制品：待 owner push 后回填（普通自动任务只提交、不 push，本轮不声称 CI APK 已交付）。
 - v0.11.0 制品：待 owner push 后回填（普通自动任务只提交、不 push，本轮不声称 CI APK 已交付）。
 - v0.10.0 已有真实成功 CI 制品：
 - Run ID `36369966197`
@@ -24,10 +26,10 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.11.0`（`versionCode = 12`），APK 制品命名为 `MyDCA-Board-v0.11.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.12.0`（`versionCode = 13`），APK 制品命名为 `MyDCA-Board-v0.12.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
-- 草稿确认支持支出 / 收入 / 转账 / 买入 / 申购：TRANSFER 需要转出账户 + 转入账户 + 金额；BUY / SUBSCRIPTION 需要主人明确选择的真实产品 + 单一资金来源账户 + 金额；确认前必须先看到资金影响预览。确认投资草稿会创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），但不结算、不生成最终持仓。
+- 草稿确认支持支出 / 收入 / 转账 / 买入 / 申购 / 卖出 / 赎回：TRANSFER 需要转出账户 + 转入账户 + 金额；BUY / SUBSCRIPTION 需要主人明确选择的真实产品 + 单一资金来源账户 + 金额；SELL / REDEMPTION 需要主人明确选择的真实产品 + 该产品真实持仓来源账户 + 份额 + 到账账户；确认前必须先看到资金影响预览。确认投资买入 / 申购草稿会创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），但不结算、不生成最终持仓；确认卖出 / 赎回草稿只创建内部 PENDING 订单并登记份额占用，不生成账本流水、不改现金余额、不改持仓。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
 - Android App 不接入真实大模型，不自动预览、不自动确认、不直接写数据库。
 
@@ -89,7 +91,8 @@ Debug 构建会通过 `app/src/debug/AndroidManifest.xml` 允许明文 HTTP，�
 - 确认按钮必须同时满足：当前草稿为 `DRAFT`、当前预览 `draftId` 与草稿 ID 一致、`preview.confirmSupported=true`。
 - 点击确认前仍会弹出二次确认。
 - 最终校验仍由后端 `/api/v2/drafts/{draftId}/confirm` 统一完成。
-- 投资草稿（BUY / SUBSCRIPTION）确认后由后端创建 PENDING 订单并同步生成付款账本，但不调用 SettlementService、不生成最终持仓；SELL / REDEMPTION 尚未支持。
+- 投资买入 / 申购草稿（BUY / SUBSCRIPTION）确认后由后端创建 PENDING 订单并同步生成付款账本，但不调用 SettlementService、不生成最终持仓。
+- 投资卖出 / 赎回草稿（SELL / REDEMPTION）确认后由后端只创建 PENDING 订单并登记 SOURCE / TARGET 资金线与份额占用，不生成任何账本流水、不改现金余额、不改持仓，真正的资金与持仓变化只在后续人工结算时产生。
 
 ## 安全边界
 
@@ -264,4 +267,19 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 投资不会自动发生：手工 / OCR / 支付通知候选 / 系统分享 / 桌面小组件任何入口都不具备投资下单能力，后端也不会在 parse 或创建 DRAFT 后自动 confirm。
 - 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 221 项通过（由 206 项增至 221 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
 - Debug APK 本地字节不可复现，体积与 SHA-256 只作本机观察，不作为制品身份；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
-- 明确未做：不做 SELL / REDEMPTION，不做自动 preview / confirm / 结算 / 交易，不做多资金来源组合投资，不新增数据库表或 migration，不新增系统权限。
+- 明确未做（v0.11.0 范围）：不做自动 preview / confirm / 结算 / 交易，不做多资金来源组合投资，不新增数据库表或 migration，不新增系统权限；SELL / REDEMPTION 作为独立任务在后续 v0.12.0 完成。
+
+## v0.12.0 投资卖出 / 赎回草稿闭环
+
+- 版本收口为 `versionName = 0.12.0`（`versionCode = 13`）；卖出 / 赎回草稿继续走既有安全链路：`DRAFT → fresh preview → 主人二次确认 → 仅创建内部 PENDING 记录`。
+- 草稿编辑新增「卖出 SELL」与「赎回 REDEMPTION」类型：必须由主人明确选择真实产品（`productId`）、该产品的真实持仓来源账户（`sourceAccountId`）、份额（`shares`）、到账账户（`targetAccountId`），可选备注；产品名称提示与持仓来源提示只作人工提示，禁止自动匹配真实产品 / 持仓来源 / 到账账户。
+- 产品选定后复用 `GET /api/v2/holdings/product/{productId}/by-account` 只读展示该产品的真实持仓来源；份额必须大于 0，最终以后端 preview 的可用份额校验为准。
+- 卖出 / 赎回预览中文展示「产品 / 持仓来源 / 当前可用份额 / 本次份额 / 预计剩余份额 / 到账账户」；可用份额已扣除同产品 / 来源账户下仍为 PENDING 的 SELL / REDEMPTION 占用份额，避免内部重复占用；到账账户只允许当前可见、active REAL 叶子账户，禁止 VIRTUAL / POSITION / 父账户，且币种必须与产品一致。
+- 确认弹窗标题为「确认创建【产品】卖出/赎回 X 份（来源 A）的内部待处理记录？」，正文为「确认后只创建内部 PENDING 待处理记录，并占用【A】的 X 份；不会立即减少持仓，也不会立即增加【B】的到账余额。真正的资金与持仓变化只在后续人工结算时产生。」。
+- 只有主人二次确认后，后端才复用既有 `OrderService.createSellRedeemDraftOrder` 创建 `status=PENDING` 订单并登记 `SOURCE`（sourceAccountId + shares）/ `TARGET`（targetAccountId）资金线；`willCreateLedgerTxn=false`、`willCreateSettlement=false`、`willAffectHolding=false`，不生成账本流水、不改现金余额、不改持仓、不自动结算、不调用真实交易渠道。
+- 确认仍受 fresh preview gate 控制：必须当前草稿为 `DRAFT`、preview 匹配当前草稿且 `preview.confirmSupported=true`，再由用户二次确认；重复确认幂等，异常整体回滚且草稿保持 `DRAFT`，`IGNORED` 草稿不可确认。
+- 切换到其它交易类型会清理 SELL / REDEMPTION 专属字段（份额 / 持仓来源 / 到账账户），保证候选 payload 干净。
+- 卖出 / 赎回不会自动发生：手工 / OCR / 支付通知候选 / 系统分享 / 桌面小组件任何入口都不具备交易能力，后端也不会在 parse 或创建 DRAFT 后自动 confirm。
+- 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 230 项通过（由 221 项增至 230 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
+- Debug APK 本地字节不可复现，体积与 SHA-256 只作本机观察，不作为制品身份；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
+- 明确未做：不做自动 preview / confirm / 结算 / 交易，不做跨账户 / 跨产品份额拆分，不做自动匹配持仓来源，不新增数据库表或 migration，不新增系统权限。

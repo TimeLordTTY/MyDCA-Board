@@ -20,6 +20,12 @@ data class AccountingIntentDto(
     val productNameHint: String? = null,
     val targetAccountId: Long? = null,
     val targetAccountNameHint: String? = null,
+    /** 卖出 / 赎回候选份额；规则解析只提取提示，最终可用份额由后端按真实持仓校验。 */
+    val shares: Double? = null,
+    /** 卖出 / 赎回候选的持仓来源账户 ID；规则解析不会自动匹配，必须由主人选择。 */
+    val sourceAccountId: Long? = null,
+    /** 持仓来源账户名称提示，只供复核，不可替代 sourceAccountId。 */
+    val sourceAccountNameHint: String? = null,
     val confidence: Double? = null,
     val expectedNavDate: String? = null,
     val expectedConfirmDate: String? = null,

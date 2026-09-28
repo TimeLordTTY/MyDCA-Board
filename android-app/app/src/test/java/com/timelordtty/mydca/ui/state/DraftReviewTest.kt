@@ -211,6 +211,78 @@ class DraftReviewTest {
         assertEquals("确认正式记账？", DraftReview.confirmDialogTitle(preview))
     }
 
+    @Test
+    fun sellRedeemPreviewShowsSharesSourceAndTarget() {
+        val preview = DraftPreviewDto(
+            draftId = 6,
+            txnType = "SELL",
+            orderType = "SELL",
+            productName = "半导体ETF",
+            productCode = "512480",
+            productAssetType = "ETF",
+            productCurrency = "CNY",
+            accountName = "券商账户",
+            targetAccountName = "到账银行卡",
+            targetFundUsage = "SPENDABLE",
+            shares = 500.0,
+            availableShares = 1000.0,
+            remainingShares = 500.0,
+            confirmSupported = true,
+            sharesMessage = "确认后只创建内部 PENDING 卖出记录并占用 券商账户 的 500 份；不会立即减少持仓，也不会立即增加 到账银行卡 的到账余额。",
+        )
+
+        assertEquals("卖出 SELL", DraftReview.txnTypeLabel("sell"))
+        assertEquals("赎回 REDEMPTION", DraftReview.txnTypeLabel("redemption"))
+        assertTrue(DraftReview.investmentImpactLines(preview).isEmpty())
+        assertEquals(
+            listOf(
+                "产品：半导体ETF / 512480 / ETF",
+                "持仓来源：券商账户",
+                "当前可用份额：1000",
+                "本次份额：500",
+                "预计剩余份额：500",
+                "到账账户：到账银行卡 / SPENDABLE",
+                "确认后只创建内部 PENDING 卖出记录并占用 券商账户 的 500 份；不会立即减少持仓，也不会立即增加 到账银行卡 的到账余额。",
+            ),
+            DraftReview.sellRedeemImpactLines(preview),
+        )
+        assertTrue(DraftReview.sellRedeemImpactLines(null).isEmpty())
+    }
+
+    @Test
+    fun sellRedeemConfirmDialogStatesPendingOnlyNoImmediateImpact() {
+        val preview = DraftPreviewDto(
+            draftId = 6,
+            txnType = "REDEMPTION",
+            productName = "兴全合润",
+            accountName = "基金账户",
+            targetAccountName = "到账银行卡",
+            shares = 1000.0,
+            confirmSupported = true,
+        )
+
+        assertEquals("确认创建【兴全合润】赎回订单 1000 份？", DraftReview.confirmDialogTitle(preview))
+        val message = DraftReview.confirmDialogMessage(preview, canConfirm = true)
+        assertTrue(message.contains("内部 PENDING"))
+        assertTrue(message.contains("不会立即减少持仓"))
+        assertTrue(message.contains("1000 份"))
+        assertTrue(DraftReview.confirmDialogMessage(preview, canConfirm = false).contains("阻止"))
+    }
+
+    @Test
+    fun sellRedeemImpactSummaryReadsShares() {
+        val draft = draft(
+            id = 9,
+            parsedPayloadJson = """{"txnType":"SELL","shares":500,"productId":5,"sourceAccountId":7}""",
+        )
+
+        val info = DraftReview.parsedInfo(draft)
+        assertEquals("500", info.shares)
+        assertEquals("7", info.sourceAccountId)
+        assertTrue(DraftReview.summary(draft).contains("份额 500"))
+        assertTrue(DraftReview.summary(draft).contains("持仓来源 7"))
+    }
+
     private fun draft(
         id: Long = 1L,
         status: String = "DRAFT",

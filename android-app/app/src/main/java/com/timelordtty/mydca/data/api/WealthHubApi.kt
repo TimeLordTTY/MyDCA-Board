@@ -8,6 +8,7 @@ import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.dto.MobileCashFlowDto
+import com.timelordtty.mydca.data.dto.MobileHoldingByAccountDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -99,4 +100,8 @@ interface WealthHubApi {
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 20,
     ): MobilePageDto<MobileHoldingDto>
+
+    /** 指定产品在各账户的真实持仓来源，供卖出 / 赎回草稿选择持仓来源账户（只读）。 */
+    @GET("api/v2/holdings/product/{productId}/by-account")
+    suspend fun getProductHoldingsByAccount(@Path("productId") productId: Long): List<MobileHoldingByAccountDto>
 }

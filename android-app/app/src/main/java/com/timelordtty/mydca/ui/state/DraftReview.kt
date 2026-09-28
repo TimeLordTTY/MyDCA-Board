@@ -10,6 +10,9 @@ import java.math.BigDecimal
 data class DraftParsedInfo(
     val txnType: String? = null,
     val amount: String? = null,
+    val shares: String? = null,
+    val sourceAccountId: String? = null,
+    val sourceAccountNameHint: String? = null,
     val accountId: String? = null,
     val accountNameHint: String? = null,
     val note: String? = null,
@@ -20,6 +23,8 @@ data class DraftParsedInfo(
     val hasParsedField: Boolean
         get() = !txnType.isNullOrBlank() ||
             !amount.isNullOrBlank() ||
+            !shares.isNullOrBlank() ||
+            !sourceAccountId.isNullOrBlank() ||
             !accountId.isNullOrBlank() ||
             !accountNameHint.isNullOrBlank() ||
             !note.isNullOrBlank()
@@ -62,6 +67,8 @@ object DraftReview {
         "TRANSFER" -> "转账 TRANSFER"
         "BUY" -> "买入 BUY"
         "SUBSCRIPTION" -> "申购 SUBSCRIPTION"
+        "SELL" -> "卖出 SELL"
+        "REDEMPTION" -> "赎回 REDEMPTION"
         else -> txnType?.trim().orEmpty().ifBlank { "类型待补充" }
     }
 
@@ -95,6 +102,24 @@ object DraftReview {
         return lines
     }
 
+    /**
+     * 卖出 / 赎回预览的中文影响行：产品、持仓来源、当前可用份额、本次份额、预计剩余份额与到账账户。
+     * 非卖出 / 赎回预览返回空列表。
+     */
+    fun sellRedeemImpactLines(preview: DraftPreviewDto?): List<String> {
+        if (preview == null || !isSellRedeem(preview)) return emptyList()
+        val lines = mutableListOf(
+            "产品：${preview.productName ?: "未选择"} / ${preview.productCode ?: "无代码"} / ${preview.productAssetType ?: "未知类型"}",
+            "持仓来源：${preview.accountName ?: "未匹配"}",
+            "当前可用份额：${formatShares(preview.availableShares)}",
+            "本次份额：${formatShares(preview.shares)}",
+            "预计剩余份额：${formatShares(preview.remainingShares)}",
+            "到账账户：${preview.targetAccountName ?: "未匹配"} / ${displayFundUsage(preview.targetFundUsage)}",
+        )
+        preview.sharesMessage?.takeIf { it.isNotBlank() }?.let { lines += it }
+        return lines
+    }
+
     /** 投资确认弹窗标题：明确「确认创建【产品】买入 / 申购订单 ¥X？」。 */
     fun confirmDialogTitle(preview: DraftPreviewDto?): String {
         if (preview == null) return "确认正式记账？"
@@ -102,6 +127,11 @@ object DraftReview {
             val action = investmentActionLabel(preview.txnType)
             return "确认创建【${preview.productName ?: "未选择产品"}】${action}订单 " +
                 "¥${formatPreviewAmount(preview.amount)}？"
+        }
+        if (isSellRedeem(preview)) {
+            val action = sellRedeemActionLabel(preview.txnType)
+            return "确认创建【${preview.productName ?: "未选择产品"}】${action}订单 " +
+                "${formatShares(preview.shares)} 份？"
         }
         if (!isTransfer(preview)) return "确认正式记账？"
         return "确认将 ¥${formatPreviewAmount(preview.amount)} 从 ${preview.accountName ?: "转出账户"}" +
@@ -111,6 +141,7 @@ object DraftReview {
     /**
      * 确认弹窗正文：
      * - 投资草稿明确「会立即扣减付款账户并增加同额待结算应收，仍需后续结算，不会自动成交」；
+     * - 卖出 / 赎回草稿明确「只创建内部 PENDING 记录，不立即减少持仓，也不立即增加到账余额」；
      * - 转账草稿明确会生成正式转账流水；
      * - 没有 fresh preview 时说明已被阻止。
      */
@@ -120,6 +151,13 @@ object DraftReview {
             val account = preview.accountName ?: "付款账户"
             return "确认后将立即从【$account】扣除 ¥${formatPreviewAmount(preview.amount)}，" +
                 "并增加同额待结算应收；订单仍需后续结算，不会自动成交。"
+        }
+        if (preview != null && isSellRedeem(preview)) {
+            val source = preview.accountName ?: "持仓来源"
+            val target = preview.targetAccountName ?: "到账账户"
+            return "确认后只创建内部 PENDING 卖出 / 赎回记录，并占用【$source】的 " +
+                "${formatShares(preview.shares)} 份；不会立即减少持仓，也不会立即增加【$target】的到账余额，" +
+                "真正的资金与持仓变化只在后续人工结算时产生。"
         }
         if (preview != null && isTransfer(preview)) {
             return "本操作会调用后端 confirm 接口，生成一笔从转出账户到转入账户的正式转账流水；请再次确认金额与账户。"
@@ -135,6 +173,14 @@ object DraftReview {
     private fun isInvestment(preview: DraftPreviewDto): Boolean =
         preview.txnType?.trim()?.uppercase() in setOf("BUY", "SUBSCRIPTION")
 
+    private fun sellRedeemActionLabel(txnType: String?): String = when (txnType?.trim()?.uppercase()) {
+        "REDEMPTION" -> "赎回"
+        else -> "卖出"
+    }
+
+    private fun isSellRedeem(preview: DraftPreviewDto): Boolean =
+        preview.txnType?.trim()?.uppercase() in setOf("SELL", "REDEMPTION")
+
     private fun isTransfer(preview: DraftPreviewDto): Boolean =
         preview.txnType?.trim()?.equals("TRANSFER", ignoreCase = true) == true
 
@@ -144,6 +190,11 @@ object DraftReview {
     private fun formatPreviewAmount(amount: Double?): String {
         if (amount == null) return "未知金额"
         return BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()
+    }
+
+    private fun formatShares(shares: Double?): String {
+        if (shares == null) return "未知份额"
+        return BigDecimal.valueOf(shares).stripTrailingZeros().toPlainString()
     }
 
     private fun formatSignedAmount(delta: Double?): String {
@@ -157,6 +208,9 @@ object DraftReview {
         return DraftParsedInfo(
             txnType = payload.firstText("txnType", "transactionType", "type"),
             amount = payload.firstNumber("amount"),
+            shares = payload.firstNumber("shares"),
+            sourceAccountId = payload.firstNumber("sourceAccountId"),
+            sourceAccountNameHint = payload.firstText("sourceAccountNameHint"),
             accountId = payload.firstNumber("accountId", "cashAccountId"),
             accountNameHint = payload.firstText("accountNameHint"),
             note = payload.firstText("note", "remark", "description"),
@@ -165,18 +219,31 @@ object DraftReview {
         )
     }
 
-    /** 列表摘要：类型 · 金额 · 账户，缺什么就明确提示缺什么。 */
+    /** 列表摘要：类型 · 金额 / 份额 · 账户，缺什么就明确提示缺什么。 */
     fun summary(draft: DraftLedgerEntryDto): String {
         val info = parsedInfo(draft)
         val parts = mutableListOf(txnTypeLabel(info.txnType))
-        parts += if (!info.amount.isNullOrBlank()) "金额 ${info.amount}" else "金额待补充"
+        parts += if (!info.shares.isNullOrBlank()) {
+            "份额 ${info.shares}"
+        } else if (!info.amount.isNullOrBlank()) {
+            "金额 ${info.amount}"
+        } else if (isSellRedeemType(info.txnType)) {
+            "份额待补充"
+        } else {
+            "金额待补充"
+        }
         parts += when {
+            !info.sourceAccountId.isNullOrBlank() -> "持仓来源 ${info.sourceAccountId}"
+            !info.sourceAccountNameHint.isNullOrBlank() -> "持仓来源提示 ${info.sourceAccountNameHint}"
             !info.accountId.isNullOrBlank() -> "账户 ${info.accountId}"
             !info.accountNameHint.isNullOrBlank() -> "账户提示 ${info.accountNameHint}"
             else -> "账户待选择"
         }
         return parts.joinToString(" · ")
     }
+
+    private fun isSellRedeemType(txnType: String?): Boolean =
+        txnType?.trim()?.uppercase() in setOf("SELL", "REDEMPTION")
 
     fun listLabel(draft: DraftLedgerEntryDto): String =
         "#${draft.id} · ${statusShortLabel(draft.status)} · ${summary(draft)}"

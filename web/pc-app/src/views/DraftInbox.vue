@@ -188,10 +188,12 @@
                   <el-option label="转账" value="TRANSFER" />
                   <el-option label="买入" value="BUY" />
                   <el-option label="申购" value="SUBSCRIPTION" />
+                  <el-option label="卖出" value="SELL" />
+                  <el-option label="赎回" value="REDEMPTION" />
                 </el-select>
               </label>
 
-              <label class="form-field">
+              <label v-if="!isSellRedeemEdit" class="form-field">
                 <span class="field-label">金额</span>
                 <el-input
                   v-model="draftEditForm.amount"
@@ -200,7 +202,16 @@
                 />
               </label>
 
-              <label v-if="isInvestmentEdit" class="form-field form-field-wide">
+              <label v-if="isSellRedeemEdit" class="form-field">
+                <span class="field-label">份额（必填）</span>
+                <el-input
+                  v-model="draftEditForm.shares"
+                  inputmode="decimal"
+                  placeholder="请输入大于 0 的份额"
+                />
+              </label>
+
+              <label v-if="isProductEdit" class="form-field form-field-wide">
                 <span class="field-label">真实产品（必选）</span>
                 <el-select
                   v-model="draftEditForm.productId"
@@ -208,6 +219,7 @@
                   clearable
                   :loading="productStore.loading"
                   placeholder="请选择真实产品"
+                  @change="handleProductChange"
                 >
                   <el-option
                     v-for="product in productOptions"
@@ -223,7 +235,7 @@
                 </el-select>
               </label>
 
-              <label v-if="isInvestmentEdit" class="form-field form-field-wide">
+              <label v-if="isProductEdit" class="form-field form-field-wide">
                 <span class="field-label">产品名称提示（仅复核）</span>
                 <el-input
                   v-model="draftEditForm.productNameHint"
@@ -241,7 +253,7 @@
                 <el-input v-model="draftEditForm.expectedConfirmDate" placeholder="例如 2026-09-30" />
               </label>
 
-              <label class="form-field form-field-wide">
+              <label v-if="!isSellRedeemEdit" class="form-field form-field-wide">
                 <span class="field-label">
                   {{
                     isTransferEdit
@@ -260,6 +272,64 @@
                 >
                   <el-option
                     v-for="account in accountOptionsForEdit"
+                    :key="account.id"
+                    :label="formatAccountOption(account)"
+                    :value="account.id"
+                  >
+                    <div class="account-option">
+                      <span>{{ account.accountName }}</span>
+                      <small>{{ formatAccountMeta(account) }}</small>
+                    </div>
+                  </el-option>
+                </el-select>
+              </label>
+
+              <label v-if="isSellRedeemEdit" class="form-field form-field-wide">
+                <span class="field-label">持仓来源账户（必选）</span>
+                <el-select
+                  v-model="draftEditForm.sourceAccountId"
+                  filterable
+                  clearable
+                  :loading="holdingsLoading"
+                  :placeholder="
+                    draftEditForm.productId
+                      ? '请选择该产品的真实持仓来源账户'
+                      : '请先选择真实产品'
+                  "
+                >
+                  <el-option
+                    v-for="holding in sellRedeemSourceOptions"
+                    :key="holding.accountId"
+                    :label="formatHoldingOption(holding)"
+                    :value="holding.accountId"
+                  >
+                    <div class="account-option">
+                      <span>{{ holding.accountName }}</span>
+                      <small>{{ formatHoldingMeta(holding) }}</small>
+                    </div>
+                  </el-option>
+                </el-select>
+              </label>
+
+              <label v-if="isSellRedeemEdit" class="form-field form-field-wide">
+                <span class="field-label">持仓来源提示</span>
+                <el-input
+                  v-model="draftEditForm.sourceAccountNameHint"
+                  placeholder="保留 AI/文本给出的持仓来源提示，便于复核"
+                />
+              </label>
+
+              <label v-if="isSellRedeemEdit" class="form-field form-field-wide">
+                <span class="field-label">到账账户（必选，仅限 REAL 叶子账户）</span>
+                <el-select
+                  v-model="draftEditForm.targetAccountId"
+                  filterable
+                  clearable
+                  :loading="accountStore.loading"
+                  placeholder="请选择到账账户"
+                >
+                  <el-option
+                    v-for="account in sellRedeemTargetAccountOptions"
                     :key="account.id"
                     :label="formatAccountOption(account)"
                     :value="account.id"
@@ -295,15 +365,19 @@
                 </el-select>
               </label>
 
-              <label v-if="isTransferEdit" class="form-field form-field-wide">
-                <span class="field-label">转入账户提示</span>
+              <label v-if="isTransferEdit || isSellRedeemEdit" class="form-field form-field-wide">
+                <span class="field-label">{{ isSellRedeemEdit ? '到账账户提示' : '转入账户提示' }}</span>
                 <el-input
                   v-model="draftEditForm.targetAccountNameHint"
-                  placeholder="保留 AI/文本给出的转入账户提示，便于复核"
+                  :placeholder="
+                    isSellRedeemEdit
+                      ? '保留 AI/文本给出的到账账户提示，便于复核'
+                      : '保留 AI/文本给出的转入账户提示，便于复核'
+                  "
                 />
               </label>
 
-              <label class="form-field form-field-wide">
+              <label v-if="!isSellRedeemEdit" class="form-field form-field-wide">
                 <span class="field-label">账户提示</span>
                 <el-input
                   v-model="draftEditForm.accountNameHint"
@@ -353,22 +427,26 @@
                 <strong>{{ formatTxnType(preview.txnType) }}</strong>
               </div>
               <div>
-                <span class="field-label">金额</span>
-                <strong>{{ formatAmount(preview.amount) }}</strong>
+                <span class="field-label">{{ isSellRedeemPreview ? '份额' : '金额' }}</span>
+                <strong>{{
+                  isSellRedeemPreview ? formatShares(preview.shares) : formatAmount(preview.amount)
+                }}</strong>
               </div>
               <div>
                 <span class="field-label">
                   {{
                     isTransferPreview
                       ? '转出账户'
-                      : isInvestmentPreview
-                        ? '付款账户'
-                        : '账户'
+                      : isSellRedeemPreview
+                        ? '持仓来源'
+                        : isProductPreview
+                          ? '付款账户'
+                          : '账户'
                   }}
                 </span>
                 <strong>{{ formatPreviewAccount(preview.accountId) }}</strong>
               </div>
-              <div v-if="isInvestmentPreview">
+              <div v-if="isProductPreview">
                 <span class="field-label">产品</span>
                 <strong>
                   {{ preview.productName || '未选择' }}
@@ -381,6 +459,19 @@
                 <strong>{{
                   formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
                 }}</strong>
+              </div>
+              <div v-if="isSellRedeemPreview">
+                <span class="field-label">到账账户</span>
+                <strong>{{
+                  formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
+                }}</strong>
+              </div>
+              <div v-if="isSellRedeemPreview">
+                <span class="field-label">可用 / 本次 / 预计剩余份额</span>
+                <strong>
+                  {{ formatShares(preview.availableShares) }} / {{ formatShares(preview.shares) }} /
+                  {{ formatShares(preview.remainingShares) }}
+                </strong>
               </div>
               <div>
                 <span class="field-label">草稿 ID</span>
@@ -414,6 +505,12 @@
                 <p>付款账户立即减少，同额待结算应收增加</p>
                 <em>{{ formatSignedAmount(preview.receivableDelta) }}</em>
               </div>
+              <div v-if="isSellRedeemPreview" class="impact-card">
+                <span class="field-label">份额占用影响</span>
+                <strong>仅内部待处理</strong>
+                <p>确认只创建内部 PENDING 记录并占用持仓来源份额</p>
+                <em>不减少持仓 · 不增加到账余额</em>
+              </div>
               <div class="impact-card">
                 <span class="field-label">正式对象影响</span>
                 <p>正式流水：{{ formatBooleanImpact(preview.willCreateLedgerTxn) }}</p>
@@ -429,6 +526,10 @@
             <div v-if="isInvestmentPreview && preview.fundingMessage" class="intent-note">
               <span class="field-label">资金来源</span>
               <p>{{ preview.fundingMessage }}</p>
+            </div>
+            <div v-if="isSellRedeemPreview && preview.sharesMessage" class="intent-note">
+              <span class="field-label">确认影响</span>
+              <p>{{ preview.sharesMessage }}</p>
             </div>
             <div v-if="preview.warnings?.length" class="warning-list">
               <span class="field-label">风险 / 提示</span>
@@ -557,9 +658,16 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
-import { aiAccountingApi, draftApi, useAccountStore, useProductStore } from '@wealth-hub/shared'
+import {
+  aiAccountingApi,
+  draftApi,
+  holdingApi,
+  useAccountStore,
+  useProductStore,
+} from '@wealth-hub/shared'
 import type {
   Account,
+  AccountHoldingInfo,
   AccountingIntent,
   DraftLedgerEntry,
   DraftLedgerStatus,
@@ -567,7 +675,15 @@ import type {
   ProductMaster,
 } from '@wealth-hub/shared'
 
-type DraftTxnType = 'EXPENSE' | 'INCOME' | 'TRANSFER' | 'BUY' | 'SUBSCRIPTION' | ''
+type DraftTxnType =
+  | 'EXPENSE'
+  | 'INCOME'
+  | 'TRANSFER'
+  | 'BUY'
+  | 'SUBSCRIPTION'
+  | 'SELL'
+  | 'REDEMPTION'
+  | ''
 
 interface DraftEditForm {
   txnType: DraftTxnType
@@ -577,12 +693,18 @@ interface DraftEditForm {
   targetAccountId?: number
   accountNameHint: string
   targetAccountNameHint: string
-  /** 投资草稿（BUY / SUBSCRIPTION）选定的真实产品 ID；必须由主人明确选择。 */
+  /** 投资 / 卖出 / 赎回草稿选定的真实产品 ID；必须由主人明确选择。 */
   productId?: number
   /** 产品名称提示，只供复核，不可代替 productId。 */
   productNameHint: string
   expectedNavDate: string
   expectedConfirmDate: string
+  /** 卖出 / 赎回草稿本次要卖出或赎回的份额，字符串便于表单编辑。 */
+  shares: string
+  /** 卖出 / 赎回草稿的持仓来源账户 ID；必须来自该产品的真实持仓来源。 */
+  sourceAccountId?: number
+  /** 持仓来源账户名称提示，只供复核，不可代替 sourceAccountId。 */
+  sourceAccountNameHint: string
 }
 
 const accountStore = useAccountStore()
@@ -603,6 +725,8 @@ const editingDraft = ref(false)
 const savingDraft = ref(false)
 const draftEditForm = ref<DraftEditForm>(emptyDraftEditForm())
 const routeDraftHintHandled = ref(false)
+const productHoldings = ref<AccountHoldingInfo[]>([])
+const holdingsLoading = ref(false)
 
 const draftQueryParams = computed(() => ({
   status: statusFilter.value || undefined,
@@ -652,18 +776,49 @@ const accountOptionsForEdit = computed(() =>
 /** 转账编辑态：只有 TRANSFER 才显示转入账户，避免目标账户残留到 EXPENSE / INCOME。 */
 const isTransferEdit = computed(() => draftEditForm.value.txnType === 'TRANSFER')
 
-/** 投资编辑态：本轮只支持 BUY（场内买入）与 SUBSCRIPTION（场外申购）。 */
+/** 投资编辑态：BUY（场内买入）与 SUBSCRIPTION（场外申购）。 */
 const isInvestmentEdit = computed(
   () => draftEditForm.value.txnType === 'BUY' || draftEditForm.value.txnType === 'SUBSCRIPTION'
 )
 
-/** 投资预览态：SELL / REDEMPTION 仍不支持，PC 不把 BUY / SUBSCRIPTION 当成不支持类型。 */
-const isInvestmentPreview = computed(
-  () => {
-    const type = preview.value?.txnType?.trim().toUpperCase()
-    return type === 'BUY' || type === 'SUBSCRIPTION'
-  }
+/** 卖出 / 赎回编辑态：SELL（场内卖出）与 REDEMPTION（场外赎回）。 */
+const isSellRedeemEdit = computed(
+  () => draftEditForm.value.txnType === 'SELL' || draftEditForm.value.txnType === 'REDEMPTION'
 )
+
+/** 需要主人明确选择真实产品的编辑态：BUY / SUBSCRIPTION / SELL / REDEMPTION。 */
+const isProductEdit = computed(() => isInvestmentEdit.value || isSellRedeemEdit.value)
+
+/** 投资预览态：BUY / SUBSCRIPTION 确认会生成付款账本，PC 不把它们当成不支持类型。 */
+const isInvestmentPreview = computed(() => {
+  const type = preview.value?.txnType?.trim().toUpperCase()
+  return type === 'BUY' || type === 'SUBSCRIPTION'
+})
+
+/** 卖出 / 赎回预览态：确认只创建内部 PENDING 记录，不生成账本、不改现金与持仓。 */
+const isSellRedeemPreview = computed(() => {
+  const type = preview.value?.txnType?.trim().toUpperCase()
+  return type === 'SELL' || type === 'REDEMPTION'
+})
+
+/** 需要展示产品信息的预览态：BUY / SUBSCRIPTION / SELL / REDEMPTION。 */
+const isProductPreview = computed(() => isInvestmentPreview.value || isSellRedeemPreview.value)
+
+/** 卖出 / 赎回持仓来源：只来自该产品真实持仓（/holdings/product/{id}/by-account），份额高者优先。 */
+const sellRedeemSourceOptions = computed(() =>
+  [...productHoldings.value].sort((left, right) => right.shares - left.shares)
+)
+
+/** 卖出 / 赎回到账账户：当前启用 REAL 叶子账户，币种与产品一致；禁止 POSITION / VIRTUAL / 父账户。 */
+const sellRedeemTargetAccountOptions = computed(() => {
+  const productCurrency = selectedProduct.value?.currency
+  return accountStore
+    .getAllLeafAccounts()
+    .filter((account) => account.isActive !== false && account.accountKind === 'REAL')
+    .filter((account) => account.virtualSubtype !== 'POSITION')
+    .filter((account) => !productCurrency || account.currency === productCurrency)
+    .sort((left, right) => left.accountName.localeCompare(right.accountName, 'zh-Hans-CN'))
+})
 
 /** 只展示启用中的产品；产品 ID 必须由主人明确选择，不使用名称自动匹配。 */
 const productOptions = computed(() =>
@@ -698,12 +853,19 @@ const isTransferPreview = computed(
 
 /**
  * 确认弹窗标题：
+ * - 卖出 / 赎回明确「确认创建【产品】卖出 / 赎回 X 份（来源 A）的内部待处理记录？」；
  * - 投资明确「确认创建【产品】买入 / 申购订单 ￥X？」；
  * - 转账明确「确认将 X 从 A 转到 B？」；
  * - 其它类型保持通用标题。
  */
 const confirmDialogTitle = computed(() => {
   const current = preview.value
+  if (current && isSellRedeemPreview.value) {
+    const action = current.txnType?.trim().toUpperCase() === 'REDEMPTION' ? '赎回' : '卖出'
+    const product = current.productName || '未选择产品'
+    const source = current.accountName || '所选持仓来源'
+    return `确认创建【${product}】${action} ${formatSharesPlain(current.shares)} 份（来源 ${source}）的内部待处理记录？`
+  }
   if (current && isInvestmentPreview.value) {
     const action = current.txnType?.trim().toUpperCase() === 'SUBSCRIPTION' ? '申购' : '买入'
     const product = current.productName || '未选择产品'
@@ -717,12 +879,18 @@ const confirmDialogTitle = computed(() => {
 
 /**
  * 确认弹窗正文：
+ * - 卖出 / 赎回明确只创建内部 PENDING 记录并占用份额，不立即减少持仓、不立即增加到账余额；
  * - 投资明确会立即扣减付款账户并增加同额待结算应收，仍需后续结算、不会自动成交；
  * - 转账明确会生成一笔正式转账流水；
  * - 其它类型保持原文案。
  */
 const confirmDialogMessage = computed(() => {
   const current = preview.value
+  if (current && isSellRedeemPreview.value) {
+    const source = current.accountName || '所选持仓来源'
+    const target = current.targetAccountName || '所选到账账户'
+    return `确认后只创建内部 PENDING 待处理记录，并占用【${source}】的 ${formatSharesPlain(current.shares)} 份；不会立即减少持仓，也不会立即增加【${target}】的到账余额。真正的资金与持仓变化只在后续人工结算时产生。`
+  }
   if (current && isInvestmentPreview.value) {
     const account = current.accountName || '付款账户'
     return `确认后将立即从【${account}】扣除 ￥${formatPlainAmount(current.amount)}，并增加同额待结算应收；订单仍需后续结算，不会自动成交。`
@@ -735,11 +903,17 @@ const confirmDialogMessage = computed(() => {
 
 /** 切换交易类型时清掉不属于该类型的残留字段，保证候选 payload 干净。 */
 function handleEditTxnTypeChange(type: DraftTxnType) {
-  if (type !== 'TRANSFER') {
+  if (type !== 'TRANSFER' && type !== 'SELL' && type !== 'REDEMPTION') {
     draftEditForm.value.targetAccountId = undefined
     draftEditForm.value.targetAccountNameHint = ''
   }
-  if (type !== 'BUY' && type !== 'SUBSCRIPTION') {
+  if (type !== 'SELL' && type !== 'REDEMPTION') {
+    draftEditForm.value.shares = ''
+    draftEditForm.value.sourceAccountId = undefined
+    draftEditForm.value.sourceAccountNameHint = ''
+    productHoldings.value = []
+  }
+  if (type !== 'BUY' && type !== 'SUBSCRIPTION' && type !== 'SELL' && type !== 'REDEMPTION') {
     draftEditForm.value.productId = undefined
     draftEditForm.value.productNameHint = ''
     draftEditForm.value.expectedNavDate = ''
@@ -747,12 +921,46 @@ function handleEditTxnTypeChange(type: DraftTxnType) {
     return
   }
   void ensureProductsLoaded()
+  if (type === 'SELL' || type === 'REDEMPTION') {
+    void ensureHoldingsLoaded()
+  }
 }
 
 /** 只读加载启用中的产品主数据；PC 绝不用产品名称自动匹配 productId。 */
 async function ensureProductsLoaded() {
   if (productStore.products.length > 0 || productStore.loading) return
   await productStore.fetchProducts()
+}
+
+/** 只读加载所选产品在各账户的真实持仓；PC 绝不用账户名称或历史订单猜测持仓来源。 */
+async function ensureHoldingsLoaded() {
+  const productId = Number(draftEditForm.value.productId)
+  if (!Number.isInteger(productId) || productId <= 0) {
+    productHoldings.value = []
+    return
+  }
+  try {
+    holdingsLoading.value = true
+    productHoldings.value = await holdingApi.getProductHoldingsByAccount(productId)
+  } catch (error: any) {
+    productHoldings.value = []
+    ElNotification.error({
+      title: '持仓加载失败',
+      message: getErrorMessage(error, '无法加载该产品的持仓来源'),
+      position: 'bottom-right',
+    })
+  } finally {
+    holdingsLoading.value = false
+  }
+}
+
+/** 产品切换后重新加载卖出 / 赎回的持仓来源，并清掉不属于新产品来源的选择。 */
+async function handleProductChange() {
+  draftEditForm.value.sourceAccountId = undefined
+  productHoldings.value = []
+  if (isSellRedeemEdit.value) {
+    await ensureHoldingsLoaded()
+  }
 }
 
 function formatPlainAmount(amount?: number | null): string {
@@ -914,8 +1122,8 @@ async function openEditDraft(draft: DraftLedgerEntry) {
     })
   }
 
-  // 投资草稿需要主人明确选择真实产品，这里只做只读加载，不会自动匹配或下单。
-  if (isInvestmentEdit.value) {
+  // 投资 / 卖出 / 赎回草稿需要主人明确选择真实产品，这里只做只读加载，不会自动匹配或下单。
+  if (isProductEdit.value) {
     try {
       await ensureProductsLoaded()
     } catch (error: any) {
@@ -925,6 +1133,11 @@ async function openEditDraft(draft: DraftLedgerEntry) {
         position: 'bottom-right',
       })
     }
+  }
+
+  // 卖出 / 赎回还需要只读加载该产品的真实持仓来源，绝不猜测来源账户。
+  if (isSellRedeemEdit.value) {
+    await ensureHoldingsLoaded()
   }
 }
 
@@ -1104,6 +1317,9 @@ function emptyDraftEditForm(): DraftEditForm {
     productNameHint: '',
     expectedNavDate: '',
     expectedConfirmDate: '',
+    shares: '',
+    sourceAccountId: undefined,
+    sourceAccountNameHint: '',
   }
 }
 
@@ -1120,6 +1336,8 @@ function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
     asNumber(payload?.destinationAccountId)
 
   const productId = asNumber(payload?.productId)
+  const shares = asNumber(payload?.shares)
+  const sourceAccountId = asNumber(payload?.sourceAccountId)
 
   return {
     txnType: normalizeEditTxnType(asString(payload?.txnType)),
@@ -1133,11 +1351,34 @@ function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
     productNameHint: asString(payload?.productNameHint) || '',
     expectedNavDate: asString(payload?.expectedNavDate) || '',
     expectedConfirmDate: asString(payload?.expectedConfirmDate) || '',
+    shares: shares === null ? '' : String(shares),
+    sourceAccountId: sourceAccountId === null ? undefined : sourceAccountId,
+    sourceAccountNameHint: asString(payload?.sourceAccountNameHint) || '',
   }
 }
 
 function validateDraftEditForm(): string | null {
   if (!draftEditForm.value.txnType) return '请选择交易类型。'
+
+  if (isSellRedeemEdit.value) {
+    const shares = Number(draftEditForm.value.shares)
+    if (!Number.isFinite(shares) || shares <= 0) return '卖出 / 赎回份额必须是大于 0 的数字。'
+
+    const productId = Number(draftEditForm.value.productId)
+    if (!Number.isInteger(productId) || productId <= 0) return '卖出 / 赎回必须选择真实产品。'
+
+    const sourceAccountId = Number(draftEditForm.value.sourceAccountId)
+    if (!Number.isInteger(sourceAccountId) || sourceAccountId <= 0) {
+      return '卖出 / 赎回必须选择该产品真实的持仓来源账户。'
+    }
+
+    const targetAccountId = Number(draftEditForm.value.targetAccountId)
+    if (!Number.isInteger(targetAccountId) || targetAccountId <= 0) {
+      return '卖出 / 赎回必须选择到账账户。'
+    }
+
+    return null
+  }
 
   const amount = Number(draftEditForm.value.amount)
   if (!Number.isFinite(amount) || amount <= 0) return '金额必须是大于 0 的数字。'
@@ -1174,23 +1415,45 @@ function buildUpdatedPayload(draft: DraftLedgerEntry, amount: number): Record<st
   payload.sourceRef = payload.sourceRef || draft.sourceRef || null
   payload.rawInput = draft.rawInput || payload.rawInput || ''
   payload.txnType = draftEditForm.value.txnType
-  payload.amount = amount
   payload.note = draftEditForm.value.note.trim() || draft.rawInput || ''
-  payload.accountId = draftEditForm.value.accountId
-  payload.accountNameHint = draftEditForm.value.accountNameHint.trim() || null
-  if (draftEditForm.value.txnType === 'TRANSFER') {
+
+  if (isSellRedeemEdit.value) {
+    // SELL / REDEMPTION 只使用份额与持仓来源，不写 amount / 付款账户。
+    payload.shares = Number(draftEditForm.value.shares)
+    payload.sourceAccountId = draftEditForm.value.sourceAccountId
+    payload.sourceAccountNameHint = draftEditForm.value.sourceAccountNameHint.trim() || null
     payload.targetAccountId = draftEditForm.value.targetAccountId
     payload.targetAccountNameHint = draftEditForm.value.targetAccountNameHint.trim() || null
+    delete payload.amount
+    delete payload.accountId
+    delete payload.accountNameHint
   } else {
-    delete payload.targetAccountId
-    delete payload.targetAccountNameHint
+    payload.amount = amount
+    payload.accountId = draftEditForm.value.accountId
+    payload.accountNameHint = draftEditForm.value.accountNameHint.trim() || null
+    delete payload.shares
+    delete payload.sourceAccountId
+    delete payload.sourceAccountNameHint
+    if (draftEditForm.value.txnType === 'TRANSFER') {
+      payload.targetAccountId = draftEditForm.value.targetAccountId
+      payload.targetAccountNameHint = draftEditForm.value.targetAccountNameHint.trim() || null
+    } else {
+      delete payload.targetAccountId
+      delete payload.targetAccountNameHint
+    }
   }
-  if (isInvestmentEdit.value) {
+
+  if (isProductEdit.value) {
     payload.productId = draftEditForm.value.productId
     payload.productNameHint = draftEditForm.value.productNameHint.trim() || null
-    payload.expectedNavDate = draftEditForm.value.expectedNavDate.trim() || null
-    payload.expectedConfirmDate = draftEditForm.value.expectedConfirmDate.trim() || null
     payload.orderType = draftEditForm.value.txnType
+    if (isInvestmentEdit.value) {
+      payload.expectedNavDate = draftEditForm.value.expectedNavDate.trim() || null
+      payload.expectedConfirmDate = draftEditForm.value.expectedConfirmDate.trim() || null
+    } else {
+      delete payload.expectedNavDate
+      delete payload.expectedConfirmDate
+    }
   } else {
     delete payload.productId
     delete payload.productNameHint
@@ -1206,10 +1469,28 @@ function buildUpdatedPayload(draft: DraftLedgerEntry, amount: number): Record<st
 function calculateMissingFields(payload: Record<string, unknown>): string[] {
   const missingFields: string[] = []
   const txnType = normalizeEditTxnType(asString(payload.txnType))
+
+  if (!txnType) missingFields.push('txnType')
+
+  if (txnType === 'SELL' || txnType === 'REDEMPTION') {
+    const shares = asNumber(payload.shares)
+    if (shares === null || shares <= 0) missingFields.push('shares')
+
+    const productId = asNumber(payload.productId)
+    if (productId === null || productId <= 0) missingFields.push('productId')
+
+    const sourceAccountId = asNumber(payload.sourceAccountId)
+    if (sourceAccountId === null || sourceAccountId <= 0) missingFields.push('sourceAccountId')
+
+    const targetAccountId = asNumber(payload.targetAccountId)
+    if (targetAccountId === null || targetAccountId <= 0) missingFields.push('targetAccountId')
+
+    return missingFields
+  }
+
   const amount = asNumber(payload.amount)
   const accountId = asNumber(payload.accountId)
 
-  if (!txnType) missingFields.push('txnType')
   if (amount === null || amount <= 0) missingFields.push('amount')
   if (accountId === null || accountId <= 0) missingFields.push('accountId')
 
@@ -1228,8 +1509,12 @@ function calculateMissingFields(payload: Record<string, unknown>): string[] {
 
 function summarizeDraft(draft: DraftLedgerEntry): string {
   const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson))
+  const rawTxnType = asString(payload?.txnType)?.trim().toUpperCase()
+  const sellRedeem = rawTxnType === 'SELL' || rawTxnType === 'REDEMPTION'
   const txnType = formatTxnType(asString(payload?.txnType))
-  const amount = formatAmount(asNumber(payload?.amount))
+  const amount = sellRedeem
+    ? formatShares(asNumber(payload?.shares))
+    : formatAmount(asNumber(payload?.amount))
   const account = formatPreviewAccount(asNumber(payload?.accountId))
   const targetAccountId = asNumber(payload?.targetAccountId)
   const accountLabel =
@@ -1305,6 +1590,9 @@ function normalizeEditTxnType(type?: string | null): DraftTxnType {
   if (normalized === 'BUY' || normalized === 'SUBSCRIPTION') {
     return normalized
   }
+  if (normalized === 'SELL' || normalized === 'REDEMPTION') {
+    return normalized
+  }
   return ''
 }
 
@@ -1338,6 +1626,8 @@ function formatTxnType(type?: string | null): string {
     TRANSFER: '转账',
     BUY: '买入',
     SUBSCRIPTION: '申购',
+    SELL: '卖出',
+    REDEMPTION: '赎回',
   }
   return type ? labels[type] || type : '-'
 }
@@ -1422,6 +1712,28 @@ function formatProductOption(product: ProductMaster): string {
 function formatProductMeta(product?: ProductMaster): string {
   if (!product) return '未选择产品'
   return `${product.productCode} · ${product.assetType} · ${product.currency}`
+}
+
+/** 份额展示：去掉无意义尾随零，空值按 0 处理。 */
+function formatShares(shares?: number | null): string {
+  if (shares === null || shares === undefined || Number.isNaN(shares)) return '-'
+  return `${formatSharesPlain(shares)} 份`
+}
+
+function formatSharesPlain(shares?: number | null): string {
+  if (shares === null || shares === undefined || Number.isNaN(shares)) return '-'
+  return String(Number(shares))
+}
+
+/** 卖出 / 赎回持仓来源选项文案：账户名 + 当前持仓份额。 */
+function formatHoldingOption(holding: AccountHoldingInfo): string {
+  return `${holding.accountName} / 持仓 ${formatSharesPlain(holding.shares)} 份`
+}
+
+function formatHoldingMeta(holding?: AccountHoldingInfo): string {
+  if (!holding) return '未选择持仓来源'
+  const parent = holding.parentAccountName ? `${holding.parentAccountName} · ` : ''
+  return `${parent}持仓 ${formatSharesPlain(holding.shares)} 份 · 市值 ￥${formatPlainAmount(holding.marketValue)}`
 }
 
 function formatAccountOption(account: Account): string {

@@ -87,9 +87,9 @@ export interface DraftPreview {
   /** 草稿主键。 */
   draftId: number
   /**
-   * 候选流水类型：EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION。
-   * TRANSFER 需补齐转出与转入账户；BUY / SUBSCRIPTION 需补齐真实产品与单一资金来源账户。
-   * SELL / REDEMPTION 仍不支持。
+   * 候选流水类型：EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION / SELL / REDEMPTION。
+   * TRANSFER 需补齐转出与转入账户；BUY / SUBSCRIPTION 需补齐真实产品与单一资金来源账户；
+   * SELL / REDEMPTION 需补齐真实产品、持仓来源账户、份额与到账账户。
    */
   txnType?: string | null
   /** 候选转出（来源）账户 ID。 */
@@ -132,6 +132,14 @@ export interface DraftPreview {
   availableBefore?: number | null
   /** 确认后待结算应收的变动金额；买入 / 申购为正数。 */
   receivableDelta?: number | null
+  /** 卖出 / 赎回草稿本次要卖出或赎回的份额。 */
+  shares?: number | null
+  /** 卖出 / 赎回草稿持仓来源账户当前可用份额（已扣除同产品 / 来源下仍为 PENDING 的占用份额）。 */
+  availableShares?: number | null
+  /** 卖出 / 赎回草稿确认后预计剩余可用份额。 */
+  remainingShares?: number | null
+  /** 卖出 / 赎回中文提示，说明确认只创建内部 PENDING 记录、不立即减少持仓。 */
+  sharesMessage?: string | null
   /** 预计净值日（可选）。 */
   expectedNavDate?: string | null
   /** 预计确认日（可选）。 */
@@ -140,14 +148,18 @@ export interface DraftPreview {
   fundingMessage?: string | null
   /**
    * 确认后是否会生成正式流水；预览阶段始终不会写正式账本。
-   * BUY / SUBSCRIPTION 确认会立即生成付款账本（付款账户 CASH CREDIT + 待结算应收 RECEIVABLE DEBIT）。
+   * BUY / SUBSCRIPTION 确认会立即生成付款账本（付款账户 CASH CREDIT + 待结算应收 RECEIVABLE DEBIT）；
+   * SELL / REDEMPTION 确认不会生成任何账本流水。
    */
   willCreateLedgerTxn?: boolean | null
-  /** 草稿确认是否会生成订单；BUY / SUBSCRIPTION 确认后会创建系统内 PENDING 订单。 */
+  /**
+   * 草稿确认是否会生成订单；BUY / SUBSCRIPTION / SELL / REDEMPTION 确认后会创建系统内 PENDING 订单。
+   * SELL / REDEMPTION 订单只登记内部待处理份额占用，不生成账本、不改现金余额、不改持仓。
+   */
   willCreateOrder?: boolean | null
-  /** 草稿确认是否会生成结算记录；BUY / SUBSCRIPTION 当前不会自动结算。 */
+  /** 草稿确认是否会生成结算记录；投资买入 / 申购 / 卖出 / 赎回当前都不会自动结算。 */
   willCreateSettlement?: boolean | null
-  /** 首版草稿确认是否会影响持仓。 */
+  /** 首版草稿确认是否会影响持仓；SELL / REDEMPTION 确认不会立即影响持仓。 */
   willAffectHolding?: boolean | null
   /** 候选备注。 */
   note?: string | null

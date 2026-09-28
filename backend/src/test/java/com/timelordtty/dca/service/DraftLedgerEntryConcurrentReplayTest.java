@@ -51,7 +51,7 @@ class DraftLedgerEntryConcurrentReplayTest {
     private final ProductMasterMapper productMasterMapper = mock(ProductMasterMapper.class);
     private final OrderService orderService = mock(OrderService.class);
     private final DraftLedgerEntryService service =
-            new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService);
+            new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService, mock(HoldingService.class));
 
     @Test
     void concurrentReplayInSameUserScopeKeepsSingleDraftAndReturnsExistingOne() {

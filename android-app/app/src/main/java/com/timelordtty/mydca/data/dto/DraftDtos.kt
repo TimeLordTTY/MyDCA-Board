@@ -51,7 +51,7 @@ data class DraftPreviewDto(
     val targetAccountDelta: Double? = null,
     val impactDirection: String? = null,
     val accountDelta: Double? = null,
-    /** 投资草稿的订单类型：BUY / SUBSCRIPTION；非投资草稿为空。 */
+    /** 投资草稿的订单类型：BUY / SUBSCRIPTION / SELL / REDEMPTION；非投资草稿为空。 */
     val orderType: String? = null,
     /** 投资草稿选定的真实产品 ID；由主人明确选择，不由文本自动匹配。 */
     val productId: Long? = null,
@@ -63,6 +63,14 @@ data class DraftPreviewDto(
     val availableBefore: Double? = null,
     /** 确认后待结算应收的变动金额，买入 / 申购为正数。 */
     val receivableDelta: Double? = null,
+    /** 卖出 / 赎回草稿本次份额；非卖出 / 赎回草稿为空。 */
+    val shares: Double? = null,
+    /** 当前可用份额（真实持仓份额 - 同产品/来源账户下 PENDING 卖出 / 赎回占用份额）。 */
+    val availableShares: Double? = null,
+    /** 预计剩余份额（可用份额 - 本次份额）。 */
+    val remainingShares: Double? = null,
+    /** 卖出 / 赎回份额提示文案，明确不会立即减少持仓或增加到账余额。 */
+    val sharesMessage: String? = null,
     val expectedNavDate: String? = null,
     val expectedConfirmDate: String? = null,
     /** 资金来源中文提示，便于主人复核付款账户与可用余额。 */

@@ -5,7 +5,7 @@
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.11.0 / versionCode 12`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环与 v0.11.0 投资买入 / 申购草稿闭环均已完成。
+- Android 当前版本：`0.12.0 / versionCode 13`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环、v0.11.0 投资买入 / 申购草稿闭环与 v0.12.0 投资卖出 / 赎回草稿闭环均已完成。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
@@ -18,7 +18,9 @@
 - v0.10.0 CI APK 已真实产出：Run `36369966197`，Artifact `10949105553`，APK SHA-256 `FD39508EA408807DB5ECEEBAFD2B2F4630D766447398E29D1397D8721A5304F0`。
 - v0.11.0 投资买入 / 申购草稿闭环已落地：BUY / SUBSCRIPTION 候选解析、真实产品 + 单一资金来源账户选择、只读订单与 CASH / RECEIVABLE 资金影响预览、二次确认后经 OrderService 创建 PENDING 订单并生成付款账本；不自动结算、不生成最终持仓。
 - v0.11.0 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）待 owner push 后回填（普通自动任务只提交、不 push）。
-- 下一普通工程目标：投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环，作为独立任务推进；本轮 v0.11.0 已完成买入 / 申购，SELL / REDEMPTION 尚未支持。数据库 migration 上线与真机人工验收继续独立处理。
+- v0.12.0 投资卖出 / 赎回草稿闭环已落地：SELL / REDEMPTION 候选解析、真实产品 + 该产品真实持仓来源 + 份额 + 到账账户选择、可用份额只读预览（已扣除 PENDING 占用）、二次确认后经 OrderService 仅创建 PENDING 订单并登记 SOURCE / TARGET 资金线；确认阶段不生成账本流水、不改现金余额、不改持仓，不自动结算。
+- v0.12.0 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）待 owner push 后回填（普通自动任务只提交、不 push）。
+- 下一普通工程目标：四类投资动作（买入 / 申购 / 卖出 / 赎回）草稿闭环均已落地；下一步的完整结算 / 持仓影响闭环尚无 owner 授权任务，需单独规划与批准。数据库 migration 上线与真机人工验收继续独立处理。
 
 ### 已被后续版本完成的旧待办
 
@@ -451,6 +453,34 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   确认弹窗标题为「确认创建【产品】买入/申购订单 ¥X？」；PC `web/shared` 与草稿箱同步投资类型与预览字段。
 - 本轮验证：后端 `mvn -B test` 121 项通过（由 95 项增至 121 项）、Android `testDebugUnitTest` 35 类 221 项通过（由 206 项增至 221 项）、
   `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
+## Android / 后端 v0.12.0 投资卖出 / 赎回草稿闭环（2026-09-28）
+
+- 对应任务 `task-mydca-v012-invest-sell-redeem-draft-loop-20260928`（owner 直接批准，L3），详细说明见 `docs/mydca_v012_invest_sell_redeem_draft_loop_20260928.md`。
+- 目标：把草稿正式登记从 EXPENSE / INCOME / TRANSFER / BUY / SUBSCRIPTION 扩展到投资 SELL（场内卖出）与 REDEMPTION（场外赎回），
+  让主人可以补齐真实产品 + 该产品真实持仓来源 + 份额 + 到账账户、先看到可用份额与剩余份额预览、再二次确认后仅创建系统内 PENDING 记录；
+  不改变「DRAFT → fresh preview → 主人二次确认 → 仅内部 PENDING」的安全边界。
+- 候选结构：`txnType=SELL / REDEMPTION` + `productId`（必须由主人明确选择）+ `productNameHint`（仅提示）+ `shares`
+  + `sourceAccountId`（持仓来源）+ `sourceAccountNameHint` + `targetAccountId`（到账账户）+ `targetAccountNameHint` + `note`
+  + 可选 `expectedNavDate` / `expectedConfirmDate`。
+- 文本解析：`卖出` → SELL、`赎回` → REDEMPTION，优先级高于 `买` / `付款` / `支付` 等 EXPENSE 关键词；
+  只提取 `shares` 与产品名称提示，禁止把名称提示映射成真实 `productId`，也绝不自动匹配持仓来源或到账账户；
+  缺字段时只生成 DRAFT 并写入 `missingFields`。
+- 只读预览：持仓来源必须是该产品在当前 user / family 下的真实持仓来源，`shares > 0` 且不超过可用份额；
+  可用份额 = 该来源账户真实持仓份额 − 同产品 / 来源账户下仍为 PENDING 的 SELL / REDEMPTION 占用份额；
+  到账账户必须当前 user / family 可见、active REAL 叶子账户、币种与产品一致，禁止 VIRTUAL / POSITION / 父账户；
+  影响口径为 `willCreateOrder=true`（仅当字段齐全）、`willCreateLedgerTxn=false`、`willCreateSettlement=false`、`willAffectHolding=false`，
+  `impactDirection=NONE`、deltas 为 0；preview 绝不调用 `OrderService` / `LedgerService` / `SettlementService`。
+- 正式登记：新增 `OrderService.createSellRedeemDraftOrder(...)` 安全入口（只允许 SELL / REDEMPTION），复用既有 `OrderService`
+  创建 `status=PENDING` 订单并写入 `SOURCE`（sourceAccountId + shares）/ `TARGET`（targetAccountId）资金线；
+  confirm 阶段不生成 CASH / POSITION / FEE 账本流水、不改现金余额、不改持仓，真正的资金与持仓变化仍只在后续 SettlementService 人工结算时产生；未新增表或 migration。
+- confirm：SELL / REDEMPTION 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用安全入口；订单 ID 写回 `confirmOrderId`，
+  重复确认幂等，异常整体回滚且草稿保持 `DRAFT`，`IGNORED` 草稿不可确认，不存在自动 preview / confirm / settle。
+- Android `versionName = 0.12.0`（`versionCode = 13`）：草稿编辑新增卖出 / 赎回，表单为真实产品 + 持仓来源 + 份额 + 到账账户 + 备注，
+  产品选定后复用 `GET /api/v2/holdings/product/{productId}/by-account` 展示持仓来源；切换其它交易类型会清理 SELL / REDEMPTION 专属字段；
+  PC `web/shared` 与草稿箱同步卖出 / 赎回类型与预览字段，支持查看 / 编辑 / preview / 二次确认。
+- 本轮验证：后端 `mvn -B test` 145 项通过（由 121 项增至 145 项）、Android `testDebugUnitTest` 35 类 230 项通过（由 221 项增至 230 项）、
+  `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
+
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 服务端 `draft_ledger_entry` 唯一约束缺口已收敛：该缺口最初因为 `allowed_paths` 不含 `sql/**` 而遗留，
@@ -503,5 +533,13 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - v0.11.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
   工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
 - 真机人工验收：投资草稿的产品选择、资金账户过滤、付款账户 / 待结算应收预览与二次确认文案。
-- 未做：SELL / REDEMPTION、多资金来源组合投资、完整结算 / 持仓影响确认；PC 未重做整套投资编辑 UI。
+- 未做（v0.11.0 范围）：多资金来源组合投资、完整结算 / 持仓影响确认；PC 未重做整套投资编辑 UI。SELL / REDEMPTION 作为独立任务已在 v0.12.0 完成。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动下单、自动结算或自动正式入账。
+
+## 后续待办（v0.12.0 投资卖出 / 赎回草稿闭环）
+
+- v0.12.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
+  工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
+- 真机人工验收：卖出 / 赎回草稿的持仓来源选择、可用份额与剩余份额预览、到账账户过滤与二次确认文案。
+- 未做：跨账户 / 跨产品份额拆分、自动匹配持仓来源、完整结算 / 持仓影响确认（SettlementService 人工结算需单独授权任务）。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动下单、自动结算或自动正式入账。

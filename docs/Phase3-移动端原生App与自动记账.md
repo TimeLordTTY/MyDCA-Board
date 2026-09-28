@@ -5,11 +5,11 @@
 
 本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-已落地：原生 Android 0.11.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环与 BUY / SUBSCRIPTION 投资草稿闭环）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+已落地：原生 Android 0.12.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环、BUY / SUBSCRIPTION 投资买入 / 申购草稿闭环与 SELL / REDEMPTION 投资卖出 / 赎回草稿闭环）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
 
 安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 
-下一普通移动端任务：投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环，作为独立任务推进；本轮 v0.11.0 已完成买入 / 申购，SELL / REDEMPTION 尚未支持。真机体验验收（转账双账户、投资产品与资金账户选择、桌面小组件、系统分享）仍由主人在真实设备完成。
+投资卖出 / 赎回（SELL / REDEMPTION）草稿闭环已在 v0.12.0 完成，四类投资动作（买入 / 申购 / 卖出 / 赎回）均已纳入草稿安全链路；完整结算 / 持仓影响闭环尚无 owner 授权任务，需单独规划与批准。真机体验验收（转账双账户、投资产品与资金账户选择、卖出 / 赎回持仓来源与可用份额预览、桌面小组件、系统分享）仍由主人在真实设备完成。
 <!-- CURRENT-SNAPSHOT:END -->
 
 ## 阶段定位
@@ -75,7 +75,8 @@
 - App 只提供投资补录入口，不把复杂投资行为直接简化成普通生活流水。
 - 对于涉及 T+N、手续费、确认净值、确认份额的投资行为，建议优先生成 `Order` / `Settlement` 流程，而不是直接写普通生活流水。
 - 这部分与现有订单、结算模块衔接；原生 App 在 M1/M2 可先提供入口和预填确认页，M3 再完善与订单/结算的闭环。
-- 已实现（v0.11.0）：BUY（场内买入）/ SUBSCRIPTION（场外申购）已可作为草稿闭环：主人明确选择真实产品 + 单一资金来源账户后，二次确认才经 OrderService 创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；仍未结算、未生成最终持仓、未接任何真实交易渠道。SELL / REDEMPTION 尚未支持。
+- 已实现（v0.11.0）：BUY（场内买入）/ SUBSCRIPTION（场外申购）已可作为草稿闭环：主人明确选择真实产品 + 单一资金来源账户后，二次确认才经 OrderService 创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；仍未结算、未生成最终持仓、未接任何真实交易渠道。
+- 已实现（v0.12.0）：SELL（场内卖出）/ REDEMPTION（场外赎回）已可作为草稿闭环：主人明确选择真实产品 + 该产品真实持仓来源 + 份额 + 到账账户后，二次确认才经 OrderService 仅创建 PENDING 订单并登记 SOURCE / TARGET 资金线；确认阶段不生成账本流水、不改现金余额、不改持仓，真正的资金与持仓变化只在后续人工结算时产生，未接任何真实交易渠道。
 
 ## 服务端新增表
 
@@ -479,7 +480,28 @@ CREATE TABLE `draft_ledger_entry` (
   重复确认幂等，`IGNORED` 草稿不可确认，不存在解析后自动 confirm 或建档后自动 confirm。
 - Android：草稿编辑支持支出 / 收入 / 转账 / 买入 / 申购，投资表单支持真实产品 + 单一资金账户；投资预览中文展示「产品 / 资金来源 / 可用余额 / 付款账户变动 / 待结算应收变动」；
   确认弹窗标题为「确认创建【产品】买入/申购订单 ¥X？」，确认按钮仍受 fresh preview gate 控制。
-- 明确未做：不做 SELL / REDEMPTION，不做多资金来源组合投资，不做自动 preview / confirm / 下单 / 结算 / 交易，不新增数据库表或 migration。
+- 明确未做（v0.11.0 范围）：不做多资金来源组合投资，不做自动 preview / confirm / 下单 / 结算 / 交易，不新增数据库表或 migration；SELL / REDEMPTION 已在 v0.12.0 单独完成。
+
+### 当前已实现（v0.12.0 投资卖出 / 赎回草稿闭环）
+
+- 候选结构与写入字段：`txnType=SELL / REDEMPTION` + `productId`（必须由主人明确选择）+ `productNameHint`（仅提示）+ `shares`
+  + `sourceAccountId`（持仓来源）+ `sourceAccountNameHint` + `targetAccountId`（到账账户）+ `targetAccountNameHint` + `note`
+  + 可选 `expectedNavDate` / `expectedConfirmDate`。
+- 文本解析：`卖出` → SELL、`赎回` → REDEMPTION，优先级高于 `买` / `付款` / `支付` 等 EXPENSE 关键词；只提取 `shares` 与产品名称提示，
+  禁止把名称提示映射成真实 `productId`，也绝不自动匹配持仓来源或到账账户；缺字段时只生成 DRAFT 并写入 `missingFields`。
+- 预览：持仓来源必须是该产品在当前 user / family 下的真实持仓来源，`shares > 0` 且不超过可用份额；
+  可用份额 = 该来源账户真实持仓份额 − 同产品 / 来源账户下仍为 PENDING 的 SELL / REDEMPTION 占用份额；
+  到账账户必须可见、active REAL、叶子、币种与产品一致，禁止 VIRTUAL / POSITION / 父账户；影响口径为 `willCreateOrder=true`（仅当字段齐全）、
+  `willCreateLedgerTxn=false`、`willCreateSettlement=false`、`willAffectHolding=false`，`impactDirection=NONE`、deltas 为 0，
+  preview 不调用 `OrderService` / `LedgerService` / `SettlementService`。
+- 正式登记：`OrderService.createSellRedeemDraftOrder` 经既有 `createOrder` 创建 `status=PENDING` 订单并写入 `SOURCE`（sourceAccountId + shares）/
+  `TARGET`（targetAccountId）资金线；confirm 阶段不生成 CASH / POSITION / FEE 账本流水、不改现金余额、不改持仓；未新增表或 migration。
+- confirm：SELL / REDEMPTION 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用安全入口；订单 ID 写回 `confirmOrderId`，
+  重复确认幂等，异常整体回滚且草稿保持 `DRAFT`，`IGNORED` 草稿不可确认，不存在解析后自动 confirm 或建档后自动 confirm。
+- Android：草稿编辑支持支出 / 收入 / 转账 / 买入 / 申购 / 卖出 / 赎回，卖出 / 赎回表单支持真实产品 + 持仓来源 + 份额 + 到账账户 + 备注，
+  产品选定后复用 `GET /api/v2/holdings/product/{productId}/by-account` 展示持仓来源；确认弹窗明确「当前只创建内部待处理记录，不立即减少持仓，也不立即增加到账余额」。
+- 明确未做：不做跨账户 / 跨产品份额拆分，不做自动匹配持仓来源，不做自动 preview / confirm / 下单 / 结算 / 交易，不新增数据库表或 migration。
+
 ### 批量确认幂等
 
 - 已 `CONFIRMED` 的草稿再次确认，应返回 `duplicate` / `already_confirmed`，不重复生成正式流水。

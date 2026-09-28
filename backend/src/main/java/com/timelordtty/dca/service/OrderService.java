@@ -44,6 +44,7 @@ import java.util.UUID;
  * 2. 每个资金来源账户的可用余额必须足够：account.balance - account.reserved_amount >= funding_line.amount（应用层校验）
  * 3. account_id必须是叶子账户（应用层校验）
  * 4. 草稿投资确认必须走 createInvestmentDraftOrder，重新校验产品、币种、资金用途与账户可见性
+ * 5. 草稿卖出 / 赎回确认必须走 createSellRedeemDraftOrder：只登记 SOURCE / TARGET 份额占用，不生成账本、不改现金与持仓
  * 
  * @author timelordtty
  * @since 1.0.0
@@ -435,6 +436,103 @@ public class OrderService {
                 parseOptionalDate(expectedNavDate), parseOptionalDate(expectedConfirmDate), null, null);
     }
 
+    /**
+     * 草稿卖出 / 赎回确认的安全入口：只允许 SELL / REDEMPTION，并在创建订单前再次完成全部安全校验。
+     *
+     * <p>SELL / REDEMPTION 与 BUY / SUBSCRIPTION 的真实语义不同：下单阶段只登记份额占用，
+     * 不生成 CASH / POSITION 流水、不改现金余额、不改持仓，也不调用 SettlementService；
+     * 真正的资金与持仓变化只在后续人工结算（SettlementService）时产生。</p>
+     *
+     * <p>写入的 order_funding_line 固定两行：SOURCE 行保存持仓来源账户 + 份额，TARGET 行保存到账账户。
+     * 到账账户必须是当前 user/family 可见、启用的 REAL 叶子账户，币种与产品一致，
+     * 且不能是 POSITION 持仓账户、VIRTUAL 虚拟账户或父账户。</p>
+     *
+     * @param userId 发起用户 ID
+     * @param familyId 家庭 ID，可为空
+     * @param productId 真实产品 ID，必须由用户明确选择
+     * @param orderType 订单类型，只允许 SELL / REDEMPTION
+     * @param shares 卖出 / 赎回份额，必须大于 0
+     * @param sourceAccountId 持仓来源账户 ID
+     * @param targetAccountId 到账账户 ID
+     * @param expectedNavDate 预期净值日期（ISO 字符串，可空）
+     * @param expectedConfirmDate 预期确认日期（ISO 字符串，可空）
+     * @param note 备注，仅用于调用方追踪；订单流水备注仍由订单模板生成
+     * @return 创建的 PENDING 订单
+     */
+    @Transactional
+    public Order createSellRedeemDraftOrder(Long userId, Long familyId, Long productId, String orderType,
+                                            BigDecimal shares, Long sourceAccountId, Long targetAccountId,
+                                            String expectedNavDate, String expectedConfirmDate, String note) {
+        if (!"SELL".equals(orderType) && !"REDEMPTION".equals(orderType)) {
+            throw new RuntimeException("草稿卖出 / 赎回确认只支持 SELL / REDEMPTION 订单");
+        }
+        if (productId == null) {
+            throw new RuntimeException("卖出 / 赎回草稿必须由主人明确选择真实产品，不能按产品名称自动匹配");
+        }
+        if (shares == null || shares.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("卖出 / 赎回份额必须大于 0");
+        }
+        if (sourceAccountId == null) {
+            throw new RuntimeException("卖出 / 赎回草稿必须指定持仓来源账户");
+        }
+        if (targetAccountId == null) {
+            throw new RuntimeException("卖出 / 赎回草稿必须指定到账账户");
+        }
+
+        ProductMaster product = productMasterMapper.selectById(productId);
+        if (product == null || !Boolean.TRUE.equals(product.getIsActive())) {
+            throw new RuntimeException("产品不存在或已停用，不能用于卖出 / 赎回订单");
+        }
+
+        Account sourceAccount = accountMapper.selectById(sourceAccountId);
+        if (sourceAccount == null || !Boolean.TRUE.equals(sourceAccount.getIsActive())) {
+            throw new RuntimeException("持仓来源账户不存在或已停用");
+        }
+        if (!accountService.isLeafAccount(sourceAccountId)) {
+            throw new RuntimeException("持仓来源账户必须是叶子账户");
+        }
+        if (!isVisibleToUserOrFamily(sourceAccount, userId, familyId)) {
+            throw new RuntimeException("持仓来源账户不存在、已停用或当前用户/家庭不可见");
+        }
+
+        Account targetAccount = accountMapper.selectVisibleRealById(targetAccountId, userId, familyId);
+        if (targetAccount == null) {
+            throw new RuntimeException("到账账户不存在、已停用或当前用户/家庭不可见");
+        }
+        if (!accountService.isLeafAccount(targetAccountId)) {
+            throw new RuntimeException("到账账户必须是叶子账户");
+        }
+        if ("POSITION".equalsIgnoreCase(targetAccount.getAccountType())) {
+            throw new RuntimeException("到账账户不能是 POSITION 持仓账户，请选择现金类 REAL 叶子账户");
+        }
+        if (!currencyEquals(targetAccount.getCurrency(), product.getCurrency())) {
+            throw new RuntimeException("到账账户币种与产品币种必须一致");
+        }
+
+        List<OrderFundingLine> fundingLines = new ArrayList<>();
+        OrderFundingLine sourceLine = new OrderFundingLine();
+        sourceLine.setAccountId(sourceAccountId);
+        sourceLine.setShares(shares);
+        sourceLine.setLineType("SOURCE");
+        fundingLines.add(sourceLine);
+        OrderFundingLine targetLine = new OrderFundingLine();
+        targetLine.setAccountId(targetAccountId);
+        targetLine.setLineType("TARGET");
+        fundingLines.add(targetLine);
+
+        return createOrder(userId, productId, orderType, null, shares, null, fundingLines,
+                parseOptionalDate(expectedNavDate), parseOptionalDate(expectedConfirmDate), null, null);
+    }
+
+    /** user/family 可见性判断，与 accounts 表可见性语义保持一致。 */
+    private boolean isVisibleToUserOrFamily(Account account, Long userId, Long familyId) {
+        if (account.getOwnerUserId() != null && account.getOwnerUserId().equals(userId)) {
+            return true;
+        }
+        return familyId != null && account.getOwnerFamilyId() != null
+                && account.getOwnerFamilyId().equals(familyId);
+    }
+
     /** 解析可选 ISO 日期；空值或无法解析时返回 null，不阻断订单创建。 */
     private LocalDate parseOptionalDate(String value) {
         if (value == null || value.isBlank()) {
@@ -654,6 +752,19 @@ public class OrderService {
      */
     public List<OrderFundingLine> getOrderFundingLines(String orderId) {
         return orderFundingLineMapper.selectByOrderId(orderId);
+    }
+    /**
+     * 统计指定产品 + 持仓来源账户下仍为 PENDING 的 SELL / REDEMPTION 占用份额。
+     *
+     * <p>SELL / REDEMPTION 下单不生成账本，占用只存在于 order_funding_line，因此草稿可用份额
+     * 必须扣除这里返回的占用份额，避免同一产品 / 来源账户被内部重复占用。</p>
+     */
+    public BigDecimal sumPendingSellSharesByAccount(Long productId, Long userId, Long accountId) {
+        if (productId == null || userId == null || accountId == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal occupied = orderFundingLineMapper.sumPendingSellSharesByAccount(productId, userId, accountId);
+        return occupied != null ? occupied : BigDecimal.ZERO;
     }
 
     /**

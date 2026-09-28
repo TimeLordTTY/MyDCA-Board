@@ -25,6 +25,7 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
 import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
+import com.timelordtty.mydca.data.dto.MobileHoldingByAccountDto
 import com.timelordtty.mydca.data.dto.ProductDto
 import com.timelordtty.mydca.data.repository.DraftRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
@@ -68,6 +69,8 @@ fun DraftInboxScreen(
     var showIgnoreDialog by remember { mutableStateOf(false) }
     var selectableAccounts by remember { mutableStateOf<List<MobileAccountDto>>(emptyList()) }
     var selectableProducts by remember { mutableStateOf<List<ProductDto>>(emptyList()) }
+    var productHoldings by remember { mutableStateOf<List<MobileHoldingByAccountDto>>(emptyList()) }
+    var isLoadingHoldings by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun setCurrentDraft(draft: DraftLedgerEntryDto?) {
@@ -337,6 +340,26 @@ fun DraftInboxScreen(
             }
         }
     }
+    // 卖出 / 赎回草稿：产品选定后只读拉取该产品在各账户的真实持仓来源，供主人明确选择。
+    LaunchedEffect(wealthRepository, editForm.txnType, editForm.productId) {
+        val repository = wealthRepository
+        val isSellRedeem = DraftEditState.isSellRedeemType(editForm.txnType)
+        val productId = editForm.productId.trim().toLongOrNull()
+        if (repository == null || !isSellRedeem || productId == null) {
+            productHoldings = emptyList()
+            isLoadingHoldings = false
+            return@LaunchedEffect
+        }
+        isLoadingHoldings = true
+        productHoldings = when (val result = repository.getProductHoldingsByAccount(productId)) {
+            is NetworkResult.Success -> result.data
+            is NetworkResult.Failure -> {
+                actionMessage = "持仓来源加载失败：${result.message}"
+                emptyList()
+            }
+        }
+        isLoadingHoldings = false
+    }
 
     val preview = when (val state = previewState) {
         is AsyncState.Success -> state.data
@@ -401,6 +424,8 @@ fun DraftInboxScreen(
             editForm = editForm,
             selectableAccounts = selectableAccounts,
             selectableProducts = selectableProducts,
+            productHoldings = productHoldings,
+            isLoadingHoldings = isLoadingHoldings,
             editError = editError,
             isEditDirty = isEditDirty,
             isSavingDraft = isSavingDraft,
@@ -500,6 +525,8 @@ private fun DraftDetailSection(
     editForm: DraftEditForm,
     selectableAccounts: List<MobileAccountDto>,
     selectableProducts: List<ProductDto>,
+    productHoldings: List<MobileHoldingByAccountDto>,
+    isLoadingHoldings: Boolean,
     editError: String?,
     isEditDirty: Boolean,
     isSavingDraft: Boolean,
@@ -541,6 +568,8 @@ private fun DraftDetailSection(
                 editForm = editForm,
                 selectableAccounts = selectableAccounts,
                 selectableProducts = selectableProducts,
+                productHoldings = productHoldings,
+                isLoadingHoldings = isLoadingHoldings,
                 editError = editError,
                 isEditDirty = isEditDirty,
                 isSavingDraft = isSavingDraft,
@@ -612,6 +641,8 @@ private fun DraftEditSection(
     editForm: DraftEditForm,
     selectableAccounts: List<MobileAccountDto>,
     selectableProducts: List<ProductDto>,
+    productHoldings: List<MobileHoldingByAccountDto>,
+    isLoadingHoldings: Boolean,
     editError: String?,
     isEditDirty: Boolean,
     isSavingDraft: Boolean,
@@ -631,6 +662,7 @@ private fun DraftEditSection(
         }
 
         Text("accountId 是后端真实账户 ID，必须是正整数；accountNameHint 只是人工提示，不会替代 accountId。")
+        Text("卖出 SELL / 赎回 REDEMPTION 只填写真实产品、持仓来源、本次份额与到账账户；确认后只创建内部 PENDING 记录，不立即改动持仓或余额。")
         if (isEditDirty) {
             Text("当前表单有未保存修改：旧预览已失效，保存并重新预览后才能确认。")
         }
@@ -668,22 +700,37 @@ private fun DraftEditSection(
             ) {
                 Text(if (editForm.txnType == DraftAccountSelection.SUBSCRIPTION) "申购 SUBSCRIPTION ✓" else "申购 SUBSCRIPTION")
             }
+            OutlinedButton(
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.SELL)) },
+            ) {
+                Text(if (editForm.txnType == DraftAccountSelection.SELL) "卖出 SELL ✓" else "卖出 SELL")
+            }
+            OutlinedButton(
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                onClick = { onEditFormChange(DraftEditState.switchTxnType(editForm, DraftAccountSelection.REDEMPTION)) },
+            ) {
+                Text(if (editForm.txnType == DraftAccountSelection.REDEMPTION) "赎回 REDEMPTION ✓" else "赎回 REDEMPTION")
+            }
         }
 
-        OutlinedTextField(
-            value = editForm.amount,
-            onValueChange = { onEditFormChange(editForm.copy(amount = it)) },
-            enabled = !isSavingDraft && !isPreviewingDraft,
-            label = { Text("金额 amount") },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth(),
-        )
         val isTransferForm = editForm.txnType == DraftAccountSelection.TRANSFER
         val isInvestmentForm = DraftEditState.isInvestmentType(editForm.txnType)
+        val isSellRedeemForm = DraftEditState.isSellRedeemType(editForm.txnType)
         val editEnabled = !isSavingDraft && !isPreviewingDraft
         val selectedProduct = selectableProducts.firstOrNull { it.id.toString() == editForm.productId.trim() }
-        if (isInvestmentForm) {
+        if (!isSellRedeemForm) {
+            OutlinedTextField(
+                value = editForm.amount,
+                onValueChange = { onEditFormChange(editForm.copy(amount = it)) },
+                enabled = editEnabled,
+                label = { Text("金额 amount") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (isInvestmentForm || isSellRedeemForm) {
             ProductPickerSection(
                 selectedProductId = editForm.productId,
                 products = selectableProducts,
@@ -698,30 +745,56 @@ private fun DraftEditSection(
                 },
             )
         }
-        AccountPickerSection(
-            title = when {
-                isTransferForm -> "选择转出账户"
-                isInvestmentForm -> "选择付款账户"
-                else -> "选择叶子账户"
-            },
-            description = when {
-                isTransferForm ->
-                    "转账可能是主人主动调整资金分区：SPENDABLE / RESERVED / INVESTABLE 之间都可以转移，只需选择真实叶子账户。"
-                isInvestmentForm ->
-                    "投资买入 / 申购只允许 INVESTABLE 真实叶子账户；国债逆回购 BOND_REPO 才允许使用 RESERVED 专款。确认后会立即扣减该账户并增加待结算应收。"
-                else ->
-                    "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。"
-            },
-            txnType = editForm.txnType,
-            accounts = selectableAccounts,
-            productAssetType = selectedProduct?.assetType,
-            enabled = editEnabled,
-            onPick = { account ->
-                onEditFormChange(
-                    editForm.copy(accountId = account.id.toString(), accountNameHint = account.accountName),
-                )
-            },
-        )
+        if (isSellRedeemForm) {
+            HoldingSourcePickerSection(
+                selectedAccountId = editForm.sourceAccountId,
+                holdings = productHoldings,
+                isLoading = isLoadingHoldings,
+                enabled = editEnabled,
+                onPick = { holding ->
+                    onEditFormChange(
+                        editForm.copy(
+                            sourceAccountId = holding.accountId?.toString().orEmpty(),
+                            sourceAccountNameHint = holding.accountName ?: editForm.sourceAccountNameHint,
+                        ),
+                    )
+                },
+            )
+            OutlinedTextField(
+                value = editForm.shares,
+                onValueChange = { onEditFormChange(editForm.copy(shares = it)) },
+                enabled = editEnabled,
+                label = { Text("本次份额 shares（必填）") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            AccountPickerSection(
+                title = when {
+                    isTransferForm -> "选择转出账户"
+                    isInvestmentForm -> "选择付款账户"
+                    else -> "选择叶子账户"
+                },
+                description = when {
+                    isTransferForm ->
+                        "转账可能是主人主动调整资金分区：SPENDABLE / RESERVED / INVESTABLE 之间都可以转移，只需选择真实叶子账户。"
+                    isInvestmentForm ->
+                        "投资买入 / 申购只允许 INVESTABLE 真实叶子账户；国债逆回购 BOND_REPO 才允许使用 RESERVED 专款。确认后会立即扣减该账户并增加待结算应收。"
+                    else ->
+                        "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。"
+                },
+                txnType = editForm.txnType,
+                accounts = selectableAccounts,
+                productAssetType = selectedProduct?.assetType,
+                enabled = editEnabled,
+                onPick = { account ->
+                    onEditFormChange(
+                        editForm.copy(accountId = account.id.toString(), accountNameHint = account.accountName),
+                    )
+                },
+            )
+        }
         if (isTransferForm) {
             AccountPickerSection(
                 title = "选择转入账户",
@@ -739,23 +812,38 @@ private fun DraftEditSection(
                 Text(message)
             }
         }
-        OutlinedTextField(
-            value = editForm.accountId,
-            onValueChange = { onEditFormChange(editForm.copy(accountId = it)) },
-            enabled = !isSavingDraft && !isPreviewingDraft,
-            label = {
-                Text(
-                    when {
-                        isTransferForm -> "转出账户 ID accountId"
-                        isInvestmentForm -> "付款账户 ID accountId"
-                        else -> "真实账户 ID accountId"
-                    },
-                )
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (isSellRedeemForm) {
+            AccountPickerSection(
+                title = "选择到账账户",
+                description = "到账账户必须是当前可见的 REAL 叶子账户，不能是 VIRTUAL / POSITION / 父账户，币种需与产品一致；最终以后端 preview 为准。",
+                txnType = editForm.txnType,
+                accounts = selectableAccounts,
+                productCurrency = selectedProduct?.currency,
+                enabled = editEnabled,
+                onPick = { account ->
+                    onEditFormChange(editForm.copy(targetAccountId = account.id.toString()))
+                },
+            )
+        }
+        if (!isSellRedeemForm) {
+            OutlinedTextField(
+                value = editForm.accountId,
+                onValueChange = { onEditFormChange(editForm.copy(accountId = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = {
+                    Text(
+                        when {
+                            isTransferForm -> "转出账户 ID accountId"
+                            isInvestmentForm -> "付款账户 ID accountId"
+                            else -> "真实账户 ID accountId"
+                        },
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         if (isTransferForm) {
             OutlinedTextField(
                 value = editForm.targetAccountId,
@@ -767,15 +855,44 @@ private fun DraftEditSection(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        OutlinedTextField(
-            value = editForm.accountNameHint,
-            onValueChange = { onEditFormChange(editForm.copy(accountNameHint = it)) },
-            enabled = !isSavingDraft && !isPreviewingDraft,
-            label = { Text("账户提示 accountNameHint") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (isInvestmentForm) {
+        if (isSellRedeemForm) {
+            OutlinedTextField(
+                value = editForm.sourceAccountId,
+                onValueChange = { onEditFormChange(editForm.copy(sourceAccountId = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("持仓来源 ID sourceAccountId（必填）") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = editForm.targetAccountId,
+                onValueChange = { onEditFormChange(editForm.copy(targetAccountId = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("到账账户 ID targetAccountId（必填）") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = editForm.sourceAccountNameHint,
+                onValueChange = { onEditFormChange(editForm.copy(sourceAccountNameHint = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("持仓来源提示 sourceAccountNameHint（仅提示）") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        } else {
+            OutlinedTextField(
+                value = editForm.accountNameHint,
+                onValueChange = { onEditFormChange(editForm.copy(accountNameHint = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("账户提示 accountNameHint") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (isInvestmentForm || isSellRedeemForm) {
             OutlinedTextField(
                 value = editForm.productId,
                 onValueChange = { onEditFormChange(editForm.copy(productId = it)) },
@@ -863,6 +980,20 @@ private fun PreviewContent(preview: DraftPreviewDto) {
             KeyValueRow("预计净值日", preview.expectedNavDate ?: "未设置")
             KeyValueRow("预计确认日", preview.expectedConfirmDate ?: "未设置")
         }
+        if (preview.txnType?.trim()?.uppercase() in setOf("SELL", "REDEMPTION")) {
+            KeyValueRow("订单类型", preview.orderType ?: preview.txnType ?: "未知")
+            KeyValueRow("产品", preview.productName ?: "未选择")
+            KeyValueRow("产品代码", preview.productCode ?: "无")
+            KeyValueRow("产品类型", preview.productAssetType ?: "未知")
+            KeyValueRow("产品币种", preview.productCurrency ?: "未知")
+            KeyValueRow("持仓来源", preview.accountName ?: "未匹配")
+            KeyValueRow("当前可用份额", preview.availableShares?.toString() ?: "未知")
+            KeyValueRow("本次份额", preview.shares?.toString() ?: "未知")
+            KeyValueRow("预计剩余份额", preview.remainingShares?.toString() ?: "未知")
+            KeyValueRow("到账账户", preview.targetAccountName ?: "未匹配")
+            KeyValueRow("预计净值日", preview.expectedNavDate ?: "未设置")
+            KeyValueRow("预计确认日", preview.expectedConfirmDate ?: "未设置")
+        }
         if (preview.txnType?.equals("TRANSFER", ignoreCase = true) == true) {
             KeyValueRow("转入账户", preview.targetAccountName ?: "未匹配")
             KeyValueRow("转入账户类型", preview.targetAccountType ?: "未知")
@@ -877,6 +1008,11 @@ private fun PreviewContent(preview: DraftPreviewDto) {
         if (investmentLines.isNotEmpty()) {
             Text("投资付款账本影响：")
             investmentLines.forEach { line -> Text(line) }
+        }
+        val sellRedeemLines = DraftReview.sellRedeemImpactLines(preview)
+        if (sellRedeemLines.isNotEmpty()) {
+            Text("卖出 / 赎回份额占用影响：")
+            sellRedeemLines.forEach { line -> Text(line) }
         }
         val transferLines = DraftReview.transferImpactLines(preview)
         if (transferLines.isNotEmpty()) {
@@ -950,13 +1086,14 @@ private fun AccountPickerSection(
     enabled: Boolean,
     onPick: (MobileAccountDto) -> Unit,
     productAssetType: String? = null,
+    productCurrency: String? = null,
 ) {
     SectionCard(title = title, description = description) {
         val candidates = accounts.filter { account ->
-            DraftAccountSelection.isSelectable(txnType, account, productAssetType)
+            DraftAccountSelection.isSelectable(txnType, account, productAssetType, productCurrency)
         }
         val blocked = accounts.filterNot { account ->
-            DraftAccountSelection.isSelectable(txnType, account, productAssetType)
+            DraftAccountSelection.isSelectable(txnType, account, productAssetType, productCurrency)
         }
         if (candidates.isEmpty()) {
             StatusPill("暂无符合当前交易类型的可选账户")
@@ -977,7 +1114,7 @@ private fun AccountPickerSection(
             Text("以下账户受保护，当前交易类型不可选择：")
             blocked.forEach { account ->
                 Text(
-                    text = "${account.accountName}：${DraftAccountSelection.rejectionReason(txnType, account, productAssetType)}",
+                    text = "${account.accountName}：${DraftAccountSelection.rejectionReason(txnType, account, productAssetType, productCurrency)}",
                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
                 )
             }
@@ -1011,6 +1148,44 @@ private fun ProductPickerSection(
                             (if (selected) "已选 " else "") +
                                 "${product.productName ?: "未命名产品"} · ${product.productCode ?: "无代码"} · " +
                                 "${product.assetType ?: "未知类型"} · ${product.currency ?: "未知币种"}",
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+/**
+ * 卖出 / 赎回草稿的持仓来源选择：只展示 GET /api/v2/holdings/product/{productId}/by-account
+ * 返回的真实持仓账户，必须由主人明确选择，移动端不会按账户名或历史订单自动匹配。
+ */
+@Composable
+private fun HoldingSourcePickerSection(
+    selectedAccountId: String,
+    holdings: List<MobileHoldingByAccountDto>,
+    isLoading: Boolean,
+    enabled: Boolean,
+    onPick: (MobileHoldingByAccountDto) -> Unit,
+) {
+    SectionCard(
+        title = "选择持仓来源",
+        description = "持仓来源来自 GET /api/v2/holdings/product/{productId}/by-account，只展示该产品当前真实持仓账户；可用份额还需扣除仍在 PENDING 的卖出 / 赎回占用。",
+    ) {
+        when {
+            isLoading -> CircularProgressIndicator()
+            holdings.isEmpty() -> StatusPill("该产品暂无可见持仓来源，请先在 PC 端确认持仓或更改产品")
+            else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                holdings.forEach { holding ->
+                    val selected = holding.accountId?.toString() == selectedAccountId.trim()
+                    OutlinedButton(
+                        enabled = enabled,
+                        onClick = { onPick(holding) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            (if (selected) "已选 " else "") +
+                                "${holding.accountName ?: "未知账户"} · 份额 ${formatShares(holding.shares?.toString())}" +
+                                (holding.parentAccountName?.takeIf { it.isNotBlank() }?.let { " · 父账户 $it" } ?: ""),
                         )
                     }
                 }

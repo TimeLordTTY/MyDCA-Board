@@ -246,15 +246,126 @@ class DraftEditStateTest {
     }
 
     @Test
-    fun sellRemainsUnsupportedAndBlocksSave() {
-        val result = DraftEditState.buildUpdateRequest(
+    fun sellAndRedemptionAreSupportedTypes() {
+        val sell = DraftEditState.buildUpdateRequest(
             draft(),
-            DraftEditForm(txnType = "SELL", amount = "1000", accountId = "7", productId = "5"),
+            DraftEditForm(
+                txnType = "SELL",
+                productId = "5",
+                shares = "500",
+                sourceAccountId = "7",
+                targetAccountId = "8",
+            ),
+        )
+        val redemption = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(
+                txnType = "REDEMPTION",
+                productId = "6",
+                shares = "1000",
+                sourceAccountId = "7",
+                targetAccountId = "8",
+            ),
         )
 
-        assertFalse(result.isValid)
-        assertTrue(result.error.orEmpty().contains("BUY"))
-        assertFalse(DraftEditState.SUPPORTED_TXN_TYPES.contains("SELL"))
+        assertTrue(sell.isValid)
+        assertTrue(redemption.isValid)
+        assertTrue(DraftEditState.SUPPORTED_TXN_TYPES.contains("SELL"))
+        assertTrue(DraftEditState.SUPPORTED_TXN_TYPES.contains("REDEMPTION"))
+        assertTrue(DraftEditState.isSellRedeemType("sell"))
+        assertTrue(DraftEditState.isSellRedeemType(" redemption "))
+        assertFalse(DraftEditState.isSellRedeemType("BUY"))
+    }
+
+    @Test
+    fun sellFormRequiresSharesSourceAndTarget() {
+        val missingShares = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "SELL", productId = "5", sourceAccountId = "7", targetAccountId = "8"),
+        )
+        val missingSource = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "SELL", productId = "5", shares = "500", targetAccountId = "8"),
+        )
+        val missingTarget = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(txnType = "SELL", productId = "5", shares = "500", sourceAccountId = "7"),
+        )
+
+        assertFalse(missingShares.isValid)
+        assertTrue(missingShares.error.orEmpty().contains("份额"))
+        assertFalse(missingSource.isValid)
+        assertTrue(missingSource.error.orEmpty().contains("sourceAccountId"))
+        assertFalse(missingTarget.isValid)
+        assertTrue(missingTarget.error.orEmpty().contains("targetAccountId"))
+    }
+
+    @Test
+    fun sellPayloadCarriesSharesSourceAndDropsAmount() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft(),
+            DraftEditForm(
+                txnType = "SELL",
+                productId = "5",
+                productNameHint = "半导体ETF",
+                shares = "500",
+                sourceAccountId = "7",
+                sourceAccountNameHint = "券商账户",
+                targetAccountId = "8",
+                accountId = "999",
+            ),
+        )
+
+        assertTrue(result.isValid)
+        val payload = DraftEditState.parsePayloadJson(result.request?.parsedPayloadJson)
+        assertEquals("SELL", payload["txnType"])
+        assertEquals(500.0, (payload["shares"] as Number).toDouble(), 0.0)
+        assertEquals(5L, (payload["productId"] as Number).toLong())
+        assertEquals(7L, (payload["sourceAccountId"] as Number).toLong())
+        assertEquals(8L, (payload["targetAccountId"] as Number).toLong())
+        assertEquals("半导体ETF", payload["productNameHint"])
+        assertEquals("券商账户", payload["sourceAccountNameHint"])
+        assertFalse(payload.containsKey("amount"))
+        assertFalse(payload.containsKey("accountId"))
+    }
+
+    @Test
+    fun switchingFromSellToExpenseClearsSellFields() {
+        val sellForm = DraftEditForm(
+            txnType = "SELL",
+            productId = "5",
+            productNameHint = "半导体ETF",
+            shares = "500",
+            sourceAccountId = "7",
+            sourceAccountNameHint = "券商账户",
+            targetAccountId = "8",
+        )
+
+        val expense = DraftEditState.switchTxnType(sellForm, "EXPENSE")
+
+        assertEquals("EXPENSE", expense.txnType)
+        assertEquals("", expense.shares)
+        assertEquals("", expense.sourceAccountId)
+        assertEquals("", expense.sourceAccountNameHint)
+        assertEquals("", expense.targetAccountId)
+        assertEquals("", expense.productId)
+    }
+
+    @Test
+    fun formFromDraftReadsBackSellRedeemFields() {
+        val form = DraftEditState.formFromDraft(
+            draft(
+                parsedPayloadJson =
+                """{"txnType":"SELL","shares":500,"productId":5,"sourceAccountId":7,"sourceAccountNameHint":"券商账户","targetAccountId":8}""",
+            ),
+        )
+
+        assertEquals("SELL", form.txnType)
+        assertEquals("500", form.shares)
+        assertEquals("5", form.productId)
+        assertEquals("7", form.sourceAccountId)
+        assertEquals("券商账户", form.sourceAccountNameHint)
+        assertEquals("8", form.targetAccountId)
     }
 
     @Test

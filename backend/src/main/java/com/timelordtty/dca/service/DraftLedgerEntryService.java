@@ -27,8 +27,9 @@ import java.util.Map;
 /**
  * 草稿流水服务，负责 Phase3 自动记账候选记录的保存、预览、确认和忽略。
  *
- * <p>除 confirmDraft 明确调用 QuickEntryService（EXPENSE / INCOME / TRANSFER）或 OrderService（BUY / SUBSCRIPTION）
- * 外，本服务不会写入正式账本、账户余额、持仓成本或订单数据；previewDraft 始终是只读的。</p>
+ * <p>除 confirmDraft 明确调用 QuickEntryService（EXPENSE / INCOME / TRANSFER）或 OrderService
+ * （BUY / SUBSCRIPTION 生成付款账本；SELL / REDEMPTION 只登记份额占用、不生成账本）外，
+ * 本服务不会写入正式账本、账户余额、持仓成本或订单数据；previewDraft 始终是只读的。</p>
  */
 @Service
 public class DraftLedgerEntryService {
@@ -42,24 +43,28 @@ public class DraftLedgerEntryService {
     private final ObjectMapper objectMapper;
     /** 产品主数据只读入口，用于投资草稿校验真实 productId、启用状态和币种。 */
     private final ProductMasterMapper productMasterMapper;
-    /** 订单服务入口，只有主人二次确认投资草稿后才创建 PENDING 订单并生成付款账本。 */
+    /** 订单服务入口，只有主人二次确认投资 / 卖出赎回草稿后才创建 PENDING 订单。 */
     private final OrderService orderService;
+    /** 持仓只读入口，用于 SELL / REDEMPTION 校验真实持仓来源与当前可用份额。 */
+    private final HoldingService holdingService;
 
     /**
-     * 装配草稿 Mapper、快速记账服务、产品只读入口、订单服务和 JSON 编解码器。
+     * 装配草稿 Mapper、快速记账服务、产品只读入口、订单服务、持仓只读入口和 JSON 编解码器。
      */
     public DraftLedgerEntryService(DraftLedgerEntryMapper draftLedgerEntryMapper,
                                    AccountMapper accountMapper,
                                    QuickEntryService quickEntryService,
                                    ObjectMapper objectMapper,
                                    ProductMasterMapper productMasterMapper,
-                                   OrderService orderService) {
+                                   OrderService orderService,
+                                   HoldingService holdingService) {
         this.draftLedgerEntryMapper = draftLedgerEntryMapper;
         this.accountMapper = accountMapper;
         this.quickEntryService = quickEntryService;
         this.objectMapper = objectMapper;
         this.productMasterMapper = productMasterMapper;
         this.orderService = orderService;
+        this.holdingService = holdingService;
     }
 
     /**
@@ -199,7 +204,8 @@ public class DraftLedgerEntryService {
     }
 
     /**
-     * 确认草稿并转为正式流水；支持 EXPENSE / INCOME / TRANSFER（QuickEntryService）与 BUY / SUBSCRIPTION（OrderService）。
+     * 确认草稿并转为正式流水；支持 EXPENSE / INCOME / TRANSFER（QuickEntryService）、BUY / SUBSCRIPTION（OrderService 生成付款账本）
+     * 与 SELL / REDEMPTION（OrderService 只创建 PENDING 订单并登记份额占用）。
      *
      * <p>确认前会重新生成 fresh preview 并复用同一套校验规则；confirmSupported=false 时直接拒绝。
      * 投资草稿确认只创建 PENDING 订单并生成付款账本，不结算、不生成最终持仓。</p>
@@ -242,8 +248,16 @@ public class DraftLedgerEntryService {
                     preview.getProductId(), preview.getTxnType(), preview.getAmount(), preview.getAccountId(),
                     preview.getExpectedNavDate(), preview.getExpectedConfirmDate(), preview.getNote());
             confirmedOrderId = order.getOrderId();
+        } else if (isSellRedeemType(preview.getTxnType())) {
+            // 只有这里会在主人二次确认后创建 PENDING 卖出 / 赎回订单，并且只登记 SOURCE / TARGET 份额占用；
+            // 本服务绝不调用 SettlementService，也绝不生成任何 CASH / POSITION 流水或持仓变化。
+            Order order = orderService.createSellRedeemDraftOrder(userId, draft.getOwnerFamilyId(),
+                    preview.getProductId(), preview.getTxnType(), preview.getShares(),
+                    preview.getAccountId(), preview.getTargetAccountId(),
+                    preview.getExpectedNavDate(), preview.getExpectedConfirmDate(), preview.getNote());
+            confirmedOrderId = order.getOrderId();
         } else {
-            throw new RuntimeException("草稿确认仅支持 EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION");
+            throw new RuntimeException("草稿确认仅支持 EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION/SELL/REDEMPTION");
         }
 
         int updated = draftLedgerEntryMapper.markConfirmed(draftId, confirmedTxnId, confirmedOrderId);
@@ -307,6 +321,10 @@ public class DraftLedgerEntryService {
 
         if (isInvestmentType(preview.getTxnType())) {
             return buildInvestmentPreview(preview, payload, draft);
+        }
+
+        if (isSellRedeemType(preview.getTxnType())) {
+            return buildSellRedeemPreview(preview, payload, draft);
         }
 
         boolean transfer = "TRANSFER".equals(preview.getTxnType());
@@ -405,7 +423,7 @@ public class DraftLedgerEntryService {
             preview.setMessage("可确认：将通过 QuickEntryService 生成正式" + preview.getTxnType() + "流水");
             warnings.add("预览阶段不会写入正式账本；只有点击确认后才会生成正式流水。");
         } else if (!supportedType) {
-            preview.setMessage("草稿确认仅支持 EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION 记账");
+            preview.setMessage("草稿确认仅支持 EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION/SELL/REDEMPTION 记账");
         } else if (accountUnavailable) {
             preview.setMessage("草稿账户不存在、已停用或当前用户/家庭不可见，请重新选择账户。");
         } else if (targetAccountUnavailable) {
@@ -421,9 +439,202 @@ public class DraftLedgerEntryService {
         return preview;
     }
 
-    /** 判断草稿类型是否为投资买入 / 申购；本轮只支持 BUY 与 SUBSCRIPTION。 */
+    /** 判断草稿类型是否为投资买入 / 申购；BUY 与 SUBSCRIPTION 确认后会生成付款账本。 */
     private boolean isInvestmentType(String txnType) {
         return "BUY".equals(txnType) || "SUBSCRIPTION".equals(txnType);
+    }
+
+    /** 判断草稿类型是否为卖出 / 赎回；SELL 与 REDEMPTION 确认后只创建 PENDING 订单，不生成账本。 */
+    private boolean isSellRedeemType(String txnType) {
+        return "SELL".equals(txnType) || "REDEMPTION".equals(txnType);
+    }
+    /**
+     * 只读生成 SELL / REDEMPTION 确认预览，与 confirm 复用同一套安全规则。
+     *
+     * <p>本方法绝不调用 OrderService.createOrder / createSellRedeemDraftOrder、LedgerService 或
+     * SettlementService；不创建订单、不写正式账本、不改现金余额、不改持仓。</p>
+     *
+     * <p>可用份额 = 该产品在持仓来源账户下的真实持仓份额 - 同产品 / 来源账户下仍为 PENDING 的
+     * SELL / REDEMPTION 占用份额；到账账户必须是当前 user/family 可见、启用的 REAL 叶子账户，
+     * 币种与产品一致，且不能是 POSITION 持仓账户或父账户。</p>
+     */
+    private DraftPreviewDTO buildSellRedeemPreview(DraftPreviewDTO preview, Map<String, Object> payload,
+                                                   DraftLedgerEntry draft) {
+        boolean sell = "SELL".equals(preview.getTxnType());
+        preview.setOrderType(preview.getTxnType());
+        preview.setProductId(firstLong(payload, "productId"));
+        String productNameHint = firstString(payload, "productNameHint");
+        preview.setExpectedNavDate(firstString(payload, "expectedNavDate"));
+        preview.setExpectedConfirmDate(firstString(payload, "expectedConfirmDate"));
+        BigDecimal shares = firstBigDecimal(payload, "shares");
+        preview.setShares(shares);
+
+        List<String> missing = new ArrayList<>();
+        List<String> warnings = new ArrayList<>();
+        boolean sharesInvalid = shares == null || shares.compareTo(BigDecimal.ZERO) <= 0;
+        if (sharesInvalid) {
+            missing.add("shares");
+            warnings.add("份额 shares 必须大于 0，才能确认卖出 / 赎回订单。");
+        }
+        if (preview.getProductId() == null) {
+            missing.add("productId");
+        }
+        if (preview.getAccountId() == null) {
+            missing.add("sourceAccountId");
+        }
+        if (preview.getTargetAccountId() == null) {
+            missing.add("targetAccountId");
+        }
+
+        ProductMaster product = null;
+        if (preview.getProductId() != null) {
+            product = productMasterMapper.selectById(preview.getProductId());
+            if (product == null) {
+                addIfAbsent(missing, "productId");
+                warnings.add("产品不存在或已被删除，请重新选择启用的产品。");
+            } else if (!Boolean.TRUE.equals(product.getIsActive())) {
+                addIfAbsent(missing, "productId");
+                warnings.add("产品已停用，不能再用于卖出 / 赎回草稿，请重新选择启用产品。");
+            } else {
+                preview.setProductName(product.getProductName());
+                preview.setProductCode(product.getProductCode());
+                preview.setProductAssetType(product.getAssetType());
+                preview.setProductCurrency(product.getCurrency());
+            }
+        } else {
+            addIfAbsent(missing, "productId");
+            String hintSuffix = productNameHint == null ? "" :
+                    "当前产品名称提示 " + productNameHint + " 只作参考。";
+            warnings.add("请在 App / PC 明确选择真实产品；系统不会按产品名称自动匹配 productId。" + hintSuffix);
+        }
+
+        BigDecimal availableShares = null;
+        if (preview.getAccountId() == null) {
+            warnings.add("请选择该产品当前真实的持仓来源账户；系统不会自动匹配持仓来源。");
+        } else if (product != null) {
+            HoldingService.AccountHoldingInfo source =
+                    findHoldingSource(draft, preview.getProductId(), preview.getAccountId());
+            if (source == null) {
+                addIfAbsent(missing, "sourceAccountId");
+                warnings.add("持仓来源账户不是该产品当前的真实持仓来源，或当前用户/家庭不可见，请重新选择。");
+            } else {
+                preview.setAccountName(source.getAccountName());
+                BigDecimal held = source.getShares() != null ? source.getShares() : BigDecimal.ZERO;
+                BigDecimal occupied = orderService.sumPendingSellSharesByAccount(
+                        preview.getProductId(), draft.getOwnerUserId(), source.getAccountId());
+                availableShares = held.subtract(occupied);
+                if (availableShares.compareTo(BigDecimal.ZERO) < 0) {
+                    availableShares = BigDecimal.ZERO;
+                }
+                preview.setAvailableShares(availableShares);
+                if (availableShares.compareTo(BigDecimal.ZERO) <= 0) {
+                    addIfAbsent(missing, "sourceAccountId");
+                    warnings.add("该持仓来源当前可用份额为 0（真实持仓 "
+                            + displayShares(held) + "，已被 PENDING 卖出 / 赎回占用 "
+                            + displayShares(occupied) + "），不能再卖出 / 赎回。");
+                } else if (!sharesInvalid && shares.compareTo(availableShares) > 0) {
+                    addIfAbsent(missing, "shares");
+                    warnings.add("本次份额超过可用份额（可用 " + displayShares(availableShares)
+                            + "），请减少份额，或先等待 PENDING 卖出 / 赎回订单结算 / 取消。");
+                }
+            }
+        }
+
+        if (preview.getTargetAccountId() == null) {
+            warnings.add("请选择本次资金的到账账户；系统不会自动匹配到账账户。");
+        } else {
+            Account target = accountMapper.selectVisibleRealById(preview.getTargetAccountId(),
+                    draft.getOwnerUserId(), draft.getOwnerFamilyId());
+            if (target == null) {
+                addIfAbsent(missing, "targetAccountId");
+                warnings.add("到账账户不存在、已停用或当前用户/家庭不可见，请重新选择可用账户。");
+            } else {
+                preview.setTargetAccountName(target.getAccountName());
+                preview.setTargetAccountType(target.getAccountType());
+                preview.setTargetFundUsage(target.getFundUsage());
+                if (!accountMapper.selectChildren(target.getId()).isEmpty()) {
+                    addIfAbsent(missing, "targetAccountId");
+                    warnings.add("到账账户是父账户，仅用于聚合展示；请选择其下的叶子账户。");
+                }
+                if ("POSITION".equalsIgnoreCase(target.getAccountType())) {
+                    addIfAbsent(missing, "targetAccountId");
+                    warnings.add("到账账户不能是 POSITION 持仓账户；请选择现金类 REAL 叶子账户。");
+                }
+                if (product != null && !currencyEquals(target.getCurrency(), product.getCurrency())) {
+                    addIfAbsent(missing, "targetAccountId");
+                    warnings.add("到账账户币种与产品币种不一致，请选择币种一致的到账账户。");
+                }
+            }
+        }
+
+        preview.setMissingFields(missing);
+        // SELL / REDEMPTION 确认只登记份额占用：不生成流水、不改现金余额、不改持仓。
+        preview.setImpactDirection("NONE");
+        preview.setAccountDelta(BigDecimal.ZERO);
+        preview.setTargetAccountDelta(BigDecimal.ZERO);
+        preview.setReceivableDelta(BigDecimal.ZERO);
+        preview.setWillCreateLedgerTxn(false);
+        preview.setWillCreateSettlement(false);
+        preview.setWillAffectHolding(false);
+
+        boolean ready = missing.isEmpty();
+        preview.setConfirmSupported(ready);
+        preview.setWillCreateOrder(ready);
+        if (availableShares != null && !sharesInvalid) {
+            BigDecimal remaining = availableShares.subtract(shares);
+            preview.setRemainingShares(remaining.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : remaining);
+        }
+
+        String action = sell ? "卖出" : "赎回";
+        String productLabel = preview.getProductName() != null ? preview.getProductName()
+                : (productNameHint != null ? productNameHint : "所选产品");
+        String sourceLabel = preview.getAccountName() != null ? preview.getAccountName() : "所选持仓来源";
+        String targetLabel = preview.getTargetAccountName() != null ? preview.getTargetAccountName() : "所选到账账户";
+        if (ready) {
+            String sharesText = displayShares(shares);
+            preview.setSharesMessage("确认后只创建内部 PENDING " + action + "记录并占用 " + sourceLabel + " 的 "
+                    + sharesText + " 份；不会立即减少持仓，也不会立即增加 " + targetLabel
+                    + " 的到账余额。");
+            preview.setMessage("可确认：将创建 PENDING " + action + "订单（产品 " + productLabel
+                    + "），仅登记内部待处理份额占用；确认后持仓与现金余额保持不变，"
+                    + "真正的资金与持仓变化只在后续人工结算时产生。");
+            warnings.add("预览阶段不会创建订单、不会写入账本、不会结算；只有主人再次确认后才会创建 PENDING 订单。");
+        } else if (!warnings.isEmpty()) {
+            preview.setMessage(warnings.get(0));
+        } else {
+            preview.setMessage("草稿缺少必要字段：" + String.join(", ", missing));
+        }
+        preview.setWarnings(warnings);
+        return preview;
+    }
+
+    /**
+     * 在指定产品的持仓来源中查找该账户；只使用 HoldingService 按当前 user/family 计算的真实持仓，
+     * 找不到时返回 null，绝不按账户名称或历史订单猜测持仓来源。
+     */
+    private HoldingService.AccountHoldingInfo findHoldingSource(DraftLedgerEntry draft, Long productId, Long accountId) {
+        if (productId == null || accountId == null) {
+            return null;
+        }
+        List<HoldingService.AccountHoldingInfo> holdings = holdingService.getProductHoldingsByAccount(
+                productId, draft.getOwnerUserId(), draft.getOwnerFamilyId());
+        if (holdings == null) {
+            return null;
+        }
+        for (HoldingService.AccountHoldingInfo holding : holdings) {
+            if (holding != null && accountId.equals(holding.getAccountId())) {
+                return holding;
+            }
+        }
+        return null;
+    }
+
+    /** 份额展示文案：去掉无意义尾随零，空值按 0 处理。 */
+    private String displayShares(BigDecimal shares) {
+        if (shares == null) {
+            return "0";
+        }
+        return shares.stripTrailingZeros().toPlainString();
     }
 
     /**

@@ -49,4 +49,17 @@
         WHERE order_id = #{orderId}
     </delete>
 
+    <select id="sumPendingSellSharesByAccount" resultType="java.math.BigDecimal">
+        SELECT COALESCE(SUM(ofl.shares), 0)
+        FROM order_funding_line ofl
+        JOIN orders o ON o.order_id = ofl.order_id
+        WHERE o.product_id = #{productId}
+        AND o.user_id = #{userId}
+        AND o.status = 'PENDING'
+        AND o.order_type IN ('SELL', 'REDEMPTION')
+        AND ofl.account_id = #{accountId}
+        AND ofl.line_type = 'SOURCE'
+        AND ofl.shares IS NOT NULL
+    </select>
+
 </mapper>

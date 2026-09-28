@@ -8,6 +8,7 @@ import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import com.timelordtty.mydca.data.dto.IgnoreDraftRequestDto
 import com.timelordtty.mydca.data.dto.MobileAccountDto
 import com.timelordtty.mydca.data.dto.MobileCashFlowDto
+import com.timelordtty.mydca.data.dto.MobileHoldingByAccountDto
 import com.timelordtty.mydca.data.dto.MobileHoldingDto
 import com.timelordtty.mydca.data.dto.MobileOverviewDto
 import com.timelordtty.mydca.data.dto.MobilePageDto
@@ -64,6 +65,24 @@ class WealthRepositoryTest {
         val serverError = HttpException(Response.error<Any>(500, "".toResponseBody("text/plain".toMediaType())))
         assertEquals("服务暂时不可用，请稍后重试", serverError.toUserMessage())
     }
+
+    @Test
+    fun getProductHoldingsByAccountReturnsSuccess() = runTest {
+        val repository = WealthRepository(
+            api = object : FakeWealthHubApi() {
+                override suspend fun getProductHoldingsByAccount(productId: Long): List<MobileHoldingByAccountDto> {
+                    return listOf(
+                        MobileHoldingByAccountDto(accountId = 7, accountName = "券商账户", shares = 1000.0),
+                    )
+                }
+            }
+        )
+
+        val result = repository.getProductHoldingsByAccount(5L)
+
+        assertTrue(result is NetworkResult.Success)
+        assertEquals(7L, (result as NetworkResult.Success).data.first().accountId)
+    }
 }
 
 private open class FakeWealthHubApi : WealthHubApi {
@@ -83,4 +102,5 @@ private open class FakeWealthHubApi : WealthHubApi {
     override suspend fun getMobileTransactions(page: Int, pageSize: Int): MobilePageDto<MobileTransactionDto> = throw UnsupportedOperationException()
     override suspend fun getMobileHoldings(page: Int, pageSize: Int): MobilePageDto<MobileHoldingDto> = throw UnsupportedOperationException()
     override suspend fun getProducts(keyword: String?, assetType: String?, channel: String?): List<ProductDto> = throw UnsupportedOperationException()
+    override suspend fun getProductHoldingsByAccount(productId: Long): List<MobileHoldingByAccountDto> = throw UnsupportedOperationException()
 }

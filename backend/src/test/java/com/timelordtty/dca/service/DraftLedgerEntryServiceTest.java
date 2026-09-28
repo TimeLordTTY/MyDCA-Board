@@ -42,7 +42,7 @@ class DraftLedgerEntryServiceTest {
     private final QuickEntryService quickEntryService = mock(QuickEntryService.class);
     private final ProductMasterMapper productMasterMapper = mock(ProductMasterMapper.class);
     private final OrderService orderService = mock(OrderService.class);
-    private final DraftLedgerEntryService service = new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService);
+    private final DraftLedgerEntryService service = new DraftLedgerEntryService(mapper, accountMapper, quickEntryService, new ObjectMapper(), productMasterMapper, orderService, mock(HoldingService.class));
 
     @Test
     void previewDraftOnlyUpdatesPreviewPayloadAndDoesNotPostLedger() {
@@ -249,8 +249,8 @@ class DraftLedgerEntryServiceTest {
     @Test
     void previewUnsupportedTypeKeepsImpactAndLedgerCreationDisabled() {
         DraftLedgerEntry draft = draft("DRAFT");
-        // SELL / REDEMPTION 属于下一阶段的独立任务，本版本仍不支持，用它验证“不支持类型”分支。
-        draft.setParsedPayloadJson("{\"txnType\":\"SELL\",\"accountId\":7,\"amount\":12.34}");
+        // DIVIDEND 等非记账类型仍不支持，用它验证“不支持类型”分支；SELL / REDEMPTION 已在 v0.12 支持。
+        draft.setParsedPayloadJson("{\"txnType\":\"DIVIDEND\",\"accountId\":7,\"amount\":12.34}");
         when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(draft);
         when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "证券账户", "BROKER", "INVESTABLE"));
 
@@ -309,14 +309,14 @@ class DraftLedgerEntryServiceTest {
     @Test
     void confirmUnsupportedTypeFailsWithoutPostingLedger() {
         DraftLedgerEntry draft = draft("DRAFT");
-        // SELL / REDEMPTION 属于下一阶段的独立任务，本版本仍不支持，用它验证“不支持类型”分支。
-        draft.setParsedPayloadJson("{\"txnType\":\"SELL\",\"accountId\":7,\"amount\":12.34}");
+        // DIVIDEND 等非记账类型仍不支持，用它验证“不支持类型”分支；SELL / REDEMPTION 已在 v0.12 支持。
+        draft.setParsedPayloadJson("{\"txnType\":\"DIVIDEND\",\"accountId\":7,\"amount\":12.34}");
         when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(draft);
         when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "证券账户", "BROKER", "INVESTABLE"));
 
         RuntimeException error = assertThrows(RuntimeException.class, () -> service.confirmDraft(10L, 20L, 1L));
 
-        assertTrue(error.getMessage().contains("EXPENSE/INCOME"));
+        assertTrue(error.getMessage().contains("EXPENSE/INCOME/TRANSFER/BUY/SUBSCRIPTION/SELL/REDEMPTION"));
         verify(quickEntryService, never()).quickExpense(any(), any(), any(), any());
         verify(quickEntryService, never()).quickIncome(any(), any(), any(), any());
         verify(mapper, never()).markConfirmed(any(), any(), any());
@@ -693,7 +693,7 @@ class DraftLedgerEntryServiceTest {
         });
         when(statefulMapper.selectVisibleById(any(), any(), any()))
                 .thenAnswer(invocation -> visibleById(store, invocation.getArgument(0)));
-        statefulService = new DraftLedgerEntryService(statefulMapper, mock(AccountMapper.class), statefulQuickEntryService, new ObjectMapper(), mock(ProductMasterMapper.class), mock(OrderService.class));
+        statefulService = new DraftLedgerEntryService(statefulMapper, mock(AccountMapper.class), statefulQuickEntryService, new ObjectMapper(), mock(ProductMasterMapper.class), mock(OrderService.class), mock(HoldingService.class));
     }
 
     private DraftLedgerEntry visibleBySource(List<DraftLedgerEntry> store, Long userId, Long familyId,
