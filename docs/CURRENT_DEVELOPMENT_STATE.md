@@ -153,10 +153,10 @@
 ## 当前真正未完成
 
 1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **投资订单类草稿确认**：当前 BUY / SUBSCRIPTION / SELL / REDEMPTION 仍未纳入草稿确认闭环；下一步先做买入 / 申购，确认只创建系统内 PENDING 订单，不自动结算、不自动交易。
+2. **投资订单类草稿确认**：当前 BUY / SUBSCRIPTION / SELL / REDEMPTION 仍未纳入草稿确认闭环；下一步先做买入 / 申购。现有 OrderService 对 BUY / SUBSCRIPTION 的真实语义是：创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）；因此新 preview 必须把该资金影响明确展示出来，不能把它描述成“只占用资金”。仍不自动结算、不生成最终持仓、不调用真实交易渠道。
 3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
 4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：**v0.11.0 投资买入 / 申购草稿闭环**。在不改变“输入/解析 → DRAFT → fresh preview → 主人二次确认”的安全边界下，BUY / SUBSCRIPTION 的确认结果只创建系统内 PENDING 订单并按现有 OrderService 规则占用资金；不自动结算、不生成成交、不调用任何真实交易渠道。
+下一项普通、可自动化的业务任务：**v0.11.0 投资买入 / 申购草稿闭环**。在不改变“输入/解析 → DRAFT → fresh preview → 主人二次确认”的安全边界下，BUY / SUBSCRIPTION 的确认要复用现有 OrderService；preview 必须明确显示“将创建 PENDING 订单，并同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT）”。不自动结算、不生成最终持仓、不调用任何真实交易渠道。

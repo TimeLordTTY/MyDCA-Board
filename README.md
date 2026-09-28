@@ -87,6 +87,6 @@ Android 常用验证：
 
 ## 当前下一步
 
-下一项普通工程任务：**v0.11.0 投资买入 / 申购草稿闭环**。先把 BUY / SUBSCRIPTION 做成“候选 → DRAFT → 订单影响预览 → 主人二次确认 → 创建系统内 PENDING 订单”，不自动结算、不自动交易；真机验收继续作为人工项保留。
+下一项普通工程任务：**v0.11.0 投资买入 / 申购草稿闭环**。先把 BUY / SUBSCRIPTION 做成“候选 → DRAFT → 订单/资金影响预览 → 主人二次确认 → 复用现有 OrderService 创建系统内 PENDING 订单”。必须按现有真实语义明确展示：买入/申购创建订单时会同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），但不会自动结算、不会生成最终持仓，也不会连接任何真实交易渠道。
 
 完整当前状态与长期文档关系见 `docs/CURRENT_DEVELOPMENT_STATE.md` 和 `docs/DOCUMENT_INDEX.md`。
