@@ -197,8 +197,13 @@ Android（`gradlew.bat --no-daemon testDebugUnitTest`）：
 | Artifact 名 | `mydca-android-v0.10.0-<sha>` | 同上 |
 
 - 继续使用一次性 debug 签名（`assembleDebug`），不新增 release signing key，APK 不提交到 Git。
-- **CI 制品状态：`NOT_PRODUCED`**。本轮执行进程只做本地提交，**未 push**，因此没有触发真实 `Android test APK` 工作流；Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 需在真实推送后回填，不得用本地 debug 哈希冒充。
-- 最近一次真实 CI 制品仍是 v0.9.0（Run `36367375440`、Artifact `10946904834`）。
+- CI source commit：`e5c544db7d90f82858ddc03a1ca285ec7659e037`
+- GitHub Actions `Android test APK`：Run `36369966197`，结论 `success`
+- Artifact ID：`10949105553`
+- Artifact：`mydca-android-v0.10.0-e5c544db7d90f82858ddc03a1ca285ec7659e037`
+- APK：`MyDCA-Board-v0.10.0-e5c544db.apk`
+- CI APK SHA-256：`FD39508EA408807DB5ECEEBAFD2B2F4630D766447398E29D1397D8721A5304F0`
+- 该 SHA-256 来自 CI Artifact 内 `SHA256SUMS.txt`，不是本地 debug APK 哈希。
 
 ## 8. 与后续工作的关系
 

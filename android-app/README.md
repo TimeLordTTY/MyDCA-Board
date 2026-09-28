@@ -7,13 +7,12 @@
 - v0.10.0 TRANSFER 转账草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账，转账表单支持转出 / 转入双账户、双账户影响预览与「确认将 ¥X 从 A 转到 B？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复记账。
 - v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
 - v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
-- 最近一次真实 CI 制品仍是 v0.9.0：
-- Run ID `36367375440`
-- Artifact ID `10946904834`
-- Artifact `mydca-android-v0.9.0-7fe07527a8d793018d4d7f284a5643359873ddd0`
-- APK `MyDCA-Board-v0.9.0-7fe07527.apk`
-- CI APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
-- v0.10.0 制品状态：`NOT_PRODUCED`（本轮只提交、未 push，未触发 `Android test APK`）。
+- v0.10.0 已有真实成功 CI 制品：
+- Run ID `36369966197`
+- Artifact ID `10949105553`
+- Artifact `mydca-android-v0.10.0-e5c544db7d90f82858ddc03a1ca285ec7659e037`
+- APK `MyDCA-Board-v0.10.0-e5c544db.apk`
+- CI APK SHA-256 `FD39508EA408807DB5ECEEBAFD2B2F4630D766447398E29D1397D8721A5304F0`
 
 <!-- CURRENT-SNAPSHOT:END -->
 

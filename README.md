@@ -66,7 +66,12 @@ v0.9.0 已有真实成功 CI 制品：
 - APK `MyDCA-Board-v0.9.0-7fe07527.apk`
 - CI APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
 
-v0.10.0 本轮只提交、未 push，未触发工作流，制品状态为 `NOT_PRODUCED`；Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 需在真实推送后回填。
+v0.10.0 已有真实成功 CI 制品：
+- Run ID `36369966197`
+- Artifact ID `10949105553`
+- Artifact `mydca-android-v0.10.0-e5c544db7d90f82858ddc03a1ca285ec7659e037`
+- APK `MyDCA-Board-v0.10.0-e5c544db.apk`
+- CI APK SHA-256 `FD39508EA408807DB5ECEEBAFD2B2F4630D766447398E29D1397D8721A5304F0`
 
 ## 构建与验证
 
@@ -82,6 +87,6 @@ Android 常用验证：
 
 ## 当前下一步
 
-下一项普通工程任务：**v0.10.0 真机验收与 CI 制品回填**（转账双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，以及桌面小组件添加 / 尺寸回调 / 点击跳转）；任何新入口都仍只允许用户显式生成 DRAFT。
+下一项普通工程任务：**v0.11.0 投资买入 / 申购草稿闭环**。先把 BUY / SUBSCRIPTION 做成“候选 → DRAFT → 订单影响预览 → 主人二次确认 → 创建系统内 PENDING 订单”，不自动结算、不自动交易；真机验收继续作为人工项保留。
 
 完整当前状态与长期文档关系见 `docs/CURRENT_DEVELOPMENT_STATE.md` 和 `docs/DOCUMENT_INDEX.md`。

@@ -84,9 +84,15 @@
 
 ## Android CI APK 真实证据
 
-### v0.10.0（CI 未产出）
-- 状态：`NOT_PRODUCED`
-- 说明：本轮执行进程只做本地提交、**未 push**，未触发 `Android test APK`；Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 需在真实推送后回填，不得用本地 debug 哈希冒充。
+### v0.10.0
+- source commit：`e5c544db7d90f82858ddc03a1ca285ec7659e037`
+- GitHub Actions：`Android test APK`
+- Run ID：`36369966197`
+- 结论：`success`
+- Artifact ID：`10949105553`
+- Artifact：`mydca-android-v0.10.0-e5c544db7d90f82858ddc03a1ca285ec7659e037`
+- APK：`MyDCA-Board-v0.10.0-e5c544db.apk`
+- CI APK SHA-256：`FD39508EA408807DB5ECEEBAFD2B2F4630D766447398E29D1397D8721A5304F0`
 
 ### v0.9.0
 - source commit：`7fe07527a8d793018d4d7f284a5643359873ddd0`
@@ -147,10 +153,10 @@
 ## 当前真正未完成
 
 1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **v0.10.0 CI 制品证据**：v0.10.0 尚未真实推送触发 `Android test APK`，Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待回填。
+2. **投资订单类草稿确认**：当前 BUY / SUBSCRIPTION / SELL / REDEMPTION 仍未纳入草稿确认闭环；下一步先做买入 / 申购，确认只创建系统内 PENDING 订单，不自动结算、不自动交易。
 3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
 4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：**v0.10.0 真机验收与 CI 制品回填**（转账双账户选择 / 确认弹窗 / 流水页转出与转入两条视图；桌面小组件添加 / 尺寸回调 / 点击跳转）。在不改变“DRAFT → fresh preview → 用户二次确认 → 正式账本”的安全边界下，投资订单 / 结算类草稿确认与持仓影响作为后续独立任务推进。
+下一项普通、可自动化的业务任务：**v0.11.0 投资买入 / 申购草稿闭环**。在不改变“输入/解析 → DRAFT → fresh preview → 主人二次确认”的安全边界下，BUY / SUBSCRIPTION 的确认结果只创建系统内 PENDING 订单并按现有 OrderService 规则占用资金；不自动结算、不生成成交、不调用任何真实交易渠道。
