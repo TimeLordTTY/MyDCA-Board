@@ -1,7 +1,9 @@
 package com.timelordtty.dca.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -454,6 +456,213 @@ class DraftLedgerEntryServiceTest {
         verifyNoInteractions(quickEntryService);
     }
 
+    @Test
+    void transferPreviewRequiresSourceAccount() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"targetAccountId\":8,\"amount\":100}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(account(8L, "工资卡", "BANK", "SPENDABLE"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals("TRANSFER", preview.getTxnType());
+        assertFalse(preview.getConfirmSupported());
+        assertFalse(preview.getWillCreateLedgerTxn());
+        assertTrue(preview.getMissingFields().contains("accountId"));
+        assertFalse(preview.getMissingFields().contains("targetAccountId"));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewRequiresTargetAccount() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"amount\":100}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertFalse(preview.getConfirmSupported());
+        assertTrue(preview.getMissingFields().contains("targetAccountId"));
+        assertNull(preview.getTargetAccountId());
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewBlocksIdenticalSourceAndTarget() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":7,\"amount\":100}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertFalse(preview.getConfirmSupported());
+        assertTrue(preview.getMissingFields().contains("targetAccountId"));
+        assertTrue(preview.getMessage().contains("不能相同"));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewBlocksUnavailableOrParentSourceAccount() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":8,\"amount\":100}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(account(8L, "工资卡", "BANK", "SPENDABLE"));
+
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(null);
+        DraftPreviewDTO unavailable = service.previewDraft(10L, 20L, 1L);
+        assertFalse(unavailable.getConfirmSupported());
+        assertTrue(unavailable.getMissingFields().contains("accountId"));
+
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "父账户", "BANK", "SPENDABLE"));
+        when(accountMapper.selectChildren(7L)).thenReturn(List.of(account(70L, "子账户", "BANK", "SPENDABLE")));
+        DraftPreviewDTO parent = service.previewDraft(10L, 20L, 1L);
+        assertFalse(parent.getConfirmSupported());
+        assertTrue(parent.getMissingFields().contains("accountId"));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewBlocksUnavailableOrParentTargetAccount() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":8,\"amount\":100}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(null);
+        DraftPreviewDTO unavailable = service.previewDraft(10L, 20L, 1L);
+        assertFalse(unavailable.getConfirmSupported());
+        assertTrue(unavailable.getMissingFields().contains("targetAccountId"));
+
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(account(8L, "父账户", "BANK", "SPENDABLE"));
+        when(accountMapper.selectChildren(8L)).thenReturn(List.of(account(80L, "子账户", "BANK", "SPENDABLE")));
+        DraftPreviewDTO parent = service.previewDraft(10L, 20L, 1L);
+        assertFalse(parent.getConfirmSupported());
+        assertTrue(parent.getMissingFields().contains("targetAccountId"));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewBlocksDifferentCurrency() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":8,\"amount\":100}");
+        Account usdAccount = account(8L, "美元账户", "BANK", "SPENDABLE");
+        usdAccount.setCurrency("USD");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(usdAccount);
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertFalse(preview.getConfirmSupported());
+        assertTrue(preview.getMissingFields().contains("targetAccountId"));
+        assertTrue(preview.getMessage().contains("币种"));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewAllowsReservedToSpendableWithRiskWarning() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":2,\"targetAccountId\":1,\"amount\":300}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(2L, 10L, 20L)).thenReturn(account(2L, "专款账户", "BANK", "RESERVED"));
+        when(accountMapper.selectVisibleRealById(1L, 10L, 20L)).thenReturn(account(1L, "日常账户", "CASH", "SPENDABLE"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals(true, preview.getConfirmSupported());
+        assertEquals("RESERVED", preview.getFundUsage());
+        assertEquals("SPENDABLE", preview.getTargetFundUsage());
+        assertEquals(new BigDecimal("-300"), preview.getAccountDelta());
+        assertEquals(new BigDecimal("300"), preview.getTargetAccountDelta());
+        assertEquals("日常账户", preview.getTargetAccountName());
+        assertTrue(preview.getWarnings().stream()
+                .anyMatch(warning -> warning.contains("RESERVED") && warning.contains("SPENDABLE")));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void transferPreviewAllowsInvestableToReservedWithRiskWarning() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":3,\"targetAccountId\":2,\"amount\":500}");
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(3L, 10L, 20L)).thenReturn(account(3L, "投资账户", "BANK", "INVESTABLE"));
+        when(accountMapper.selectVisibleRealById(2L, 10L, 20L)).thenReturn(account(2L, "专款账户", "BANK", "RESERVED"));
+
+        DraftPreviewDTO preview = service.previewDraft(10L, 20L, 1L);
+
+        assertEquals(true, preview.getConfirmSupported());
+        assertEquals("INVESTABLE", preview.getFundUsage());
+        assertEquals("RESERVED", preview.getTargetFundUsage());
+        assertTrue(preview.getWarnings().stream()
+                .anyMatch(warning -> warning.contains("INVESTABLE") && warning.contains("RESERVED")));
+        verify(mapper).updatePreview(eq(1L), any(String.class));
+        verifyNoInteractions(quickEntryService);
+    }
+
+    @Test
+    void confirmTransferDraftUsesQuickTransferOnceAndMarksConfirmed() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":8,"
+                + "\"amount\":100,\"note\":\"月度资金分区\"}");
+        LedgerTxn txn = new LedgerTxn();
+        txn.setTxnId("TXN-TRANSFER-1");
+
+        when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(mapper.selectVisibleById(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(account(8L, "工资卡", "BANK", "SPENDABLE"));
+        when(quickEntryService.quickTransfer(10L, 20L, 7L, 8L, new BigDecimal("100"), "月度资金分区"))
+                .thenReturn(txn);
+        when(mapper.markConfirmed(1L, "TXN-TRANSFER-1", null)).thenReturn(1);
+
+        service.confirmDraft(10L, 20L, 1L);
+
+        verify(quickEntryService).quickTransfer(10L, 20L, 7L, 8L, new BigDecimal("100"), "月度资金分区");
+        verify(mapper).markConfirmed(1L, "TXN-TRANSFER-1", null);
+    }
+
+    @Test
+    void replayingConfirmedTransferDraftDoesNotCreateSecondTransfer() {
+        DraftLedgerEntry confirmed = draft("CONFIRMED");
+        confirmed.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":8,\"amount\":100}");
+        when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(confirmed);
+
+        service.confirmDraft(10L, 20L, 1L);
+
+        verifyNoInteractions(quickEntryService);
+        verify(mapper, never()).markConfirmed(any(), any(), any());
+    }
+
+    @Test
+    void transferConfirmStatusUpdateFailureThrowsForRollback() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"targetAccountId\":8,\"amount\":100}");
+        LedgerTxn txn = new LedgerTxn();
+        txn.setTxnId("TXN-TRANSFER-2");
+        when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+        when(accountMapper.selectVisibleRealById(8L, 10L, 20L)).thenReturn(account(8L, "工资卡", "BANK", "SPENDABLE"));
+        when(quickEntryService.quickTransfer(10L, 20L, 7L, 8L, new BigDecimal("100"), null)).thenReturn(txn);
+        when(mapper.markConfirmed(1L, "TXN-TRANSFER-2", null)).thenReturn(0);
+
+        RuntimeException error = assertThrows(RuntimeException.class, () -> service.confirmDraft(10L, 20L, 1L));
+
+        assertTrue(error.getMessage().contains("回滚"));
+    }
+
+    @Test
+    void confirmTransferDraftRequiresFreshSupportingPreview() {
+        DraftLedgerEntry transferDraft = draft("DRAFT");
+        transferDraft.setParsedPayloadJson("{\"txnType\":\"TRANSFER\",\"accountId\":7,\"amount\":100}");
+        when(mapper.selectVisibleByIdForUpdate(1L, 10L, 20L)).thenReturn(transferDraft);
+        when(accountMapper.selectVisibleRealById(7L, 10L, 20L)).thenReturn(account(7L, "余额宝", "MMF", "SPENDABLE"));
+
+        assertThrows(RuntimeException.class, () -> service.confirmDraft(10L, 20L, 1L));
+        verifyNoInteractions(quickEntryService);
+        verify(mapper, never()).markConfirmed(any(), any(), any());
+    }
     private DraftLedgerEntryMapper statefulMapper;
     private DraftLedgerEntryService statefulService;
     private QuickEntryService statefulQuickEntryService;

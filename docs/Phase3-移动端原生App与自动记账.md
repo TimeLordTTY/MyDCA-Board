@@ -5,11 +5,11 @@
 
 本设计已经从“规划 Android”进入“Android 日常可用化”阶段；当前事实见 `docs/CURRENT_DEVELOPMENT_STATE.md`。
 
-已落地：原生 Android 0.9.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
+已落地：原生 Android 0.10.0、真实登录与安全 Token、今日待办、草稿编辑/preview/confirm 人工闭环（含 TRANSFER 转账草稿双账户闭环）、手工文本、本地 OCR、支付通知候选、加密 Draft Outbox、全局“记一笔”快速采集中心、系统 Share Sheet 文本/单图分享采集、桌面快速记账小组件，以及后端 v0.8 sourceRef 强幂等与并发冲突恢复。
 
 安全边界未改变：不自动 preview、不自动 confirm、不自动正式入账、不自动交易。
 
-下一普通移动端任务：v0.10.0 转账草稿闭环；桌面小组件真机体验验收仍由主人在真实设备完成，通知栏快捷入口保留为后续独立任务。任何自动采集入口都继续只到 DRAFT。
+下一普通移动端任务：v0.10.0 真机验收与 CI 制品回填；转账与桌面小组件的真机体验验收仍由主人在真实设备完成，通知栏快捷入口保留为后续独立任务。任何自动采集入口都继续只到 DRAFT。
 <!-- CURRENT-SNAPSHOT:END -->
 
 ## 阶段定位
@@ -445,6 +445,23 @@ CREATE TABLE `draft_ledger_entry` (
 - 小组件层没有 repository / network / parse / draft / preview / confirm 能力；`updatePeriodMillis=0`，
   无后台轮询 / Alarm / WorkManager / 前台服务 / 常驻通知；未申请任何新权限，`MainActivity` 未新增 intent-filter。
 - 明确未做：不做桌面余额 / 资产展示，不做动态计数与后台刷新，不做通知栏常驻入口，不做 Quick Settings Tile。
+
+### 当前已实现（v0.10.0 TRANSFER 转账草稿闭环）
+
+- 候选结构与写入字段：`txnType=TRANSFER` + `accountId` / `accountNameHint`（转出）+ `targetAccountId` / `targetAccountNameHint`（转入）+ `amount` + `note`；
+  `sourceAccountId` / `cashAccountId`、`toAccountId` / `destinationAccountId` 只作兼容读取别名，写回只用标准字段。
+- 文本解析：`转账` / `转到` / `转入` / `转出` 或「从…到…」优先判定 TRANSFER，优先级高于「到账 / 付款 / 支付」；解析只输出候选与 DRAFT，
+  不把账户名称提示映射成真实账户 ID，缺 `accountId` / `targetAccountId` 时写入 `missingFields`。
+- 预览：两个账户都必须当前 user / family 可见、active REAL、叶子、互不相同、币种一致；TRANSFER 不套用 EXPENSE 的 SPENDABLE 规则，
+  跨资金用途转账给出中文风险提示；预览新增 `targetAccountId` / `targetAccountName` / `targetAccountType` / `targetFundUsage` / `targetAccountDelta`，
+  且 preview 阶段不调用 `LedgerService` / `QuickEntryService`。
+- 正式入账：`QuickEntryService.quickTransfer` 经既有 `LedgerService.createTransaction(..., "TRANSFER_OUT", ...)` 创建一笔平衡交易（转出 CREDIT + 转入 DEBIT）；
+  流水页仍按既有语义展示转出 / 转入两条视图，底层只有一笔交易，不计入收入 / 支出净现金流；未新增表或 migration。
+- confirm：TRANSFER 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用 `quickTransfer`；`txnId` 写回 `confirmTxnId`，重复确认幂等，
+  `IGNORED` 草稿不可确认，不存在解析后自动 confirm 或建档后自动 confirm。
+- Android：草稿编辑支持支出 / 收入 / 转账三种类型与转出 / 转入双账户，切回支出 / 收入会清空目标账户；转账预览中文展示「从 / 到 / 金额 / 双账户变动 / 风险提示」；
+  确认弹窗标题为「确认将 ¥X 从 A 转到 B？」，确认按钮仍受 fresh preview gate 控制。
+- 明确未做：不做自动 preview / confirm / 转账 / 交易，不做跨币种转账，不做投资订单 / 结算类草稿确认，不新增数据库表或 migration。
 
 ### 批量确认幂等
 

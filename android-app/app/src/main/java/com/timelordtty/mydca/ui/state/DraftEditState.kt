@@ -20,6 +20,7 @@ data class DraftEditForm(
     val amount: String = "",
     val note: String = "",
     val accountId: String = "",
+    val targetAccountId: String = "",
     val accountNameHint: String = "",
 )
 
@@ -49,15 +50,19 @@ object DraftEditState {
     fun formFromDraft(draft: DraftLedgerEntryDto): DraftEditForm {
         val payload = parsePayload(draft.parsedPayloadJson)
         val txnType = firstString(payload, "txnType", "transactionType", "type") ?: "EXPENSE"
+        val normalizedType = txnType.uppercase()
         val amount = firstScalar(payload, "amount").orEmpty()
-        val accountId = firstScalar(payload, "accountId", "cashAccountId").orEmpty()
+        val accountId = firstScalar(payload, "accountId", "cashAccountId", "sourceAccountId").orEmpty()
+        val targetAccountId =
+            firstScalar(payload, "targetAccountId", "toAccountId", "destinationAccountId").orEmpty()
         val note = firstString(payload, "note", "remark", "description") ?: draft.rawInput.orEmpty()
         val accountNameHint = firstString(payload, "accountNameHint").orEmpty()
         return DraftEditForm(
-            txnType = txnType.uppercase().takeIf { it == "EXPENSE" || it == "INCOME" } ?: "EXPENSE",
+            txnType = normalizedType.takeIf { it == "EXPENSE" || it == "INCOME" || it == "TRANSFER" } ?: "EXPENSE",
             amount = amount,
             note = note,
             accountId = accountId,
+            targetAccountId = targetAccountId,
             accountNameHint = accountNameHint,
         )
     }
@@ -68,8 +73,8 @@ object DraftEditState {
         }
 
         val normalizedType = form.txnType.trim().uppercase()
-        if (normalizedType !in setOf("EXPENSE", "INCOME")) {
-            return DraftEditRequestResult(error = "交易类型必须是 EXPENSE 或 INCOME。")
+        if (normalizedType !in setOf("EXPENSE", "INCOME", "TRANSFER")) {
+            return DraftEditRequestResult(error = "交易类型必须是 EXPENSE、INCOME 或 TRANSFER。")
         }
 
         val amount = parseAmount(form.amount)
@@ -77,6 +82,19 @@ object DraftEditState {
 
         val accountId = parseAccountId(form.accountId)
             ?: return DraftEditRequestResult(error = "accountId 必须是后端真实账户 ID，且为大于 0 的正整数。")
+
+        val isTransfer = normalizedType == "TRANSFER"
+        val targetAccountId = if (isTransfer) {
+            parseAccountId(form.targetAccountId)
+                ?: return DraftEditRequestResult(
+                    error = "转入账户 targetAccountId 必须是后端真实账户 ID，且为大于 0 的正整数。",
+                )
+        } else {
+            null
+        }
+        if (isTransfer && targetAccountId == accountId) {
+            return DraftEditRequestResult(error = "转出账户与转入账户不能相同，请重新选择转入账户。")
+        }
 
         val normalizedNote = form.note.trim()
         val normalizedAccountNameHint = form.accountNameHint.trim()
@@ -90,6 +108,7 @@ object DraftEditState {
                 note = normalizedNote,
                 accountId = accountId,
                 accountNameHint = normalizedAccountNameHint,
+                targetAccountId = targetAccountId,
             ),
             confidence = draft.confidence,
             missingFieldsJson = buildStringArrayJson(emptyList()),
@@ -144,11 +163,15 @@ object DraftEditState {
         note: String,
         accountId: Long,
         accountNameHint: String,
+        targetAccountId: Long?,
     ): String {
         return writeJsonObject {
             name("txnType").value(txnType)
             name("amount").value(amount.stripTrailingZeros())
             name("accountId").value(accountId)
+            if (targetAccountId != null) {
+                name("targetAccountId").value(targetAccountId)
+            }
             if (note.isNotBlank()) {
                 name("note").value(note)
             }

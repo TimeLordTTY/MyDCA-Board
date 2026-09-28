@@ -86,9 +86,9 @@ export interface UpdateDraftRequest {
 export interface DraftPreview {
   /** 草稿主键。 */
   draftId: number
-  /** 候选流水类型，首版仅 EXPENSE/INCOME 可确认。 */
+  /** 候选流水类型：EXPENSE / INCOME / TRANSFER；TRANSFER 需补齐转出与转入账户后方可确认。 */
   txnType?: string | null
-  /** 候选现金账户 ID。 */
+  /** 候选转出（来源）账户 ID。 */
   accountId?: number | null
   /** 候选账户名称，用于确认前复核影响对象。 */
   accountName?: string | null
@@ -96,12 +96,22 @@ export interface DraftPreview {
   accountType?: string | null
   /** 候选账户资金用途，例如 SPENDABLE、RESERVED、INVESTABLE。 */
   fundUsage?: string | null
+  /** 转账时的转入（目标）账户 ID；非 TRANSFER 草稿为空。 */
+  targetAccountId?: number | null
+  /** 转账时的转入账户名称，用于确认前复核影响对象。 */
+  targetAccountName?: string | null
+  /** 转账时的转入账户类型，例如 CASH、BANK、PAYMENT、MMF。 */
+  targetAccountType?: string | null
+  /** 转账时的转入账户资金用途，例如 SPENDABLE、RESERVED、INVESTABLE。 */
+  targetFundUsage?: string | null
   /** 候选金额。 */
   amount?: number | null
   /** 对账户余额的影响方向：DECREASE、INCREASE 或 NONE。 */
   impactDirection?: 'DECREASE' | 'INCREASE' | 'NONE' | string | null
-  /** 对候选账户余额的预计变动金额，支出为负数，收入为正数。 */
+  /** 对候选（转出）账户余额的预计变动金额：支出为负数，收入为正数，转账为负数。 */
   accountDelta?: number | null
+  /** 转账时对转入账户余额的预计变动金额，通常为正数；非 TRANSFER 草稿为空。 */
+  targetAccountDelta?: number | null
   /** 确认后是否会生成正式流水；预览阶段始终不会写正式账本。 */
   willCreateLedgerTxn?: boolean | null
   /** 首版草稿确认是否会生成订单。 */

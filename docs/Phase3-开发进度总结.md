@@ -5,7 +5,7 @@
 
 > 本文件保留 Phase3 的演进时间线；当前事实与下一步以 `docs/CURRENT_DEVELOPMENT_STATE.md` 为准。
 
-- Android 当前版本：`0.9.0 / versionCode 10`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集与 v0.9.0 桌面快速记账小组件均已完成。
+- Android 当前版本：`0.10.0 / versionCode 11`，v0.7 全局“记一笔”快速采集中心、v0.8.0 系统分享快速采集、v0.9.0 桌面快速记账小组件与 v0.10.0 TRANSFER 转账草稿闭环均已完成。
 - v0.8 后端强幂等已完成：result commit `ea8b3618e25c648127c62750c307ae8af976dd56`；应用层幂等 + user/family scope 数据库唯一键 + DuplicateKey 并发恢复均已落地。
 - v0.8 migration 已进入 Git，但未由自动任务连接或执行到任何数据库；生产迁移需单独授权并先跑只读重复数据预检。
 - v0.7 CI APK 已真实产出：Run `36320197608`，Artifact `10931548073`，APK SHA-256 `D18D0CC67F7428495E6A6F2B0ED50100D556301368D6853FD0489AD2325E3B2B`。
@@ -14,7 +14,9 @@
 - v0.8.0 CI APK 已真实产出：Run `36329990920`，Artifact `10934923148`，APK SHA-256 `F3C03CF9685C376782C2DB0CB799836971A63B5B4763BC38A9F1B0A96E837E08`。
 - v0.9.0 桌面快速记账小组件已落地：只做系统级入口，点击后仅打开既有页面，不联网、不读写账本、不自动记账。
 - v0.9.0 CI APK 已真实产出：Run `36367375440`，Artifact `10946904834`，APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`。
-- 下一普通工程目标：v0.10.0 转账草稿闭环；数据库 migration 上线与真机人工验收都不与普通后台自动功能开发混在一起。
+- v0.10.0 转账草稿闭环已落地：文本候选识别 TRANSFER、双账户影响预览、二次确认后经 `QuickEntryService.quickTransfer` 生成一笔正式转账流水，重复确认不重复记账。
+- v0.10.0 CI APK 尚未产出（本轮只提交、未 push）；真实推送后需回填 Run ID / Artifact ID / APK 文件名 / CI APK SHA-256。
+- 下一普通工程目标：v0.10.0 真机验收与 CI 制品回填；数据库 migration 上线与真机人工验收都不与普通后台自动功能开发混在一起。
 
 ### 已被后续版本完成的旧待办
 
@@ -40,7 +42,7 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 
 - 草稿创建、查询、编辑、预览和忽略只操作 `draft_ledger_entry`，不写入正式 `ledger_txn` 或 `ledger_posting`。
 - 草稿不参与资产、余额、收益、持仓成本或流水统计计算。
-- 首版确认只支持 `EXPENSE` / `INCOME` 快速记账，并且必须通过 `QuickEntryService` 进入既有账本校验链路。
+- 确认支持 `EXPENSE` / `INCOME` / `TRANSFER` 快速记账，并且必须通过 `QuickEntryService` 进入既有账本校验链路（TRANSFER 走 `quickTransfer`，生成一笔平衡转账）。
 - 不支持的草稿类型不会绕过 `LedgerService`、`OrderService` 或 `SettlementService` 直接写正式表。
 - 已确认或已忽略草稿不可再次编辑；已确认草稿重复确认时直接幂等返回，不二次入账。
 
@@ -401,6 +403,28 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
 - 本地 Debug APK：55,816,715 bytes，SHA-256 `C2CC3CBD10EFCD20177450CC367ACAF2C273A0E8C050BBCAFBEF58E704116617`（本机观察，debug APK 本地字节不可复现，不作为制品身份）；
   本进程未推送，CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地哈希冒充。
 
+## Android / 后端 v0.10.0 TRANSFER 转账草稿闭环（2026-09-28）
+
+- 对应任务 `task-mydca-v010-transfer-draft-loop-20260928`（owner 直接批准，L3），详细说明见 `docs/mydca_v010_transfer_draft_loop_20260928.md`。
+- 目标：把草稿正式确认从 EXPENSE / INCOME 扩展到 TRANSFER，让主人可以补齐转出 / 转入账户、先看到双账户影响预览、再二次确认生成一笔正式转账；
+  不改变“DRAFT → fresh preview → 主人二次确认 → 正式账本”的安全边界。
+- 候选结构：`txnType=TRANSFER` + `accountId` / `accountNameHint`（转出）+ `targetAccountId` / `targetAccountNameHint`（转入）+ `amount` + `note`；
+  `sourceAccountId` / `cashAccountId`、`toAccountId` / `destinationAccountId` 只作兼容读取别名，写回只用标准字段。
+- 文本解析：转账语义（`转账` / `转到` / `转入` / `转出` /「从…到…」）优先于「到账 / 付款 / 支付」；名称提示只进候选，不自动映射账户 ID，
+  缺 ID 时仍只生成 DRAFT 并把 `accountId` / `targetAccountId` 记入 `missingFields`。
+- 预览：两个账户都必须可见、active REAL、叶子、互不相同、币种一致；TRANSFER 不套用 EXPENSE 的 SPENDABLE 规则，跨资金用途转账给出中文风险提示；
+  新增 `targetAccountId` / `targetAccountName` / `targetAccountType` / `targetFundUsage` / `targetAccountDelta`。
+- 正式入账：新增 `QuickEntryService.quickTransfer`，经既有 `LedgerService.createTransaction(..., "TRANSFER_OUT", ...)` 创建一笔平衡交易
+  （转出 CREDIT + 转入 DEBIT）；流水页仍展示转出 / 转入两条视图，底层只有一笔交易，不计入收入 / 支出净现金流；未新增表或 migration。
+- confirm：TRANSFER 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用 `quickTransfer`；`txnId` 写回 `confirmTxnId`，重复确认幂等，
+  `IGNORED` 草稿不可确认，不存在自动 preview / confirm。
+- Android `versionName = 0.10.0`（`versionCode = 11`）：草稿编辑支持支出 / 收入 / 转账三种类型与转出 / 转入双账户，切回支出 / 收入清空目标账户；
+  确认弹窗标题为「确认将 ¥X 从 A 转到 B？」；PC `web/shared` 与草稿箱补齐最小查看 / 预览与安全编辑兼容。
+- 本轮验证：后端 `mvn -B test` 95 项通过（由 70 项增至 95 项）、Android `testDebugUnitTest` 35 类 206 项通过（由 195 项增至 206 项）、
+  `assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。未连接任何数据库、未推送。
+- 本地 Debug APK：55,821,214 bytes，SHA-256 `4D5C1443EE30B0A8315ECBB848A3FFAD62ED3B675861236361B8971552C087DB`（本机观察，debug APK 本地字节不可复现，不作为制品身份）；
+  本进程未推送，CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）为 `NOT_PRODUCED`，不得用本地哈希冒充。
+
 ## 后续待办（Android v0.6 可靠记账采集）
 
 - 服务端 `draft_ledger_entry` 唯一约束缺口已收敛：该缺口最初因为 `allowed_paths` 不含 `sql/**` 而遗留，
@@ -439,3 +463,11 @@ Phase3 主线是“对话优先的草稿闭环与移动端基础”。首版优�
   以及“未登录时先登录再消费一次”的端到端体验。
 - 未实现 Quick Settings Tile、通知栏常驻入口、桌面余额 / 资产展示、动态计数与后台刷新；任何后续入口都继续只到 DRAFT。
 - 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm 或自动正式入账。
+
+## 后续待办（v0.10.0 TRANSFER 转账草稿闭环）
+
+- v0.10.0 的 CI 制品证据（Run ID / Artifact ID / APK 文件名 / CI APK SHA-256）需在真实推送触发 `Android test APK`
+  工作流后回填；本轮执行进程只做本地提交、未推送，未声称 CI APK 交付完成。
+- 真机人工验收：转账的双账户选择、确认弹窗文案，以及正式确认后流水页的转出 / 转入两条视图。
+- 未做：跨币种转账、投资订单 / 结算类草稿确认、持仓影响确认；PC 未重做整套转账编辑 UI（只做最小查看 / 预览与安全编辑兼容）。
+- 仍不改变 preview / confirm 的人工边界，不新增自动 preview、自动 confirm、自动转账或自动正式入账。

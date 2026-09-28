@@ -116,6 +116,89 @@ class DraftEditStateTest {
         assertNotNull(request?.parsedPayloadJson)
     }
 
+    @Test
+    fun transferDraftFormReadsBackBothAccounts() {
+        val form = DraftEditState.formFromDraft(
+            draft(parsedPayloadJson = """{"txnType":"TRANSFER","amount":100,"accountId":7,"targetAccountId":8}"""),
+        )
+
+        assertEquals("TRANSFER", form.txnType)
+        assertEquals("7", form.accountId)
+        assertEquals("8", form.targetAccountId)
+        assertEquals("100", form.amount)
+    }
+
+    @Test
+    fun transferFormBuildsTwoAccountPayload() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft = draft(),
+            form = DraftEditForm(
+                txnType = "TRANSFER",
+                amount = "100",
+                accountId = "7",
+                targetAccountId = "8",
+                note = "资金分区",
+            ),
+        )
+
+        assertTrue(result.isValid)
+        val payload = DraftEditState.parsePayloadJson(result.request?.parsedPayloadJson)
+        assertEquals("TRANSFER", payload["txnType"])
+        assertEquals(7L, (payload["accountId"] as Number).toLong())
+        assertEquals(8L, (payload["targetAccountId"] as Number).toLong())
+    }
+
+    @Test
+    fun transferFormBlocksIdenticalAccounts() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft = draft(),
+            form = DraftEditForm(txnType = "TRANSFER", amount = "100", accountId = "7", targetAccountId = "7"),
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.error.orEmpty().contains("不能相同"))
+    }
+
+    @Test
+    fun transferFormRequiresTargetAccountId() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft = draft(),
+            form = DraftEditForm(txnType = "TRANSFER", amount = "100", accountId = "7", targetAccountId = ""),
+        )
+
+        assertFalse(result.isValid)
+        assertTrue(result.error.orEmpty().contains("targetAccountId"))
+    }
+
+    @Test
+    fun switchingBackToExpenseDropsResidualTargetAccount() {
+        val result = DraftEditState.buildUpdateRequest(
+            draft = draft(),
+            form = DraftEditForm(
+                txnType = "EXPENSE",
+                amount = "100",
+                accountId = "7",
+                targetAccountId = "8",
+            ),
+        )
+
+        assertTrue(result.isValid)
+        val payload = DraftEditState.parsePayloadJson(result.request?.parsedPayloadJson)
+        assertFalse(payload.containsKey("targetAccountId"))
+    }
+
+    @Test
+    fun stalePreviewCannotConfirmTransferDraft() {
+        val transferDraft = draft(
+            id = 10,
+            parsedPayloadJson = """{"txnType":"TRANSFER","accountId":7,"targetAccountId":8,"amount":100}""",
+        )
+        val freshPreview = DraftPreviewDto(draftId = 10, txnType = "TRANSFER", confirmSupported = true)
+
+        assertTrue(DraftEditState.canConfirm(transferDraft, freshPreview, false, false, false, false))
+        assertFalse(DraftEditState.canConfirm(transferDraft, freshPreview.copy(draftId = 11), false, false, false, false))
+        assertFalse(DraftEditState.canConfirm(transferDraft, freshPreview, editDirty = true, saving = false, previewing = false, confirming = false))
+    }
     private fun draft(
         id: Long = 1L,
         status: String = "DRAFT",

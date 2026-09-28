@@ -29,5 +29,6 @@
 - v0.7：`docs/mydca_android_v07_quick_capture_hub_20260927.md`
 - Android v0.8.0：`docs/mydca_android_v080_external_share_capture_20260927.md`
 - Android v0.9.0：`docs/mydca_android_v090_home_widget_quick_capture_20260928.md`
+- v0.10.0 转账草稿闭环：`docs/mydca_v010_transfer_draft_loop_20260928.md`
 - v0.8 后端强幂等：`docs/mydca_v08_draft_strong_idempotency_20260927.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。

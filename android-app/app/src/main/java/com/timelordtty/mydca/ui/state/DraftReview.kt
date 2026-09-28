@@ -3,6 +3,7 @@ package com.timelordtty.mydca.ui.state
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
+import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import java.math.BigDecimal
 
 /** 草稿解析结果的可复核展示口径，只读取后端已返回的候选字段。 */
@@ -58,7 +59,53 @@ object DraftReview {
     fun txnTypeLabel(txnType: String?): String = when (txnType?.trim()?.uppercase()) {
         "EXPENSE" -> "支出 EXPENSE"
         "INCOME" -> "收入 INCOME"
+        "TRANSFER" -> "转账 TRANSFER"
         else -> txnType?.trim().orEmpty().ifBlank { "类型待补充" }
+    }
+
+    /** TRANSFER 预览的中文双账户影响行；非转账预览返回空列表。 */
+    fun transferImpactLines(preview: DraftPreviewDto?): List<String> {
+        if (preview == null || !isTransfer(preview)) return emptyList()
+        return listOf(
+            "从：${preview.accountName ?: "未匹配"} / ${displayFundUsage(preview.fundUsage)}",
+            "到：${preview.targetAccountName ?: "未匹配"} / ${displayFundUsage(preview.targetFundUsage)}",
+            "金额：${formatPreviewAmount(preview.amount)}",
+            "转出账户变动：${formatSignedAmount(preview.accountDelta)}",
+            "转入账户变动：${formatSignedAmount(preview.targetAccountDelta)}",
+        )
+    }
+
+    /** 确认弹窗标题：TRANSFER 明确「确认将 ¥X 从 A 转到 B？」，其它类型保持通用标题。 */
+    fun confirmDialogTitle(preview: DraftPreviewDto?): String {
+        if (preview == null || !isTransfer(preview)) return "确认正式记账？"
+        return "确认将 ¥${formatPreviewAmount(preview.amount)} 从 ${preview.accountName ?: "转出账户"}" +
+            " 转到 ${preview.targetAccountName ?: "转入账户"}？"
+    }
+
+    /** 确认弹窗正文：明确告知会生成正式转账流水；没有 fresh preview 时说明已被阻止。 */
+    fun confirmDialogMessage(preview: DraftPreviewDto?, canConfirm: Boolean): String {
+        if (!canConfirm) return "当前草稿没有可确认预览，移动端已阻止本次确认。"
+        if (preview != null && isTransfer(preview)) {
+            return "本操作会调用后端 confirm 接口，生成一笔从转出账户到转入账户的正式转账流水；请再次确认金额与账户。"
+        }
+        return "本操作会调用后端 confirm 接口。请确认预览内容无误后再继续。"
+    }
+
+    private fun isTransfer(preview: DraftPreviewDto): Boolean =
+        preview.txnType?.trim()?.equals("TRANSFER", ignoreCase = true) == true
+
+    private fun displayFundUsage(fundUsage: String?): String =
+        fundUsage?.takeIf { it.isNotBlank() } ?: "未知"
+
+    private fun formatPreviewAmount(amount: Double?): String {
+        if (amount == null) return "未知金额"
+        return BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()
+    }
+
+    private fun formatSignedAmount(delta: Double?): String {
+        if (delta == null) return "未知"
+        val value = BigDecimal.valueOf(delta).stripTrailingZeros().toPlainString()
+        return if (delta > 0) "+$value" else value
     }
 
     fun parsedInfo(draft: DraftLedgerEntryDto): DraftParsedInfo {

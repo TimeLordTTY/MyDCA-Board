@@ -17,16 +17,20 @@ public class AccountingIntentDTO {
     private String sourceRef;
     /** 原始输入文本，供用户复核和后续重新解析。 */
     private String rawInput;
-    /** 候选交易类型，首版仅识别 EXPENSE / INCOME，不确定时为空。 */
+    /** 候选交易类型，识别 EXPENSE / INCOME / TRANSFER，不确定时为空。 */
     private String txnType;
     /** 候选金额，不确定或缺失时为空。 */
     private BigDecimal amount;
     /** 候选备注，来自去除金额和账户提示后的主体文本。 */
     private String note;
-    /** 候选账户 ID；首版规则解析不强行匹配账户，因此通常为空。 */
+    /** 候选账户 ID；TRANSFER 时表示转出账户。规则解析不强行匹配账户，因此通常为空。 */
     private Long accountId;
     /** 账户名称提示，例如“余额宝生活费”，只供人工复核，不自动当成账户 ID。 */
     private String accountNameHint;
+    /** TRANSFER 候选的转入账户 ID；规则解析不强行匹配账户，因此通常为空。 */
+    private Long targetAccountId;
+    /** TRANSFER 候选的转入账户名称提示，例如“银行卡”，只供人工复核，不自动当成账户 ID。 */
+    private String targetAccountNameHint;
     /** 规则解析置信度，仅用于排序和提示，不作为自动入账依据。 */
     private BigDecimal confidence;
     /** 缺失字段列表，提示前端或 Hermes 后续补齐。 */

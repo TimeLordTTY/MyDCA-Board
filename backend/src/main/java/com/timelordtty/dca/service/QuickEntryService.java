@@ -140,5 +140,80 @@ public class QuickEntryService {
 
         return ledgerService.createTransaction(userId, null, "INCOME", null, postings, note);
     }
+
+    /**
+     * 快速记录一笔真实账户之间的转账（转出账户 CREDIT + 转入账户 DEBIT），并调用统一记账服务创建交易。
+     *
+     * <p>转账入口不复用“查到 ID 就能记账”的逻辑：两个账户都必须当前 user/family 可见、为启用的 REAL 叶子账户，
+     * 且转出账户 != 转入账户、币种一致、金额大于 0；任何校验不通过都直接拒绝，由事务整体回滚。</p>
+     *
+     * <p>一笔转账只生成一条业务交易，流水页会按转出 / 转入展示为两条视图，但底层不会重复记账，
+     * 也不计入收入 / 支出净现金流。</p>
+     *
+     * @param userId 发起用户ID
+     * @param familyId 家庭ID，可为空
+     * @param sourceAccountId 转出账户ID
+     * @param targetAccountId 转入账户ID
+     * @param amount 转账金额，必须大于 0
+     * @param note 备注
+     * @return 创建的 LedgerTxn
+     */
+    @Transactional
+    public LedgerTxn quickTransfer(Long userId, Long familyId, Long sourceAccountId, Long targetAccountId,
+                                   BigDecimal amount, String note) {
+        if (sourceAccountId == null || targetAccountId == null) {
+            throw new RuntimeException("转账必须同时指定转出账户与转入账户");
+        }
+        if (sourceAccountId.equals(targetAccountId)) {
+            throw new RuntimeException("转出账户与转入账户不能相同");
+        }
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new RuntimeException("转账金额必须大于 0");
+        }
+
+        Account sourceAccount = accountMapper.selectVisibleRealById(sourceAccountId, userId, familyId);
+        if (sourceAccount == null) {
+            throw new RuntimeException("转出账户不存在、已停用或当前用户/家庭不可见");
+        }
+        Account targetAccount = accountMapper.selectVisibleRealById(targetAccountId, userId, familyId);
+        if (targetAccount == null) {
+            throw new RuntimeException("转入账户不存在、已停用或当前用户/家庭不可见");
+        }
+        if (!accountService.isLeafAccount(sourceAccountId) || !accountService.isLeafAccount(targetAccountId)) {
+            throw new RuntimeException("父账户仅用于聚合展示，不能作为转账账户；请选择叶子账户");
+        }
+        if (!currencyEquals(sourceAccount.getCurrency(), targetAccount.getCurrency())) {
+            throw new RuntimeException("转出账户与转入账户币种必须一致；跨币种转账暂不支持");
+        }
+
+        // 一笔转账使用现有转账流水语义：转出账户 CREDIT，转入账户 DEBIT
+        List<LedgerPosting> postings = new ArrayList<>();
+
+        LedgerPosting creditPosting = new LedgerPosting();
+        creditPosting.setPostingType("CREDIT");
+        creditPosting.setAccountId(sourceAccountId);
+        creditPosting.setAccountType("CASH");
+        creditPosting.setAmount(amount);
+        creditPosting.setCurrency(sourceAccount.getCurrency());
+        postings.add(creditPosting);
+
+        LedgerPosting debitPosting = new LedgerPosting();
+        debitPosting.setPostingType("DEBIT");
+        debitPosting.setAccountId(targetAccountId);
+        debitPosting.setAccountType("CASH");
+        debitPosting.setAmount(amount);
+        debitPosting.setCurrency(targetAccount.getCurrency());
+        postings.add(debitPosting);
+
+        return ledgerService.createTransaction(userId, familyId, "TRANSFER_OUT", null, postings, note);
+    }
+
+    /** 比较两个账户币种是否一致；双方都为空时视为一致，避免因历史空值误阻断。 */
+    private boolean currencyEquals(String left, String right) {
+        if (left == null || left.isBlank()) {
+            return right == null || right.isBlank();
+        }
+        return left.equalsIgnoreCase(right);
+    }
 }
 

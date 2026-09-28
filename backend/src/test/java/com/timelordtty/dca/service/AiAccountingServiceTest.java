@@ -276,4 +276,75 @@ class AiAccountingServiceTest {
         assertEquals("PAYMENT_NOTIFICATION", captor.getValue().getSourceType());
         assertEquals("candidate-fingerprint-1", captor.getValue().getSourceRef());
     }
+
+    @Test
+    void parseTransferTextExtractsAmountAndHintsWithoutMatchingAccounts() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("从余额宝转到银行卡 500");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertEquals("TRANSFER", intent.getTxnType());
+        assertEquals(new BigDecimal("500"), intent.getAmount());
+        assertEquals("余额宝", intent.getAccountNameHint());
+        assertEquals("银行卡", intent.getTargetAccountNameHint());
+        assertNull(intent.getAccountId());
+        assertNull(intent.getTargetAccountId());
+        assertTrue(intent.getMissingFields().contains("accountId"));
+        assertTrue(intent.getMissingFields().contains("targetAccountId"));
+        assertTrue(intent.getParsedPayloadJson().contains("\"targetAccountNameHint\""));
+        verifyNoInteractions(draftLedgerEntryService);
+    }
+
+    @Test
+    void parseTransferTextWithoutAccountsKeepsBothAccountFieldsMissing() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("转账 1000");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertEquals("TRANSFER", intent.getTxnType());
+        assertEquals(new BigDecimal("1000"), intent.getAmount());
+        assertNull(intent.getAccountNameHint());
+        assertNull(intent.getTargetAccountNameHint());
+        assertTrue(intent.getMissingFields().contains("accountId"));
+        assertTrue(intent.getMissingFields().contains("targetAccountId"));
+    }
+
+    @Test
+    void transferSemanticsWinOverExpenseAndIncomeKeywords() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("从余额宝转账到银行卡 800，支付手续费 0");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertEquals("TRANSFER", intent.getTxnType());
+        assertEquals(new BigDecimal("800"), intent.getAmount());
+    }
+
+    @Test
+    void salaryArrivalTextStillStaysIncome() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("工资到账 5000");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertEquals("INCOME", intent.getTxnType());
+        assertEquals(new BigDecimal("5000"), intent.getAmount());
+        assertFalse(intent.getMissingFields().contains("targetAccountId"));
+        assertNull(intent.getTargetAccountNameHint());
+    }
+
+    @Test
+    void lunchPaymentTextStillStaysExpense() {
+        ParseTextRequest request = new ParseTextRequest();
+        request.setText("支付午饭 30");
+
+        AccountingIntentDTO intent = service.parseText(request);
+
+        assertEquals("EXPENSE", intent.getTxnType());
+        assertEquals(new BigDecimal("30"), intent.getAmount());
+        assertTrue(intent.getMissingFields().contains("accountId"));
+        assertFalse(intent.getMissingFields().contains("targetAccountId"));
+    }
 }

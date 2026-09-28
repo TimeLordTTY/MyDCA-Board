@@ -6,12 +6,16 @@ import com.timelordtty.mydca.data.dto.MobileAccountDto
  * 草稿账户选择的前端提示规则。
  *
  * 普通消费（EXPENSE）只允许后端标记为可支出的真实叶子账户；父账户、RESERVED、INVESTABLE
- * 与待分配账户都不作为消费来源。这里只负责前端提示和过滤，最终安全边界仍由后端
- * preview / confirm 重新校验，移动端不会代替后端放行。
+ * 与待分配账户都不作为消费来源。转账（TRANSFER）可能是主人主动做资金分区，
+ * SPENDABLE / RESERVED / INVESTABLE 之间都允许转移，前端不按资金用途阻断。
+ *
+ * 这里只负责前端提示和过滤，最终安全边界仍由后端 preview / confirm 重新校验，
+ * 移动端不会代替后端放行。
  */
 object DraftAccountSelection {
     const val EXPENSE = "EXPENSE"
     const val INCOME = "INCOME"
+    const val TRANSFER = "TRANSFER"
 
     private const val SPENDABLE = "SPENDABLE"
     private const val RESERVED = "RESERVED"
@@ -55,6 +59,26 @@ object DraftAccountSelection {
             account.fundUsage.isNullOrBlank() -> "待分配账户未完成资金分区，不得直接用于日常消费。"
             else -> "普通消费只允许 SPENDABLE 叶子账户。"
         }
+    }
+
+    /**
+     * 转账的前端提示：转出 / 转入不能相同，币种不一致时提前提示。
+     *
+     * 这里只是提示，不阻断保存；最终是否可转以后端 preview / confirm 为准。
+     */
+    fun transferValidationMessage(source: MobileAccountDto?, target: MobileAccountDto?): String? {
+        if (source == null || target == null) return null
+        if (source.id == target.id) {
+            return "转出账户与转入账户不能相同，请重新选择转入账户。"
+        }
+        val sourceCurrency = source.currency?.trim().orEmpty()
+        val targetCurrency = target.currency?.trim().orEmpty()
+        if (sourceCurrency.isNotEmpty() && targetCurrency.isNotEmpty() &&
+            !sourceCurrency.equals(targetCurrency, ignoreCase = true)
+        ) {
+            return "转出账户与转入账户币种不一致，跨币种转账暂不支持；最终以后端预览校验为准。"
+        }
+        return null
     }
 
     private fun normalizeType(txnType: String?): String = txnType.orEmpty().trim().uppercase()

@@ -414,6 +414,8 @@ fun DraftInboxScreen(
 
     if (showConfirmDialog) {
         ConfirmDraftDialog(
+            title = DraftReview.confirmDialogTitle(preview),
+            message = DraftReview.confirmDialogMessage(preview, canConfirm),
             canConfirm = canConfirm,
             onConfirm = ::confirmSelectedDraft,
             onDismiss = { showConfirmDialog = false },
@@ -627,15 +629,29 @@ private fun DraftEditSection(
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = { onEditFormChange(editForm.copy(txnType = DraftAccountSelection.EXPENSE)) },
+                onClick = {
+                    onEditFormChange(
+                        editForm.copy(txnType = DraftAccountSelection.EXPENSE, targetAccountId = ""),
+                    )
+                },
             ) {
                 Text(if (editForm.txnType == DraftAccountSelection.EXPENSE) "支出 EXPENSE ✓" else "支出 EXPENSE")
             }
             OutlinedButton(
                 enabled = !isSavingDraft && !isPreviewingDraft,
-                onClick = { onEditFormChange(editForm.copy(txnType = DraftAccountSelection.INCOME)) },
+                onClick = {
+                    onEditFormChange(
+                        editForm.copy(txnType = DraftAccountSelection.INCOME, targetAccountId = ""),
+                    )
+                },
             ) {
                 Text(if (editForm.txnType == DraftAccountSelection.INCOME) "收入 INCOME ✓" else "收入 INCOME")
+            }
+            OutlinedButton(
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                onClick = { onEditFormChange(editForm.copy(txnType = DraftAccountSelection.TRANSFER)) },
+            ) {
+                Text(if (editForm.txnType == DraftAccountSelection.TRANSFER) "转账 TRANSFER ✓" else "转账 TRANSFER")
             }
         }
 
@@ -648,55 +664,61 @@ private fun DraftEditSection(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
         )
-        SectionCard(
-            title = "选择叶子账户",
-            description = "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。",
-        ) {
-            val candidates = selectableAccounts.filter { account ->
-                DraftAccountSelection.isSelectable(editForm.txnType, account)
-            }
-            val blocked = selectableAccounts.filterNot { account ->
-                DraftAccountSelection.isSelectable(editForm.txnType, account)
-            }
-            if (candidates.isEmpty()) {
-                StatusPill("暂无符合当前交易类型的可选账户")
+        val isTransferForm = editForm.txnType == DraftAccountSelection.TRANSFER
+        val editEnabled = !isSavingDraft && !isPreviewingDraft
+        AccountPickerSection(
+            title = if (isTransferForm) "选择转出账户" else "选择叶子账户",
+            description = if (isTransferForm) {
+                "转账可能是主人主动调整资金分区：SPENDABLE / RESERVED / INVESTABLE 之间都可以转移，只需选择真实叶子账户。"
             } else {
-                candidates.forEach { account ->
-                    OutlinedButton(
-                        enabled = !isSavingDraft && !isPreviewingDraft,
-                        onClick = {
-                            onEditFormChange(
-                                editForm.copy(
-                                    accountId = account.id.toString(),
-                                    accountNameHint = account.accountName,
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("${account.accountName} · ${account.fundUsage ?: "待分配"} · 可用 ${formatMoney(account.availableAmount)}")
-                    }
-                }
-            }
-            if (blocked.isNotEmpty()) {
-                Text("以下账户受保护，当前交易类型不可选择：")
-                blocked.forEach { account ->
-                    Text(
-                        text = "${account.accountName}：${DraftAccountSelection.rejectionReason(editForm.txnType, account)}",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    )
-                }
+                "普通消费只允许 SPENDABLE；RESERVED、INVESTABLE、待分配和父账户不可作为默认消费来源。"
+            },
+            txnType = editForm.txnType,
+            accounts = selectableAccounts,
+            enabled = editEnabled,
+            onPick = { account ->
+                onEditFormChange(
+                    editForm.copy(accountId = account.id.toString(), accountNameHint = account.accountName),
+                )
+            },
+        )
+        if (isTransferForm) {
+            AccountPickerSection(
+                title = "选择转入账户",
+                description = "转入账户同样必须是真实叶子账户；转出与转入不能相同，币种必须一致，最终以后端 preview 为准。",
+                txnType = editForm.txnType,
+                accounts = selectableAccounts,
+                enabled = editEnabled,
+                onPick = { account ->
+                    onEditFormChange(editForm.copy(targetAccountId = account.id.toString()))
+                },
+            )
+            val sourceAccount = selectableAccounts.firstOrNull { it.id.toString() == editForm.accountId.trim() }
+            val targetAccount = selectableAccounts.firstOrNull { it.id.toString() == editForm.targetAccountId.trim() }
+            DraftAccountSelection.transferValidationMessage(sourceAccount, targetAccount)?.let { message ->
+                Text(message)
             }
         }
         OutlinedTextField(
             value = editForm.accountId,
             onValueChange = { onEditFormChange(editForm.copy(accountId = it)) },
             enabled = !isSavingDraft && !isPreviewingDraft,
-            label = { Text("真实账户 ID accountId") },
+            label = { Text(if (isTransferForm) "转出账户 ID accountId" else "真实账户 ID accountId") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.fillMaxWidth(),
         )
+        if (isTransferForm) {
+            OutlinedTextField(
+                value = editForm.targetAccountId,
+                onValueChange = { onEditFormChange(editForm.copy(targetAccountId = it)) },
+                enabled = !isSavingDraft && !isPreviewingDraft,
+                label = { Text("转入账户 ID targetAccountId") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         OutlinedTextField(
             value = editForm.accountNameHint,
             onValueChange = { onEditFormChange(editForm.copy(accountNameHint = it)) },
@@ -747,10 +769,21 @@ private fun PreviewContent(preview: DraftPreviewDto) {
         KeyValueRow("资金用途", preview.fundUsage ?: "未知")
         KeyValueRow("影响方向", preview.impactDirection ?: "未知")
         KeyValueRow("账户变动", preview.accountDelta?.toString() ?: "未知")
+        if (preview.txnType?.equals("TRANSFER", ignoreCase = true) == true) {
+            KeyValueRow("转入账户", preview.targetAccountName ?: "未匹配")
+            KeyValueRow("转入账户类型", preview.targetAccountType ?: "未知")
+            KeyValueRow("转入资金用途", preview.targetFundUsage ?: "未知")
+            KeyValueRow("转入账户变动", preview.targetAccountDelta?.toString() ?: "未知")
+        }
         KeyValueRow("会生成流水", if (preview.willCreateLedgerTxn) "是" else "否")
         KeyValueRow("会生成订单", if (preview.willCreateOrder) "是" else "否")
         KeyValueRow("会生成结算", if (preview.willCreateSettlement) "是" else "否")
         KeyValueRow("会影响持仓", if (preview.willAffectHolding) "是" else "否")
+        val transferLines = DraftReview.transferImpactLines(preview)
+        if (transferLines.isNotEmpty()) {
+            Text("转账双账户影响：")
+            transferLines.forEach { line -> Text(line) }
+        }
         val missingFields = preview.missingFields.orEmpty()
         val warnings = preview.warnings.orEmpty()
         if (missingFields.isNotEmpty()) {
@@ -764,22 +797,16 @@ private fun PreviewContent(preview: DraftPreviewDto) {
 
 @Composable
 private fun ConfirmDraftDialog(
+    title: String,
+    message: String,
     canConfirm: Boolean,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("确认正式记账？") },
-        text = {
-            Text(
-                if (canConfirm) {
-                    "本操作会调用后端 confirm 接口。请确认预览内容无误后再继续。"
-                } else {
-                    "当前草稿没有可确认预览，移动端已阻止本次确认。"
-                }
-            )
-        },
+        title = { Text(title) },
+        text = { Text(message) },
         confirmButton = {
             Button(enabled = canConfirm, onClick = onConfirm) {
                 Text("二次确认")
@@ -813,4 +840,43 @@ private fun IgnoreDraftDialog(
             }
         },
     )
+}
+
+@Composable
+private fun AccountPickerSection(
+    title: String,
+    description: String,
+    txnType: String?,
+    accounts: List<MobileAccountDto>,
+    enabled: Boolean,
+    onPick: (MobileAccountDto) -> Unit,
+) {
+    SectionCard(title = title, description = description) {
+        val candidates = accounts.filter { account -> DraftAccountSelection.isSelectable(txnType, account) }
+        val blocked = accounts.filterNot { account -> DraftAccountSelection.isSelectable(txnType, account) }
+        if (candidates.isEmpty()) {
+            StatusPill("暂无符合当前交易类型的可选账户")
+        } else {
+            candidates.forEach { account ->
+                OutlinedButton(
+                    enabled = enabled,
+                    onClick = { onPick(account) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        "${account.accountName} · ${account.fundUsage ?: "待分配"} · 可用 ${formatMoney(account.availableAmount)}",
+                    )
+                }
+            }
+        }
+        if (blocked.isNotEmpty()) {
+            Text("以下账户受保护，当前交易类型不可选择：")
+            blocked.forEach { account ->
+                Text(
+                    text = "${account.accountName}：${DraftAccountSelection.rejectionReason(txnType, account)}",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
 }

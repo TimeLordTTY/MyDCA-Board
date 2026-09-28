@@ -56,7 +56,7 @@ export const draftApi = {
   },
 
   /**
-   * 确认草稿；首版由后端限制为 EXPENSE/INCOME 快速记账。
+   * 确认草稿；后端仅支持 EXPENSE/INCOME/TRANSFER 快速记账，TRANSFER 需先补齐转出与转入账户。
    */
   confirmDraft: async (draftId: number): Promise<DraftLedgerEntry> => {
     const response = await apiClient.post<DraftLedgerEntry>(`/drafts/${draftId}/confirm`)

@@ -50,10 +50,17 @@ public class AiAccountingService {
         intent.setSourceType("HERMES_TEXT");
         intent.setSourceRef(request.getSourceRef());
         intent.setRawInput(normalizedText);
-        intent.setTxnType(detectTxnType(normalizedText));
-        intent.setAmount(intent.getTxnType() == null ? null : extractAmount(normalizedText));
-        intent.setAccountNameHint(extractAccountNameHint(normalizedText));
-        intent.setNote(extractNote(normalizedText, intent.getAmount(), intent.getAccountNameHint()));
+        String txnType = detectTxnType(normalizedText);
+        intent.setTxnType(txnType);
+        intent.setAmount(txnType == null ? null : extractAmount(normalizedText));
+        if ("TRANSFER".equals(txnType)) {
+            intent.setAccountNameHint(extractTransferSourceHint(normalizedText));
+            intent.setTargetAccountNameHint(extractTransferTargetHint(normalizedText));
+        } else {
+            intent.setAccountNameHint(extractAccountNameHint(normalizedText));
+        }
+        intent.setNote(extractNote(normalizedText, intent.getAmount(), intent.getAccountNameHint(),
+                intent.getTargetAccountNameHint()));
         intent.setConfidence(calculateConfidence(intent));
         intent.setMissingFields(buildMissingFields(intent));
         intent.setParsedPayloadJson(toIntentJson(intent));
@@ -94,6 +101,8 @@ public class AiAccountingService {
         intent.setNote(input.getNote());
         intent.setAccountId(input.getAccountId());
         intent.setAccountNameHint(input.getAccountNameHint());
+        intent.setTargetAccountId(input.getTargetAccountId());
+        intent.setTargetAccountNameHint(input.getTargetAccountNameHint());
         intent.setConfidence(input.getConfidence() == null ? calculateConfidence(input) : input.getConfidence());
         intent.setMissingFields(input.getMissingFields() == null || input.getMissingFields().isEmpty()
                 ? buildMissingFields(intent)
@@ -103,6 +112,9 @@ public class AiAccountingService {
     }
 
     private String detectTxnType(String text) {
+        if (detectTransfer(text)) {
+            return "TRANSFER";
+        }
         if (containsAny(text, "花了", "支出", "买", "消费", "付款", "支付")) {
             return "EXPENSE";
         }
@@ -110,6 +122,16 @@ public class AiAccountingService {
             return "INCOME";
         }
         return null;
+    }
+
+    /**
+     * 识别明确转账语义；转账优先级高于“到账/付款”等可能造成 EXPENSE / INCOME 误判的关键词。
+     */
+    private boolean detectTransfer(String text) {
+        if (containsAny(text, "转账", "转到", "转入", "转出")) {
+            return true;
+        }
+        return text.contains("从") && text.contains("到");
     }
 
     private BigDecimal extractAmount(String text) {
@@ -162,13 +184,63 @@ public class AiAccountingService {
         return text.substring(0, end).trim();
     }
 
-    private String extractNote(String text, BigDecimal amount, String accountNameHint) {
+    /**
+     * 提取 TRANSFER 转出账户名称提示：取“从 X 转到/到 Y”中的 X，读到转账动词或分隔符即停止。
+     */
+    private String extractTransferSourceHint(String text) {
+        int index = text.indexOf('从');
+        if (index < 0) {
+            return null;
+        }
+        String hint = readUntilTransferBoundary(text.substring(index + 1));
+        return hint.isBlank() ? null : hint;
+    }
+
+    /**
+     * 提取 TRANSFER 转入账户名称提示：优先取最后一个“到”之后的内容，其次取“转入”之后的内容。
+     */
+    private String extractTransferTargetHint(String text) {
+        int toIndex = text.lastIndexOf('到');
+        if (toIndex >= 0) {
+            String hint = readUntilSeparator(text.substring(toIndex + 1));
+            if (!hint.isBlank()) {
+                return hint;
+            }
+        }
+        int transferInIndex = text.indexOf("转入");
+        if (transferInIndex >= 0) {
+            String hint = readUntilSeparator(text.substring(transferInIndex + "转入".length()));
+            if (!hint.isBlank()) {
+                return hint;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 读取账户提示直到遇到转账动词或常规分隔符，避免把“从 A 转到 B”整体当成一个账户名。
+     */
+    private String readUntilTransferBoundary(String text) {
+        int end = text.length();
+        for (String separator : List.of("，", ",", "。", "；", ";", " ", "转", "到")) {
+            int index = text.indexOf(separator);
+            if (index >= 0) {
+                end = Math.min(end, index);
+            }
+        }
+        return text.substring(0, end).trim();
+    }
+
+    private String extractNote(String text, BigDecimal amount, String accountNameHint, String targetAccountNameHint) {
         String note = text;
         if (amount != null) {
             note = note.replaceFirst(Pattern.quote(amount.stripTrailingZeros().toPlainString()), "");
         }
         if (accountNameHint != null) {
-            note = note.replaceFirst("(用|到|从)" + Pattern.quote(accountNameHint), "");
+            note = note.replaceFirst("(用|从|转到|转入|转出|到)" + Pattern.quote(accountNameHint), "");
+        }
+        if (targetAccountNameHint != null) {
+            note = note.replaceFirst("(转到|转入|到)" + Pattern.quote(targetAccountNameHint), "");
         }
         note = note.replaceAll("[，,。；;]", " ")
                 .replace("花了", "")
@@ -192,6 +264,9 @@ public class AiAccountingService {
         if (intent.getAccountId() == null) {
             missingFields.add("accountId");
         }
+        if ("TRANSFER".equals(intent.getTxnType()) && intent.getTargetAccountId() == null) {
+            missingFields.add("targetAccountId");
+        }
         return missingFields;
     }
 
@@ -211,6 +286,8 @@ public class AiAccountingService {
         payload.put("note", intent.getNote());
         payload.put("accountId", intent.getAccountId());
         payload.put("accountNameHint", intent.getAccountNameHint());
+        payload.put("targetAccountId", intent.getTargetAccountId());
+        payload.put("targetAccountNameHint", intent.getTargetAccountNameHint());
         payload.put("confidence", intent.getConfidence());
         payload.put("missingFields", intent.getMissingFields());
         return toJson(payload);

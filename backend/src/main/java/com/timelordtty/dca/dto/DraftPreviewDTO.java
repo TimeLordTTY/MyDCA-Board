@@ -12,9 +12,9 @@ import java.util.List;
 public class DraftPreviewDTO {
     /** 草稿 ID，用于前端把预览结果与候选记录对应起来。 */
     private Long draftId;
-    /** 候选流水类型，首版只支持 EXPENSE 和 INCOME 的快速记账确认。 */
+    /** 候选流水类型，支持 EXPENSE / INCOME / TRANSFER。 */
     private String txnType;
-    /** 候选现金账户 ID，确认 EXPENSE/INCOME 时会传给 QuickEntryService。 */
+    /** 候选现金账户 ID；TRANSFER 时表示转出账户，确认时会传给 QuickEntryService。 */
     private Long accountId;
     /** 候选账户名称，用于确认前复核本次草稿会影响哪个真实账户。 */
     private String accountName;
@@ -22,12 +22,22 @@ public class DraftPreviewDTO {
     private String accountType;
     /** 候选账户资金用途，例如 SPENDABLE、RESERVED、INVESTABLE。 */
     private String fundUsage;
+    /** TRANSFER 候选的转入账户 ID；其他类型为空。 */
+    private Long targetAccountId;
+    /** TRANSFER 候选的转入账户名称，用于确认前复核资金去向。 */
+    private String targetAccountName;
+    /** TRANSFER 候选的转入账户类型，例如 CASH、BANK、PAYMENT、MMF。 */
+    private String targetAccountType;
+    /** TRANSFER 候选的转入账户资金用途，例如 SPENDABLE、RESERVED、INVESTABLE。 */
+    private String targetFundUsage;
     /** 候选记账金额，必须为正数才能确认。 */
     private BigDecimal amount;
-    /** 对账户余额的影响方向：DECREASE、INCREASE 或 NONE。 */
+    /** 对候选（转出）账户余额的影响方向：DECREASE、INCREASE 或 NONE。 */
     private String impactDirection;
-    /** 对候选账户余额的预计变动金额，支出为负数，收入为正数。 */
+    /** 对候选账户余额的预计变动金额：支出为负数，收入为正数，TRANSFER 转出为负数。 */
     private BigDecimal accountDelta;
+    /** TRANSFER 对转入账户余额的预计变动金额，为正数；其他类型的可确认预览为 0。 */
+    private BigDecimal targetAccountDelta;
     /** 确认后是否会生成正式流水；预览阶段始终不会写正式账本。 */
     private Boolean willCreateLedgerTxn;
     /** 首版草稿确认不会生成订单。 */
@@ -42,7 +52,7 @@ public class DraftPreviewDTO {
     private Boolean confirmSupported;
     /** 不能确认或需要补齐时的提示文案。 */
     private String message;
-    /** 预览阶段识别出的缺失字段，例如 accountId、amount。 */
+    /** 预览阶段识别出的缺失字段，例如 accountId、targetAccountId、amount。 */
     private List<String> missingFields;
     /** 预览阶段提示或风险说明，供用户确认前复核。 */
     private List<String> warnings;

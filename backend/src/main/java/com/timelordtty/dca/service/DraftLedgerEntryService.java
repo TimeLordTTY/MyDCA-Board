@@ -187,7 +187,7 @@ public class DraftLedgerEntryService {
     }
 
     /**
-     * 确认草稿并转为正式流水；首版仅支持 EXPENSE/INCOME，且必须通过 QuickEntryService。
+     * 确认草稿并转为正式流水；支持 EXPENSE / INCOME / TRANSFER，且必须通过 QuickEntryService。
      */
     @Transactional
     public DraftLedgerEntryDTO confirmDraft(Long userId, Long familyId, Long draftId) {
@@ -213,8 +213,11 @@ public class DraftLedgerEntryService {
             txn = quickEntryService.quickExpense(userId, preview.getAccountId(), preview.getAmount(), preview.getNote());
         } else if ("INCOME".equals(preview.getTxnType())) {
             txn = quickEntryService.quickIncome(userId, preview.getAccountId(), preview.getAmount(), preview.getNote());
+        } else if ("TRANSFER".equals(preview.getTxnType())) {
+            txn = quickEntryService.quickTransfer(userId, draft.getOwnerFamilyId(), preview.getAccountId(),
+                    preview.getTargetAccountId(), preview.getAmount(), preview.getNote());
         } else {
-            throw new RuntimeException("首版草稿确认仅支持 EXPENSE/INCOME 快速记账");
+            throw new RuntimeException("草稿确认仅支持 EXPENSE/INCOME/TRANSFER 快速记账");
         }
 
         int updated = draftLedgerEntryMapper.markConfirmed(draftId, txn.getTxnId(), null);
@@ -259,29 +262,37 @@ public class DraftLedgerEntryService {
     }
 
     /**
-     * 基于 parsed_payload_json 生成首版确认预览，支持 EXPENSE/INCOME 的必要字段校验。
+     * 基于 parsed_payload_json 生成确认预览，支持 EXPENSE / INCOME / TRANSFER 的必要字段校验。
      */
     private DraftPreviewDTO buildPreview(DraftLedgerEntry draft) {
         Map<String, Object> payload = parsePayload(draft.getParsedPayloadJson());
         DraftPreviewDTO preview = new DraftPreviewDTO();
         preview.setDraftId(draft.getId());
         preview.setTxnType(normalizeTxnType(firstString(payload, "txnType", "transactionType", "type")));
-        preview.setAccountId(firstLong(payload, "accountId", "cashAccountId"));
+        preview.setAccountId(firstLong(payload, "accountId", "cashAccountId", "sourceAccountId"));
+        preview.setTargetAccountId(firstLong(payload, "targetAccountId", "toAccountId", "destinationAccountId"));
         preview.setAmount(firstBigDecimal(payload, "amount"));
         preview.setNote(defaultIfBlank(firstString(payload, "note", "remark", "description"), draft.getRawInput()));
         preview.setWillCreateOrder(false);
         preview.setWillCreateSettlement(false);
         preview.setWillAffectHolding(false);
 
+        boolean transfer = "TRANSFER".equals(preview.getTxnType());
+
         List<String> missing = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
         boolean accountUnavailable = false;
+        boolean targetAccountUnavailable = false;
         String accountRuleViolation = null;
+        String targetAccountRuleViolation = null;
         if (preview.getTxnType() == null) {
             missing.add("txnType");
         }
         if (preview.getAccountId() == null) {
             missing.add("accountId");
+        }
+        if (transfer && preview.getTargetAccountId() == null) {
+            missing.add("targetAccountId");
         }
         if (preview.getAmount() == null || preview.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
             missing.add("amount");
@@ -300,7 +311,7 @@ public class DraftLedgerEntryService {
                 preview.setFundUsage(account.getFundUsage());
                 if (!accountMapper.selectChildren(account.getId()).isEmpty()) {
                     accountRuleViolation = "父账户仅用于聚合展示，不能作为记账账户；请选择其下可用的叶子账户。";
-                } else if ("EXPENSE".equals(preview.getTxnType())
+                } else if (!transfer && "EXPENSE".equals(preview.getTxnType())
                         && !"SPENDABLE".equals(account.getFundUsage())) {
                     accountRuleViolation = expenseAccountRuleMessage(account.getFundUsage());
                 }
@@ -310,22 +321,67 @@ public class DraftLedgerEntryService {
                 }
             }
         }
+
+        Account targetAccount = null;
+        if (transfer && preview.getTargetAccountId() != null) {
+            targetAccount = accountMapper.selectVisibleRealById(preview.getTargetAccountId(), draft.getOwnerUserId(), draft.getOwnerFamilyId());
+            if (targetAccount == null) {
+                targetAccountUnavailable = true;
+                addIfAbsent(missing, "targetAccountId");
+                warnings.add("转入账户不存在、已停用或当前用户/家庭不可见，请重新选择可用账户。");
+            } else {
+                preview.setTargetAccountName(targetAccount.getAccountName());
+                preview.setTargetAccountType(targetAccount.getAccountType());
+                preview.setTargetFundUsage(targetAccount.getFundUsage());
+                if (!accountMapper.selectChildren(targetAccount.getId()).isEmpty()) {
+                    targetAccountRuleViolation = "转入账户是父账户，仅用于聚合展示；请选择其下的叶子账户。";
+                }
+                if (targetAccountRuleViolation != null) {
+                    addIfAbsent(missing, "targetAccountId");
+                    warnings.add(targetAccountRuleViolation);
+                }
+            }
+        }
+
+        if (transfer && account != null && targetAccount != null) {
+            if (account.getId() != null && account.getId().equals(targetAccount.getId())) {
+                targetAccountRuleViolation = "转出账户与转入账户不能相同；请重新选择转入账户。";
+                addIfAbsent(missing, "targetAccountId");
+                warnings.add(targetAccountRuleViolation);
+            } else if (!currencyEquals(account.getCurrency(), targetAccount.getCurrency())) {
+                targetAccountRuleViolation = "转出账户与转入账户币种必须一致；跨币种转账暂不支持。";
+                addIfAbsent(missing, "targetAccountId");
+                warnings.add(targetAccountRuleViolation);
+            } else if (!fundUsageEquals(account.getFundUsage(), targetAccount.getFundUsage())) {
+                warnings.add("本次会把资金从 " + displayFundUsage(account.getFundUsage())
+                        + " 转到 " + displayFundUsage(targetAccount.getFundUsage()) + "，请确认这是主动调整资金分区。");
+            }
+        }
         preview.setMissingFields(missing);
 
-        boolean supportedType = "EXPENSE".equals(preview.getTxnType()) || "INCOME".equals(preview.getTxnType());
+        boolean supportedType = "EXPENSE".equals(preview.getTxnType())
+                || "INCOME".equals(preview.getTxnType())
+                || transfer;
         applyAccountImpact(preview);
         boolean ready = supportedType && missing.isEmpty();
         preview.setConfirmSupported(ready);
         preview.setWillCreateLedgerTxn(ready);
-        if (ready) {
+        if (ready && transfer) {
+            preview.setMessage("可确认：将通过 QuickEntryService 生成一笔从转出账户到转入账户的正式转账流水");
+            warnings.add("预览阶段不会写入正式账本；只有点击确认后才会生成正式转账流水。");
+        } else if (ready) {
             preview.setMessage("可确认：将通过 QuickEntryService 生成正式" + preview.getTxnType() + "流水");
             warnings.add("预览阶段不会写入正式账本；只有点击确认后才会生成正式流水。");
         } else if (!supportedType) {
-            preview.setMessage("首版草稿确认仅支持 EXPENSE/INCOME 快速记账");
+            preview.setMessage("草稿确认仅支持 EXPENSE/INCOME/TRANSFER 快速记账");
         } else if (accountUnavailable) {
             preview.setMessage("草稿账户不存在、已停用或当前用户/家庭不可见，请重新选择账户。");
+        } else if (targetAccountUnavailable) {
+            preview.setMessage("转入账户不存在、已停用或当前用户/家庭不可见，请重新选择转入账户。");
         } else if (accountRuleViolation != null) {
             preview.setMessage(accountRuleViolation);
+        } else if (targetAccountRuleViolation != null) {
+            preview.setMessage(targetAccountRuleViolation);
         } else {
             preview.setMessage("草稿缺少必要字段：" + String.join(", ", missing));
         }
@@ -343,8 +399,31 @@ public class DraftLedgerEntryService {
         return "待分配账户不应直接用于日常消费；请先完成资金分区并选择 SPENDABLE 叶子账户。";
     }
 
+    /** 比较两个账户币种是否一致；双方都为空时视为一致，避免因历史空值误阻断。 */
+    private boolean currencyEquals(String left, String right) {
+        if (left == null || left.isBlank()) {
+            return right == null || right.isBlank();
+        }
+        return left.equalsIgnoreCase(right);
+    }
+
+    /** 比较两个账户的资金用途是否一致，用于生成跨用途转账的中文风险提示。 */
+    private boolean fundUsageEquals(String left, String right) {
+        if (left == null || left.isBlank()) {
+            return right == null || right.isBlank();
+        }
+        return left.equalsIgnoreCase(right);
+    }
+
+    /** 资金用途展示文案，空值统一显示为“待分配”。 */
+    private String displayFundUsage(String fundUsage) {
+        return fundUsage == null || fundUsage.isBlank() ? "待分配" : fundUsage;
+    }
+
     /**
-     * 计算 EXPENSE/INCOME 对候选账户的方向和金额影响；其他类型首版不提供可确认影响。
+     * 计算 EXPENSE/INCOME/TRANSFER 对账户的方向和金额影响；其他类型不提供可确认影响。
+     *
+     * <p>TRANSFER 对转出账户为负数（accountDelta），对转入账户为正数（targetAccountDelta）。</p>
      */
     private void applyAccountImpact(DraftPreviewDTO preview) {
         if (preview.getAmount() == null || preview.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
@@ -358,6 +437,10 @@ public class DraftLedgerEntryService {
         } else if ("INCOME".equals(preview.getTxnType())) {
             preview.setImpactDirection("INCREASE");
             preview.setAccountDelta(preview.getAmount());
+        } else if ("TRANSFER".equals(preview.getTxnType())) {
+            preview.setImpactDirection("DECREASE");
+            preview.setAccountDelta(preview.getAmount().negate());
+            preview.setTargetAccountDelta(preview.getAmount());
         } else {
             preview.setImpactDirection("NONE");
             preview.setAccountDelta(BigDecimal.ZERO);
@@ -453,7 +536,7 @@ public class DraftLedgerEntryService {
     }
 
     /**
-     * 统一草稿流水类型大小写，首版只允许 EXPENSE/INCOME 进入确认路径。
+     * 统一草稿流水类型大小写，允许 EXPENSE/INCOME/TRANSFER 进入确认路径。
      */
     private String normalizeTxnType(String txnType) {
         return txnType == null ? null : txnType.trim().toUpperCase(Locale.ROOT);

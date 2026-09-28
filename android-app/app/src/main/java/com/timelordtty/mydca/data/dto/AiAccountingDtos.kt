@@ -14,6 +14,8 @@ data class AccountingIntentDto(
     val note: String? = null,
     val accountId: Long? = null,
     val accountNameHint: String? = null,
+    val targetAccountId: Long? = null,
+    val targetAccountNameHint: String? = null,
     val confidence: Double? = null,
     val missingFields: List<String> = emptyList(),
     val parsedPayloadJson: String? = null,

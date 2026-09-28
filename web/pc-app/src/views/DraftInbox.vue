@@ -178,9 +178,14 @@
             <div class="edit-form-grid">
               <label class="form-field">
                 <span class="field-label">交易类型</span>
-                <el-select v-model="draftEditForm.txnType" placeholder="请选择类型">
+                <el-select
+                  v-model="draftEditForm.txnType"
+                  placeholder="请选择类型"
+                  @change="handleEditTxnTypeChange"
+                >
                   <el-option label="支出" value="EXPENSE" />
                   <el-option label="收入" value="INCOME" />
+                  <el-option label="转账" value="TRANSFER" />
                 </el-select>
               </label>
 
@@ -194,7 +199,9 @@
               </label>
 
               <label class="form-field form-field-wide">
-                <span class="field-label">现金/活钱账户</span>
+                <span class="field-label">
+                  {{ isTransferEdit ? '转出账户' : '现金/活钱账户' }}
+                </span>
                 <el-select
                   v-model="draftEditForm.accountId"
                   filterable
@@ -214,6 +221,37 @@
                     </div>
                   </el-option>
                 </el-select>
+              </label>
+
+              <label v-if="isTransferEdit" class="form-field form-field-wide">
+                <span class="field-label">转入账户（仅转账）</span>
+                <el-select
+                  v-model="draftEditForm.targetAccountId"
+                  filterable
+                  clearable
+                  :loading="accountStore.loading"
+                  placeholder="请选择转入账户"
+                >
+                  <el-option
+                    v-for="account in transferTargetAccountOptions"
+                    :key="account.id"
+                    :label="formatAccountOption(account)"
+                    :value="account.id"
+                  >
+                    <div class="account-option">
+                      <span>{{ account.accountName }}</span>
+                      <small>{{ formatAccountMeta(account) }}</small>
+                    </div>
+                  </el-option>
+                </el-select>
+              </label>
+
+              <label v-if="isTransferEdit" class="form-field form-field-wide">
+                <span class="field-label">转入账户提示</span>
+                <el-input
+                  v-model="draftEditForm.targetAccountNameHint"
+                  placeholder="保留 AI/文本给出的转入账户提示，便于复核"
+                />
               </label>
 
               <label class="form-field form-field-wide">
@@ -270,8 +308,14 @@
                 <strong>{{ formatAmount(preview.amount) }}</strong>
               </div>
               <div>
-                <span class="field-label">账户</span>
+                <span class="field-label">{{ isTransferPreview ? '转出账户' : '账户' }}</span>
                 <strong>{{ formatPreviewAccount(preview.accountId) }}</strong>
+              </div>
+              <div v-if="isTransferPreview">
+                <span class="field-label">转入账户</span>
+                <strong>{{
+                  formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
+                }}</strong>
               </div>
               <div>
                 <span class="field-label">草稿 ID</span>
@@ -280,7 +324,7 @@
             </div>
             <div class="preview-impact-grid">
               <div class="impact-card">
-                <span class="field-label">账户影响</span>
+                <span class="field-label">{{ isTransferPreview ? '转出账户影响' : '账户影响' }}</span>
                 <strong>{{ formatImpactDirection(preview.impactDirection) }}</strong>
                 <p>
                   {{ formatPreviewAccount(preview.accountId, preview.accountName) }}
@@ -288,6 +332,16 @@
                   <span v-if="preview.fundUsage"> / {{ preview.fundUsage }}</span>
                 </p>
                 <em>{{ formatSignedAmount(preview.accountDelta) }}</em>
+              </div>
+              <div v-if="isTransferPreview" class="impact-card">
+                <span class="field-label">转入账户影响</span>
+                <strong>转入</strong>
+                <p>
+                  {{ formatPreviewAccount(preview.targetAccountId, preview.targetAccountName) }}
+                  <span v-if="preview.targetAccountType"> / {{ preview.targetAccountType }}</span>
+                  <span v-if="preview.targetFundUsage"> / {{ preview.targetFundUsage }}</span>
+                </p>
+                <em>{{ formatSignedAmount(preview.targetAccountDelta) }}</em>
               </div>
               <div class="impact-card">
                 <span class="field-label">正式对象影响</span>
@@ -437,14 +491,16 @@ import type {
   DraftPreview,
 } from '@wealth-hub/shared'
 
-type DraftTxnType = 'EXPENSE' | 'INCOME' | ''
+type DraftTxnType = 'EXPENSE' | 'INCOME' | 'TRANSFER' | ''
 
 interface DraftEditForm {
   txnType: DraftTxnType
   amount: string
   note: string
   accountId?: number
+  targetAccountId?: number
   accountNameHint: string
+  targetAccountNameHint: string
 }
 
 const accountStore = useAccountStore()
@@ -498,6 +554,49 @@ const rankedAccountOptions = computed(() => {
     return left.accountName.localeCompare(right.accountName, 'zh-Hans-CN')
   })
 })
+
+const transferTargetAccountOptions = computed(() =>
+  [...editableAccountOptions.value].sort((left, right) =>
+    left.accountName.localeCompare(right.accountName, 'zh-Hans-CN')
+  )
+)
+
+/** 转账编辑态：只有 TRANSFER 才显示转入账户，避免目标账户残留到 EXPENSE / INCOME。 */
+const isTransferEdit = computed(() => draftEditForm.value.txnType === 'TRANSFER')
+
+/** 转账预览态：PC 只做查看 / 预览兼容，不把 TRANSFER 当成不支持类型。 */
+const isTransferPreview = computed(
+  () => preview.value?.txnType?.trim().toUpperCase() === 'TRANSFER'
+)
+
+/** 转账确认弹窗标题：明确「确认将 X 从 A 转到 B？」。 */
+const transferConfirmTitle = computed(() => {
+  const current = preview.value
+  if (!current || !isTransferPreview.value) return '确认正式记账'
+  const from = current.accountName || `账户 #${current.accountId ?? '-'}`
+  const to = current.targetAccountName || `账户 #${current.targetAccountId ?? '-'}`
+  return `确认将 ￥${formatPlainAmount(current.amount)} 从 ${from} 转到 ${to}？`
+})
+
+/** 转账确认弹窗正文：明确会生成一笔正式转账流水；非转账保持原文案。 */
+const transferConfirmMessage = computed(() =>
+  isTransferPreview.value
+    ? '本操作会通过后端统一记账入口生成一笔从转出账户到转入账户的正式转账流水，并影响正式账本统计。请先确认金额与账户无误。'
+    : '确认后将通过后端统一记账入口生成正式流水，并影响正式账本统计。请确认草稿内容无误。'
+)
+
+/** 切换交易类型时清掉转入账户残留，保证非转账 payload 不含 target 字段。 */
+function handleEditTxnTypeChange(type: DraftTxnType) {
+  if (type !== 'TRANSFER') {
+    draftEditForm.value.targetAccountId = undefined
+    draftEditForm.value.targetAccountNameHint = ''
+  }
+}
+
+function formatPlainAmount(amount?: number | null): string {
+  if (amount === null || amount === undefined || Number.isNaN(amount)) return '-'
+  return Number(amount).toFixed(2)
+}
 
 async function loadDrafts() {
   const currentSelectedId = selectedDraft.value?.id
@@ -787,15 +886,11 @@ async function handleConfirm(draft: DraftLedgerEntry) {
   }
 
   try {
-    await ElMessageBox.confirm(
-      '确认后将通过后端统一记账入口生成正式流水，并影响正式账本统计。请确认草稿内容无误。',
-      '确认正式记账',
-      {
-        confirmButtonText: '确认记账',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
+    await ElMessageBox.confirm(transferConfirmMessage.value, transferConfirmTitle.value, {
+      confirmButtonText: '确认记账',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
 
     confirming.value = true
     const confirmed = await draftApi.confirmDraft(draft.id)
@@ -827,21 +922,32 @@ function emptyDraftEditForm(): DraftEditForm {
     amount: '',
     note: '',
     accountId: undefined,
+    targetAccountId: undefined,
     accountNameHint: '',
+    targetAccountNameHint: '',
   }
 }
 
 function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
   const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson))
   const amount = asNumber(payload?.amount)
-  const accountId = asNumber(payload?.accountId)
+  const accountId =
+    asNumber(payload?.accountId) ??
+    asNumber(payload?.cashAccountId) ??
+    asNumber(payload?.sourceAccountId)
+  const targetAccountId =
+    asNumber(payload?.targetAccountId) ??
+    asNumber(payload?.toAccountId) ??
+    asNumber(payload?.destinationAccountId)
 
   return {
     txnType: normalizeEditTxnType(asString(payload?.txnType)),
     amount: amount === null ? '' : String(amount),
     note: asString(payload?.note) || draft.rawInput || '',
     accountId: accountId === null ? undefined : accountId,
+    targetAccountId: targetAccountId === null ? undefined : targetAccountId,
     accountNameHint: asString(payload?.accountNameHint) || '',
+    targetAccountNameHint: asString(payload?.targetAccountNameHint) || '',
   }
 }
 
@@ -853,6 +959,16 @@ function validateDraftEditForm(): string | null {
 
   const accountId = Number(draftEditForm.value.accountId)
   if (!Number.isInteger(accountId) || accountId <= 0) return '请选择有效的现金或活钱账户。'
+
+  if (draftEditForm.value.txnType === 'TRANSFER') {
+    const targetAccountId = Number(draftEditForm.value.targetAccountId)
+    if (!Number.isInteger(targetAccountId) || targetAccountId <= 0) {
+      return '转账必须选择转入账户。'
+    }
+    if (targetAccountId === accountId) {
+      return '转出账户与转入账户不能相同，请重新选择转入账户。'
+    }
+  }
 
   return null
 }
@@ -870,6 +986,13 @@ function buildUpdatedPayload(draft: DraftLedgerEntry, amount: number): Record<st
   payload.note = draftEditForm.value.note.trim() || draft.rawInput || ''
   payload.accountId = draftEditForm.value.accountId
   payload.accountNameHint = draftEditForm.value.accountNameHint.trim() || null
+  if (draftEditForm.value.txnType === 'TRANSFER') {
+    payload.targetAccountId = draftEditForm.value.targetAccountId
+    payload.targetAccountNameHint = draftEditForm.value.targetAccountNameHint.trim() || null
+  } else {
+    delete payload.targetAccountId
+    delete payload.targetAccountNameHint
+  }
   payload.missingFields = calculateMissingFields(payload)
 
   return payload
@@ -885,6 +1008,11 @@ function calculateMissingFields(payload: Record<string, unknown>): string[] {
   if (amount === null || amount <= 0) missingFields.push('amount')
   if (accountId === null || accountId <= 0) missingFields.push('accountId')
 
+  if (txnType === 'TRANSFER') {
+    const targetAccountId = asNumber(payload.targetAccountId)
+    if (targetAccountId === null || targetAccountId <= 0) missingFields.push('targetAccountId')
+  }
+
   return missingFields
 }
 
@@ -893,8 +1021,11 @@ function summarizeDraft(draft: DraftLedgerEntry): string {
   const txnType = formatTxnType(asString(payload?.txnType))
   const amount = formatAmount(asNumber(payload?.amount))
   const account = formatPreviewAccount(asNumber(payload?.accountId))
+  const targetAccountId = asNumber(payload?.targetAccountId)
+  const accountLabel =
+    targetAccountId === null ? account : `${account} → ${formatPreviewAccount(targetAccountId)}`
   const note = asString(payload?.note) || draft.rawInput || '-'
-  return `${txnType} / ${amount} / ${account} / ${note}`
+  return `${txnType} / ${amount} / ${accountLabel} / ${note}`
 }
 
 function parseMissingFields(raw?: string | null): string[] {
@@ -956,7 +1087,9 @@ function asNumber(value: unknown): number | null {
 
 function normalizeEditTxnType(type?: string | null): DraftTxnType {
   const normalized = type?.trim().toUpperCase()
-  if (normalized === 'EXPENSE' || normalized === 'INCOME') return normalized
+  if (normalized === 'EXPENSE' || normalized === 'INCOME' || normalized === 'TRANSFER') {
+    return normalized
+  }
   return ''
 }
 
@@ -987,6 +1120,7 @@ function formatTxnType(type?: string | null): string {
   const labels: Record<string, string> = {
     EXPENSE: '支出',
     INCOME: '收入',
+    TRANSFER: '转账',
   }
   return type ? labels[type] || type : '-'
 }

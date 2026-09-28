@@ -56,6 +56,33 @@ class DraftAccountSelectionTest {
         assertTrue(DraftAccountSelection.isSelectable(null, reserved))
     }
 
+    @Test
+    fun transferAllowsAnySelectableLeafAccountRegardlessOfFundUsage() {
+        val selectable = DraftAccountSelection.selectableFor("TRANSFER", all)
+
+        assertEquals(listOf(1L, 2L, 3L, 4L), selectable.map { it.id })
+        assertTrue(DraftAccountSelection.isSelectable("transfer", reserved))
+        assertTrue(DraftAccountSelection.isSelectable("TRANSFER", investable))
+        assertFalse(DraftAccountSelection.isSelectable("TRANSFER", parent))
+        assertNull(DraftAccountSelection.rejectionReason("TRANSFER", reserved))
+        assertTrue(DraftAccountSelection.rejectionReason("TRANSFER", parent).orEmpty().contains("父账户"))
+    }
+
+    @Test
+    fun transferValidationFlagsSameAccountAndCurrencyMismatch() {
+        assertEquals(
+            "转出账户与转入账户不能相同，请重新选择转入账户。",
+            DraftAccountSelection.transferValidationMessage(spendable, spendable),
+        )
+
+        val cny = spendable.copy(currency = "CNY")
+        val usd = account(6, "美元账户", "SPENDABLE").copy(currency = "USD")
+        assertTrue(DraftAccountSelection.transferValidationMessage(cny, usd).orEmpty().contains("币种"))
+
+        val anotherCny = account(7, "另一个日常账户", "SPENDABLE")
+        assertNull(DraftAccountSelection.transferValidationMessage(cny, anotherCny))
+        assertNull(DraftAccountSelection.transferValidationMessage(null, anotherCny))
+    }
     private fun account(
         id: Long,
         name: String,

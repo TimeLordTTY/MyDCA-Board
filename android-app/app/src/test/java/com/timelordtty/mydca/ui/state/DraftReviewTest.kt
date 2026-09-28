@@ -1,6 +1,7 @@
 package com.timelordtty.mydca.ui.state
 
 import com.timelordtty.mydca.data.dto.DraftLedgerEntryDto
+import com.timelordtty.mydca.data.dto.DraftPreviewDto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -74,6 +75,60 @@ class DraftReviewTest {
         assertEquals("#7 · 待确认 · 支出 EXPENSE · 金额 12.3 · 账户 5", DraftReview.listLabel(complete))
     }
 
+    @Test
+    fun transferPreviewShowsBothAccountsAndBothDeltas() {
+        val preview = DraftPreviewDto(
+            draftId = 3,
+            txnType = "TRANSFER",
+            accountName = "专款账户",
+            fundUsage = "RESERVED",
+            targetAccountName = "日常账户",
+            targetFundUsage = "SPENDABLE",
+            amount = 300.0,
+            accountDelta = -300.0,
+            targetAccountDelta = 300.0,
+            confirmSupported = true,
+            warnings = listOf("本次会把资金从 RESERVED 转到 SPENDABLE，请确认这是主动调整资金分区。"),
+        )
+
+        assertEquals("转账 TRANSFER", DraftReview.txnTypeLabel("transfer"))
+        assertEquals(
+            listOf(
+                "从：专款账户 / RESERVED",
+                "到：日常账户 / SPENDABLE",
+                "金额：300",
+                "转出账户变动：-300",
+                "转入账户变动：+300",
+            ),
+            DraftReview.transferImpactLines(preview),
+        )
+    }
+
+    @Test
+    fun transferConfirmDialogStatesFromToAndAmount() {
+        val preview = DraftPreviewDto(
+            draftId = 3,
+            txnType = "TRANSFER",
+            accountName = "专款账户",
+            targetAccountName = "日常账户",
+            amount = 300.0,
+            confirmSupported = true,
+        )
+
+        assertEquals("确认将 ¥300 从 专款账户 转到 日常账户？", DraftReview.confirmDialogTitle(preview))
+        assertTrue(DraftReview.confirmDialogMessage(preview, canConfirm = true).contains("正式转账流水"))
+        assertTrue(DraftReview.confirmDialogMessage(preview, canConfirm = false).contains("阻止"))
+        assertEquals("确认正式记账？", DraftReview.confirmDialogTitle(null))
+    }
+
+    @Test
+    fun expensePreviewHasNoTransferLines() {
+        val preview = DraftPreviewDto(draftId = 1, txnType = "EXPENSE", amount = 12.3, confirmSupported = true)
+
+        assertTrue(DraftReview.transferImpactLines(preview).isEmpty())
+        assertTrue(DraftReview.transferImpactLines(null).isEmpty())
+        assertEquals("确认正式记账？", DraftReview.confirmDialogTitle(preview))
+    }
     private fun draft(
         id: Long = 1L,
         status: String = "DRAFT",

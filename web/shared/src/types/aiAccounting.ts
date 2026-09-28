@@ -31,16 +31,20 @@ export interface AccountingIntent {
   sourceRef?: string | null
   /** 原始输入文本。 */
   rawInput: string
-  /** 候选交易类型，不确定时为空。 */
-  txnType?: 'EXPENSE' | 'INCOME' | string | null
+  /** 候选交易类型：EXPENSE / INCOME / TRANSFER；不确定时为空。 */
+  txnType?: 'EXPENSE' | 'INCOME' | 'TRANSFER' | string | null
   /** 候选金额，不确定时为空。 */
   amount?: number | null
   /** 候选备注。 */
   note?: string | null
-  /** 候选账户 ID；首版规则解析通常为空，等待用户补齐。 */
+  /** 候选转出（来源）账户 ID；规则解析不会自动映射真实账户，通常为空，等待用户补齐。 */
   accountId?: number | null
-  /** 账户名称提示，只供复核，不自动当成账户 ID。 */
+  /** 转出账户名称提示，只供复核，不自动当成账户 ID。 */
   accountNameHint?: string | null
+  /** 转账时的转入（目标）账户 ID；规则解析不会自动映射真实账户，通常为空。 */
+  targetAccountId?: number | null
+  /** 转账时的转入账户名称提示，只供复核，不自动当成账户 ID。 */
+  targetAccountNameHint?: string | null
   /** 规则解析置信度。 */
   confidence?: number | null
   /** 仍需补齐的字段。 */

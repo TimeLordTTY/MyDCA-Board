@@ -3,14 +3,17 @@
 <!-- CURRENT-SNAPSHOT:START -->
 ## 当前发布状态（2026-09-28）
 
-- 当前 Android：`versionName=0.9.0`、`versionCode=10`。
+- 当前 Android：`versionName=0.10.0`、`versionCode=11`。
+- v0.10.0 TRANSFER 转账草稿闭环已完成：草稿箱可切换支出 / 收入 / 转账，转账表单支持转出 / 转入双账户、双账户影响预览与「确认将 ¥X 从 A 转到 B？」二次确认；只有后端 `preview.confirmSupported=true` 才可确认，重复确认不重复记账。
 - v0.9.0 桌面快速记账小组件已完成：四个静态中文入口只打开既有页面，不联网、不读写账本、不自动记账。
-- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程；CI 真实制品：
+- v0.8.0 系统分享快速采集已完成：Share Sheet 文本 / 单图只预填到现有手工 / OCR 流程。
+- 最近一次真实 CI 制品仍是 v0.9.0：
 - Run ID `36367375440`
 - Artifact ID `10946904834`
 - Artifact `mydca-android-v0.9.0-7fe07527a8d793018d4d7f284a5643359873ddd0`
 - APK `MyDCA-Board-v0.9.0-7fe07527.apk`
 - CI APK SHA-256 `5E1059E630D2F66C76A93271C62285C36276A7FAAA65867A445709AAD2A0A13C`
+- v0.10.0 制品状态：`NOT_PRODUCED`（本轮只提交、未 push，未触发 `Android test APK`）。
 
 <!-- CURRENT-SNAPSHOT:END -->
 
@@ -20,9 +23,10 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.9.0`（`versionCode = 10`），APK 制品命名为 `MyDCA-Board-v0.9.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.10.0`（`versionCode = 11`），APK 制品命名为 `MyDCA-Board-v0.10.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
+- 草稿确认支持支出 / 收入 / 转账：TRANSFER 需要转出账户 + 转入账户 + 金额，确认前必须先看到双账户影响预览。
 - 未登录时展示真实用户名/密码登录入口；密码不持久化，登录 Token 由 Android Keystore 加密保护。
 - Android App 不接入真实大模型，不自动预览、不自动确认、不直接写数据库。
 
@@ -128,7 +132,8 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 
 ## 草稿编辑与账户补全
 
-- 草稿箱详情页支持编辑 DRAFT 草稿的 `txnType`、`amount`、`note`、`accountId` 和 `accountNameHint`。
+- 草稿箱详情页支持编辑 DRAFT 草稿的 `txnType`、`amount`、`note`、`accountId`、`accountNameHint`，以及转账的 `targetAccountId`。
+- 交易类型支持「支出 EXPENSE / 收入 INCOME / 转账 TRANSFER」；切回支出 / 收入时会清空转入账户，避免目标账户残留到非转账 payload。
 - 保存草稿调用 `PUT /api/v2/drafts/{draftId}`，只更新草稿候选内容，不会直接写正式账本。
 - `accountId` 是后端真实账户 ID，必须输入正整数；`accountNameHint` 只是提示，不会替代真实账户。
 - 保存后旧 preview 会被清空；“保存并预览”会基于保存后的草稿重新生成 preview。
@@ -233,3 +238,15 @@ android-app/app/build/outputs/apk/debug/app-debug.apk
 - 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 195 项通过（由 28 类 156 项增至 35 类 195 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
 - Debug APK：大小 55,816,715 bytes，SHA-256：`C2CC3CBD10EFCD20177450CC367ACAF2C273A0E8C050BBCAFBEF58E704116617`（debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察，不作为制品身份）；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
 - 明确未做：不做桌面余额 / 资产展示，不做动态计数或后台刷新，不做通知栏常驻入口，不做 Quick Settings Tile，不自动 parse / OCR / draft / preview / confirm，不自动正式入账、不自动交易，不新增广泛系统权限。
+
+## v0.10.0 TRANSFER 转账草稿闭环
+
+- 版本收口为 `versionName = 0.10.0`（`versionCode = 11`）；转账草稿继续走既有安全链路：`DRAFT → fresh preview → 主人二次确认 → 正式账本`。
+- 草稿编辑新增「转账 TRANSFER」类型：转出账户（`accountId`）、转入账户（`targetAccountId`）、金额、备注；两边都只能选真实可记账叶子账户，转出 / 转入不能相同。
+- 转账不受「日常消费只允许 SPENDABLE」限制：`SPENDABLE` / `RESERVED` / `INVESTABLE` 之间允许转移；币种不一致前端提前提示，最终以后端 preview 为准。
+- TRANSFER 预览中文展示「从 / 到 / 金额 / 转出账户变动 / 转入账户变动 / 风险提示」；确认弹窗标题为「确认将 ¥X 从 A 转到 B？」而不是通用确认文案。
+- 确认仍受 fresh preview gate 控制：必须当前草稿为 `DRAFT`、preview 匹配当前草稿且 `preview.confirmSupported=true`，再由用户二次确认；重复确认不重复记账，`IGNORED` 草稿不可确认。
+- 转账不会自动发生：手工 / OCR / 支付通知候选 / 系统分享 / 桌面小组件任何入口都不具备转账能力，后端也不会在 parse 或创建 DRAFT 后自动 confirm。
+- 2026-09-28 验证：`testDebugUnitTest` 35 个测试类共 206 项通过（由 195 项增至 206 项）、`assembleDebug` 通过、`lintDebug` 通过（0 error，2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 通过（成功静默）。
+- Debug APK：大小 55,821,214 bytes，SHA-256：`4D5C1443EE30B0A8315ECBB848A3FFAD62ED3B675861236361B8971552C087DB`（debug APK 本地字节不可复现：同一份源码重复 `assembleDebug` 的体积与 SHA-256 都会变化，该值只作本机观察，不作为制品身份）；APK 不提交到 Git。CI 制品（Run ID / Artifact ID / 文件名 / CI APK SHA-256）状态为 `NOT_PRODUCED`，需在真实推送触发工作流后回填，本轮不声称 CI APK 已交付。
+- 明确未做：不做自动 preview / confirm / 转账 / 交易，不做跨币种转账，不做投资订单 / 结算类草稿确认，不新增数据库表或 migration，不新增系统权限。

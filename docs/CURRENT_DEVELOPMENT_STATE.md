@@ -11,10 +11,10 @@
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.9.0`
-- `versionCode = 10`
+- `versionName = 0.10.0`
+- `versionCode = 11`
 
-“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.9.0` 是桌面快速记账小组件版本（上一版 `0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
+“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.10.0` 是 TRANSFER 转账草稿闭环版本（上一版 `0.9.0` 为桌面快速记账小组件，更早 `0.8.0` 为外部分享快速采集）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
 ## 已完成的 Phase3 主能力
 
@@ -27,6 +27,7 @@
 - v0.7 全局“记一笔”快速采集中心：手工、OCR、支付通知候选、Outbox 四入口统一导航。
 - v0.8.0 外部分享快速采集：系统 Share Sheet 的文本 / 单张图片只预填到现有人工采集流程，不自动 parse/OCR/draft/preview/confirm。
 - v0.9.0 桌面快速记账小组件：四个静态中文入口（记一笔 / 手工记账 / 图片识别 / 草稿箱）只打开既有页面，不联网、不读写账本、不自动记账。
+- v0.10.0 TRANSFER 转账草稿闭环：文本候选识别转账、双账户（转出 / 转入）影响预览、主人二次确认后经 `QuickEntryService.quickTransfer` 生成一笔正式转账流水；重复确认不重复记账。
 
 ## v0.8 强幂等（已完成）
 
@@ -67,7 +68,25 @@
 - 未登录时目标只在当前进程保留一次；未申请任何新权限，`MainActivity` 未新增 intent-filter。
 - Android 35 个测试类 / 195 项通过、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1` 全部通过。
 
+## v0.10.0 TRANSFER 转账草稿闭环（已完成）
+
+- 任务：`task-mydca-v010-transfer-draft-loop-20260928`
+- 详细说明：`docs/mydca_v010_transfer_draft_loop_20260928.md`
+
+- 候选结构统一为 `txnType=TRANSFER` + `accountId` / `accountNameHint`（转出）+ `targetAccountId` / `targetAccountNameHint`（转入）+ `amount` + `note`；`sourceAccountId` / `cashAccountId`、`toAccountId` / `destinationAccountId` 只作兼容读取别名，写回只用标准字段。
+- 文本解析：`转账` / `转到` / `转入` / `转出` 或「从…到…」优先判定 TRANSFER，优先级高于「到账 / 付款 / 支付」；`工资到账 5000` 仍为 INCOME、`支付午饭 30` 仍为 EXPENSE。规则解析不把账户名称提示映射成真实账户 ID，缺 ID 时只生成 DRAFT 并把 `accountId` / `targetAccountId` 写入 `missingFields`。
+- 预览：转出 / 转入两个账户都必须当前 user / family 可见、active REAL、叶子账户、互不相同、币种一致；TRANSFER 不套用 EXPENSE 的 SPENDABLE 限制，跨资金用途时给出中文风险提示。新增 `targetAccountId` / `targetAccountName` / `targetAccountType` / `targetFundUsage` / `targetAccountDelta`；转出记 `accountDelta = -amount`，转入记 `targetAccountDelta = +amount`。
+- 正式入账：`QuickEntryService.quickTransfer(userId, familyId, sourceAccountId, targetAccountId, amount, note)` 经既有 `LedgerService.createTransaction(..., "TRANSFER_OUT", ...)` 创建一笔平衡交易（转出 CREDIT + 转入 DEBIT）；流水页按既有语义展示转出 / 转入两条视图，但底层只有一笔交易，不计入收入 / 支出净现金流。
+- confirm：TRANSFER 必须重新 `buildPreview`，只有 `confirmSupported=true` 才调用 `quickTransfer`；`txnId` 写回 `confirmTxnId`，重复确认幂等，`IGNORED` 不可确认，不存在自动 preview / confirm。
+- Android：`versionName = 0.10.0`（`versionCode = 11`）；草稿编辑支持支出 / 收入 / 转账三种类型与转出 / 转入双账户，切回支出 / 收入会清空目标账户；确认弹窗为「确认将 ¥X 从 A 转到 B？」。
+- PC / shared：`web/shared` 同步 TRANSFER 与 target 字段类型；PC 草稿箱可查看 / 预览双账户与双 delta，并补齐最小安全编辑，不再把 TRANSFER 显示成不支持类型。
+- 本轮未新增数据库表 / migration，未连接任何数据库；后端 95 项测试、Android 206 项测试、`assembleDebug`、`lintDebug`（0 error / 2 条既有 warning）、`scripts/post-task-compile-hook.ps1`（成功静默）全部通过。
+
 ## Android CI APK 真实证据
+
+### v0.10.0（CI 未产出）
+- 状态：`NOT_PRODUCED`
+- 说明：本轮执行进程只做本地提交、**未 push**，未触发 `Android test APK`；Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 需在真实推送后回填，不得用本地 debug 哈希冒充。
 
 ### v0.9.0
 - source commit：`7fe07527a8d793018d4d7f284a5643359873ddd0`
@@ -127,11 +146,11 @@
 
 ## 当前真正未完成
 
-1. **真实设备体验验收**：桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **转账草稿闭环**：当前草稿正式确认仍只支持 EXPENSE / INCOME；TRANSFER 的双账户预览、人工确认与 Android 编辑流程尚未落地。
+1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
+2. **v0.10.0 CI 制品证据**：v0.10.0 尚未真实推送触发 `Android test APK`，Run ID / Artifact ID / APK 文件名 / CI APK SHA-256 待回填。
 3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
 4. **长期能力**：投资订单类草稿确认、完整结算/持仓影响、策略建议与回测闭环继续按设计推进。
 
 ## 下一工程任务
 
-下一项普通、可自动化的业务任务：**Android / 后端 v0.10.0 转账草稿闭环**。在不改变“DRAFT → fresh preview → 用户二次确认 → 正式账本”的安全边界下，补齐 TRANSFER 的双账户编辑、影响预览与人工确认；真机桌面小组件体验验收继续保留为人工验收项。
+下一项普通、可自动化的业务任务：**v0.10.0 真机验收与 CI 制品回填**（转账双账户选择 / 确认弹窗 / 流水页转出与转入两条视图；桌面小组件添加 / 尺寸回调 / 点击跳转）。在不改变“DRAFT → fresh preview → 用户二次确认 → 正式账本”的安全边界下，投资订单 / 结算类草稿确认与持仓影响作为后续独立任务推进。
