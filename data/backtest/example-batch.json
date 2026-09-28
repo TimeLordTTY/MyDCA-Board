@@ -1,0 +1,9 @@
+{
+  "data": "backtest/example.csv",
+  "strategies": [
+    {"name": "pure_sip", "parameters": [{"contribution": 100}]},
+    {"name": "ma_enhanced", "parameters": [{"ma_window": 2, "dip_multiplier": 2}]},
+    {"name": "profit_recycle", "version": "1", "parameters": [{"profit_threshold": 0.1}]},
+    {"name": "profit_recycle", "version": "2", "parameters": [{"profit_threshold": 0.1}]}
+  ]
+}

@@ -1,0 +1,9 @@
+# Offline backtest JSON contract (v1)
+
+Run `python scripts/backtest/run_backtest.py --data backtest/example.csv --data-root data` for one pure SIP simulation. Use `--strategy ma_enhanced --version 1 --params '{"ma_window":2}'` to select a strategy. Run `python scripts/backtest/run_backtest.py --batch data/backtest/example-batch.json --data-root data` to compare strategies. CSV requires ascending unique `date,nav` rows; dates use ISO format and NAV must be positive.
+
+The JSON result has `schema_version`, deterministic `run_id`, `provenance` (engine and strategy versions, SHA-256 of exact input bytes, date range and parameters), `data_range`, `strategy`, `metrics`, `events`, and `warnings`. Batch output has `results`; each result adds `baseline` deltas relative to pure SIP with matching contribution and interval. Currency amounts are nominal and have no currency conversion, fees, dividends, or tax model. Total return divides final assets by total contributions. Annualized return applies the simple calendar span to that ratio and is null for one date. Maximum drawdown uses account value and can be distorted by later contributions; it is descriptive, not time-weighted risk. These are historical simulations only.
+
+All paths resolve inside `--data-root`; batch configs must also live there. Batch size is limited to 64, input CSV to 20 MB / 100,000 rows. Strategy names and versions are an explicit allowlist; no Python expression or plugin loading is supported. Identical bytes and parameters yield identical JSON; source paths are excluded. Errors are JSON on stderr with exit code 2. The engine reads CSV and never accesses a database or trading service.
+
+There are no prior result files in this repository to migrate. Existing JSON outputs can be read as ordinary JSON and wrapped by consumers; this engine writes only schema v1. The prior CLI described in design documents was not implemented in the repository when this module was added.
