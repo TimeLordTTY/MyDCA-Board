@@ -55,6 +55,26 @@ export interface SettlementConfirm {
   confirmedAt: string
   note?: string
   createdAt: string
+  /** Display-only digest; cannot be used as freshPreviewToken. */
+  previewDigest?: string
+  ledgerTxnId?: string
+}
+
+export interface SettlementAudit {
+  orderId: string
+  orderType: Order['orderType']
+  orderStatus: string
+  productId: number
+  productName?: string
+  settlement: SettlementConfirm
+  fundingLines: OrderFundingLine[]
+  ledgerTxnId?: string
+  postings: Array<{ txnId: string; accountId: number; accountType: string; postingType: string; amount: number; shares?: number }>
+  cashDelta: number
+  positionSharesDelta: number
+  feeAmount: number
+  reconciliationStatus: 'OK' | 'WARNING' | 'BROKEN'
+  reasons: string[]
 }
 
 /**

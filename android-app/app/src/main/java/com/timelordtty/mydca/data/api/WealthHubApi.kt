@@ -18,6 +18,7 @@ import com.timelordtty.mydca.data.dto.ParseTextRequestDto
 import com.timelordtty.mydca.data.dto.PendingSettlementOrderDto
 import com.timelordtty.mydca.data.dto.ProductDto
 import com.timelordtty.mydca.data.dto.SettlementConfirmDto
+import com.timelordtty.mydca.data.dto.SettlementAuditDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewRequestDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
@@ -122,6 +123,12 @@ interface WealthHubApi {
     /** 待结算订单列表（只读）。列表本身不会 preview，也不会 confirm。 */
     @GET("api/v2/settlements/pending")
     suspend fun getPendingSettlements(): List<PendingSettlementOrderDto>
+
+    @GET("api/v2/settlements/history")
+    suspend fun getSettlementHistory(): List<SettlementAuditDto>
+
+    @GET("api/v2/settlements/history/{orderId}")
+    suspend fun getSettlementAudit(@Path("orderId") orderId: String): SettlementAuditDto
 
     /**
      * 人工结算只读预览：返回现金 / 持仓 / 手续费影响与 freshPreviewToken。

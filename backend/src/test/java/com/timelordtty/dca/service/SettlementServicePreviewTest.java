@@ -455,6 +455,8 @@ class SettlementServicePreviewTest {
 
         assertNotNull(result);
         assertEquals("ORD-1", result.getOrderId());
+        assertNotNull(result.getPreviewDigest());
+        assertFalse(result.getPreviewDigest().equals(preview.getFreshPreviewToken()));
         assertEquals("CONFIRMED", pendingOrder.getStatus());
         verify(settlementConfirmMapper, times(1)).insert(any());
         verify(orderMapper, times(1)).update(any());
@@ -464,9 +466,30 @@ class SettlementServicePreviewTest {
     }
 
     @Test
+    void auditDigestCannotAuthorizeConfirmation() {
+        stubBuyPendingOrder("ORD-1");
+        SettlementPreviewDTO preview = service.previewSettlement(
+                "ORD-1", CONFIRM_DATE, NAV_DATE, new BigDecimal("2.0"), null, null, new BigDecimal("5"));
+        String auditDigest = java.util.HexFormat.of().formatHex(digestForTest(preview.getFreshPreviewToken()));
+        assertThrows(RuntimeException.class, () -> service.confirmSettlement("ORD-1", CONFIRM_DATE, NAV_DATE,
+                new BigDecimal("2.0"), null, null, new BigDecimal("5"), auditDigest));
+        verify(settlementConfirmMapper, never()).insert(any());
+    }
+
+    private static byte[] digestForTest(String token) {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256").digest(
+                    ("settlement-audit-v1:" + token).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    @Test
     void duplicateConfirmIsIdempotent() {
         SettlementConfirm existing = existingConfirm("ORD-1");
         when(settlementConfirmMapper.selectByOrderId("ORD-1")).thenReturn(existing);
+        when(orderMapper.selectByOrderId("ORD-1")).thenReturn(order("ORD-1", "BUY", "CONFIRMED", USER_ID));
 
         SettlementConfirm result = service.confirmSettlement("ORD-1", CONFIRM_DATE, NAV_DATE,
                 new BigDecimal("2.0"), null, null, new BigDecimal("5"), "stale-token");
@@ -475,6 +498,15 @@ class SettlementServicePreviewTest {
         verify(settlementConfirmMapper, never()).insert(any());
         verify(orderMapper, never()).update(any());
         verifyNoInteractions(ledgerService, accountService);
+    }
+
+    @Test
+    void foreignDuplicateConfirmCannotReadSettlement() {
+        when(settlementConfirmMapper.selectByOrderId("ORD-1")).thenReturn(existingConfirm("ORD-1"));
+        when(orderMapper.selectByOrderId("ORD-1")).thenReturn(order("ORD-1", "BUY", "CONFIRMED", OTHER_USER_ID));
+        assertThrows(RuntimeException.class, () -> service.confirmSettlement("ORD-1", CONFIRM_DATE, NAV_DATE,
+                new BigDecimal("2.0"), null, null, new BigDecimal("5"), "stale-token"));
+        verifyNoInteractions(ledgerService);
     }
 
     @Test

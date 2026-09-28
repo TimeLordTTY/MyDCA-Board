@@ -134,6 +134,7 @@
 
           <div class="detail-actions">
             <el-button @click="loadHistory(selectedDraft.id)">查看历史</el-button>
+            <el-button v-if="selectedDraft.confirmOrderId" @click="openSettlementAudit(selectedDraft.confirmOrderId)">查看关联订单与结算审计</el-button>
             <el-button v-if="selectedDraft.status === 'IGNORED'" @click="handleReopen(selectedDraft)">恢复草稿</el-button>
             <el-button v-if="selectedDraft.status === 'CONFIRMED'" @click="handleCopy(selectedDraft)">复制为新草稿</el-button>
             <el-button
@@ -670,7 +671,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import {
   aiAccountingApi,
@@ -729,6 +730,10 @@ const textInput = ref('')
 const parsedIntent = ref<AccountingIntent | null>(null)
 const drafts = ref<DraftLedgerEntry[]>([])
 const selectedDraft = ref<DraftLedgerEntry | null>(null)
+const settlementRouter = useRouter()
+function openSettlementAudit(orderId: string) {
+  settlementRouter.push({ name: 'Settlements', query: { audit: orderId } })
+}
 const history = ref<DraftLifecycleEvent[]>([])
 const historyVisible = ref(false)
 const historyLoading = ref(false)

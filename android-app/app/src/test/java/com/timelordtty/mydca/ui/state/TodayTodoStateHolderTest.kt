@@ -130,6 +130,8 @@ private class TodoApiFixture(
 
     override suspend fun getPendingSettlements(): List<PendingSettlementOrderDto> =
         throw UnsupportedOperationException()
+    override suspend fun getSettlementHistory(): List<com.timelordtty.mydca.data.dto.SettlementAuditDto> = throw UnsupportedOperationException()
+    override suspend fun getSettlementAudit(orderId: String): com.timelordtty.mydca.data.dto.SettlementAuditDto = throw UnsupportedOperationException()
 
     override suspend fun previewSettlement(request: SettlementPreviewRequestDto): SettlementPreviewDto =
         throw UnsupportedOperationException()

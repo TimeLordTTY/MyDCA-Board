@@ -35,4 +35,5 @@
 - v0.13.0 人工结算预览与二次确认闭环：`docs/mydca_v013_manual_settlement_preview_confirm_20260928.md`
 - v0.8 后端强幂等：`docs/mydca_v08_draft_strong_idempotency_20260927.md`
 - v0.14 草稿生命周期审计与安全恢复：`docs/mydca_v014_draft_lifecycle_audit_20260928.md`
+- v0.14 人工结算审计与只读对账：`docs/mydca_v014_settlement_audit_reconciliation_20260929.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。

@@ -146,6 +146,10 @@ public class SettlementService {
         // 幂等：同一订单已存在 settlement_confirm 时直接返回既有结果，绝不重复生成第二套结算流水。
         SettlementConfirm existing = settlementConfirmMapper.selectByOrderId(orderId);
         if (existing != null) {
+            Order existingOrder = orderMapper.selectByOrderId(orderId);
+            if (existingOrder == null || !java.util.Objects.equals(existingOrder.getUserId(), userService.getCurrentUser().getId())) {
+                throw new RuntimeException("订单不属于当前用户，不能查看结算确认");
+            }
             return existing;
         }
         SettlementComputation computation = runSettlement(orderId, confirmDate, navDate, confirmNav, confirmShares,
@@ -1027,8 +1031,12 @@ public class SettlementService {
             // 0. 创建 preview 阶段登记的“待创建账户”并回填分录；账户创建严格发生在令牌校验之后，令牌失效时零副作用。
             createPendingAccounts(computation);
 
-            // 1. settlement_confirm 落库（一个订单只允许一条）
-            settlementConfirmMapper.insert(settlement);
+            // Store only the digest, never the fresh token. The digest is display-only.
+            settlement.setPreviewDigest(digestForAudit(computation.freshPreviewToken));
+
+            // LedgerService returns the exact transaction created for this settlement.
+            // Write it together with the confirmation inside the same transaction below.
+            com.timelordtty.dca.model.LedgerTxn settlementTxn = null;
 
             // 2. 释放出资行占用的 reserved_amount（只释放有金额的出资行；
             //    SELL / REDEMPTION 的份额占用不涉及金额，不在此处理）
@@ -1056,7 +1064,7 @@ public class SettlementService {
 
             // 4. 正式账本：整个订单只生成这一套 ledger_txn / ledger_posting
             if (!postings.isEmpty()) {
-                ledgerService.createTransaction(
+                settlementTxn = ledgerService.createTransaction(
                     order.getUserId(),
                     ownerFamilyId,
                     order.getOrderType(),
@@ -1070,6 +1078,9 @@ public class SettlementService {
                     orderId  // orderId - 关联订单
                 );
             }
+
+            settlement.setLedgerTxnId(settlementTxn == null ? null : settlementTxn.getTxnId());
+            settlementConfirmMapper.insert(settlement);
 
             // 5. 订单状态
             order.setStatus("CONFIRMED");
@@ -1124,6 +1135,21 @@ public class SettlementService {
     /** BigDecimal 的稳定文本，null 归一为空串，避免指纹受标度差异影响。 */
     private static String plain(BigDecimal value) {
         return value == null ? "" : value.stripTrailingZeros().toPlainString();
+    }
+
+    private static String digestForAudit(String token) {
+        try {
+            byte[] bytes = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(("settlement-audit-v1:" + token).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) {
+                hex.append(Character.forDigit((b >>> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("无法生成结算审计摘要", e);
+        }
     }
 
     /** 卖出 / 赎回的份额来源合计；资金来源行没有份额时回退到订单份额。 */

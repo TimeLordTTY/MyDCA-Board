@@ -54,18 +54,68 @@
         </table>
       </div>
     </div>
+    <div class="card" style="margin-top: 20px">
+      <div class="row-between"><h3>结算历史与只读对账</h3><button class="btn" @click="loadHistory">刷新历史</button></div>
+      <div v-if="historyError" class="sub">{{ historyError }}</div>
+      <div v-else-if="historyLoading" class="sub">正在加载结算历史...</div>
+      <div v-else-if="history.length === 0" class="sub">暂无结算历史</div>
+      <table v-else><thead><tr><th>订单</th><th>产品 / 类型</th><th>状态</th><th>对账</th><th>操作</th></tr></thead>
+        <tbody><tr v-for="item in history" :key="item.orderId">
+          <td class="mono">{{ item.orderId }}</td><td>{{ item.productName || item.productId }} / {{ getOrderTypeLabel(item.orderType) }}</td>
+          <td>{{ item.orderStatus }}</td><td>{{ auditLabel(item.reconciliationStatus) }}</td>
+          <td><button class="btn" @click="loadAudit(item.orderId)">查看详情</button></td>
+        </tr></tbody></table>
+      <div v-if="auditError" class="sub">{{ auditError }}</div>
+      <div v-if="selectedAudit" class="card" style="margin-top: 16px">
+        <h3>结算审计：{{ selectedAudit.orderId }}</h3>
+        <p>确认时间：{{ selectedAudit.settlement.confirmedAt || '未记录' }}；确认日期：{{ selectedAudit.settlement.confirmDate }}</p>
+        <p>净值：{{ selectedAudit.settlement.confirmNav ?? '未记录' }}；份额：{{ selectedAudit.settlement.confirmShares ?? '未记录' }}；金额：{{ selectedAudit.settlement.confirmAmount ?? '未记录' }}</p>
+        <p>预览摘要：{{ selectedAudit.settlement.previewDigest || '历史记录未保存' }}（仅审计展示，不可用于确认）</p>
+        <p>现金影响：{{ selectedAudit.cashDelta }}；持仓份额影响：{{ selectedAudit.positionSharesDelta }}；手续费：{{ selectedAudit.feeAmount }}</p>
+        <p>来源 / 目标账户：{{ selectedAudit.fundingLines.map(line => `${line.lineType || 'SOURCE'} #${line.accountId}`).join('；') || '无' }}</p>
+        <p>对账：{{ auditLabel(selectedAudit.reconciliationStatus) }}；{{ selectedAudit.reasons.join('；') || '未发现不一致' }}</p>
+        <p>结算流水：{{ selectedAudit.ledgerTxnId || '缺失' }}</p>
+        <p v-for="posting in selectedAudit.postings" :key="`${posting.txnId}-${posting.accountId}-${posting.accountType}`">
+          {{ posting.accountType }} {{ posting.postingType }} 账户 #{{ posting.accountId }} 金额 {{ posting.amount }} 份额 {{ posting.shares ?? '—' }}
+        </p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElNotification } from 'element-plus'
 import { settlementApi, getOrderTypeLabel, formatCurrency, formatDate } from '@wealth-hub/shared'
-import type { Order } from '@wealth-hub/shared'
+import type { Order, SettlementAudit } from '@wealth-hub/shared'
 import SettlementConfirmModal from '../components/SettlementConfirmModal.vue'
 
 const loading = ref(false)
 const pendingSettlements = ref<Order[]>([])
+const route = useRoute()
+const history = ref<SettlementAudit[]>([])
+const selectedAudit = ref<SettlementAudit | null>(null)
+const historyLoading = ref(false)
+const historyError = ref<string | null>(null)
+const auditError = ref<string | null>(null)
+const auditLabel = (status: SettlementAudit['reconciliationStatus']) =>
+  ({ OK: '一致', WARNING: '需核对', BROKEN: '不一致' })[status]
+
+async function loadHistory() {
+  historyLoading.value = true
+  historyError.value = null
+  try { history.value = await settlementApi.getHistory() }
+  catch { historyError.value = '结算历史加载失败，请重试' }
+  finally { historyLoading.value = false }
+}
+
+async function loadAudit(orderId: string) {
+  selectedAudit.value = null
+  auditError.value = null
+  try { selectedAudit.value = await settlementApi.getAudit(orderId) }
+  catch { auditError.value = '结算详情加载失败，请重试' }
+}
 
 async function loadSettlements() {
   loading.value = true
@@ -88,5 +138,7 @@ function handleConfirmSettlement(settlement: Order) {
 
 onMounted(() => {
   loadSettlements()
+  loadHistory()
+  if (typeof route.query.audit === 'string') loadAudit(route.query.audit)
 })
 </script>

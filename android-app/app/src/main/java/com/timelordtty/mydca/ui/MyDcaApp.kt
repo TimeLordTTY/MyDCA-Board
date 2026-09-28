@@ -401,6 +401,11 @@ private fun AuthenticatedApp(
                                 onOpenImageOcr = { draftEntryMode = OcrEntryMode.Image },
                                 onOpenManualEntry = { draftEntryMode = OcrEntryMode.ManualText },
                                 onOpenDraft = { draftId -> selectedDraftId = draftId },
+                                onOpenSettlementAudit = { orderId ->
+                                    settlementFocusOrderId = orderId
+                                    settlementFlowOpen = true
+                                    currentRoute = AppRoute.TodayTodo
+                                },
                                 draftOutbox = draftOutbox,
                                 draftCreationGateway = aiAccountingRepository,
                                 focusOutbox = quickFocus.outbox,

@@ -49,6 +49,7 @@ fun DraftInboxScreen(
     onOpenImageOcr: () -> Unit,
     onOpenManualEntry: () -> Unit,
     onOpenDraft: (Long) -> Unit,
+    onOpenSettlementAudit: (String) -> Unit = {},
     draftOutbox: DraftOutboxQueue? = null,
     draftCreationGateway: DraftCreationGateway? = null,
     focusOutbox: Boolean = false,
@@ -475,6 +476,7 @@ fun DraftInboxScreen(
 
         DraftDetailSection(
             selectedDraft = selectedDraft,
+            onOpenSettlementAudit = onOpenSettlementAudit,
             previewState = previewState,
             canConfirm = canConfirm,
             editForm = editForm,
@@ -598,6 +600,7 @@ private fun DraftListSection(
 @Composable
 private fun DraftDetailSection(
     selectedDraft: DraftLedgerEntryDto?,
+    onOpenSettlementAudit: (String) -> Unit,
     previewState: AsyncState<DraftPreviewDto>?,
     canConfirm: Boolean,
     editForm: DraftEditForm,
@@ -643,6 +646,11 @@ private fun DraftDetailSection(
             }
         )
         ParsedInfoSection(selectedDraft)
+        selectedDraft.confirmOrderId?.let { orderId ->
+            OutlinedButton(onClick = { onOpenSettlementAudit(orderId) }) {
+                Text("查看关联订单与结算审计")
+            }
+        }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             OutlinedButton(onClick = onHistory) { Text("查看历史") }

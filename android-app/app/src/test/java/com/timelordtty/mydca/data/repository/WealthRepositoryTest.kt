@@ -138,6 +138,8 @@ private open class FakeWealthHubApi : WealthHubApi {
     override suspend fun getProducts(keyword: String?, assetType: String?, channel: String?): List<ProductDto> = throw UnsupportedOperationException()
     override suspend fun getProductHoldingsByAccount(productId: Long): List<MobileHoldingByAccountDto> = throw UnsupportedOperationException()
     override suspend fun getPendingSettlements(): List<PendingSettlementOrderDto> = throw UnsupportedOperationException()
+    override suspend fun getSettlementHistory(): List<com.timelordtty.mydca.data.dto.SettlementAuditDto> = throw UnsupportedOperationException()
+    override suspend fun getSettlementAudit(orderId: String): com.timelordtty.mydca.data.dto.SettlementAuditDto = throw UnsupportedOperationException()
     override suspend fun previewSettlement(request: SettlementPreviewRequestDto): SettlementPreviewDto = throw UnsupportedOperationException()
     override suspend fun confirmSettlement(request: SettlementPreviewRequestDto): SettlementConfirmDto = throw UnsupportedOperationException()
 }

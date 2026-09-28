@@ -13,6 +13,7 @@ data class DraftLedgerEntryDto(
     val status: String? = null,
     val confidence: Double? = null,
     val missingFieldsJson: String? = null,
+    val confirmOrderId: String? = null,
     val createdAt: String? = null,
     val updatedAt: String? = null,
 )

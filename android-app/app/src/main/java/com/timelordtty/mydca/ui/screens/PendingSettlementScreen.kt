@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.dto.PendingSettlementOrderDto
+import com.timelordtty.mydca.data.dto.SettlementAuditDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewDto
 import com.timelordtty.mydca.data.repository.SettlementRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
@@ -59,11 +60,38 @@ fun PendingSettlementScreen(
     var actionMessage by remember { mutableStateOf<String?>(null) }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var isConfirming by remember { mutableStateOf(false) }
+    var history by remember { mutableStateOf<List<SettlementAuditDto>>(emptyList()) }
+    var audit by remember { mutableStateOf<SettlementAuditDto?>(null) }
+    var historyError by remember { mutableStateOf<String?>(null) }
+    var historyLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val holder = remember(settlementRepository, wealthRepository) {
         settlementRepository?.let { SettlementStateHolder(it, wealthRepository) }
     }
     val today = remember { LocalDate.now().toString() }
+
+    fun loadHistory() {
+        val repository = settlementRepository ?: run { historyError = apiConfigError ?: "接口配置未就绪"; return }
+        historyLoading = true
+        scope.launch {
+            when (val result = repository.history()) {
+                is NetworkResult.Success -> { history = result.data; historyError = null }
+                else -> historyError = "结算历史加载失败，请重试"
+            }
+            historyLoading = false
+        }
+    }
+
+    fun loadAudit(orderId: String) {
+        val repository = settlementRepository ?: return
+        audit = null
+        scope.launch {
+            when (val result = repository.audit(orderId)) {
+                is NetworkResult.Success -> { audit = result.data; historyError = null }
+                else -> historyError = "结算详情加载失败，请重试"
+            }
+        }
+    }
 
     fun selectOrder(order: PendingSettlementOrderDto, clearMessage: Boolean = true) {
         selectedOrder = order
@@ -225,6 +253,8 @@ fun PendingSettlementScreen(
 
     LaunchedEffect(settlementRepository, wealthRepository, apiConfigError) {
         refresh(showLoading = true)
+        loadHistory()
+        if (focusOrderId != null) loadAudit(focusOrderId)
     }
 
     val canConfirm = SettlementEditState.canConfirm(
@@ -246,6 +276,28 @@ fun PendingSettlementScreen(
             onSelectOrder = ::selectOrder,
             onClose = onClose,
         )
+        SectionCard(title = "结算历史与只读对账", description = "查看已完成结算，不会触发确认或改账") {
+            OutlinedButton(onClick = ::loadHistory) { Text("刷新历史") }
+            if (historyLoading) Text("正在加载结算历史...")
+            historyError?.let { Text(it) }
+            if (!historyLoading && history.isEmpty()) Text("暂无结算历史")
+            history.forEach { item ->
+                OutlinedButton(onClick = { loadAudit(item.orderId) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("${item.orderId} · ${item.productName ?: item.orderType ?: "订单"} · ${auditStatusLabel(item.reconciliationStatus)}")
+                }
+            }
+            audit?.let { item ->
+                Text("订单 ${item.orderId} · ${item.orderStatus ?: "未知状态"}")
+                Text("确认日期 ${item.settlement.confirmDate ?: "未记录"}；净值 ${item.settlement.confirmNav ?: "未记录"}")
+                Text("确认时间 ${item.settlement.confirmedAt ?: "未记录"}；结算份额 ${item.settlement.confirmShares ?: "未记录"}；金额 ${item.settlement.confirmAmount ?: "未记录"}")
+                Text("现金 ${item.cashDelta ?: 0.0}；持仓份额 ${item.positionSharesDelta ?: 0.0}；手续费 ${item.feeAmount ?: 0.0}")
+                Text("来源 / 目标账户：${item.fundingLines.joinToString { "${it.lineType ?: "SOURCE"} #${it.accountId}" }}")
+                Text("流水 ${item.ledgerTxnId ?: "缺失"}；对账 ${auditStatusLabel(item.reconciliationStatus)}")
+                Text("预览摘要 ${item.settlement.previewDigest ?: "历史记录未保存"}（仅审计，不可用于确认）")
+                item.reasons.forEach { Text(it) }
+                item.postings.forEach { Text("${it.accountType} ${it.postingType} #${it.accountId} 金额 ${it.amount} 份额 ${it.shares ?: "—"}") }
+            }
+        }
         SettlementEditSection(
             selectedOrder = selectedOrder,
             form = form,
@@ -268,6 +320,12 @@ fun PendingSettlementScreen(
             onDismiss = { if (!isConfirming) showConfirmDialog = false },
         )
     }
+}
+
+private fun auditStatusLabel(status: String): String = when (status) {
+    "OK" -> "一致"
+    "BROKEN" -> "不一致"
+    else -> "需核对"
 }
 
 @Composable

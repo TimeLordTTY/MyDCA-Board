@@ -16,6 +16,8 @@
 
 v0.14 草稿生命周期审计与安全恢复已写入代码；需要部署 `sql/updatesql/20260928/01_create_draft_lifecycle_event.sql` 后才可使用事件持久化。详细边界见 `docs/mydca_v014_draft_lifecycle_audit_20260928.md`。
 
+v0.14 人工结算历史与只读对账已写入代码；新结算精确流水关联和展示用预览摘要依赖部署 `sql/updatesql/20260929/01_settlement_audit_link.sql`。历史旧记录、关联账户份额无法可靠回溯时显示 `WARNING`，不会自动修复。详见 `docs/mydca_v014_settlement_audit_reconciliation_20260929.md`。
+
 “v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.14.0` 增加草稿历史查看与安全恢复（上一版 `0.13.0` 为人工结算预览与二次确认闭环）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
 ## 已完成的 Phase3 主能力

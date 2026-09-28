@@ -3,9 +3,13 @@
  */
 
 import { apiClient } from './client'
-import type { Order, ConfirmSettlementRequest, SettlementPreview, SettlementPreviewRequest } from '../types'
+import type { Order, ConfirmSettlementRequest, SettlementPreview, SettlementPreviewRequest, SettlementAudit } from '../types'
 
 export const settlementApi = {
+  getHistory: async (): Promise<SettlementAudit[]> =>
+    (await apiClient.get<SettlementAudit[]>('/settlements/history')).data,
+  getAudit: async (orderId: string): Promise<SettlementAudit> =>
+    (await apiClient.get<SettlementAudit>(`/settlements/history/${encodeURIComponent(orderId)}`)).data,
   /**
    * 获取待结算清单（返回Order列表）
    */

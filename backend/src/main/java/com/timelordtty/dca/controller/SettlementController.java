@@ -1,11 +1,13 @@
 package com.timelordtty.dca.controller;
 
 import com.timelordtty.dca.dto.SettlementPreviewDTO;
+import com.timelordtty.dca.dto.SettlementAuditDTO;
 import com.timelordtty.dca.dto.SettlementPreviewRequest;
 import com.timelordtty.dca.model.Order;
 import com.timelordtty.dca.model.SettlementConfirm;
 import com.timelordtty.dca.service.OrderService;
 import com.timelordtty.dca.service.SettlementService;
+import com.timelordtty.dca.service.SettlementAuditService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,13 +32,27 @@ public class SettlementController {
      * 结算服务入口，负责订单成交确认、费用拆分和账本落账编排。
      */
     private final SettlementService settlementService;
+    private final SettlementAuditService auditService;
 
     /**
      * 装配订单与结算服务，处理待结算订单查询和成交确认入口。
      */
-    public SettlementController(OrderService orderService, SettlementService settlementService) {
+    public SettlementController(OrderService orderService, SettlementService settlementService,
+                                SettlementAuditService auditService) {
         this.orderService = orderService;
         this.settlementService = settlementService;
+        this.auditService = auditService;
+    }
+
+    @GetMapping("/history")
+    public ResponseEntity<List<SettlementAuditDTO>> history() {
+        return ResponseEntity.ok(auditService.history());
+    }
+
+    @GetMapping("/history/{orderId}")
+    public ResponseEntity<SettlementAuditDTO> audit(@PathVariable String orderId) {
+        SettlementAuditDTO audit = auditService.detail(orderId);
+        return audit == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(audit);
     }
 
     /**

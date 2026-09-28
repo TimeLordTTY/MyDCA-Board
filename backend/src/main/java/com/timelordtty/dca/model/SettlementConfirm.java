@@ -53,6 +53,12 @@ public class SettlementConfirm {
     
     /** 关联订单ID，外键关联orders.order_id，唯一约束 */
     private String orderId;
+
+    /** SHA-256 preview digest retained for audit; never an authorization token. */
+    private String previewDigest;
+
+    /** Exact ledger transaction created by this confirmation. */
+    private String ledgerTxnId;
     
     /** 实际确认日期，实际到账的日期，可人工覆盖 */
     private LocalDate confirmDate;

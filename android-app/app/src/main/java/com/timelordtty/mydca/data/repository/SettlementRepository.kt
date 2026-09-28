@@ -3,6 +3,7 @@ package com.timelordtty.mydca.data.repository
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.PendingSettlementOrderDto
+import com.timelordtty.mydca.data.dto.SettlementAuditDto
 import com.timelordtty.mydca.data.dto.SettlementConfirmDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewRequestDto
@@ -20,6 +21,9 @@ import com.timelordtty.mydca.data.dto.SettlementPreviewRequestDto
 open class SettlementRepository(
     private val api: WealthHubApi,
 ) {
+    open suspend fun history(): NetworkResult<List<SettlementAuditDto>> = safeNetworkCall { api.getSettlementHistory() }
+
+    open suspend fun audit(orderId: String): NetworkResult<SettlementAuditDto> = safeNetworkCall { api.getSettlementAudit(orderId) }
     open suspend fun listPendingSettlements(): NetworkResult<List<PendingSettlementOrderDto>> = safeNetworkCall {
         api.getPendingSettlements()
     }

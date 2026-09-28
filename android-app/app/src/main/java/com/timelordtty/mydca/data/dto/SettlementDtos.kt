@@ -105,4 +105,28 @@ data class SettlementConfirmDto(
     val confirmFee: Double? = null,
     val confirmedAt: String? = null,
     val note: String? = null,
+    val previewDigest: String? = null,
+)
+
+/** Read-only settlement history; previewDigest is never a confirm credential. */
+data class SettlementAuditDto(
+    val orderId: String = "",
+    val orderType: String? = null,
+    val orderStatus: String? = null,
+    val productName: String? = null,
+    val settlement: SettlementConfirmDto = SettlementConfirmDto(),
+    val fundingLines: List<SettlementAuditFundingDto> = emptyList(),
+    val ledgerTxnId: String? = null,
+    val postings: List<SettlementAuditPostingDto> = emptyList(),
+    val cashDelta: Double? = null,
+    val positionSharesDelta: Double? = null,
+    val feeAmount: Double? = null,
+    val reconciliationStatus: String = "WARNING",
+    val reasons: List<String> = emptyList(),
+)
+
+data class SettlementAuditFundingDto(val accountId: Long = 0L, val lineType: String? = null)
+data class SettlementAuditPostingDto(
+    val txnId: String = "", val accountId: Long = 0L, val accountType: String = "",
+    val postingType: String = "", val amount: Double? = null, val shares: Double? = null,
 )
