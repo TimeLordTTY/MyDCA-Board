@@ -31,6 +31,7 @@ class QuickCaptureHubTest {
             visible.toSet(),
         )
         assertFalse(QuickCaptureHub.isEntryVisibleOn(AppRoute.Settings))
+        assertFalse(QuickCaptureHub.isEntryVisibleOn(AppRoute.StrategyLab))
     }
 
     @Test

@@ -11,5 +11,6 @@ enum class AppRoute(
     TodayTodo("今日待办", "待办"),
     Drafts("草稿箱", "草稿"),
     Accounts("账户 / 流水 / 持仓", "资产"),
+    StrategyLab("策略回测", "回测"),
     Settings("设置", "设置"),
 }

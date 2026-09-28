@@ -95,7 +95,7 @@ object QuickCaptureHub {
      * - 已经进入手工 / 图片录入子页面时隐藏，避免打扰当前的采集流程。
      */
     fun isEntryVisibleOn(route: AppRoute, isSubFlowOpen: Boolean = false): Boolean =
-        route != AppRoute.Settings && !isSubFlowOpen
+        route != AppRoute.Settings && route != AppRoute.StrategyLab && !isSubFlowOpen
 
     fun entries(
         pendingCandidateCount: Int,

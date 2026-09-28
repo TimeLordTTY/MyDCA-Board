@@ -42,6 +42,7 @@ import com.timelordtty.mydca.ui.screens.DraftInboxScreen
 import com.timelordtty.mydca.ui.screens.ExternalShareNoticeBanner
 import com.timelordtty.mydca.ui.screens.OverviewScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
+import com.timelordtty.mydca.ui.screens.BacktestRecentScreen
 import com.timelordtty.mydca.ui.screens.TodayTodoScreen
 import com.timelordtty.mydca.ui.screens.LoginScreen
 import com.timelordtty.mydca.ui.screens.OcrEntryMode
@@ -431,6 +432,7 @@ private fun AuthenticatedApp(
                         onFilterChange = { accountFilterValue = it.name },
                         refreshToken = assetsRefreshToken,
                     )
+                    AppRoute.StrategyLab -> BacktestRecentScreen(services.wealthHubApi)
                     AppRoute.Settings -> SettingsScreen(
                         baseUrl = baseUrl,
                         displayName = displayName,

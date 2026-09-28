@@ -77,6 +77,11 @@ const router = createRouter({
           name: 'Settings',
           component: () => import('../views/Settings.vue'),
         },
+        {
+          path: 'strategy-lab',
+          name: 'StrategyLab',
+          component: () => import('../views/StrategyLab.vue'),
+        },
       ],
     },
   ],

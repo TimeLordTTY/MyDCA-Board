@@ -117,6 +117,7 @@ class WealthRepositoryTest {
 }
 
 private open class FakeWealthHubApi : WealthHubApi {
+    override suspend fun recentBacktests(): List<com.timelordtty.mydca.data.dto.BacktestResultDto> = emptyList()
     override suspend fun draftHistory(draftId: Long): List<com.timelordtty.mydca.data.dto.DraftLifecycleEventDto> = throw UnsupportedOperationException()
     override suspend fun reopenDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()
     override suspend fun copyConfirmedDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()

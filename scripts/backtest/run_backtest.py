@@ -15,6 +15,7 @@ def main():
     parser.add_argument("--strategy", default="pure_sip")
     parser.add_argument("--version", default="1")
     parser.add_argument("--params", default="{}")
+    parser.add_argument("--params-stdin", action="store_true")
     parser.add_argument("--batch", type=Path)
     args = parser.parse_args()
     try:
@@ -30,8 +31,9 @@ def main():
         else:
             if not args.data:
                 raise InputError("--data is required")
-            rows, digest = load_nav(Path(args.data), args.data_root)
-            result = run(rows, digest, args.strategy, args.version, json.loads(args.params))
+            params = json.load(sys.stdin) if args.params_stdin else json.loads(args.params)
+            result = batch({"data": args.data, "strategies": [{"name": args.strategy, "version": args.version,
+                            "parameters": [params]}]}, args.data_root)["results"][0]
         print(json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False))
         return 0
     except (InputError, OSError, ValueError, TypeError, KeyError) as exc:
