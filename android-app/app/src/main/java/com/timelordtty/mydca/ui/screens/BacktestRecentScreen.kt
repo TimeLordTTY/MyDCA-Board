@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.BacktestResultDto
+import retrofit2.HttpException
 import java.util.Locale
 
 /** Read only recent runs; this screen has no run or trade action. */
@@ -29,22 +30,30 @@ fun BacktestRecentScreen(api: WealthHubApi) {
     var message by remember { mutableStateOf("加载最近回测中…") }
     var loadAttempt by remember { mutableStateOf(0) }
     var loadFailed by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(true) }
     LaunchedEffect(api, loadAttempt) {
-        message = "加载最近回测中…"
+        loading = true
+        message = if (results.isEmpty()) "加载最近回测中…" else "正在刷新，以下为上次成功读取的结果。"
         loadFailed = false
         try {
             results = api.recentBacktests().reversed()
             message = if (results.isEmpty()) "暂无回测结果，请在 PC 策略实验室运行历史回测。" else ""
-        } catch (_: Exception) {
-            results = emptyList()
+        } catch (error: Exception) {
             loadFailed = true
-            message = "最近回测加载失败，请检查网络或登录状态后重试。"
+            val reason = when ((error as? HttpException)?.code()) {
+                401 -> "登录已失效，请重新登录。"
+                403 -> "当前账号没有回测历史访问权限。"
+                else -> "最近回测加载失败，请检查网络后重试。"
+            }
+            message = if (results.isEmpty()) reason else "$reason 以下为上次成功读取的旧结果。"
+        } finally {
+            loading = false
         }
     }
     LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("历史回测不代表未来表现；此处仅展示结果。") }
         if (message.isNotEmpty()) item { Text(message) }
-        if (loadFailed) item { OutlinedButton(onClick = { loadAttempt++ }) { Text("重试加载") } }
+        if (!loading) item { OutlinedButton(onClick = { loadAttempt++ }) { Text(if (loadFailed) "重试加载" else "刷新结果") } }
         items(results, key = { it.run_id }) { result ->
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -58,5 +67,5 @@ fun BacktestRecentScreen(api: WealthHubApi) {
     }
 }
 
-private fun pct(value: Double?): String = value?.let { String.format(Locale.CHINA, "%.2f%%", it * 100) } ?: "—"
-private fun num(value: Double?): String = value?.let { String.format(Locale.CHINA, "%.2f", it) } ?: "—"
+private fun pct(value: Double?): String = value?.let { String.format(Locale.CHINA, "%.2f%%", it * 100) } ?: "未知"
+private fun num(value: Double?): String = value?.let { String.format(Locale.CHINA, "%.2f", it) } ?: "未知"

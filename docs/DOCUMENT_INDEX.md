@@ -1,7 +1,7 @@
 # 财富中枢文档索引与事实源优先级
 
 - **作者**：ChatGPT
-- **更新时间**：2026-09-28 +08:00
+- **更新时间**：2026-09-30 +08:00
 
 ## 读取顺序
 
@@ -37,6 +37,10 @@
 - v0.14 草稿生命周期审计与安全恢复：`docs/mydca_v014_draft_lifecycle_audit_20260928.md`
 - v0.14 人工结算审计与只读对账：`docs/mydca_v014_settlement_audit_reconciliation_20260929.md`
 - v0.14 发布硬化与验证：`docs/mydca_v014_release_hardening_20260929.md`
+- v0.15 发布硬化与回归：`docs/mydca_v015_release_hardening_20260930.md`
+- v0.15 回测运行历史：`docs/mydca_v015_backtest_run_history_20260929.md`
+- v0.15 回测对比报告：`docs/mydca_v015_backtest_compare_report_20260929.md`
 - v0.15 每日财富雷达后端：`docs/mydca_v015_finance_radar_backend_20260929.md`
 - v0.15 只读策略研究候选：`docs/mydca_v015_strategy_research_candidates_20260929.md`
+- v0.15 研究证据导出：`docs/mydca_v015_research_evidence_export_20260929.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。

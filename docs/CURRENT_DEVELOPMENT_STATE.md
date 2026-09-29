@@ -1,7 +1,7 @@
 # 财富中枢当前开发状态
 
 - **作者**：ChatGPT（依据 v2 代码、AiCore Delivery Manifest 与 GitHub Actions 证据同步）
-- **更新时间**：2026-09-28 +08:00
+- **更新时间**：2026-09-30 +08:00
 - **工程仓库**：`TimeLordTTY/MyDCA-Board@v2`
 
 > 本文件是“当前实现状态”的首要事实源。长篇设计文档、版本专项报告和 Phase1/Phase2 历史总结保留设计/历史价值；若其中的“当前状态、下一步、尚未实现”与本文件冲突，以本文件和实际代码为准。
@@ -11,8 +11,12 @@
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.14.0`
-- `versionCode = 15`
+- `versionName = 0.15.0`
+- `versionCode = 16`
+
+v0.15 已加入持久化的 owner 作用域回测历史、2 至 5 条历史对比、只读策略研究候选与可校验证据包，以及 PC/Android 每日财富雷达。PC 策略实验室提供历史、对比、候选与证据导出；Android 展示只读雷达和最近成功回测。雷达未知值保留 `null`/「未知」，刷新失败的旧快照明确标识；研究结果不生成订单或交易。详见 `docs/mydca_v015_release_hardening_20260930.md`。
+
+v0.15 回测历史使用部署方提供的本地持久化目录 `../data/backtest-history`（可配置 `backtest.history-root`），**没有新增 SQL migration**。既有 v0.8、v0.14 migration 在 Git 中，目标环境是否已部署仍待逐环境确认；本次未连接数据库或执行迁移。目录不可写或记录损坏时历史接口会失败，界面显示错误而不报空列表或假成功。
 
 v0.14 发布硬化已对齐 GitHub Actions APK 制品名与 Android 版本，并补齐 Android 最近回测、PC 待结算和策略实验室的失败态。完整验证与未完成的真机/生产迁移边界见 `docs/mydca_v014_release_hardening_20260929.md`。
 
@@ -20,7 +24,7 @@ v0.14 草稿生命周期审计与安全恢复已写入代码；需要部署 `sql
 
 v0.14 人工结算历史与只读对账已写入代码；新结算精确流水关联和展示用预览摘要依赖部署 `sql/updatesql/20260929/01_settlement_audit_link.sql`。历史旧记录、关联账户份额无法可靠回溯时显示 `WARNING`，不会自动修复。详见 `docs/mydca_v014_settlement_audit_reconciliation_20260929.md`。
 
-“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.14.0` 增加草稿历史查看与安全恢复（上一版 `0.13.0` 为人工结算预览与二次确认闭环）。前后端版本号不属于同一层，互不依赖即可独立发布。
+“v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.15.0` 增加只读雷达与回测结果展示（`0.14.0` 为草稿历史查看与安全恢复）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
 ## 已完成的 Phase3 主能力
 
@@ -130,6 +134,9 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 
 ## Android CI APK 真实证据
 
+### v0.15.0
+- source commit / Run ID / Artifact ID / APK 文件名 / CI APK SHA-256：尚无真实 CI 证据；本次只本地提交、不 push。
+
 ### v0.13.0
 - source commit / Run ID / Artifact ID / APK 文件名 / CI APK SHA-256：待 owner push 后回填（普通自动任务只提交、不 push）。
 
@@ -191,7 +198,7 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 ## 自动开发与交付
 
 普通工程当前通过 AiCore：
-`ChatGPT/owner → ai-core Git task → Windows scheduler → approved Codex executor → MyDCA v2 → tests/build → commit/push → finalizer → Hermes → verified WeCom receipt`
+`ChatGPT/owner → ai-core Git task → Windows scheduler → approved Codex executor → MyDCA v2 → tests/build → local commit → 后续由 owner 安排推送与交付`
 
 `scripts/post-task-compile-hook.ps1` 构建成功后必须静默：只输出 stdout/log，不播放声音，不弹 Windows Toast/Popup。
 
@@ -209,9 +216,10 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 
 1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，投资卖出 / 赎回草稿的持仓来源选择 / 可用份额预览 / 到账账户过滤 / 二次确认文案，待结算的结算编辑 / 现金与持仓影响预览 / 二次确认弹窗 / 成功后订单与持仓刷新，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
 2. **投资订单结算**：BUY / SUBSCRIPTION 已纳入草稿确认闭环（v0.11.0），SELL / REDEMPTION 已在 v0.12.0 纳入；v0.13.0 起四类 PENDING 订单均可人工生成只读结算预览（`POST /api/v2/settlements/preview`）并经主人二次确认后携带 fresh 令牌 confirm（`POST /api/v2/settlements/confirm`）落内部账。既有 OrderService 真实语义保持不变：BUY / SUBSCRIPTION 创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），结算时清理 RECEIVABLE 并形成 POSITION / 关联账户与手续费、不重复扣下单现金；SELL / REDEMPTION 只创建 PENDING 订单并登记 SOURCE / TARGET 资金线与份额占用，结算时才产生 CASH / POSITION / FEE 影响。全流程不自动结算、不后台 confirm、不调用真实交易渠道。
-3. **数据库 migration 上线**：v0.8 唯一键脚本尚未部署；生产执行前必须先跑重复数据预检。
-4. **长期能力**：策略建议与回测闭环，以及结算后的更多持仓影响场景继续按设计推进。
+3. **数据库 migration 上线**：v0.8 唯一键、v0.14 草稿生命周期与结算审计脚本都只在 Git 中确认存在；目标环境部署状态未由本任务验证。生产执行前必须先按各脚本的预检、备份和人工变更流程处理，尤其 v0.8 唯一键必须先检查重复来源。
+4. **v0.15 运行与体验验收**：回测历史目录需在目标环境单独配置持久化和权限；PC/Android Radar、历史与研究候选需人工完成真实登录、权限、断网、过期行情和设备体验验收。真实 CI APK 证据须在后续推送并成功构建后回填。
+5. **长期能力**：研究候选仍仅是历史证据，不构成自动策略执行；结算后的更多持仓影响场景继续按设计推进。
 
 ## 下一工程任务
 
-v0.13.0 已完成四类投资订单（买入 / 申购 / 卖出 / 赎回）的人工结算预览与二次确认闭环：PENDING 订单先经只读 preview 展示现金 / 持仓 / 手续费影响与 fresh 令牌，主人二次确认后携带令牌 confirm 才在财富中枢内部生成 `settlement_confirm` 与账本 / 持仓影响；preview 只读、confirm 幂等且事务完整。结算仍复用既有 `SettlementService`，不另造第二套结算引擎，不自动结算、不后台 confirm、不调用任何真实交易渠道。后续普通工程任务（策略建议 / 回测闭环、数据库 migration 上线、真机验收）需由 owner 单独规划与批准。
+v0.15 工程收敛后，下一步由 owner 单独安排目标环境的历史目录配置、未部署 migration 审核与执行、真机/PC 人工体验验收，以及推送后的 Android CI APK 证据回填。任何生产数据库迁移、真实财务记录修改或交易均不属于本次授权。

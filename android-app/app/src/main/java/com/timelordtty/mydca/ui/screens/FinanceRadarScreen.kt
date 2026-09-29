@@ -20,6 +20,7 @@ import com.timelordtty.mydca.ui.FinanceRadarDestination
 import com.timelordtty.mydca.ui.state.FinanceRadarState
 import com.timelordtty.mydca.ui.state.FinanceRadarStateHolder
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 
 @Composable
 fun FinanceRadarScreen(
@@ -51,11 +52,12 @@ fun FinanceRadarScreen(
             state.snapshot == null -> EmptySection("暂无雷达数据", "请手动刷新后再查看。")
             else -> {
                 RefreshBar(state.lastSuccessAt, state.loading) { refresh() }
-                if (state.isStale) {
+                if (state.isStale || state.snapshot?.date != LocalDate.now().toString()) {
                     NoticeBanner(
-                        "旧快照 · 尚未刷新成功",
+                        if (state.isStale) "旧快照 · 尚未刷新成功" else "历史日期快照",
                         state.error?.let { "$it。以下为上次成功结果，请手动重试。" }
-                            ?: "正在刷新，以下仍为上次成功结果。",
+                            ?: if (state.loading) "正在刷新，以下仍为上次成功结果。"
+                            else "快照日期不是今天，请手动刷新确认当前状态。",
                         if (state.loading) null else ::refresh,
                     )
                 }

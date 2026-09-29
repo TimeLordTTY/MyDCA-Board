@@ -13,8 +13,9 @@
       <button :disabled="loading || !data" @click="run">{{ loading ? '计算中…' : '运行只读回测' }}</button>
     </section>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
+    <p v-if="loading" class="empty" role="status">正在读取回测数据…</p>
     <p v-if="!datasets.length && !loading && !error" class="empty">暂无可用历史数据。请由管理员将 CSV 放入回测数据目录。</p>
-    <p v-if="!results.length && !error && !loading" class="empty">运行回测后，结果将显示在这里。</p>
+    <p v-if="!results.length && !error && !loading" class="empty">暂无最近回测结果；可从下方查看已保存的历史记录。</p>
     <section v-for="result in results" :key="result.run_id" class="panel result">
       <div class="heading"><h2>{{ result.strategy.name }} v{{ result.strategy.version }}</h2><small>{{ result.data_range.start }} 至 {{ result.data_range.end }} · {{ result.data_range.rows }} 条 · {{ result.run_id }}</small></div>
       <div class="metrics"><div v-for="[label, value] in metrics(result)" :key="label"><span>{{ label }}</span><strong>{{ value }}</strong></div></div>
@@ -25,7 +26,9 @@
       <h2>回测历史对比</h2>
       <p>选择 2 至 5 条成功记录。报告仅使用已保存的结果，不会重新运行回测。</p>
       <p v-if="historyError" role="alert" class="error">{{ historyError }}</p>
-      <div v-if="!history.length" class="empty">暂无回测历史。</div>
+      <p v-if="loadingHistory" role="status" class="empty">正在读取回测历史…</p>
+      <button v-if="historyError && !loadingHistory" @click="loadMoreHistory">重试读取历史</button>
+      <div v-if="!history.length && !loadingHistory && !historyError" class="empty">暂无回测历史。</div>
       <div v-for="item in history" :key="item.historyRunId" class="history-row">
         <label><input type="checkbox" :checked="selected.includes(item.historyRunId)" :disabled="item.status !== 'SUCCESS' || (!selected.includes(item.historyRunId) && selected.length >= 5)" @change="toggle(item.historyRunId)" />
           {{ item.strategy || '未知策略' }} v{{ item.strategyVersion || '—' }} · {{ item.startedAt }} · {{ item.status }} · {{ item.historyRunId }}
@@ -33,6 +36,7 @@
       </div>
       <button v-if="hasMoreHistory" :disabled="loadingHistory" @click="loadMoreHistory">{{ loadingHistory ? '加载中…' : '加载更早记录' }}</button>
       <button :disabled="selected.length < 2 || comparing" @click="compare">{{ comparing ? '生成中…' : `比较 ${selected.length} 条并生成报告` }}</button>
+      <p v-if="compareError" role="alert" class="error">{{ compareError }}</p>
       <button :disabled="selected.length < 2 || exporting || !validResearchThresholds" @click="exportEvidence">{{ exporting ? '导出中…' : '导出研究证据' }}</button>
       <p v-if="exportError" role="alert" class="error">{{ exportError }}</p>
       <template v-if="report">
@@ -54,6 +58,9 @@
       </div>
       <button :disabled="!selected.length || researching || !validResearchThresholds" @click="research">{{ researching ? '筛查中…' : '生成研究候选' }}</button>
       <p v-if="researchError" role="alert" class="error">{{ researchError }}</p>
+      <p v-if="researching" role="status" class="empty">正在筛查已保存的回测证据…</p>
+      <p v-else-if="!researchReport && !researchError && !selected.length" class="empty">先从回测历史选择至少一条成功记录。</p>
+      <p v-else-if="!researchReport && !researchError" class="empty">尚未生成研究候选；选择或阈值变化后需重新筛查。</p>
       <template v-if="researchReport">
         <p class="notice">{{ researchReport.disclaimer }}</p>
         <p v-for="item in researchReport.excluded_runs" :key="item.run_id" class="compare-warning">{{ item.run_id }} · {{ item.status }}：{{ item.reason }}</p>
@@ -96,6 +103,7 @@ const selected = ref<string[]>([])
 const report = ref<BacktestCompareReport | null>(null)
 const comparing = ref(false)
 const historyError = ref('')
+const compareError = ref('')
 const historyPage = ref(0)
 const hasMoreHistory = ref(false)
 const loadingHistory = ref(false)
@@ -112,21 +120,34 @@ const validResearchThresholds = computed(() => {
     Number.isFinite(t.minBaselineAnnualizedDelta) && t.minBaselineAnnualizedDelta >= -1 && t.minBaselineAnnualizedDelta <= 1 &&
     Number.isInteger(t.minTradeCount) && t.minTradeCount >= 0 && t.minTradeCount <= 100000
 })
-watch(researchThresholds, () => { researchReport.value = null }, {deep: true})
+watch(researchThresholds, () => { researchReport.value = null; exportError.value = '' }, {deep: true})
+function requestError(cause: unknown, fallback: string): string {
+  const status = (cause as { response?: { status?: number } })?.response?.status
+  return status === 401 ? '登录已失效，请重新登录后重试。' : status === 403 ? '当前账号没有策略实验室访问权限。' : fallback
+}
 async function loadMoreHistory() {
+  if (loadingHistory.value) return
   loadingHistory.value = true; historyError.value = ''
   try { const page = await backtestApi.history(historyPage.value, 50); history.value = [...history.value, ...page]; historyPage.value++; hasMoreHistory.value = page.length === 50 }
-  catch { historyError.value = '回测历史加载失败，请稍后重试' }
+  catch (cause) { historyError.value = requestError(cause, '回测历史加载失败，请稍后重试。') }
   finally { loadingHistory.value = false }
 }
-onMounted(async () => { try { datasets.value = (await apiClient.get<string[]>('/backtest-lab/datasets')).data; data.value = datasets.value[0] || ''; results.value = (await apiClient.get<Result[]>('/backtest-lab/recent')).data.reverse(); await loadMoreHistory() } catch (e: any) { error.value = e?.response?.status === 403 ? '没有策略实验室访问权限，请联系管理员。' : '回测数据加载失败，请稍后重试' } finally { loading.value = false } })
+onMounted(async () => {
+  void loadMoreHistory()
+  try {
+    datasets.value = (await apiClient.get<string[]>('/backtest-lab/datasets')).data
+    data.value = datasets.value[0] || ''
+    results.value = (await apiClient.get<Result[]>('/backtest-lab/recent')).data.reverse()
+  } catch (cause) { error.value = requestError(cause, '回测数据加载失败，请稍后重试。') }
+  finally { loading.value = false }
+})
 async function run() {
   loading.value = true; error.value = ''
   const params: Record<string, number> = { contribution: contribution.value, interval_days: interval.value }
   if (strategy.value === 'ma_enhanced') Object.assign(params, {ma_window: window.value, dip_multiplier: multiplier.value})
   if (strategy.value.startsWith('profit_recycle')) Object.assign(params, {profit_threshold: threshold.value, sell_fraction: fraction.value})
   const [name, version = '1'] = strategy.value.split(':')
-  try { const result = (await apiClient.post<Result>('/backtest-lab/runs', {data: data.value, strategy: name, version, params})).data; results.value = [result, ...results.value.filter(x => x.run_id !== result.run_id)]; history.value = []; historyPage.value = 0; await loadMoreHistory() }
+  try { const result = (await apiClient.post<Result>('/backtest-lab/runs', {data: data.value, strategy: name, version, params})).data; results.value = [result, ...results.value.filter(x => x.run_id !== result.run_id)]; history.value = []; historyPage.value = 0; selected.value = []; report.value = null; researchReport.value = null; await loadMoreHistory() }
   catch (e: any) { error.value = e?.response?.status === 403 ? '没有运行策略回测的权限，请联系管理员。' : e?.response?.data?.message || '回测失败，请检查参数与历史数据' }
   finally { loading.value = false }
 }
@@ -136,7 +157,9 @@ function metrics(result: Result): [string, string][] { const m = result.metrics;
 function toggle(id: string) {
   selected.value = selected.value.includes(id) ? selected.value.filter(x => x !== id) : [...selected.value, id]
   report.value = null
+  compareError.value = ''
   researchReport.value = null
+  researchError.value = ''
   exportError.value = ''
 }
 async function exportEvidence() {
@@ -149,23 +172,32 @@ async function exportEvidence() {
     link.download = 'backtest-research-evidence.zip'
     link.click()
     URL.revokeObjectURL(url)
-  } catch {
-    exportError.value = '研究证据导出失败，请检查所选回测和网络后重试'
+  } catch (cause) {
+    exportError.value = requestError(cause, '研究证据导出失败，请检查所选回测和网络后重试。')
   } finally { exporting.value = false }
 }
 function researchStatus(status: BacktestResearchReport['candidates'][number]['status']): string {
-  return {WORTH_FURTHER_RESEARCH: '值得继续研究', EVIDENCE_INSUFFICIENT: '证据不足', DOES_NOT_MEET_CRITERIA: '不满足条件'}[status]
+  return {WORTH_FURTHER_RESEARCH: '值得继续研究', EVIDENCE_INSUFFICIENT: '证据不足', DOES_NOT_MEET_CRITERIA: '不满足条件'}[status] ?? '未知'
 }
 async function research() {
   researching.value = true; researchError.value = ''; researchReport.value = null
-  try { researchReport.value = await backtestApi.research(selected.value, researchThresholds.value) }
-  catch (e: any) { researchError.value = e?.response?.data?.message || '研究候选生成失败' }
+  const runIds = [...selected.value]
+  const thresholds = {...researchThresholds.value}
+  try {
+    const result = await backtestApi.research(runIds, thresholds)
+    if (JSON.stringify(runIds) === JSON.stringify(selected.value) && JSON.stringify(thresholds) === JSON.stringify(researchThresholds.value)) researchReport.value = result
+  }
+  catch (cause) { researchError.value = requestError(cause, '研究候选生成失败，请检查所选记录后重试。') }
   finally { researching.value = false }
 }
 async function compare() {
-  comparing.value = true; historyError.value = ''; report.value = null
-  try { report.value = await backtestApi.compare(selected.value) }
-  catch (e: any) { historyError.value = e?.response?.data?.message || '对比报告生成失败' }
+  comparing.value = true; compareError.value = ''; report.value = null
+  const runIds = [...selected.value]
+  try {
+    const result = await backtestApi.compare(runIds)
+    if (JSON.stringify(runIds) === JSON.stringify(selected.value)) report.value = result
+  }
+  catch (cause) { compareError.value = requestError(cause, '对比报告生成失败，请检查所选记录后重试。') }
   finally { comparing.value = false }
 }
 const compareRows = [

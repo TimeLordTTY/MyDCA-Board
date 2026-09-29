@@ -10,14 +10,17 @@
     </header>
 
     <div v-if="loading && !radar" class="radar-state" role="status">正在读取今日事实…</div>
-    <div v-else-if="error" class="radar-state radar-error" role="alert">
+    <div v-else-if="error && !radar" class="radar-state radar-error" role="alert">
       {{ error }} <button type="button" @click="load">重试</button>
     </div>
     <template v-else-if="radar">
+      <p v-if="loading || error || staleDate" class="radar-state" :class="{ 'radar-error': !!error }" :role="error ? 'alert' : 'status'">
+        {{ error ? `${error} 以下为上次成功读取的旧快照。` : loading ? '正在刷新；当前显示上次成功读取的快照。' : `快照日期为 ${radar.date}，请刷新确认当前状态。` }}
+      </p>
       <p v-if="!items.length" class="radar-state">暂无雷达数据。</p>
       <div v-else class="radar-grid">
         <article v-for="item in items" :key="item.id" class="radar-card" :class="`radar-${item.status.toLowerCase()}`">
-          <div class="radar-card-top"><h3>{{ item.title }}</h3><span class="radar-status">{{ statusLabel[item.status] }}</span></div>
+          <div class="radar-card-top"><h3>{{ item.title }}</h3><span class="radar-status">{{ statusLabel[item.status] ?? '未知' }}</span></div>
           <p>{{ item.detail }}</p>
           <router-link :to="{ name: item.route }" :aria-label="`${item.title}：查看详情`">查看详情 <span aria-hidden="true">↗</span></router-link>
         </article>
@@ -37,6 +40,7 @@ const radar = ref<FinanceRadarData | null>(null)
 const loading = ref(false)
 const error = ref('')
 const items = computed(() => radar.value ? radarItems(radar.value) : [])
+const staleDate = computed(() => !!radar.value && radar.value.date !== new Date().toLocaleDateString('en-CA'))
 
 async function load() {
   if (loading.value) return
@@ -45,7 +49,6 @@ async function load() {
   try {
     radar.value = await financeRadarApi.get()
   } catch (cause) {
-    radar.value = null
     error.value = radarErrorText(cause)
   } finally {
     loading.value = false
