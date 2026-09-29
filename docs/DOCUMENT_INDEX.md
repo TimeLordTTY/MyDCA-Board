@@ -38,4 +38,5 @@
 - v0.14 人工结算审计与只读对账：`docs/mydca_v014_settlement_audit_reconciliation_20260929.md`
 - v0.14 发布硬化与验证：`docs/mydca_v014_release_hardening_20260929.md`
 - v0.15 每日财富雷达后端：`docs/mydca_v015_finance_radar_backend_20260929.md`
+- v0.15 只读策略研究候选：`docs/mydca_v015_strategy_research_candidates_20260929.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。

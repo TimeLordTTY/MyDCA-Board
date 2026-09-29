@@ -41,13 +41,41 @@
         <button @click="download('json')">导出 JSON</button> <button @click="download('md')">导出 Markdown</button>
       </template>
     </section>
+    <section class="panel">
+      <h2>只读研究候选</h2>
+      <p>从上方勾选的成功历史记录中，按策略、版本和参数分组。阈值只用于筛查证据，不构成买卖建议。</p>
+      <div class="research-gates">
+        <label>最小样本区间（天）<input v-model.number="researchThresholds.minSampleDays" type="number" min="1" max="3650" step="1" /></label>
+        <label>最大回撤上限<input v-model.number="researchThresholds.maxDrawdown" type="number" min="0" max="1" step="0.01" /></label>
+        <label>最低相对基准年化差<input v-model.number="researchThresholds.minBaselineAnnualizedDelta" type="number" min="-1" max="1" step="0.01" /></label>
+        <label>最少交易次数<input v-model.number="researchThresholds.minTradeCount" type="number" min="0" max="100000" step="1" /></label>
+      </div>
+      <button :disabled="!selected.length || researching || !validResearchThresholds" @click="research">{{ researching ? '筛查中…' : '生成研究候选' }}</button>
+      <p v-if="researchError" role="alert" class="error">{{ researchError }}</p>
+      <template v-if="researchReport">
+        <p class="notice">{{ researchReport.disclaimer }}</p>
+        <p v-for="item in researchReport.excluded_runs" :key="item.run_id" class="compare-warning">{{ item.run_id }} · {{ item.status }}：{{ item.reason }}</p>
+        <p v-if="!researchReport.candidates.length" class="empty">所选记录没有可用的成功回测证据。</p>
+        <article v-for="candidate in researchReport.candidates" :key="candidate.strategy + candidate.strategy_version + JSON.stringify(candidate.canonical_params)" class="candidate">
+          <h3>{{ candidate.strategy }} v{{ candidate.strategy_version }} · {{ researchStatus(candidate.status) }}</h3>
+          <p>证据状态：{{ candidate.evidence_status === 'CONSISTENT' ? '一致' : '不足或不可合并' }} · 参数：{{ JSON.stringify(candidate.canonical_params) }}</p>
+          <p>历史 run：{{ candidate.run_ids.join('、') }}</p>
+          <p>数据集 hash：{{ candidate.dataset_hashes.join('、') }}</p>
+          <ul><li v-for="reason in candidate.reasons" :key="reason">{{ reason }}</li><li v-for="warning in candidate.warnings" :key="warning">⚠ {{ warning }}</li></ul>
+          <div v-for="item in candidate.evidence" :key="item.run_id" class="evidence">
+            <strong>{{ item.run_id }}</strong> · {{ item.data_range.start }} 至 {{ item.data_range.end }}（{{ item.sample_days }} 天）
+            <span>年化 {{ percent(item.metrics.annualized_return) }} · 回撤 {{ percent(item.metrics.max_drawdown) }} · 相对基准年化差 {{ percent(item.baseline_delta.annualized_return_delta) }} · 交易 {{ number(item.metrics.trade_count) }} 次</span>
+          </div>
+        </article>
+      </template>
+    </section>
   </main>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { apiClient, backtestApi } from '@wealth-hub/shared'
-import type { BacktestRun, BacktestCompareReport, BacktestCompareRun } from '@wealth-hub/shared'
+import type { BacktestRun, BacktestCompareReport, BacktestCompareRun, BacktestResearchReport, BacktestResearchThresholds } from '@wealth-hub/shared'
 type Result = { run_id: string; strategy: {name: string; version: string; params: Record<string, number>}; data_range: {start: string; end: string; rows: number}; metrics: Record<string, number | null>; baseline?: Record<string, number | string | null> }
 const datasets = ref<string[]>([])
 const data = ref('')
@@ -69,6 +97,18 @@ const historyError = ref('')
 const historyPage = ref(0)
 const hasMoreHistory = ref(false)
 const loadingHistory = ref(false)
+const researchThresholds = ref<BacktestResearchThresholds>({minSampleDays: 180, maxDrawdown: 0.30, minBaselineAnnualizedDelta: 0, minTradeCount: 3})
+const researchReport = ref<BacktestResearchReport | null>(null)
+const researching = ref(false)
+const researchError = ref('')
+const validResearchThresholds = computed(() => {
+  const t = researchThresholds.value
+  return Number.isInteger(t.minSampleDays) && t.minSampleDays >= 1 && t.minSampleDays <= 3650 &&
+    Number.isFinite(t.maxDrawdown) && t.maxDrawdown >= 0 && t.maxDrawdown <= 1 &&
+    Number.isFinite(t.minBaselineAnnualizedDelta) && t.minBaselineAnnualizedDelta >= -1 && t.minBaselineAnnualizedDelta <= 1 &&
+    Number.isInteger(t.minTradeCount) && t.minTradeCount >= 0 && t.minTradeCount <= 100000
+})
+watch(researchThresholds, () => { researchReport.value = null }, {deep: true})
 async function loadMoreHistory() {
   loadingHistory.value = true; historyError.value = ''
   try { const page = await backtestApi.history(historyPage.value, 50); history.value = [...history.value, ...page]; historyPage.value++; hasMoreHistory.value = page.length === 50 }
@@ -92,6 +132,16 @@ function metrics(result: Result): [string, string][] { const m = result.metrics;
 function toggle(id: string) {
   selected.value = selected.value.includes(id) ? selected.value.filter(x => x !== id) : [...selected.value, id]
   report.value = null
+  researchReport.value = null
+}
+function researchStatus(status: BacktestResearchReport['candidates'][number]['status']): string {
+  return {WORTH_FURTHER_RESEARCH: '值得继续研究', EVIDENCE_INSUFFICIENT: '证据不足', DOES_NOT_MEET_CRITERIA: '不满足条件'}[status]
+}
+async function research() {
+  researching.value = true; researchError.value = ''; researchReport.value = null
+  try { researchReport.value = await backtestApi.research(selected.value, researchThresholds.value) }
+  catch (e: any) { researchError.value = e?.response?.data?.message || '研究候选生成失败' }
+  finally { researching.value = false }
 }
 async function compare() {
   comparing.value = true; historyError.value = ''; report.value = null
@@ -124,4 +174,5 @@ function download(format: 'json' | 'md') {
 <style scoped>
 .lab{padding:32px;max-width:1200px;margin:auto;color:#172b38}.lab h1{font-size:30px;margin:0}.lab header p,.notice{color:#627582}.panel{background:white;border:1px solid #dce5e8;border-radius:14px;padding:22px;margin:20px 0;box-shadow:0 6px 22px rgba(18,52,68,.05)}.panel:first-of-type{display:flex;flex-wrap:wrap;align-items:end;gap:16px}.panel label{display:grid;gap:6px;font-size:13px;color:#475b67}.panel input,.panel select{border:1px solid #b7cbd0;border-radius:8px;padding:9px;min-width:125px;background:white}.panel button{border:0;border-radius:8px;background:#0d635d;color:white;padding:11px 18px;cursor:pointer}.panel button:disabled{opacity:.5;cursor:default}.heading{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}.heading h2{margin:0}.heading small{color:#64747b}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0}.metrics div{background:#f2f7f6;border-radius:9px;padding:13px}.metrics span{display:block;font-size:12px;color:#526b70}.metrics strong{display:block;font-size:20px;margin-top:4px}.error{color:#a02c36}.empty{padding:20px;color:#61737c}
 .history-row{padding:8px 0;border-bottom:1px solid #e5ecee}.history-row label{display:flex;align-items:center;gap:8px;overflow-wrap:anywhere}.history-row input{min-width:auto}.compare-warning{margin:12px 0;padding:12px;border:1px solid #db9b39;background:#fff5dc;color:#714607;border-radius:8px}.compare-scroll{overflow-x:auto;margin-top:18px}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:10px;border-bottom:1px solid #dce5e8;min-width:140px}th small{font-weight:400;overflow-wrap:anywhere}
+.research-gates{display:flex;flex-wrap:wrap;gap:16px;margin:18px 0}.research-gates label{display:grid;gap:6px}.candidate{border-top:1px solid #dce5e8;padding:16px 0;overflow-wrap:anywhere}.candidate h3{margin:0 0 8px}.candidate ul{padding-left:22px}.evidence{background:#f2f7f6;border-radius:8px;padding:10px;margin:8px 0}.evidence span{display:block;margin-top:4px}
 </style>

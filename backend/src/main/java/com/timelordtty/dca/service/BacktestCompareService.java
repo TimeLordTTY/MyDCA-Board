@@ -68,7 +68,7 @@ public class BacktestCompareService {
         return report;
     }
 
-    private ObjectNode safeRun(BacktestRunDTO run) {
+    ObjectNode safeRun(BacktestRunDTO run) {
         JsonNode source = run.result();
         JsonNode range = source.path("data_range");
         if (!run.historyRunId().matches("[0-9a-f-]{36}")

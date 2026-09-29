@@ -6,6 +6,7 @@ import com.timelordtty.dca.dto.BacktestResultDTO;
 import com.timelordtty.dca.dto.BacktestRunDTO;
 import com.timelordtty.dca.service.BacktestLabService;
 import com.timelordtty.dca.service.BacktestCompareService;
+import com.timelordtty.dca.service.BacktestResearchService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -19,14 +20,18 @@ import java.util.Map;
 public class BacktestLabController {
     private final BacktestLabService service;
     private final BacktestCompareService compareService;
+    private final BacktestResearchService researchService;
     private final ObjectMapper mapper = new ObjectMapper();
-    public BacktestLabController(BacktestLabService service, BacktestCompareService compareService) {
+    public BacktestLabController(BacktestLabService service, BacktestCompareService compareService,
+            BacktestResearchService researchService) {
         this.service = service;
         this.compareService = compareService;
+        this.researchService = researchService;
     }
 
     public record RunRequest(String data, String strategy, String version, Map<String, Object> params) {}
     public record CompareRequest(List<String> runIds) {}
+    public record ResearchRequest(List<String> runIds, BacktestResearchService.Thresholds thresholds) {}
 
     @GetMapping("/datasets")
     public List<String> datasets() throws IOException { return service.datasets(); }
@@ -54,6 +59,11 @@ public class BacktestLabController {
     @PostMapping("/runs/compare")
     public JsonNode compare(@RequestBody CompareRequest request) throws IOException {
         return compareService.compare(request.runIds());
+    }
+
+    @PostMapping("/runs/research")
+    public JsonNode research(@RequestBody ResearchRequest request) throws IOException {
+        return researchService.research(request.runIds(), request.thresholds());
     }
 
     private BacktestResultDTO dto(JsonNode result) { return mapper.convertValue(result, BacktestResultDTO.class); }
