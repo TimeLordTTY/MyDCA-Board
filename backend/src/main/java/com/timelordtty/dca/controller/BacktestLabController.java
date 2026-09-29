@@ -7,9 +7,14 @@ import com.timelordtty.dca.dto.BacktestRunDTO;
 import com.timelordtty.dca.service.BacktestLabService;
 import com.timelordtty.dca.service.BacktestCompareService;
 import com.timelordtty.dca.service.BacktestResearchService;
+import com.timelordtty.dca.service.BacktestEvidenceService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.HttpHeaders;
+import org.springframework.security.concurrent.DelegatingSecurityContextCallable;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.context.request.async.WebAsyncTask;
 
 import java.io.IOException;
 import java.util.List;
@@ -21,12 +26,14 @@ public class BacktestLabController {
     private final BacktestLabService service;
     private final BacktestCompareService compareService;
     private final BacktestResearchService researchService;
+    private final BacktestEvidenceService evidenceService;
     private final ObjectMapper mapper = new ObjectMapper();
     public BacktestLabController(BacktestLabService service, BacktestCompareService compareService,
-            BacktestResearchService researchService) {
+            BacktestResearchService researchService, BacktestEvidenceService evidenceService) {
         this.service = service;
         this.compareService = compareService;
         this.researchService = researchService;
+        this.evidenceService = evidenceService;
     }
 
     public record RunRequest(String data, String strategy, String version, Map<String, Object> params) {}
@@ -64,6 +71,21 @@ public class BacktestLabController {
     @PostMapping("/runs/research")
     public JsonNode research(@RequestBody ResearchRequest request) throws IOException {
         return researchService.research(request.runIds(), request.thresholds());
+    }
+
+    @PostMapping(value = "/runs/evidence", produces = "application/zip")
+    public WebAsyncTask<ResponseEntity<byte[]>> evidence(@RequestBody ResearchRequest request) {
+        var task = new WebAsyncTask<>(10_000L, new DelegatingSecurityContextCallable<>(() -> {
+            var bundle = evidenceService.export(request.runIds(), request.thresholds());
+            return ResponseEntity.ok()
+                    .contentType(MediaType.parseMediaType("application/zip"))
+                    .contentLength(bundle.bytes().length)
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=backtest-research-evidence.zip")
+                    .header("X-Content-SHA256", bundle.sha256())
+                    .body(bundle.bytes());
+        }));
+        task.onTimeout(() -> ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build());
+        return task;
     }
 
     private BacktestResultDTO dto(JsonNode result) { return mapper.convertValue(result, BacktestResultDTO.class); }

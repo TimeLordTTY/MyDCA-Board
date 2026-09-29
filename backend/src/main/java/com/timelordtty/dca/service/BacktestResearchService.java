@@ -18,6 +18,7 @@ import java.util.TreeMap;
 /** Deterministic evidence gates over saved, owner-scoped runs. No execution services are involved. */
 @Service
 public class BacktestResearchService {
+    public static final String RULE_VERSION = "1";
     public record Thresholds(Integer minSampleDays, Double maxDrawdown,
             Double minBaselineAnnualizedDelta, Integer minTradeCount) {}
 

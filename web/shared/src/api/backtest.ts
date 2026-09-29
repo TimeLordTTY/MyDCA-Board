@@ -10,4 +10,6 @@ export const backtestApi = {
     (await apiClient.post<BacktestCompareReport>('/backtest-lab/runs/compare', { runIds })).data,
   research: async (runIds: string[], thresholds: BacktestResearchThresholds): Promise<BacktestResearchReport> =>
     (await apiClient.post<BacktestResearchReport>('/backtest-lab/runs/research', { runIds, thresholds })).data,
+  evidence: async (runIds: string[], thresholds: BacktestResearchThresholds): Promise<Blob> =>
+    (await apiClient.post<Blob>('/backtest-lab/runs/evidence', { runIds, thresholds }, { responseType: 'blob', timeout: 15000 })).data,
 }

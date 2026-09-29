@@ -33,6 +33,8 @@
       </div>
       <button v-if="hasMoreHistory" :disabled="loadingHistory" @click="loadMoreHistory">{{ loadingHistory ? '加载中…' : '加载更早记录' }}</button>
       <button :disabled="selected.length < 2 || comparing" @click="compare">{{ comparing ? '生成中…' : `比较 ${selected.length} 条并生成报告` }}</button>
+      <button :disabled="selected.length < 2 || exporting || !validResearchThresholds" @click="exportEvidence">{{ exporting ? '导出中…' : '导出研究证据' }}</button>
+      <p v-if="exportError" role="alert" class="error">{{ exportError }}</p>
       <template v-if="report">
         <div v-for="warning in report.warnings" :key="warning" class="compare-warning" role="alert">⚠ {{ warning }}</div>
         <div class="compare-scroll"><table><thead><tr><th>指标</th><th v-for="run in report.runs" :key="run.run_id">{{ run.strategy }} v{{ run.strategy_version }}<br /><small>{{ run.run_id }}</small></th></tr></thead>
@@ -101,6 +103,8 @@ const researchThresholds = ref<BacktestResearchThresholds>({minSampleDays: 180, 
 const researchReport = ref<BacktestResearchReport | null>(null)
 const researching = ref(false)
 const researchError = ref('')
+const exporting = ref(false)
+const exportError = ref('')
 const validResearchThresholds = computed(() => {
   const t = researchThresholds.value
   return Number.isInteger(t.minSampleDays) && t.minSampleDays >= 1 && t.minSampleDays <= 3650 &&
@@ -133,6 +137,21 @@ function toggle(id: string) {
   selected.value = selected.value.includes(id) ? selected.value.filter(x => x !== id) : [...selected.value, id]
   report.value = null
   researchReport.value = null
+  exportError.value = ''
+}
+async function exportEvidence() {
+  exporting.value = true; exportError.value = ''
+  try {
+    const blob = await backtestApi.evidence(selected.value, researchThresholds.value)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'backtest-research-evidence.zip'
+    link.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    exportError.value = '研究证据导出失败，请检查所选回测和网络后重试'
+  } finally { exporting.value = false }
 }
 function researchStatus(status: BacktestResearchReport['candidates'][number]['status']): string {
   return {WORTH_FURTHER_RESEARCH: '值得继续研究', EVIDENCE_INSUFFICIENT: '证据不足', DOES_NOT_MEET_CRITERIA: '不满足条件'}[status]
