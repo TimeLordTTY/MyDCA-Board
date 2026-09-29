@@ -34,11 +34,13 @@ import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.repository.AuthRepository
 import com.timelordtty.mydca.data.repository.AiAccountingRepository
 import com.timelordtty.mydca.data.repository.DraftRepository
+import com.timelordtty.mydca.data.repository.FinanceRadarRepository
 import com.timelordtty.mydca.data.repository.SettlementRepository
 import com.timelordtty.mydca.data.repository.TodoRepository
 import com.timelordtty.mydca.data.repository.WealthRepository
 import com.timelordtty.mydca.ui.screens.AssetsScreen
 import com.timelordtty.mydca.ui.screens.DraftInboxScreen
+import com.timelordtty.mydca.ui.screens.FinanceRadarScreen
 import com.timelordtty.mydca.ui.screens.ExternalShareNoticeBanner
 import com.timelordtty.mydca.ui.screens.OverviewScreen
 import com.timelordtty.mydca.ui.screens.SettingsScreen
@@ -195,6 +197,7 @@ private fun AuthenticatedApp(
         var editingOutboxEntry by remember { mutableStateOf<DraftOutboxEntry?>(null) }
         // 待结算是有明确安全边界的子流程：进入后只加载列表，绝不自动 preview / confirm。
         var settlementFlowOpen by remember { mutableStateOf(false) }
+        var radarOpen by rememberSaveable { mutableStateOf(false) }
         var settlementFocusOrderId by remember { mutableStateOf<String?>(null) }
         // 人工结算成功后自增，驱动总览与资产页面重新拉取账户 / 持仓 / 资产摘要。
         var assetsRefreshToken by remember { mutableStateOf(0) }
@@ -206,6 +209,7 @@ private fun AuthenticatedApp(
         val settlementRepository = remember(services.wealthHubApi) { SettlementRepository(services.wealthHubApi) }
         val aiAccountingRepository = remember(services.wealthHubApi) { AiAccountingRepository(services.wealthHubApi) }
         val wealthRepository = remember(services.wealthHubApi) { WealthRepository(services.wealthHubApi) }
+        val radarRepository = remember(services.wealthHubApi) { FinanceRadarRepository(services.wealthHubApi) }
         val outboxScope = rememberCoroutineScope()
         val draftOutbox = remember(context) {
             AndroidDraftOutbox.createQueue(context) { entry, draftId ->
@@ -296,12 +300,12 @@ private fun AuthenticatedApp(
             topBar = {
                 TopAppBar(
                     title = {
-                        Text(if (settlementFlowOpen) "待结算" else if (outboxEntries.isNotEmpty()) "${currentRoute.title} · 待发送 ${outboxEntries.size}" else currentRoute.title)
+                        Text(if (radarOpen && currentRoute == AppRoute.Overview) "每日财富雷达" else if (settlementFlowOpen) "待结算" else if (outboxEntries.isNotEmpty()) "${currentRoute.title} · 待发送 ${outboxEntries.size}" else currentRoute.title)
                     }
                 )
             },
             floatingActionButton = {
-                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen)) {
+                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen || radarOpen)) {
                     ExtendedFloatingActionButton(onClick = { isQuickCaptureOpen = true }) {
                         Text("记一笔")
                     }
@@ -317,6 +321,7 @@ private fun AuthenticatedApp(
                                 draftEntryMode = null
                                 editingOutboxEntry = null
                                 settlementFlowOpen = false
+                                radarOpen = false
                                 settlementFocusOrderId = null
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
                                 NotificationNavigationTarget.clear()
@@ -336,11 +341,32 @@ private fun AuthenticatedApp(
                 modifier = Modifier.padding(innerPadding),
             ) { route ->
                 when (route) {
-                    AppRoute.Overview -> OverviewScreen(
-                        wealthRepository = wealthRepository,
-                        apiConfigError = apiConfigError,
-                        refreshToken = assetsRefreshToken,
-                    )
+                    AppRoute.Overview -> {
+                        if (radarOpen) {
+                            FinanceRadarScreen(
+                                repository = radarRepository,
+                                outboxCount = outboxEntries.size,
+                                onClose = { radarOpen = false },
+                                onNavigate = { destination ->
+                                    val navigation = destination.navigation()
+                                    radarOpen = false
+                                    selectedDraftId = null
+                                    draftEntryMode = null
+                                    settlementFocusOrderId = null
+                                    settlementFlowOpen = navigation.openSettlements
+                                    quickFocus = QuickCaptureFocus(outbox = navigation.focusOutbox)
+                                    currentRoute = navigation.route
+                                },
+                            )
+                        } else {
+                            OverviewScreen(
+                                wealthRepository = wealthRepository,
+                                apiConfigError = apiConfigError,
+                                refreshToken = assetsRefreshToken,
+                                onOpenRadar = { radarOpen = true },
+                            )
+                        }
+                    }
                     AppRoute.TodayTodo -> {
                         if (settlementFlowOpen) {
                             PendingSettlementScreen(

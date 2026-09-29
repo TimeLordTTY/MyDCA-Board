@@ -22,6 +22,7 @@ import com.timelordtty.mydca.data.dto.SettlementAuditDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewDto
 import com.timelordtty.mydca.data.dto.SettlementPreviewRequestDto
 import com.timelordtty.mydca.data.dto.TodayTodoDto
+import com.timelordtty.mydca.data.dto.FinanceRadarDto
 import com.timelordtty.mydca.data.dto.UpdateDraftRequestDto
 import retrofit2.http.Body
 import retrofit2.http.GET
@@ -35,6 +36,9 @@ import retrofit2.http.Query
  * 只声明查看、预览和用户手动确认相关接口；移动端不直接写数据库。
  */
 interface WealthHubApi {
+    @GET("api/v2/finance-radar")
+    suspend fun getFinanceRadar(): FinanceRadarDto
+
     @GET("api/v2/backtest-lab/recent")
     suspend fun recentBacktests(): List<com.timelordtty.mydca.data.dto.BacktestResultDto>
     @GET("api/v2/todos/today")

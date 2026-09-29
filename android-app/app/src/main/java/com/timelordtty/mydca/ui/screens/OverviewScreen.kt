@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +24,7 @@ fun OverviewScreen(
     wealthRepository: WealthRepository?,
     apiConfigError: String?,
     refreshToken: Int = 0,
+    onOpenRadar: () -> Unit = {},
 ) {
     var state by remember { mutableStateOf(WealthOverviewUiState()) }
     val scope = rememberCoroutineScope()
@@ -54,6 +56,7 @@ fun OverviewScreen(
 
     PageScaffold {
         SafetyBanner("总览只展示后端真实只读财富摘要；金额、持仓与待办口径以服务端返回为准，移动端不自行重算正式账本。")
+        OutlinedButton(onClick = onOpenRadar) { Text("打开每日财富雷达") }
         when {
             state.isLoading -> LoadingSection("正在加载总览")
             state.overview == null && !state.errorMessage.isNullOrBlank() ->
