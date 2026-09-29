@@ -3,8 +3,10 @@ package com.timelordtty.dca.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.timelordtty.dca.dto.BacktestResultDTO;
+import com.timelordtty.dca.dto.BacktestRunDTO;
 import com.timelordtty.dca.service.BacktestLabService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -24,7 +26,19 @@ public class BacktestLabController {
     public List<String> datasets() throws IOException { return service.datasets(); }
 
     @GetMapping("/recent")
-    public List<BacktestResultDTO> recent() { return service.recent().stream().map(this::dto).toList(); }
+    public List<BacktestResultDTO> recent() throws IOException { return service.recent().stream().map(this::dto).toList(); }
+
+    @GetMapping("/runs")
+    public List<BacktestRunDTO> history(@RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) throws IOException {
+        return service.history(page, size);
+    }
+
+    @GetMapping("/runs/{id}")
+    public ResponseEntity<BacktestRunDTO> detail(@PathVariable String id) throws IOException {
+        BacktestRunDTO run = service.detail(id);
+        return run == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(run);
+    }
 
     @PostMapping("/runs")
     public BacktestResultDTO run(@RequestBody RunRequest request) throws Exception {
@@ -33,10 +47,13 @@ public class BacktestLabController {
 
     private BacktestResultDTO dto(JsonNode result) { return mapper.convertValue(result, BacktestResultDTO.class); }
 
-    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class, IOException.class, InterruptedException.class})
+    @ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class, IOException.class,
+            InterruptedException.class, java.util.concurrent.TimeoutException.class})
     public ResponseEntity<Map<String, String>> error(Exception error) {
         String message = error instanceof IOException || error instanceof InterruptedException
                 ? "回测服务暂不可用，请稍后重试" : error.getMessage();
-        return ResponseEntity.badRequest().body(Map.of("message", message == null ? "回测失败" : message));
+        HttpStatus status = error instanceof IOException || error instanceof InterruptedException
+                ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(Map.of("message", message == null ? "回测失败" : message));
     }
 }

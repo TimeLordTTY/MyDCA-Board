@@ -13,5 +13,7 @@ public record BacktestResultDTO(
         JsonNode metrics,
         JsonNode events,
         JsonNode baseline,
-        List<String> warnings
+        List<String> warnings,
+        String history_run_id,
+        Boolean cache_hit
 ) {}

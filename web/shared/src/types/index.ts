@@ -13,6 +13,7 @@ export * from './indicator'
 export * from './draft'
 export * from './aiAccounting'
 export * from './todo'
+export * from './backtest'
 
 // 重新导出PendingSettlement（从order.ts）
 export type { PendingSettlement } from './order'

@@ -21,6 +21,7 @@ export * from './brokerFee'
 export * from './draft'
 export * from './aiAccounting'
 export * from './todo'
+export * from './backtest'
 
 // 导出所有API对象
 export { authApi } from './auth'
@@ -41,3 +42,4 @@ export { brokerFeeApi } from './brokerFee'
 export { draftApi } from './draft'
 export { aiAccountingApi } from './aiAccounting'
 export { todoApi } from './todo'
+export { backtestApi } from './backtest'
