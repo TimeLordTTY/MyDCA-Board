@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.timelordtty.dca.dto.BacktestResultDTO;
 import com.timelordtty.dca.dto.BacktestRunDTO;
 import com.timelordtty.dca.service.BacktestLabService;
+import com.timelordtty.dca.service.BacktestCompareService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -17,10 +18,15 @@ import java.util.Map;
 @RequestMapping("/api/v2/backtest-lab")
 public class BacktestLabController {
     private final BacktestLabService service;
+    private final BacktestCompareService compareService;
     private final ObjectMapper mapper = new ObjectMapper();
-    public BacktestLabController(BacktestLabService service) { this.service = service; }
+    public BacktestLabController(BacktestLabService service, BacktestCompareService compareService) {
+        this.service = service;
+        this.compareService = compareService;
+    }
 
     public record RunRequest(String data, String strategy, String version, Map<String, Object> params) {}
+    public record CompareRequest(List<String> runIds) {}
 
     @GetMapping("/datasets")
     public List<String> datasets() throws IOException { return service.datasets(); }
@@ -43,6 +49,11 @@ public class BacktestLabController {
     @PostMapping("/runs")
     public BacktestResultDTO run(@RequestBody RunRequest request) throws Exception {
         return dto(service.run(request.data(), request.strategy(), request.version(), request.params()));
+    }
+
+    @PostMapping("/runs/compare")
+    public JsonNode compare(@RequestBody CompareRequest request) throws IOException {
+        return compareService.compare(request.runIds());
     }
 
     private BacktestResultDTO dto(JsonNode result) { return mapper.convertValue(result, BacktestResultDTO.class); }

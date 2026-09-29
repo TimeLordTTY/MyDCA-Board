@@ -17,3 +17,24 @@ export interface BacktestRun {
   metrics: Record<string, number | null> | null
   result: Record<string, unknown> | null
 }
+
+export interface BacktestCompareRun {
+  run_id: string
+  dataset_hash: string
+  strategy: string
+  strategy_version: string
+  engine_version: string
+  canonical_params: Record<string, number>
+  data_range: { start: string; end: string }
+  metrics: Record<string, number | null>
+  baseline_delta: Record<string, number | null>
+}
+
+export interface BacktestCompareReport {
+  schema_version: string
+  generated_at: string
+  disclaimer: string
+  warnings: string[]
+  runs: BacktestCompareRun[]
+  markdown: string
+}
