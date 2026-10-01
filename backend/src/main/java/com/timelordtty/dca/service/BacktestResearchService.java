@@ -78,6 +78,7 @@ public class BacktestResearchService {
             candidate.put("strategy", first.path("strategy").asText());
             candidate.put("strategy_version", first.path("strategy_version").asText());
             candidate.set("canonical_params", first.path("canonical_params").deepCopy());
+            candidate.put("candidate_id", ResearchPlanService.candidateId(candidate));
             ArrayNode runIds = candidate.putArray("run_ids");
             ArrayNode hashes = candidate.putArray("dataset_hashes");
             ArrayNode evidence = candidate.putArray("evidence");

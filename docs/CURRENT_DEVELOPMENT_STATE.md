@@ -8,6 +8,8 @@
 
 ## 当前阶段
 
+v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据 API、创建时证据快照、独立参数草稿、DRAFT/ACTIVE/ARCHIVED 生命周期及只读失效警告。仅后端能力；UI 未接入，数据库脚本 `backend/migrations/20261001_research_plan.sql` 仅提交、未部署。历史研究不代表未来表现，不触发回测或交易。详见 `docs/mydca_v016_research_plan_backend_20261001.md`。
+
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
