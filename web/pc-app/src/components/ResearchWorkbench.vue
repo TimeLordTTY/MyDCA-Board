@@ -73,7 +73,7 @@ function failure(cause: unknown) {
   const e = cause as { response?: { status?: number }; message?: string }
   const text = e.message || ''
   const code = e.response?.status
-  return code === 401 || /401|未授权|登录/.test(text) ? '登录已失效，请重新登录。' : code === 403 || /403|权限|禁止/.test(text) ? '没有研究方案访问权限。' : code === 409 || /已变更/.test(text) ? '方案已变更，请刷新后重试。' : text || '研究请求失败，请检查网络后重试。'
+  return code === 401 || /401|未授权|登录/.test(text) ? '登录已失效，请重新登录。' : code === 403 || /403|权限|禁止/.test(text) ? '没有研究方案访问权限。' : code === 404 ? '研究方案不存在或无权访问，请刷新列表。' : code === 409 || /已变更/.test(text) ? '方案已变更，请刷新后重试。' : /[\u4e00-\u9fff]/.test(text) ? text : '研究请求失败，请检查网络后重试。'
 }
 watch(() => props.candidate, c => { newName.value = c ? `${c.strategy} v${c.strategy_version} 研究` : ''; newDescription.value = '' })
 function apply(value: ResearchPlan) { plan.value = value; name.value = value.name; description.value = value.description || ''; params.value = JSON.stringify(value.paramsDraft, null, 2); status.value = value.status === 'ACTIVE' ? 'ACTIVE' : 'DRAFT'; archivePrompt.value = false }
@@ -90,6 +90,7 @@ async function open(id: string) {
 async function refresh() {
   if (running.value || runsLoading.value) return
   const id = plan.value?.id; plans.value = []; page.value = 0; more.value = false
+  plan.value = null; runs.value = []; chosen.value = []; runsMore.value = false; runsError.value = ''; runState.value = ''
   await loadMore(); if (id && !error.value && !running.value) await open(id)
 }
 async function create() {

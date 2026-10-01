@@ -38,7 +38,25 @@ class ResearchPlanBacktestServiceTest {
         var compare = new BacktestCompareService(repo, users);
         assertEquals(id, compare.compare(List.of(aid, bid)).path("runs").get(0).path("research_plan_id").asText());
         var research = new BacktestResearchService(repo, compare, users);
+        var bundle = new BacktestEvidenceService(compare, research).export(List.of(aid, bid), null);
+        var entries = new HashMap<String, byte[]>();
+        try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(bundle.bytes()))) {
+            for (var entry = zip.getNextEntry(); entry != null; entry = zip.getNextEntry())
+                entries.put(entry.getName(), zip.readAllBytes());
+        }
+        for (String file : List.of("manifest.json", "compare.json"))
+            for (var run : json.readTree(entries.get(file)).path("runs"))
+                assertEquals(id, run.path("research_plan_id").asText());
+        // v0.15 files predate researchPlanId; they must remain usable alongside new runs.
+        Path legacyFile = root.resolve("history").resolve(bid + ".json");
+        String original = Files.readString(legacyFile);
+        var legacy = (com.fasterxml.jackson.databind.node.ObjectNode) json.readTree(original);
+        legacy.remove("researchPlanId");
+        Files.writeString(legacyFile, legacy.toString());
+        assertNull(new BacktestRunRepository(root.resolve("history")).find(bid, 7L, 9L).researchPlanId());
+        assertEquals(2, compare.compare(List.of(aid, bid)).path("runs").size());
         assertTrue(new BacktestEvidenceService(compare, research).export(List.of(aid, bid), null).bytes().length > 0);
+        Files.writeString(legacyFile, original);
         Files.writeString(data, "date,nav\n2024-01-01,1\n2024-02-01,1.2\n");
         var changed = service.run(id, request);
         assertNotEquals(saved.datasetHash(), lab.detail(changed.path("history_run_id").asText()).datasetHash());

@@ -1,7 +1,7 @@
 # 财富中枢文档索引与事实源优先级
 
 - **作者**：ChatGPT
-- **更新时间**：2026-09-30 +08:00
+- **更新时间**：2026-10-02 +08:00
 
 ## 读取顺序
 
@@ -22,6 +22,7 @@
 
 ## 当前关键文档
 
+- v0.16 发布硬化与回归：`docs/mydca_v016_release_hardening_20261001.md`
 - 当前状态：`docs/CURRENT_DEVELOPMENT_STATE.md`
 - v0.16 PC 研究方案工作台：`docs/mydca_v016_research_workbench_pc_20261001.md`
 - v0.16 研究方案回测闭环：`docs/mydca_v016_research_backtest_loop_20261001.md`

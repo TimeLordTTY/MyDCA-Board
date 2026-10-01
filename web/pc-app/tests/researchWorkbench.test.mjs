@@ -92,6 +92,26 @@ test('workbench exposes research only and keeps empty/loading/error and evidence
   assert.equal(s.more.value, false)
 })
 
+test('failed refresh clears stale editable plan and selections; retry restores detail', async () => {
+  let offline = false
+  const { state: s } = await setup({ list: async () => {
+    if (offline) throw new Error('Network Error')
+    return [fixture()]
+  } })
+  await s.open('plan-1'); s.chosen.value = ['new-run']
+  offline = true
+  await s.refresh()
+  assert.equal(s.plan.value, null)
+  assert.deepEqual(s.runs.value, [])
+  assert.deepEqual(s.chosen.value, [])
+  assert.match(s.error.value, /网络.*重试/)
+  assert.match(s.failure({ response: { status: 404 } }), /不存在或无权访问/)
+  offline = false
+  await s.refresh(); await s.open('plan-1')
+  assert.equal(s.plan.value.id, 'plan-1')
+  assert.equal(s.error.value, '')
+})
+
 test('research API limits run body to dataset and uses encoded owner-scoped paths', async () => {
   const { apiClient, researchPlanApi } = await import('../../shared/dist/index.js')
   const original = apiClient.post

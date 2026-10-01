@@ -1,7 +1,7 @@
 # 财富中枢系统（Wealth Hub / MyDCA-Board）
 
 **作者**：timelordtty  
-**当前事实同步**：2026-09-28
+**当前事实同步**：2026-10-02
 
 财富中枢是个人/家庭财富管理平台。当前工程已进入 Phase3，重点是在统一账本和草稿安全边界之上，提供 PC/Web 与 Android 原生端的日常资产查看、记账采集、人工确认、行情/指标和后续策略能力。
 
@@ -17,7 +17,10 @@
 
 ## 当前版本与里程碑
 
-- Android：`0.14.0 / versionCode 15`。
+- Android：`0.16.0 / versionCode 17`；CI APK 证据待推送后真实成功构建回填。
+- v0.16 研究闭环：owner/family 隔离的方案生命周期、不可变来源证据与独立参数草稿；PC 创建、编辑、归档及人工受控回测，Android 只读分页、详情和关联运行。复用 v0.15 compare/evidence，不创建订单、结算或账本。详见 `docs/mydca_v016_release_hardening_20261001.md`。
+- v0.16 migration `backend/migrations/20261001_research_plan.sql` 仅提交、未自动部署；新安装可择一使用 `backend/sql/initsql/research_plan.sql`，不得重复执行。
+- v0.15 回测历史、比较、研究候选、证据导出与每日财富雷达已实现；历史目录需部署方配置持久化与权限。
 - v0.14 发布硬化：Android 最近回测加载失败可重试，PC 待结算列表和策略实验室区分加载失败与空数据；APK workflow 已同步 v0.14.0 制品名。验证记录见 `docs/mydca_v014_release_hardening_20260929.md`。
 - v0.14.0 草稿历史、已忽略草稿显式恢复和已确认草稿复制入口已实现；事件表 migration 尚待授权部署，恢复和复制仍需重新预览与二次确认。
 - v0.7 全局“记一笔”快速采集中心、v0.8.0 系统 Share Sheet 文本/单图快速采集、v0.9.0 桌面快速记账小组件、v0.10.0 TRANSFER 转账草稿闭环、v0.11.0 投资买入 / 申购草稿闭环、v0.12.0 投资卖出 / 赎回草稿闭环、v0.13.0 人工结算预览与二次确认闭环均已完成。
@@ -101,6 +104,6 @@ Android 常用验证：
 
 ## 当前下一步
 
-v0.13.0 人工结算预览与二次确认闭环已完成：四类投资订单（买入 / 申购 / 卖出 / 赎回）均可生成只读结算预览，主人二次确认后携带 fresh 令牌 confirm，才在财富中枢内部生成 `settlement_confirm` 与账本 / 持仓影响。preview 只读、不写任何业务数据；confirm 幂等且事务完整。BUY / SUBSCRIPTION 结算清理 RECEIVABLE 并形成最终持仓 / 关联账户与手续费（不重复扣下单现金），SELL / REDEMPTION 结算才真正产生现金、持仓与手续费影响。全流程不自动结算、不后台 confirm、不连接任何真实交易渠道。后续普通工程任务（如策略建议 / 回测闭环、数据库 migration 上线与真机验收）需由 owner 单独规划与授权。
+v0.16 本地工程回归与发布收口记录见专项报告。目标环境研究表 migration、历史目录权限、真实登录后的 PC/Android 断网与无障碍体验，以及推送后 CI APK 证据仍需部署方/主人验收。生产数据库迁移、真实财务记录修改和交易不属于本任务授权。
 
 完整当前状态与长期文档关系见 `docs/CURRENT_DEVELOPMENT_STATE.md` 和 `docs/DOCUMENT_INDEX.md`。
