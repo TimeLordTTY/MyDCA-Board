@@ -8,6 +8,8 @@
 
 ## 当前阶段
 
+v0.17 后端新增 owner/family 双隔离风险观察规则、显式只读财务评估和幂等历史快照，支持收益/回撤、类别偏离、行情陈旧、集中度及备注/静默。仅供观察，不构成交易建议；只写观察元数据。`backend/migrations/20261002_risk_watch.sql` 仅提交、未部署，未连接数据库。详见 `docs/mydca_v017_risk_watch_backend_20261002.md`。
+
 v0.16 发布收口：Android 0.16.0 / 17 与 CI 制品命名一致；PC 刷新失败清除旧研究详情和选择，中文错误支持人工重试。验证与人工验收边界见 `docs/mydca_v016_release_hardening_20261001.md`。研究入口只写研究元数据/本地回测历史，无财务副作用；本任务未部署 migration。
 
 Android 已增加 v0.16 研究方案轻量只读入口：DRAFT/ACTIVE 分页列表、来源证据与参数快照详情、关联历史运行和失败状态。历史按最近 50 条开始手动加载更早记录，不创建/编辑方案、不发起回测。详见 `docs/mydca_v016_research_view_android_20261001.md`；真机体验与目标环境 migration 仍待人工验收。

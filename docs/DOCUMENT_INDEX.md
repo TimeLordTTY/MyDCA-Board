@@ -49,3 +49,4 @@
 - v0.15 只读策略研究候选：`docs/mydca_v015_strategy_research_candidates_20260929.md`
 - v0.15 研究证据导出：`docs/mydca_v015_research_evidence_export_20260929.md`
 - 自动执行/交付：以 `TimeLordTTY/ai-core` 的 `CURRENT_STATE.md` 与 Delivery Manifest 为准。
+- v0.17 只读风险观察后端：`docs/mydca_v017_risk_watch_backend_20261002.md`
