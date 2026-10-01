@@ -32,6 +32,7 @@ const router = createRouter({
       redirect: '/dashboard',
       meta: { requiresAuth: true },
       children: [
+        { path: 'risk-center', name: 'RiskCenter', component: () => import('../views/RiskCenter.vue') },
         {
           path: 'dashboard',
           name: 'Dashboard',

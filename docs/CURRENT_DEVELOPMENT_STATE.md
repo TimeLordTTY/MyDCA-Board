@@ -8,6 +8,8 @@
 
 ## 当前阶段
 
+v0.17 PC 已加入风险观察中心：规则配置、手工只读评估、UNKNOWN/陈旧快照、去重提醒历史筛选、手工已读与规则静默窗口。跨雷达/研究页面跳转仅带只读标识，不提供交易入口。详见 `docs/mydca_v017_risk_center_pc_20261002.md`；目标环境 migration 与真实体验仍待人工验收。
+
 v0.17 风险提醒历史新增稳定 fingerprint 去重、OPEN/ACKNOWLEDGED/MUTED/RESOLVED、规则静默窗口与未解除列表。静默不改变评估证据，未知数据不视为解除。新增 backend/migrations/20261002_risk_alert_history.sql 仅提交未部署；只写观察元数据，无财务副作用。详见 `docs/mydca_v017_risk_alert_history_20261002.md`。
 
 

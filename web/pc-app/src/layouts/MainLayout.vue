@@ -89,6 +89,7 @@ const navItems = [
   { name: 'Accounts', path: '/accounts', label: '账户' },
   { name: 'Holdings', path: '/holdings', label: '持仓管理' },
   { name: 'StrategyLab', path: '/strategy-lab', label: '策略实验室' },
+  { name: 'RiskCenter', path: '/risk-center', label: '风险观察' },
   { name: 'Settings', path: '/settings', label: '设置' },
 ]
 

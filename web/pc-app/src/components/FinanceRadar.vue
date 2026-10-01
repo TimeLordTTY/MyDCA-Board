@@ -5,6 +5,7 @@
         <p class="radar-eyebrow">DAILY / READ ONLY</p>
         <h2 id="radar-title">每日财富雷达 <small v-if="radar">{{ radar.date }} · {{ radar.scope === 'FAMILY' ? '家庭' : '个人' }}</small></h2>
         <p class="radar-subtitle">按问题优先级查看已有记录；处理操作请进入原页面。</p>
+        <router-link :to="{ name: 'RiskCenter', query: { readonly: 'true' } }">风险观察中心 ↗</router-link>
       </div>
       <button class="radar-retry" type="button" :disabled="loading" @click="load">{{ loading ? '加载中…' : '刷新雷达' }}</button>
     </header>

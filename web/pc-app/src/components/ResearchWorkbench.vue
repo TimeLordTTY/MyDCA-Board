@@ -2,6 +2,7 @@
   <section class="workbench" aria-labelledby="research-title">
     <header><div><small>RESEARCH / 研究档案</small><h2 id="research-title">研究方案工作台</h2></div><button :disabled="busy || running || runsLoading" @click="refresh">刷新方案与状态</button></header>
     <p class="notice">历史回测不代表未来表现。研究方案不是交易建议。</p>
+    <router-link :to="{ name: 'RiskCenter', query: { readonly: 'true' } }">查看风险观察中心 ↗</router-link>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
     <p v-if="busy" role="status">正在读取或保存研究方案…</p>
     <form v-if="candidate" @submit.prevent="create">
