@@ -66,8 +66,10 @@ public class RiskWatchService {
         if(payload==null) throw new IllegalArgumentException("观察规则不存在或无权访问");
         var rule=json.readValue(payload,Rule.class); authorize(rule.config()); return rule;
     }
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
     public Rule edit(String id,Config config) throws IOException {
-        var previous=detail(id); validate(config); var u=users.getCurrentUser();
+        var u=users.getCurrentUser(); store.lockRule(id,u.getId(),u.getFamilyId());
+        var previous=detail(id); validate(config);
         var rule=new Rule(id,config,previous.createdAt(),DISCLAIMER);
         if(store.updateRule(id,u.getId(),u.getFamilyId(),json.writeValueAsString(rule))!=1)
             throw new IllegalStateException("观察规则更新失败");
@@ -89,15 +91,22 @@ public class RiskWatchService {
         for(String payload:store.history(id,u.getId(),u.getFamilyId(),offset(page,size),size)) result.add(json.readValue(payload,Snapshot.class));
         return result;
     }
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
     public Snapshot evaluate(String id) throws IOException {
-        Rule rule=detail(id); Config c=rule.config(); var u=users.getCurrentUser();
+        var u=users.getCurrentUser(); store.lockRule(id,u.getId(),u.getFamilyId());
+        Rule rule=detail(id); Config c=rule.config();
         boolean family="FAMILY".equals(c.scope());
         var facts=radar.getRadar(u.getId(),u.getFamilyId(),c.scope());
         var positions=new ArrayList<>(holdings.calculateHoldings(family?null:u.getId(),family?u.getFamilyId():null));
         // Sorting serialized rows makes input hashing independent of mapper row order.
         positions.sort(Comparator.comparing(h -> json.valueToTree(h).toString()));
         IndicatorDaily indicator=c.type()==Type.DRAWDOWN ? indicators.getLatestIndicator(c.productId(),20):null;
-        var input=json.createObjectNode(); input.put("version",1); input.set("rule",json.valueToTree(rule));
+        var input=json.createObjectNode(); input.put("version",2);
+        var evaluationConfig=(com.fasterxml.jackson.databind.node.ObjectNode)json.valueToTree(c);
+        // Display preferences must not create a new source fingerprint.
+        evaluationConfig.remove("muted");
+        if(c.type()!=Type.NOTE) evaluationConfig.remove("note");
+        input.set("rule",evaluationConfig);
         input.put("user",u.getId()); input.put("family",u.getFamilyId());
         input.set("assets",json.valueToTree(facts.assets())); input.put("date",facts.date().toString());
         input.set("markets",json.valueToTree(facts.markets().stream().sorted(Comparator.comparing(FinanceRadarDTO.MarketFact::productId)).toList()));
@@ -105,14 +114,14 @@ public class RiskWatchService {
         String hash=ResearchPlanService.digest(json.writeValueAsBytes(input));
         String snapshotId=ResearchPlanService.digest((id+":"+hash).getBytes(java.nio.charset.StandardCharsets.UTF_8));
         String existing=store.snapshot(snapshotId,u.getId(),u.getFamilyId());
-        if(existing!=null) return json.readValue(existing,Snapshot.class);
+        if(existing!=null) return reconcile(rule,json.readValue(existing,Snapshot.class));
         BigDecimal observed=observe(c,facts,positions,indicator);
-        boolean muted=c.muted(); boolean known=c.type()==Type.NOTE || observed!=null;
-        boolean matched=!muted && known && (c.type()==Type.NOTE || (c.type()==Type.RETURN && c.direction()==Direction.BELOW
+        boolean known=c.type()==Type.NOTE || observed!=null;
+        boolean matched=known && (c.type()==Type.NOTE || (c.type()==Type.RETURN && c.direction()==Direction.BELOW
                 ? observed.compareTo(c.threshold())<=0 : observed.compareTo(c.threshold())>=0));
-        String status=muted?"MUTED":known?"OK":"UNKNOWN";
-        String reason=muted?"观察规则已静默":!known?"行情、净值、成本或组合数据不足，观察值未知":matched?"观察条件已达到配置阈值":"观察条件未达到配置阈值";
-        if(c.type()==Type.NOTE && !muted) reason="自定义观察备注："+Objects.toString(c.note(),"");
+        String status=known?"OK":"UNKNOWN";
+        String reason=!known?"行情、净值、成本或组合数据不足，观察值未知":matched?"观察条件已达到配置阈值":"观察条件未达到配置阈值";
+        if(c.type()==Type.NOTE) reason="自定义观察备注："+Objects.toString(c.note(),"");
         var snapshot=new Snapshot(snapshotId,id,facts.date().toString(),hash,status,matched,
                 matched?c.severity():Severity.INFO,reason,observed,c.threshold(),Instant.now(),DISCLAIMER);
         try {
@@ -121,9 +130,50 @@ public class RiskWatchService {
         } catch(DuplicateKeyException conflict) {
             existing=store.snapshot(snapshotId,u.getId(),u.getFamilyId());
             if(existing==null) throw conflict;
-            return json.readValue(existing,Snapshot.class);
+            return reconcile(rule,json.readValue(existing,Snapshot.class));
+        }
+        return reconcile(rule,snapshot);
+    }
+    static String fingerprint(Snapshot snapshot) {
+        return ResearchPlanService.digest((snapshot.ruleId()+":"+snapshot.sourceDataHash()+":"+snapshot.severity())
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+    private Snapshot reconcile(Rule rule, Snapshot snapshot) throws IOException {
+        var u=users.getCurrentUser();
+        if(snapshot.matched()) {
+            store.insertEvent(fingerprint(snapshot),rule.id(),u.getId(),u.getFamilyId(),json.writeValueAsString(snapshot));
+        } else if(!"UNKNOWN".equals(snapshot.status())) {
+            // Unknown evidence is never recovery. History is retained.
+            store.resolve(rule.id(),u.getId(),u.getFamilyId());
         }
         return snapshot;
+    }
+    public List<Event> events(String id, boolean unresolved, int page, int size) throws IOException {
+        var rule=detail(id); var u=users.getCurrentUser();
+        Instant until=store.mutedUntil(id,u.getId(),u.getFamilyId());
+        boolean muted=rule.config().muted() || (until!=null && until.isAfter(Instant.now()));
+        var result=new ArrayList<Event>();
+        for(String payload:store.events(id,u.getId(),u.getFamilyId(),unresolved,offset(page,size),size)) {
+            var evidence=json.readValue(payload,Snapshot.class);
+            String fingerprint=fingerprint(evidence);
+            Instant ack=store.acknowledgedAt(fingerprint,id,u.getId(),u.getFamilyId());
+            Instant resolved=store.resolvedAt(fingerprint,id,u.getId(),u.getFamilyId());
+            EventState state=resolved!=null?EventState.RESOLVED:muted?EventState.MUTED:ack!=null?EventState.ACKNOWLEDGED:EventState.OPEN;
+            result.add(new Event(fingerprint,evidence,state,state==EventState.OPEN,ack,resolved,until));
+        }
+        return result;
+    }
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    public void acknowledge(String id,String fingerprint) throws IOException {
+        detail(id); var u=users.getCurrentUser(); store.lockRule(id,u.getId(),u.getFamilyId());
+        if(store.acknowledge(fingerprint,id,u.getId(),u.getFamilyId())!=1)
+            throw new IllegalArgumentException("提醒不存在或无权访问");
+    }
+    @org.springframework.transaction.annotation.Transactional(rollbackFor=Exception.class)
+    public void mute(String id,Instant until) throws IOException {
+        detail(id); var u=users.getCurrentUser(); store.lockRule(id,u.getId(),u.getFamilyId());
+        if(until!=null && !until.isAfter(Instant.now())) throw new IllegalArgumentException("静默截止时间必须在未来");
+        store.mute(id,u.getId(),u.getFamilyId(),until);
     }
     static BigDecimal observe(Config c,FinanceRadarDTO facts,List<HoldingService.HoldingInfo> positions,IndicatorDaily indicator) {
         if(c.type()==Type.NOTE) return null;

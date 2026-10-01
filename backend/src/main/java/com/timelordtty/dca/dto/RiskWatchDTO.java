@@ -8,6 +8,10 @@ public final class RiskWatchDTO {
     private RiskWatchDTO() {}
     public enum Type { RETURN, DRAWDOWN, ALLOCATION_DEVIATION, STALE, CONCENTRATION, NOTE }
     public enum Severity { INFO, WARNING, CRITICAL }
+    public enum EventState { OPEN, ACKNOWLEDGED, MUTED, RESOLVED }
+    public record Event(String fingerprint, Snapshot evidence, EventState state, boolean visible,
+                        Instant acknowledgedAt, Instant resolvedAt, Instant mutedUntil) {}
+    public record MuteRequest(Instant mutedUntil) {}
     public enum Direction { ABOVE, BELOW }
     public record Config(String scope, Type type, Long productId, String assetType,
                          BigDecimal threshold, BigDecimal target, Direction direction,

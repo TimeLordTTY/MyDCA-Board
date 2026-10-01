@@ -63,7 +63,7 @@ class RiskWatchServiceTest {
         var familyRule=service.create(family); verify(families).assertAdmin(7L,9L);
         when(radar.getRadar(7L,9L,"FAMILY")).thenReturn(facts("OK",n("1000"),"OK"));
         when(holdings.calculateHoldings(null,9L)).thenReturn(List.of());
-        var muted=service.evaluate(familyRule.id()); assertEquals("MUTED",muted.status()); assertFalse(muted.matched());
+        var muted=service.evaluate(familyRule.id()); assertEquals("OK",muted.status()); assertTrue(muted.matched());
         verify(holdings).calculateHoldings(null,9L);
     }
     @Test void unknownBelowBoundaryAndConcurrentReuse() throws Exception {
@@ -86,6 +86,48 @@ class RiskWatchServiceTest {
         assertEquals(2,saved.size());
         assertThrows(IllegalArgumentException.class,()->service.create(config(Type.CONCENTRATION,"1.1")));
         assertThrows(IllegalArgumentException.class,()->service.list(-1,20));
+    }
+    @Test void alertLifecycleMuteAckUnknownAndOwnerIsolation() throws Exception {
+        var store=mock(RiskWatchMapper.class); var users=mock(UserService.class);
+        var radar=mock(FinanceRadarService.class); var holdings=mock(HoldingService.class);
+        var user=new AuthResponse.UserInfo(); user.setId(7L); user.setFamilyId(9L);
+        when(users.getCurrentUser()).thenReturn(user);
+        var service=new RiskWatchService(store,users,mock(FamilyService.class),radar,holdings,mock(IndicatorService.class));
+        var json=new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules();
+        var rule=new Rule("r",config(Type.STALE,"4"),java.time.Instant.EPOCH,RiskWatchService.DISCLAIMER);
+        when(store.rule("r",7L,9L)).thenReturn(json.writeValueAsString(rule));
+        Map<String,String> snapshots=new HashMap<>(), events=new LinkedHashMap<>();
+        when(store.snapshot(anyString(),eq(7L),eq(9L))).thenAnswer(a->snapshots.get(a.getArgument(0)));
+        when(store.insertSnapshot(anyString(),eq("r"),eq(7L),eq(9L),anyString())).thenAnswer(a->{snapshots.put(a.getArgument(0),a.getArgument(4));return 1;});
+        when(store.insertEvent(anyString(),eq("r"),eq(7L),eq(9L),anyString())).thenAnswer(a->{events.putIfAbsent(a.getArgument(0),a.getArgument(4));return 1;});
+        when(store.events(eq("r"),eq(7L),eq(9L),anyBoolean(),eq(0),eq(20))).thenAnswer(a->new ArrayList<>(events.values()));
+        when(radar.getRadar(7L,9L,"PERSONAL")).thenReturn(facts("OK",n("1000"),"OK"));
+        when(holdings.calculateHoldings(7L,null)).thenReturn(List.of());
+        var snapshot=service.evaluate("r"); service.evaluate("r"); assertEquals(1,events.size());
+        String fp=RiskWatchService.fingerprint(snapshot);
+        var mutedConfig=new Config("PERSONAL",Type.STALE,1L,"EQUITY",n("4"),n("0.5"),Direction.ABOVE,Severity.WARNING,"观察",true);
+        when(store.rule("r",7L,9L)).thenReturn(json.writeValueAsString(new Rule("r",mutedConfig,rule.createdAt(),rule.disclaimer())));
+        assertEquals(snapshot,service.evaluate("r")); assertEquals(1,events.size());
+        when(store.rule("r",7L,9L)).thenReturn(json.writeValueAsString(rule));
+        assertEquals(EventState.OPEN,service.events("r",true,0,20).get(0).state());
+        var until=java.time.Instant.now().plusSeconds(3600); service.mute("r",until);
+        verify(store).mute("r",7L,9L,until);
+        when(store.mutedUntil("r",7L,9L)).thenReturn(until);
+        var muted=service.events("r",true,0,20).get(0); assertEquals(EventState.MUTED,muted.state()); assertFalse(muted.visible()); assertTrue(muted.evidence().matched());
+        when(store.acknowledge(fp,"r",7L,9L)).thenReturn(1); service.acknowledge("r",fp);
+        var ack=java.time.Instant.now(); when(store.acknowledgedAt(fp,"r",7L,9L)).thenReturn(ack);
+        when(store.mutedUntil("r",7L,9L)).thenReturn(ack.minusSeconds(1));
+        assertEquals(EventState.ACKNOWLEDGED,service.events("r",true,0,20).get(0).state());
+        when(radar.getRadar(7L,9L,"PERSONAL")).thenReturn(new FinanceRadarDTO(LocalDate.of(2026,10,2),"PERSONAL",facts("UNKNOWN",null,"UNKNOWN").assets(),null,List.of(),List.of()));
+        assertEquals("UNKNOWN",service.evaluate("r").status()); verify(store,never()).resolve(anyString(),anyLong(),anyLong());
+        var good=new FinanceRadarDTO(LocalDate.of(2026,10,2),"PERSONAL",facts("OK",n("1000"),"OK").assets(),null,List.of(new FinanceRadarDTO.MarketFact(1L,"OK",LocalDate.of(2026,10,2),LocalDate.of(2026,10,2),"OK",null)),List.of());
+        when(radar.getRadar(7L,9L,"PERSONAL")).thenReturn(good); assertFalse(service.evaluate("r").matched());
+        verify(store).resolve("r",7L,9L); when(store.resolvedAt(fp,"r",7L,9L)).thenReturn(ack);
+        assertEquals(EventState.RESOLVED,service.events("r",false,0,20).get(0).state()); assertEquals(1,events.size());
+        user.setId(8L); assertThrows(IllegalArgumentException.class,()->service.acknowledge("r",fp));
+        assertThrows(IllegalArgumentException.class,()->service.mute("r",until)); assertThrows(IllegalArgumentException.class,()->service.events("r",true,0,20));
+        user.setId(7L); assertThrows(IllegalArgumentException.class,()->service.mute("r",java.time.Instant.EPOCH));
+        verify(holdings,times(5)).calculateHoldings(7L,null); verifyNoMoreInteractions(holdings);
     }
     @Test void migrationIsManualMetadataOnly() throws Exception {
         String sql=java.nio.file.Files.readString(java.nio.file.Path.of("migrations/20261002_risk_watch.sql"));
