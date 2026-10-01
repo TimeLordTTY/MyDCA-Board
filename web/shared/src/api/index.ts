@@ -23,6 +23,7 @@ export * from './draft'
 export * from './aiAccounting'
 export * from './todo'
 export * from './backtest'
+export * from './researchPlan'
 
 // 导出所有API对象
 export { authApi } from './auth'

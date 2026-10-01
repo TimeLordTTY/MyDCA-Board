@@ -1,4 +1,5 @@
 export interface BacktestRun {
+  researchPlanId?: string | null
   historyRunId: string
   ownerUserId: number
   ownerFamilyId: number | null
@@ -52,6 +53,7 @@ export interface BacktestResearchReport {
   thresholds: { min_sample_days: number; max_drawdown: number; min_baseline_annualized_delta: number; min_trade_count: number }
   excluded_runs: { run_id: string; status: string; reason: string }[]
   candidates: {
+    candidate_id: string
     strategy: string
     strategy_version: string
     canonical_params: Record<string, number>

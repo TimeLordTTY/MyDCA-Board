@@ -63,7 +63,8 @@ apiClient.interceptors.response.use(
 
       // 返回错误信息
       const message = data?.message || data?.error || `请求失败: ${status}`
-      return Promise.reject(new Error(message))
+      // Preserve HTTP status for permission/conflict states in callers.
+      return Promise.reject(Object.assign(new Error(message), { response: error.response }))
     }
 
     // 网络错误

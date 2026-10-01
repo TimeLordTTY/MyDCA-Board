@@ -15,6 +15,6 @@ test('evidence API rejects failed downloads and the PC keeps an error state', as
   }
   const view = await readFile(new URL('../src/views/StrategyLab.vue', import.meta.url), 'utf8')
   assert.match(view, /v-if="exportError" role="alert"/)
-  assert.match(view, /catch \{\s*exportError\.value = '研究证据导出失败/)
+  assert.match(view, /catch \(cause\) \{\s*exportError\.value = requestError\(cause, '研究证据导出失败/)
   assert.match(view, /finally \{ exporting\.value = false \}/)
 })

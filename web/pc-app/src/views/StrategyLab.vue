@@ -1,6 +1,7 @@
 <template>
   <main class="lab">
     <header><h1>策略实验室</h1><p>仅使用已导入的历史净值数据。历史回测不代表未来表现。</p></header>
+    <ResearchWorkbench :candidate="planCandidate" :thresholds="researchThresholds" :datasets="datasets" @cancel="planCandidate = null" @evidence="usePlanRuns" @refresh-history="refreshHistory" />
     <section class="panel">
       <label>历史数据 <select v-model="data"><option value="">请选择</option><option v-for="name in datasets" :key="name">{{ name }}</option></select></label>
       <label>策略 <select v-model="strategy"><option value="pure_sip">定期投入 v1</option><option value="ma_enhanced">均线增强 v1</option><option value="profit_recycle">收益回收 v1</option><option value="profit_recycle:2">收益回收 v2</option></select></label>
@@ -23,7 +24,7 @@
       <p class="notice">历史回测不代表未来表现。本页面不创建订单或交易。</p>
     </section>
     <section class="panel">
-      <h2>回测历史对比</h2>
+      <h2 id="history-compare-title">回测历史对比</h2>
       <p>选择 2 至 5 条成功记录。报告仅使用已保存的结果，不会重新运行回测。</p>
       <p v-if="historyError" role="alert" class="error">{{ historyError }}</p>
       <p v-if="loadingHistory" role="status" class="empty">正在读取回测历史…</p>
@@ -67,6 +68,7 @@
         <p v-if="!researchReport.candidates.length" class="empty">所选记录没有可用的成功回测证据。</p>
         <article v-for="candidate in researchReport.candidates" :key="candidate.strategy + candidate.strategy_version + JSON.stringify(candidate.canonical_params)" class="candidate">
           <h3>{{ candidate.strategy }} v{{ candidate.strategy_version }} · {{ researchStatus(candidate.status) }}</h3>
+          <button @click="continueResearch(candidate)">继续研究 · 加入研究方案</button>
           <p>证据状态：{{ candidate.evidence_status === 'CONSISTENT' ? '一致' : '不足或不可合并' }} · 参数：{{ JSON.stringify(candidate.canonical_params) }}</p>
           <p>历史 run：{{ candidate.run_ids.join('、') }}</p>
           <p>数据集 hash：{{ candidate.dataset_hashes.join('、') }}</p>
@@ -83,6 +85,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import ResearchWorkbench from '../components/ResearchWorkbench.vue'
 import { apiClient, backtestApi } from '@wealth-hub/shared'
 import type { BacktestRun, BacktestCompareReport, BacktestCompareRun, BacktestResearchReport, BacktestResearchThresholds } from '@wealth-hub/shared'
 type Result = { run_id: string; strategy: {name: string; version: string; params: Record<string, number>}; data_range: {start: string; end: string; rows: number}; metrics: Record<string, number | null>; baseline?: Record<string, number | string | null> }
@@ -113,6 +116,21 @@ const researching = ref(false)
 const researchError = ref('')
 const exporting = ref(false)
 const exportError = ref('')
+const planCandidate = ref<BacktestResearchReport['candidates'][number] | null>(null)
+function continueResearch(candidate: BacktestResearchReport['candidates'][number]) {
+  planCandidate.value = candidate
+  document.getElementById('research-title')?.scrollIntoView({ behavior: 'smooth' })
+}
+async function refreshHistory() {
+  if (loadingHistory.value) return
+  history.value = []; historyPage.value = 0; selected.value = []; report.value = null; researchReport.value = null
+  await loadMoreHistory()
+}
+function usePlanRuns(ids: string[]) {
+  selected.value = ids; report.value = null; researchReport.value = null; compareError.value = ''; exportError.value = ''
+  void compare()
+  document.getElementById('history-compare-title')?.scrollIntoView({ behavior: 'smooth' })
+}
 const validResearchThresholds = computed(() => {
   const t = researchThresholds.value
   return Number.isInteger(t.minSampleDays) && t.minSampleDays >= 1 && t.minSampleDays <= 3650 &&
@@ -120,7 +138,7 @@ const validResearchThresholds = computed(() => {
     Number.isFinite(t.minBaselineAnnualizedDelta) && t.minBaselineAnnualizedDelta >= -1 && t.minBaselineAnnualizedDelta <= 1 &&
     Number.isInteger(t.minTradeCount) && t.minTradeCount >= 0 && t.minTradeCount <= 100000
 })
-watch(researchThresholds, () => { researchReport.value = null; exportError.value = '' }, {deep: true})
+watch(researchThresholds, () => { researchReport.value = null; planCandidate.value = null; exportError.value = '' }, {deep: true})
 function requestError(cause: unknown, fallback: string): string {
   const status = (cause as { response?: { status?: number } })?.response?.status
   return status === 401 ? '登录已失效，请重新登录后重试。' : status === 403 ? '当前账号没有策略实验室访问权限。' : fallback
@@ -159,6 +177,7 @@ function toggle(id: string) {
   report.value = null
   compareError.value = ''
   researchReport.value = null
+  planCandidate.value = null
   researchError.value = ''
   exportError.value = ''
 }

@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "include": [
+    "../src/env.d.ts",
+    "../src/components/ResearchWorkbench.vue",
+    "../src/views/StrategyLab.vue"
+  ],
+  "references": []
+}

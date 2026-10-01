@@ -23,6 +23,7 @@
 ## 当前关键文档
 
 - 当前状态：`docs/CURRENT_DEVELOPMENT_STATE.md`
+- v0.16 PC 研究方案工作台：`docs/mydca_v016_research_workbench_pc_20261001.md`
 - v0.16 研究方案回测闭环：`docs/mydca_v016_research_backtest_loop_20261001.md`
 - v0.16 研究方案后端：`docs/mydca_v016_research_plan_backend_20261001.md`
 - Android：`android-app/README.md`

@@ -15,6 +15,7 @@ export * from './draft'
 export * from './aiAccounting'
 export * from './todo'
 export * from './backtest'
+export * from './researchPlan'
 
 // 重新导出PendingSettlement（从order.ts）
 export type { PendingSettlement } from './order'
