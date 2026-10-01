@@ -27,6 +27,7 @@
 - v0.16 研究方案回测闭环：`docs/mydca_v016_research_backtest_loop_20261001.md`
 - v0.16 研究方案后端：`docs/mydca_v016_research_plan_backend_20261001.md`
 - Android：`android-app/README.md`
+- v0.16 Android 研究方案只读查看：`docs/mydca_v016_research_view_android_20261001.md`
 - 后端：`backend/README.md`
 - 数据库增量：`sql/updatesql/README.md`
 - v0.7：`docs/mydca_android_v07_quick_capture_hub_20260927.md`

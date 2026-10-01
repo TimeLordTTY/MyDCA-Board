@@ -8,7 +8,9 @@
 
 ## 当前阶段
 
-v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据 API、创建时证据快照、独立参数草稿、DRAFT/ACTIVE/ARCHIVED 生命周期及只读失效警告。PC 策略实验室已接入研究方案列表、详情、候选创建、编辑/归档、受控回测状态和历史 compare/evidence 入口，详见 `docs/mydca_v016_research_workbench_pc_20261001.md`。数据库脚本 `backend/migrations/20261001_research_plan.sql` 仅提交、未部署。历史研究不代表未来表现；已新增显式研究方案回测入口，复用现有白名单与离线引擎，成功/失败运行保留方案关联并复用 compare/evidence，不触发交易。详见 `docs/mydca_v016_research_backtest_loop_20261001.md`。详见 `docs/mydca_v016_research_plan_backend_20261001.md`。
+Android 已增加 v0.16 研究方案轻量只读入口：DRAFT/ACTIVE 分页列表、来源证据与参数快照详情、关联历史运行和失败状态。历史按最近 50 条开始手动加载更早记录，不创建/编辑方案、不发起回测。详见 `docs/mydca_v016_research_view_android_20261001.md`；真机体验与目标环境 migration 仍待人工验收。
+
+v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据 API、创建时证据快照、独立参数草稿、DRAFT/ACTIVE/ARCHIVED 生命周期及只读失效警告。PC 策略实验室已接入研究方案列表、详情、候选创建、编辑/归档、受控回测状态和历史 compare/evidence 入口，详见 `docs/mydca_v016_research_workbench_pc_20261001.md`。Android 只读查看已接入。数据库脚本 `backend/migrations/20261001_research_plan.sql` 仅提交、未部署。历史研究不代表未来表现；已新增显式研究方案回测入口，复用现有白名单与离线引擎，成功/失败运行保留方案关联并复用 compare/evidence，不触发交易。详见 `docs/mydca_v016_research_backtest_loop_20261001.md`。详见 `docs/mydca_v016_research_plan_backend_20261001.md`。
 
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 

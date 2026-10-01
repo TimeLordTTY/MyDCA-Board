@@ -36,6 +36,15 @@ import retrofit2.http.Query
  * 只声明查看、预览和用户手动确认相关接口；移动端不直接写数据库。
  */
 interface WealthHubApi {
+    @GET("api/v2/research-plans")
+    suspend fun researchPlans(@Query("page") page: Int = 0, @Query("size") size: Int = 20): List<com.timelordtty.mydca.data.dto.ResearchPlanDto>
+
+    @GET("api/v2/research-plans/{id}")
+    suspend fun researchPlan(@Path("id") id: String): com.timelordtty.mydca.data.dto.ResearchPlanDto
+
+    @GET("api/v2/backtest-lab/runs")
+    suspend fun researchRuns(@Query("page") page: Int = 0, @Query("size") size: Int = 50): List<com.timelordtty.mydca.data.dto.ResearchRunDto>
+
     @GET("api/v2/finance-radar")
     suspend fun getFinanceRadar(): FinanceRadarDto
 

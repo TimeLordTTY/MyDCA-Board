@@ -162,6 +162,9 @@ class WealthStateHolderTest {
 
 private class FailingWealthApi : WealthHubApi {
     override suspend fun getFinanceRadar(): com.timelordtty.mydca.data.dto.FinanceRadarDto = throw UnsupportedOperationException()
+    override suspend fun researchPlans(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.ResearchPlanDto> = error("Not used in this fixture")
+    override suspend fun researchPlan(id: String): com.timelordtty.mydca.data.dto.ResearchPlanDto = error("Not used in this fixture")
+    override suspend fun researchRuns(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.ResearchRunDto> = error("Not used in this fixture")
     override suspend fun recentBacktests(): List<com.timelordtty.mydca.data.dto.BacktestResultDto> = emptyList()
     override suspend fun draftHistory(draftId: Long): List<com.timelordtty.mydca.data.dto.DraftLifecycleEventDto> = throw UnsupportedOperationException()
     override suspend fun reopenDraft(draftId: Long): DraftLedgerEntryDto = throw UnsupportedOperationException()
