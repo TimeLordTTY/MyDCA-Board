@@ -81,6 +81,11 @@ public class BacktestCompareService {
             throw new IllegalArgumentException("回测历史记录格式无效");
         ObjectNode safe = mapper.createObjectNode();
         safe.put("run_id", run.historyRunId());
+        if (run.researchPlanId() != null) {
+            if (!run.researchPlanId().matches("[0-9a-f-]{36}"))
+                throw new IllegalArgumentException("研究方案关联格式无效");
+            safe.put("research_plan_id", run.researchPlanId());
+        }
         safe.put("dataset_hash", run.datasetHash());
         safe.put("strategy", run.strategy());
         safe.put("strategy_version", run.strategyVersion());

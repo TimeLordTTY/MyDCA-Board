@@ -70,6 +70,11 @@ public class BacktestLabService {
     }
 
     public synchronized JsonNode run(String data, String strategy, String version, Map<String, Object> params) throws Exception {
+        return run(data, strategy, version, params, null);
+    }
+
+    public synchronized JsonNode run(String data, String strategy, String version, Map<String, Object> params,
+            String researchPlanId) throws Exception {
         AuthResponse.UserInfo owner = users.getCurrentUser();
         String historyId = UUID.randomUUID().toString();
         Instant started = Instant.now();
@@ -81,11 +86,14 @@ public class BacktestLabService {
         String canonicalParams = null;
         String paramsHash = null;
         boolean writingHistory = false;
+        String failureCode = "VALIDATION_FAILED";
         try {
             if (params == null) params = Map.of();
             validate(data, strategy, version, params);
+            params = canonical(strategy, params);
             canonicalParams = mapper.writeValueAsString(new java.util.TreeMap<>(params));
             paramsHash = sha256(canonicalParams.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            failureCode = "DATASET_READ_FAILED";
             Path file = root.resolve(data);
             if (Files.size(file) > 20_000_000) throw new IllegalArgumentException("历史数据超过 20 MB");
             byte[] bytes = Files.readAllBytes(file);
@@ -94,6 +102,7 @@ public class BacktestLabService {
             String key = owner.getId() + ":" + owner.getFamilyId() + ":" + data + ":" + inputHash + ":" + strategy + ":" + version + ":" + canonicalParams;
             JsonNode previous = cache.get(key);
             boolean cacheHit = previous != null;
+            failureCode = "ENGINE_FAILED";
             JsonNode base = cacheHit ? previous : safeResult(execute(data, strategy, version, params, inputHash),
                     inputHash, strategy, version);
             if (mapper.writeValueAsBytes(base).length > 100_000) throw new IllegalStateException("回测结果超过保存上限");
@@ -101,11 +110,12 @@ public class BacktestLabService {
             ObjectNode result = base.deepCopy();
             result.put("history_run_id", historyId);
             result.put("cache_hit", cacheHit);
+            if (researchPlanId != null) result.put("research_plan_id", researchPlanId);
             writingHistory = true;
             history.save(new BacktestRunDTO(historyId, owner.getId(), owner.getFamilyId(), data, inputHash,
                     strategy, version, effectiveParams, sha256(effectiveParams.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
                     base.path("provenance").path("engine_version").asText(), started, Instant.now(),
-                    "SUCCESS", cacheHit, null, base.path("metrics"), result));
+                    "SUCCESS", cacheHit, null, base.path("metrics"), result, researchPlanId));
             if (!cacheHit) cache.put(key, base);
             return result;
         } catch (Exception error) {
@@ -114,9 +124,25 @@ public class BacktestLabService {
                     : error instanceof java.util.concurrent.TimeoutException ? "TIMEOUT" : "FAILED";
             history.save(new BacktestRunDTO(historyId, owner.getId(), owner.getFamilyId(), safeData, inputHash,
                     safeStrategy, safeVersion, canonicalParams, paramsHash, null, started, Instant.now(),
-                    status, false, status, null, null));
+                    status, false, "TIMEOUT".equals(status) ? "ENGINE_TIMEOUT" : failureCode, null, null, researchPlanId));
             throw error;
         }
+    }
+
+    /** Canonical effective defaults match the existing offline engine. */
+    private Map<String, Object> canonical(String strategy, Map<String, Object> input) {
+        Map<String, Object> result = new java.util.TreeMap<>();
+        result.put("contribution", 100.0); result.put("interval_days", 30);
+        if ("ma_enhanced".equals(strategy)) {
+            result.put("ma_window", 20); result.put("dip_multiplier", 2.0);
+        }
+        if ("profit_recycle".equals(strategy)) {
+            result.put("profit_threshold", 0.2); result.put("sell_fraction", 0.25);
+        }
+        input.forEach((key, value) -> result.put(key,
+                Set.of("interval_days", "ma_window").contains(key)
+                        ? (Object) ((Number) value).intValue() : ((Number) value).doubleValue()));
+        return result;
     }
 
     private void validate(String data, String strategy, String version, Map<String, Object> params) throws IOException {
@@ -206,7 +232,7 @@ public class BacktestLabService {
         for (String key : List.of("final_assets_delta", "annualized_return_delta", "max_drawdown_delta"))
             safeBaseline.set(key, numeric(baseline.path(key)));
         ArrayNode warnings = clean.putArray("warnings");
-        warnings.add("Historical simulation only; no live trading instruction.");
+        warnings.add("回测表现不代表未来");
         if (clean.path("metrics").path("annualized_return").isNull())
             warnings.add("Annualized return unavailable for a single date.");
         return clean;
@@ -230,7 +256,7 @@ public class BacktestLabService {
                 .map(run -> new BacktestRunDTO(run.historyRunId(), run.ownerUserId(), run.ownerFamilyId(),
                         run.dataset(), run.datasetHash(), run.strategy(), run.strategyVersion(),
                         run.canonicalParams(), run.paramsHash(), run.engineVersion(), run.startedAt(),
-                        run.finishedAt(), run.status(), run.cacheHit(), run.failureCode(), run.metrics(), null))
+                        run.finishedAt(), run.status(), run.cacheHit(), run.failureCode(), run.metrics(), null, run.researchPlanId()))
                 .toList();
     }
 

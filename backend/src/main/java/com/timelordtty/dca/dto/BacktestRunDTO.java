@@ -8,4 +8,14 @@ public record BacktestRunDTO(String historyRunId, Long ownerUserId, Long ownerFa
         String dataset, String datasetHash, String strategy, String strategyVersion,
         String canonicalParams, String paramsHash, String engineVersion,
         Instant startedAt, Instant finishedAt, String status, boolean cacheHit,
-        String failureCode, JsonNode metrics, JsonNode result) {}
+        String failureCode, JsonNode metrics, JsonNode result, String researchPlanId) {
+    public BacktestRunDTO(String historyRunId, Long ownerUserId, Long ownerFamilyId,
+            String dataset, String datasetHash, String strategy, String strategyVersion,
+            String canonicalParams, String paramsHash, String engineVersion,
+            Instant startedAt, Instant finishedAt, String status, boolean cacheHit,
+            String failureCode, JsonNode metrics, JsonNode result) {
+        this(historyRunId, ownerUserId, ownerFamilyId, dataset, datasetHash, strategy, strategyVersion,
+                canonicalParams, paramsHash, engineVersion, startedAt, finishedAt, status, cacheHit,
+                failureCode, metrics, result, null);
+    }
+}
