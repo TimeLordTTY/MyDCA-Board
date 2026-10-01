@@ -197,6 +197,7 @@ private fun AuthenticatedApp(
         var editingOutboxEntry by remember { mutableStateOf<DraftOutboxEntry?>(null) }
         // 待结算是有明确安全边界的子流程：进入后只加载列表，绝不自动 preview / confirm。
         var settlementFlowOpen by remember { mutableStateOf(false) }
+        var riskOpen by remember { mutableStateOf(false) }
         var radarOpen by rememberSaveable { mutableStateOf(false) }
         var settlementFocusOrderId by remember { mutableStateOf<String?>(null) }
         // 人工结算成功后自增，驱动总览与资产页面重新拉取账户 / 持仓 / 资产摘要。
@@ -305,7 +306,7 @@ private fun AuthenticatedApp(
                 )
             },
             floatingActionButton = {
-                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen || radarOpen)) {
+                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen || radarOpen || riskOpen)) {
                     ExtendedFloatingActionButton(onClick = { isQuickCaptureOpen = true }) {
                         Text("记一笔")
                     }
@@ -322,6 +323,7 @@ private fun AuthenticatedApp(
                                 editingOutboxEntry = null
                                 settlementFlowOpen = false
                                 radarOpen = false
+                                riskOpen = false
                                 settlementFocusOrderId = null
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
                                 NotificationNavigationTarget.clear()
@@ -342,7 +344,9 @@ private fun AuthenticatedApp(
             ) { route ->
                 when (route) {
                     AppRoute.Overview -> {
-                        if (radarOpen) {
+                        if (riskOpen) {
+                            com.timelordtty.mydca.ui.screens.RiskWatchScreen(services.wealthHubApi) { riskOpen = false }
+                        } else if (radarOpen) {
                             FinanceRadarScreen(
                                 repository = radarRepository,
                                 outboxCount = outboxEntries.size,
@@ -364,6 +368,7 @@ private fun AuthenticatedApp(
                                 apiConfigError = apiConfigError,
                                 refreshToken = assetsRefreshToken,
                                 onOpenRadar = { radarOpen = true },
+                                onOpenRisk = { riskOpen = true },
                             )
                         }
                     }

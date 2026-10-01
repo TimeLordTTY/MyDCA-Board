@@ -1,5 +1,7 @@
 # MyDCA Android App
 
+v0.17 功能增量：总览「风险观察中心」只读查看严重级别分组提醒、OPEN/RESOLVED 过滤、规则详情和分页历史，保留未知/陈旧提示。仅 GET，不重新评估、不编辑、不 ACK/MUTE。详见 [专项说明](../docs/mydca_v017_risk_center_android_20261002.md)。
+
 v0.16 功能增量：底部「研究」提供 DRAFT/ACTIVE 方案分页列表、证据警告、参数快照与关联回测历史只读详情。仅 GET，不能创建/编辑方案或发起回测。历史先读取最近 50 条，可手动继续读取更早记录；研究结果不代表未来表现。发布收口版本为 0.16.0 / 17，详见 [专项说明](../docs/mydca_v016_research_view_android_20261001.md)。
 
 <!-- CURRENT-SNAPSHOT:START -->

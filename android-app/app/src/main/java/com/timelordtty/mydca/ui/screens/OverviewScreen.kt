@@ -25,6 +25,7 @@ fun OverviewScreen(
     apiConfigError: String?,
     refreshToken: Int = 0,
     onOpenRadar: () -> Unit = {},
+    onOpenRisk: () -> Unit = {},
 ) {
     var state by remember { mutableStateOf(WealthOverviewUiState()) }
     val scope = rememberCoroutineScope()
@@ -56,6 +57,7 @@ fun OverviewScreen(
 
     PageScaffold {
         SafetyBanner("总览只展示后端真实只读财富摘要；金额、持仓与待办口径以服务端返回为准，移动端不自行重算正式账本。")
+        OutlinedButton(onClick = onOpenRisk) { Text("打开风险观察中心") }
         OutlinedButton(onClick = onOpenRadar) { Text("打开每日财富雷达") }
         when {
             state.isLoading -> LoadingSection("正在加载总览")

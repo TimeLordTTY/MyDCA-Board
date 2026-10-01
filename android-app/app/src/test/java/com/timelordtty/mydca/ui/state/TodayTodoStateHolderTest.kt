@@ -78,6 +78,9 @@ private class TodoApiFixture(
     private val fail: Boolean = false,
 ) : WealthHubApi {
     override suspend fun getFinanceRadar(): com.timelordtty.mydca.data.dto.FinanceRadarDto = throw UnsupportedOperationException()
+    override suspend fun riskRules(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.RiskRuleDto> = error("Not used in this fixture")
+    override suspend fun riskSnapshots(id: String, page: Int, size: Int): List<com.timelordtty.mydca.data.dto.RiskSnapshotDto> = error("Not used in this fixture")
+    override suspend fun riskEvents(id: String, page: Int, size: Int): List<com.timelordtty.mydca.data.dto.RiskEventDto> = error("Not used in this fixture")
     override suspend fun researchPlans(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.ResearchPlanDto> = error("Not used in this fixture")
     override suspend fun researchPlan(id: String): com.timelordtty.mydca.data.dto.ResearchPlanDto = error("Not used in this fixture")
     override suspend fun researchRuns(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.ResearchRunDto> = error("Not used in this fixture")
