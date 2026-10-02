@@ -30,5 +30,5 @@ export interface RebalancePreview {
   targetScenario: RebalanceScenario | null; bandScenario: RebalanceScenario | null
   dataDate: string | null
   prices: { productId: number; status: string; priceDate: string | null; valuationDate: string | null; priceSource: string }[]
-  warnings: { code: string; message: string }[]
+  warnings: { code: string; status: string; message: string }[]
 }

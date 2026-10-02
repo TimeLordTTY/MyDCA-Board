@@ -17,7 +17,9 @@
 
 ## 当前版本与里程碑
 
-- Android：`0.17.0 / versionCode 18`；CI APK 证据待推送后真实成功构建回填。
+- Android：`0.18.0 / versionCode 19`；CI APK 证据待推送后真实成功构建回填。
+- v0.18 配置偏离与止盈观察：主人自定义目标、区间及收益阈值；PC 配置/手工评估，Android 只读查看，情景预览仅为数学假设。无交易、订单、占用、结算或正式账本写入。详见 `docs/mydca_v018_release_hardening_20261002.md`。
+- v0.18 `backend/migrations/20261002_allocation_policy.sql` 仅提交、未部署；新安装择一使用 `backend/sql/initsql/allocation_policy.sql`，不得重复执行。
 - v0.17 风险观察中心：PC 手工规则评估、去重提醒历史、已读/静默；Android 仅 GET 查看规则、提醒及分页历史。UNKNOWN 不视为解除，仅写观察元数据，无交易、订单、结算或正式账本写入口。详见 `docs/mydca_v017_release_hardening_20261002.md`。
 - v0.17 两个 migration `backend/migrations/20261002_risk_watch.sql`、`backend/migrations/20261002_risk_alert_history.sql` 仅提交、未自动部署；新安装可择一使用对应 `backend/sql/initsql/` 脚本，不得重复执行。
 - v0.16 研究闭环：owner/family 隔离的方案生命周期、不可变来源证据与独立参数草稿；PC 创建、编辑、归档及人工受控回测，Android 只读分页、详情和关联运行。复用 v0.15 compare/evidence，不创建订单、结算或账本。详见 `docs/mydca_v016_release_hardening_20261001.md`。
@@ -106,6 +108,6 @@ Android 常用验证：
 
 ## 当前下一步
 
-v0.16 本地工程回归与发布收口记录见专项报告。目标环境研究表 migration、历史目录权限、真实登录后的 PC/Android 断网与无障碍体验，以及推送后 CI APK 证据仍需部署方/主人验收。生产数据库迁移、真实财务记录修改和交易不属于本任务授权。
+v0.18 本地工程回归与发布收口记录见专项报告。目标环境配置观察表及既有 migration、历史目录权限、真实登录后的 PC/Android 断网与无障碍体验，以及推送后 CI APK 证据仍需部署方/主人验收。生产数据库迁移、真实财务记录修改和交易不属于本任务授权。
 
 完整当前状态与长期文档关系见 `docs/CURRENT_DEVELOPMENT_STATE.md` 和 `docs/DOCUMENT_INDEX.md`。

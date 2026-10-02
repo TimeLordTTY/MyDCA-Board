@@ -1,5 +1,7 @@
 # MyDCA Android App
 
+v0.18 功能增量：总览「配置偏离与止盈观察」只读查看主人规则、区间与收益观察；主动读取数学情景预览。GET + 无请求体只读 POST evaluate，不创建/编辑配置、不交易、不占用、不结算、不入账。详见 [专项说明](ALLOCATION_VIEW.md) 与 [发布回归](../docs/mydca_v018_release_hardening_20261002.md)。
+
 v0.17 功能增量：总览「风险观察中心」只读查看严重级别分组提醒、OPEN/RESOLVED 过滤、规则详情和分页历史，保留未知/陈旧提示。仅 GET，不重新评估、不编辑、不 ACK/MUTE。详见 [专项说明](../docs/mydca_v017_risk_center_android_20261002.md)。
 
 v0.16 功能增量：底部「研究」提供 DRAFT/ACTIVE 方案分页列表、证据警告、参数快照与关联回测历史只读详情。仅 GET，不能创建/编辑方案或发起回测。历史先读取最近 50 条，可手动继续读取更早记录；研究结果不代表未来表现。发布收口版本为 0.16.0 / 17，详见 [专项说明](../docs/mydca_v016_research_view_android_20261001.md)。
@@ -7,8 +9,8 @@ v0.16 功能增量：底部「研究」提供 DRAFT/ACTIVE 方案分页列表、
 <!-- CURRENT-SNAPSHOT:START -->
 ## 当前发布状态（2026-10-02）
 
-- 当前 Android：`versionName=0.17.0`、`versionCode=18`。每日财富雷达与最近回测均为只读；刷新失败保留旧结果并明确标识，未知指标不显示为零。
-- v0.17.0 制品：尚无真实 CI Run / Artifact / APK SHA-256；预期 artifact 为 `mydca-android-v0.17.0-<full-sha>`，仅为命名约定。
+- 当前 Android：`versionName=0.18.0`、`versionCode=19`。每日财富雷达与最近回测均为只读；刷新失败保留旧结果并明确标识，未知指标不显示为零。
+- v0.18.0 制品：尚无真实 CI Run / Artifact / APK SHA-256；预期 artifact 为 `mydca-android-v0.18.0-<full-sha>`，仅为命名约定。
 - v0.15.0 制品：本次只本地提交，尚无 CI Run / Artifact / APK SHA-256 证据。
 - v0.14.0 草稿箱支持历史查看、已忽略草稿二次确认恢复及已确认草稿显式复制；复制后仍为 DRAFT，必须重新预览并二次确认。
 - v0.13.0 人工结算预览与二次确认闭环已完成：新增「待结算」体验（总览 / 今日待办进入），先「生成结算预览」只读展示现金 / 持仓 / 手续费影响与 fresh 令牌，再「确认结算」并二次确认弹窗后才调用 `POST /api/v2/settlements/confirm`；修改任一字段会清除旧预览，未 preview 不能 confirm，成功后刷新订单 / 持仓 / 资产页面。四类 PENDING 订单（买入 / 申购 / 卖出 / 赎回）均支持；preview 只读不写业务数据，confirm 幂等且事务完整。
@@ -35,7 +37,7 @@ MyDCA Android App 是 Phase3 的原生移动端基础壳，用于承接今日待
 
 - Kotlin + Jetpack Compose + Material 3。
 - 首版包含总览、今日待办、草稿箱、账户 / 流水 / 持仓、设置五个底部导航入口。
-- 当前版本 `versionName = 0.17.0`（`versionCode = 18`），APK 制品命名为 `MyDCA-Board-v0.17.0-<short-sha>.apk`。
+- 当前版本 `versionName = 0.18.0`（`versionCode = 19`），APK 制品命名为 `MyDCA-Board-v0.18.0-<short-sha>.apk`。
 - 今日待办页调用 `GET /api/v2/todos/today`，展示待办数量和列表。
 - 草稿箱页调用 `GET /api/v2/drafts`、`GET /api/v2/drafts/{draftId}`、`POST /api/v2/drafts/{draftId}/preview`、`POST /api/v2/drafts/{draftId}/ignore` 和 `POST /api/v2/drafts/{draftId}/confirm`。
 - 草稿确认支持支出 / 收入 / 转账 / 买入 / 申购 / 卖出 / 赎回：TRANSFER 需要转出账户 + 转入账户 + 金额；BUY / SUBSCRIPTION 需要主人明确选择的真实产品 + 单一资金来源账户 + 金额；SELL / REDEMPTION 需要主人明确选择的真实产品 + 该产品真实持仓来源账户 + 份额 + 到账账户；确认前必须先看到资金影响预览。确认投资买入 / 申购草稿会创建 PENDING 订单并生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），但不结算、不生成最终持仓；确认卖出 / 赎回草稿只创建内部 PENDING 订单并登记份额占用，不生成账本流水、不改现金余额、不改持仓。

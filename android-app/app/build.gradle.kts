@@ -11,8 +11,8 @@ android {
         applicationId = "com.timelordtty.mydca"
         minSdk = 26
         targetSdk = 35
-        versionCode = 18
-        versionName = "0.17.0"
+        versionCode = 19
+        versionName = "0.18.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

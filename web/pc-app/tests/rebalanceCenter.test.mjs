@@ -66,5 +66,11 @@ test('API uses only configuration metadata and GET preview; page has no financia
   } finally { Object.assign(apiClient, saved) }
   const view = await readFile(new URL('src/views/RebalanceCenter.vue', root), 'utf8')
   assert.doesNotMatch(view, /一键再平衡|自动止盈|立即买卖|orderApi|settlementApi|ledgerApi|confirmDraft/)
-  assert.match(view, /readonly: 'true'/); assert.match(view, /role="alert"/); assert.match(view, /role="status"/)
+  assert.match(view, /readonly: 'true'/); assert.match(view, /role="alert"/); assert.match(view, /role="status"/); assert.match(view, /w\.status/)
+})
+
+test('unknown returns never claim that no take-profit stage was reached', () => {
+  assert.match(model.reachedThresholds({ returnRate: null, reachedTakeProfitThresholds: [] }), /UNKNOWN/)
+  assert.equal(model.reachedThresholds({ returnRate: 0, reachedTakeProfitThresholds: [] }), '无')
+  assert.equal(model.reachedThresholds({ returnRate: 0.2, reachedTakeProfitThresholds: [0, 0.2] }), '0.00%、20.00%')
 })

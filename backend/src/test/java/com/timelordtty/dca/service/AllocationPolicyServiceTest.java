@@ -60,6 +60,23 @@ class AllocationPolicyServiceTest {
         assertEquals(Status.UNKNOWN,AllocationPolicyService.observe(p,null,List.of()).status());
         assertEquals(Status.UNKNOWN,AllocationPolicyService.observe(p,facts("OK"),List.of()).status());
     }
+    @Test void incompleteAmbiguousAndWrongScopeSnapshotsStayUnknown() {
+        var p=policy(config("PERSONAL",true,null,null));
+        var f=facts("OK"); var a=f.assets();
+        var positions=List.of(holding(1,"600","400"),holding(2,"200","200"));
+        var invalidAssets=new FinanceRadarDTO.Assets("OK",n("201"),a.investmentCost(),a.positionValue(),a.liabilities(),a.totalAssets(),a.netWorth());
+        var markets=new ArrayList<>(f.markets()); markets.add(f.markets().get(0));
+        for(var snapshot:List.of(
+                new FinanceRadarDTO(f.date(),"FAMILY",a,null,f.markets(),List.of()),
+                new FinanceRadarDTO(f.date(),f.scope(),invalidAssets,null,f.markets(),List.of()),
+                new FinanceRadarDTO(f.date(),f.scope(),a,null,Arrays.asList(null,f.markets().get(1)),List.of()),
+                new FinanceRadarDTO(f.date(),f.scope(),a,null,markets,List.of()))) {
+            var result=AllocationPolicyService.observe(p,snapshot,positions);
+            assertEquals(Status.UNKNOWN,result.status()); assertNull(result.allocation());
+            assertNull(result.returnRate()); assertTrue(result.reachedTakeProfitThresholds().isEmpty());
+            assertEquals("UNKNOWN",RebalancePreviewEngine.calculate(p,snapshot,positions).status());
+        }
+    }
     @Test void categoryAndCashTargets() {
         var c=new Config("PERSONAL",null,"EQUITY",n("0.8"),n("0.7"),n("0.9"),null,null,true,null);
         var positions=List.of(holding(1,"600","400"),holding(2,"200","200"));
@@ -91,7 +108,8 @@ class AllocationPolicyServiceTest {
         assertThrows(IllegalArgumentException.class,()->service.edit(p.id(),config("PERSONAL",true,null,null)));
         u.setId(7L); u.setFamilyId(10L); assertThrows(IllegalArgumentException.class,()->service.detail(p.id()));
         u.setFamilyId(9L); var family=service.create(config("FAMILY",true,null,null));
-        when(radar.getRadar(7L,9L,"FAMILY")).thenReturn(facts("OK"));
+        var f=facts("OK");
+        when(radar.getRadar(7L,9L,"FAMILY")).thenReturn(new FinanceRadarDTO(f.date(),"FAMILY",f.assets(),null,f.markets(),f.warnings()));
         when(holdings.calculateHoldings(null,9L)).thenReturn(List.of(holding(1,"600","400"),holding(2,"200","200")));
         assertEquals(Status.IN_RANGE,service.evaluate(family.id()).status()); verify(families,times(2)).assertAdmin(7L,9L);
         verify(holdings).calculateHoldings(null,9L);

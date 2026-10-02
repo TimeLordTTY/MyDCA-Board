@@ -22,6 +22,12 @@
 
 ## 当前关键文档
 
+- v0.18 发布硬化与回归：`docs/mydca_v018_release_hardening_20261002.md`
+- v0.18 Mapper/SQL 完整枚举与覆盖矩阵：`docs/mydca_v018_release_coverage_20261002.md`
+- v0.18 配置规则后端：`backend/ALLOCATION_POLICY_API.md`
+- v0.18 PC 配置观察中心：`docs/mydca_v018_release_hardening_20261002.md`（PC 回归与契约）
+- v0.18 Android 配置只读查看：`android-app/ALLOCATION_VIEW.md`
+
 - v0.17 发布硬化与回归：`docs/mydca_v017_release_hardening_20261002.md`
 
 - v0.16 发布硬化与回归：`docs/mydca_v016_release_hardening_20261001.md`

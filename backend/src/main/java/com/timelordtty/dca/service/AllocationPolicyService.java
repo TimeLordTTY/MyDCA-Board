@@ -112,9 +112,11 @@ public class AllocationPolicyService {
     static Evaluation observe(Policy p,FinanceRadarDTO facts,List<HoldingService.HoldingInfo> positions) {
         var c=p.config();
         if(!Boolean.TRUE.equals(c.enabled())) return result(p,Status.UNKNOWN,"策略已停用，未执行观察",null,null,List.of());
-        if(facts==null || facts.assets()==null || positions==null || facts.markets()==null || facts.date()==null
+        if(facts==null || facts.assets()==null || positions==null || facts.markets()==null || facts.date()==null || !Objects.equals(c.scope(),facts.scope())
                 || !"OK".equals(facts.assets().status()) || facts.assets().totalAssets()==null
-                || facts.assets().totalAssets().signum()<=0 || facts.assets().positionValue()==null)
+                || facts.assets().totalAssets().signum()<=0 || facts.assets().positionValue()==null || facts.assets().positionValue().signum()<0
+                || facts.assets().cashBalance()==null || facts.assets().cashBalance().signum()<0
+                || facts.assets().cashBalance().add(facts.assets().positionValue()).compareTo(facts.assets().totalAssets())!=0)
             return result(p,Status.UNKNOWN,"组合数据不足，配置占比未知",null,null,List.of());
         BigDecimal selected=BigDecimal.ZERO, total=BigDecimal.ZERO, cost=BigDecimal.ZERO;
         boolean costKnown=true, found=false;
@@ -122,7 +124,10 @@ public class AllocationPolicyService {
             if(h==null || h.getTotalShares()==null || h.getTotalShares().signum()<0)
                 return result(p,Status.UNKNOWN,"持仓份额未知",null,null,List.of());
             if(h.getTotalShares().signum()==0) continue;
-            var market=facts.markets().stream().filter(m->Objects.equals(m.productId(),h.getProductId())).findFirst().orElse(null);
+            // 缺失或重复行情不能作为确定的观察证据，与情景预览保持一致。
+            var matches=facts.markets().stream().filter(Objects::nonNull)
+                    .filter(m->Objects.equals(m.productId(),h.getProductId())).toList();
+            var market=matches.size()==1 ? matches.get(0) : null;
             if(h.getProductId()==null || h.getMarketValue()==null || h.getMarketValue().signum()<0
                     || h.getAssetType()==null || h.getAssetType().isBlank() || market==null || !"OK".equals(market.status())
                     || market.priceDate()==null || market.valuationDate()==null

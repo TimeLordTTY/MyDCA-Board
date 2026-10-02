@@ -1,4 +1,4 @@
-import type { AllocationConfig, RebalancePreview, RebalanceScenario } from '@wealth-hub/shared'
+import type { AllocationConfig, AllocationEvaluation, RebalancePreview, RebalanceScenario } from '@wealth-hub/shared'
 export const observationLabels = { IN_RANGE: '区间内', BELOW_BAND: '低于下限', ABOVE_BAND: '高于上限', TAKE_PROFIT_WATCH: '收益阈值观察', UNKNOWN: 'UNKNOWN / 数据未知' }
 export function validateAllocation(c: AllocationConfig): string {
   if (!['PERSONAL', 'FAMILY'].includes(c.scope) || typeof c.enabled !== 'boolean') return '请选择作用域及启用状态'
@@ -28,4 +28,8 @@ export function allocationError(cause: unknown): string {
   if (e.response?.status === 403) return '无权访问，家庭配置需要管理员权限。'
   if (e.response?.status === 401) return '登录已过期，请重新登录。'
   return `配置观察操作失败：${e.message || '网络或服务不可用'}。请重试。`
+}
+
+export function reachedThresholds(e: AllocationEvaluation): string {
+  return e.reachedTakeProfitThresholds.map(percent).join('、') || (e.returnRate == null ? 'UNKNOWN / 未知' : '无')
 }
