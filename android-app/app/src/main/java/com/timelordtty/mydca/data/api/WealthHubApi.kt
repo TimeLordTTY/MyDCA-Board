@@ -36,6 +36,19 @@ import retrofit2.http.Query
  * 只声明查看、预览和用户手动确认相关接口；移动端不直接写数据库。
  */
 interface WealthHubApi {
+    @GET("api/v2/allocation-policies")
+    suspend fun allocationPolicies(@Query("page") page: Int = 0, @Query("size") size: Int = 20): List<com.timelordtty.mydca.data.dto.AllocationPolicyDto>
+
+    @GET("api/v2/allocation-policies/{id}")
+    suspend fun allocationPolicy(@Path("id") id: String): com.timelordtty.mydca.data.dto.AllocationPolicyDto
+
+    /** Bodyless, read-only evaluation: no saved evidence or financial mutations. */
+    @POST("api/v2/allocation-policies/{id}/evaluate")
+    suspend fun allocationObservation(@Path("id") id: String): com.timelordtty.mydca.data.dto.AllocationEvaluationDto
+
+    @GET("api/v2/allocation-policies/{id}/preview")
+    suspend fun allocationPreview(@Path("id") id: String): com.timelordtty.mydca.data.dto.AllocationPreviewDto
+
     @GET("api/v2/risk-watch-rules")
     suspend fun riskRules(@Query("page") page: Int = 0, @Query("size") size: Int = 20): List<com.timelordtty.mydca.data.dto.RiskRuleDto>
 

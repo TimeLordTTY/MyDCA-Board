@@ -162,6 +162,10 @@ class WealthStateHolderTest {
 
 private class FailingWealthApi : WealthHubApi {
     override suspend fun getFinanceRadar(): com.timelordtty.mydca.data.dto.FinanceRadarDto = throw UnsupportedOperationException()
+    override suspend fun allocationPolicies(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.AllocationPolicyDto> = error("Not used in this fixture")
+    override suspend fun allocationPolicy(id: String): com.timelordtty.mydca.data.dto.AllocationPolicyDto = error("Not used in this fixture")
+    override suspend fun allocationObservation(id: String): com.timelordtty.mydca.data.dto.AllocationEvaluationDto = error("Not used in this fixture")
+    override suspend fun allocationPreview(id: String): com.timelordtty.mydca.data.dto.AllocationPreviewDto = error("Not used in this fixture")
     override suspend fun riskRules(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.RiskRuleDto> = error("Not used in this fixture")
     override suspend fun riskSnapshots(id: String, page: Int, size: Int): List<com.timelordtty.mydca.data.dto.RiskSnapshotDto> = error("Not used in this fixture")
     override suspend fun riskEvents(id: String, page: Int, size: Int): List<com.timelordtty.mydca.data.dto.RiskEventDto> = error("Not used in this fixture")
