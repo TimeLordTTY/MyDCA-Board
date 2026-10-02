@@ -4,6 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.repository.GoalBudgetRepository
 import com.timelordtty.mydca.ui.state.*
@@ -30,7 +34,7 @@ fun GoalBudgetScreen(api: WealthHubApi, onClose: () -> Unit) {
                 val current = currentMonthBudgets(budgets, month)
                 if (current.isEmpty()) EmptySection("本页无本月预算", "预算按分页读取，可继续查看下一页。")
                 current.forEach { budget ->
-                    SectionCard(budget.config.name, "${budget.config.month} · ${budget.config.currency} · ${budget.config.scope}") {
+                    SectionCard(budget.config.name, "${budget.config.month} · ${budget.config.currency} · ${planningScope(budget.config.scope)}") {
                         ReadObservation(budget.id, refresh, { repository.comparison(budget.id) }) { result ->
                             Text(dataQuality(result.quality))
                             KeyValueRow("计划收入", observedMoney(result.plannedIncome, "OK", budget.config.currency))
@@ -47,7 +51,7 @@ fun GoalBudgetScreen(api: WealthHubApi, onClose: () -> Unit) {
                                     KeyValueRow("计划", observedMoney(row.item.planned, "OK", budget.config.currency))
                                     KeyValueRow("实际", observedMoney(row.actual, row.quality, budget.config.currency))
                                     KeyValueRow("剩余", observedMoney(row.remaining, row.quality, budget.config.currency))
-                                    Text(overspendStatus(row.overspent, row.quality))
+                                    Text(budgetItemStatus(row.item.kind, row.overspent, row.quality))
                                     if (row.quality == "PARTIAL") KeyValueRow("已知部分（非最终实际）", observedMoney(row.knownActual, "OK", budget.config.currency))
                                 }
                             }
@@ -59,7 +63,7 @@ fun GoalBudgetScreen(api: WealthHubApi, onClose: () -> Unit) {
             ReadPage("目标进度", page, refresh, { repository.goals(page) },
                 onPrevious = { page-- }, onNext = { page++ }) { goals ->
                 goals.forEach { goal ->
-                    SectionCard(goal.config.name, "${goal.config.currency} · ${goal.config.scope}") {
+                    SectionCard(goal.config.name, "${goal.config.currency} · ${planningScope(goal.config.scope)}") {
                         KeyValueRow("目标日期", goal.config.targetDate)
                         KeyValueRow("目标金额", observedMoney(goal.config.targetValue, "OK", goal.config.currency))
                         KeyValueRow("状态", when (goal.config.state) { "ACTIVE" -> "进行中"; "PAUSED" -> "已暂停"; "ARCHIVED" -> "已归档"; else -> "未知" })
@@ -107,8 +111,14 @@ private fun <T> ReadObservation(id: String, refresh: Int,
 @Composable
 private fun <T> ReadContent(state: ResearchReadState<T>, retry: () -> Unit, content: @Composable (T) -> Unit) {
     when {
-        state.loading -> LoadingSection("正在读取")
-        state.error != null -> ErrorSection("读取失败", state.error, retry)
+        state.loading -> {
+            Text("正在读取", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            LoadingSection("加载中")
+        }
+        state.error != null -> {
+            Text("读取失败：${state.error}", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            ErrorSection("读取失败", state.error, retry)
+        }
         else -> state.data?.let { content(it) }
     }
 }

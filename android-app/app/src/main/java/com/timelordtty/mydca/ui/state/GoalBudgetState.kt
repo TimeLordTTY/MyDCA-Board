@@ -24,3 +24,14 @@ fun overspendStatus(value: Boolean?, quality: String?) = when {
     else -> "未超支"
 }
 fun currentMonthBudgets(budgets: List<BudgetDto>, month: String) = budgets.filter { it.config.month == month }
+
+fun planningScope(value: String) = when (value) {
+    "PERSONAL" -> "个人"
+    "FAMILY" -> "家庭"
+    else -> "未知作用域"
+}
+fun budgetItemStatus(kind: String, overspent: Boolean?, quality: String?) = when (kind) {
+    "RESERVE" -> "仅计划，不对应实际资金划转"
+    "INCOME" -> "收入计划，不适用超支判断"
+    else -> overspendStatus(overspent, quality)
+}

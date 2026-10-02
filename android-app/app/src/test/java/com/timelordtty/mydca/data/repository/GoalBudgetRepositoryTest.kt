@@ -72,4 +72,20 @@ class GoalBudgetRepositoryTest {
             assertEquals("未知", goalRate(p.copy(quality = "OK", completionRate = null)))
         } finally { server.shutdown() }
     }
+    @Test fun planningLabelsAndOfflineRetryPreserveUnknownBoundary() {
+        assertEquals("个人", planningScope("PERSONAL"))
+        assertEquals("家庭", planningScope("FAMILY"))
+        assertEquals("未知作用域", planningScope("FUTURE"))
+        assertEquals("仅计划，不对应实际资金划转", budgetItemStatus("RESERVE", null, "UNKNOWN"))
+        assertEquals("收入计划，不适用超支判断", budgetItemStatus("INCOME", null, "OK"))
+        assertEquals("超支状态未知", budgetItemStatus("FIXED_EXPENSE", false, "PARTIAL"))
+        var state = ResearchReadState<List<String>>().loaded(NetworkResult.Success(listOf("旧数据")))
+        state = state.loaded(NetworkResult.Failure("网络连接失败，请检查网络后重试", java.io.IOException("offline")))
+        assertNull(state.data)
+        assertNotNull(state.error)
+        state = state.loaded(NetworkResult.Success(emptyList()))
+        assertTrue(state.data!!.isEmpty())
+        assertNull(state.error)
+    }
+
 }

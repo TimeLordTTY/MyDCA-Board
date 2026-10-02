@@ -22,6 +22,12 @@
 
 ## 当前关键文档
 
+- v0.19 目标与预算发布硬化：`docs/mydca_v019_release_hardening_20261002.md`
+- v0.19 长期目标后端：`backend/GOAL_TRACKING_API.md`
+- v0.19 月度预算后端：`backend/MONTHLY_BUDGET_API.md`
+- v0.19 PC 目标与预算中心：`web/pc-app/src/views/GoalBudgetCenter.vue`（回归与契约见发布硬化）
+- v0.19 Android 目标/本月预算只读查看：`android-app/GOAL_BUDGET_VIEW.md`
+
 - v0.18 发布硬化与回归：`docs/mydca_v018_release_hardening_20261002.md`
 - v0.18 Mapper/SQL 完整枚举与覆盖矩阵：`docs/mydca_v018_release_coverage_20261002.md`
 - v0.18 配置规则后端：`backend/ALLOCATION_POLICY_API.md`

@@ -13,3 +13,5 @@ PARTIAL 的已知部分单独标注，不当最终值；UNKNOWN/null 不显示�
 
 本地验证：testDebugUnitTest、assembleDebug、lintDebug、post-task compile hook、git diff --check。
 测试仅连接本地 MockWebServer；真机、目标环境和部署状态仍需人工验收。
+
+发布收口：Android 0.19.0 / versionCode 20，CI 预期命名同步但尚无真实 CI 制品证据。作用域中文显示，收入不适用超支判断，预留显示仅计划，加载与错误使用 polite liveRegion。详见 `../docs/mydca_v019_release_hardening_20261002.md`。

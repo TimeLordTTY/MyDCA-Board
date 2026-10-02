@@ -17,7 +17,9 @@
 
 ## 当前版本与里程碑
 
-- Android：`0.18.0 / versionCode 19`；CI APK 证据待推送后真实成功构建回填。
+- Android：`0.19.0 / versionCode 20`；CI APK 证据待推送后真实成功构建回填。
+- v0.19 目标与预算：PC 创建/编辑目标、暂停/恢复/归档与月度计划，Android 仅 GET 查看目标进度与本月预算；PARTIAL/UNKNOWN 不当零，不自动记账、转账、建单、结算或交易。详见 `docs/mydca_v019_release_hardening_20261002.md`。
+- v0.19 目标/预算 migration 仅提交未部署；`backend/migrations/20261002_goal_tracking.sql`、`20261002_monthly_budget.sql` 与对应初始化脚本择一人工部署。
 - v0.18 配置偏离与止盈观察：主人自定义目标、区间及收益阈值；PC 配置/手工评估，Android 只读查看，情景预览仅为数学假设。无交易、订单、占用、结算或正式账本写入。详见 `docs/mydca_v018_release_hardening_20261002.md`。
 - v0.18 `backend/migrations/20261002_allocation_policy.sql` 仅提交、未部署；新安装择一使用 `backend/sql/initsql/allocation_policy.sql`，不得重复执行。
 - v0.17 风险观察中心：PC 手工规则评估、去重提醒历史、已读/静默；Android 仅 GET 查看规则、提醒及分页历史。UNKNOWN 不视为解除，仅写观察元数据，无交易、订单、结算或正式账本写入口。详见 `docs/mydca_v017_release_hardening_20261002.md`。
@@ -108,6 +110,6 @@ Android 常用验证：
 
 ## 当前下一步
 
-v0.18 本地工程回归与发布收口记录见专项报告。目标环境配置观察表及既有 migration、历史目录权限、真实登录后的 PC/Android 断网与无障碍体验，以及推送后 CI APK 证据仍需部署方/主人验收。生产数据库迁移、真实财务记录修改和交易不属于本任务授权。
+v0.19 本地工程回归与发布收口记录见 `docs/mydca_v019_release_hardening_20261002.md`。目标环境目标/预算表、配置观察表及既有 migration、历史目录权限、真实登录后的 PC/Android 断网与无障碍体验，以及推送后 CI APK 证据仍需部署方/主人验收。生产数据库迁移、真实财务记录修改和交易不属于本任务授权。
 
 完整当前状态与长期文档关系见 `docs/CURRENT_DEVELOPMENT_STATE.md` 和 `docs/DOCUMENT_INDEX.md`。
