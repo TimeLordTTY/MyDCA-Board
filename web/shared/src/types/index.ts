@@ -24,3 +24,5 @@ export type { PendingSettlement } from './order'
 
 // 重新导出Category（从constants/categories.ts）
 export type { Category } from '../constants/categories'
+
+export * from './goalBudget'

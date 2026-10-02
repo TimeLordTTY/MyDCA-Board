@@ -42,11 +42,11 @@
         </div>
 
         <div class="actions">
-          <button class="btn ghost" @click="handleRefresh">⟳ 刷新数据</button>
-          <button class="btn ghost" @click="handleRefreshMarketData" :disabled="refreshingMarket">
+          <button v-if="route.name !== 'GoalBudgetCenter'" class="btn ghost" @click="handleRefresh">⟳ 刷新数据</button>
+          <button v-if="route.name !== 'GoalBudgetCenter'" class="btn ghost" @click="handleRefreshMarketData" :disabled="refreshingMarket">
             {{ refreshingMarket ? '⏳ 采集中...' : '📈 刷新行情' }}
           </button>
-          <button class="btn primary" @click="handleUnifiedEntry">📝 记一笔</button>
+          <button v-if="route.name !== 'GoalBudgetCenter'" class="btn primary" @click="handleUnifiedEntry">📝 记一笔</button>
           <div class="avatar" @click="handleProfile">👤</div>
         </div>
       </div>
@@ -81,6 +81,7 @@ const refreshingMarket = ref(false)
 const refreshingData = ref(false)
 
 const navItems = [
+  { name: 'GoalBudgetCenter', path: '/goal-budget-center', label: '目标与预算' },
   { name: 'Dashboard', path: '/dashboard', label: '总览' },
   { name: 'Ledger', path: '/ledger', label: '流水' },
   { name: 'DraftInbox', path: '/drafts', label: '草稿箱' },
