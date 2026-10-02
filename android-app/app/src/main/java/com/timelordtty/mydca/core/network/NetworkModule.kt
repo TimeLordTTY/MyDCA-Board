@@ -25,6 +25,13 @@ object NetworkModule {
         unauthorizedHandler: UnauthorizedHandler = UnauthorizedHandler {},
     ): ApiServices {
         val moshi = Moshi.Builder()
+            .add(java.math.BigDecimal::class.java, object : com.squareup.moshi.JsonAdapter<java.math.BigDecimal>() {
+                override fun fromJson(reader: com.squareup.moshi.JsonReader): java.math.BigDecimal =
+                    java.math.BigDecimal(reader.nextString())
+                override fun toJson(writer: com.squareup.moshi.JsonWriter, value: java.math.BigDecimal?) {
+                    writer.value(value)
+                }
+            }.nullSafe())
             .add(KotlinJsonAdapterFactory())
             .build()
         val client = OkHttpClient.Builder()

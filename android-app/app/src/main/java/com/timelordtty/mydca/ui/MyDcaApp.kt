@@ -199,6 +199,7 @@ private fun AuthenticatedApp(
         var settlementFlowOpen by remember { mutableStateOf(false) }
         var riskOpen by remember { mutableStateOf(false) }
         var allocationOpen by remember { mutableStateOf(false) }
+        var goalBudgetOpen by remember { mutableStateOf(false) }
         var radarOpen by rememberSaveable { mutableStateOf(false) }
         var settlementFocusOrderId by remember { mutableStateOf<String?>(null) }
         // 人工结算成功后自增，驱动总览与资产页面重新拉取账户 / 持仓 / 资产摘要。
@@ -307,7 +308,7 @@ private fun AuthenticatedApp(
                 )
             },
             floatingActionButton = {
-                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen || radarOpen || riskOpen || allocationOpen)) {
+                if (QuickCaptureHub.isEntryVisibleOn(currentRoute, isSubFlowOpen = draftEntryMode != null || settlementFlowOpen || radarOpen || riskOpen || allocationOpen || goalBudgetOpen)) {
                     ExtendedFloatingActionButton(onClick = { isQuickCaptureOpen = true }) {
                         Text("记一笔")
                     }
@@ -326,6 +327,7 @@ private fun AuthenticatedApp(
                                 radarOpen = false
                                 riskOpen = false
                                 allocationOpen = false
+                                goalBudgetOpen = false
                                 settlementFocusOrderId = null
                                 quickFocus = QuickCaptureHub.focusAfterManualNavigation()
                                 NotificationNavigationTarget.clear()
@@ -346,7 +348,9 @@ private fun AuthenticatedApp(
             ) { route ->
                 when (route) {
                     AppRoute.Overview -> {
-                        if (allocationOpen) {
+                        if (goalBudgetOpen) {
+                            com.timelordtty.mydca.ui.screens.GoalBudgetScreen(services.wealthHubApi) { goalBudgetOpen = false }
+                        } else if (allocationOpen) {
                             com.timelordtty.mydca.ui.screens.AllocationScreen(services.wealthHubApi) { allocationOpen = false }
                         } else if (riskOpen) {
                             com.timelordtty.mydca.ui.screens.RiskWatchScreen(services.wealthHubApi) { riskOpen = false }
@@ -374,6 +378,7 @@ private fun AuthenticatedApp(
                                 onOpenRadar = { radarOpen = true },
                                 onOpenRisk = { riskOpen = true },
                                 onOpenAllocation = { allocationOpen = true },
+                                onOpenGoalBudget = { goalBudgetOpen = true },
                             )
                         }
                     }
