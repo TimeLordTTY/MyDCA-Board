@@ -90,6 +90,7 @@ const navItems = [
   { name: 'Holdings', path: '/holdings', label: '持仓管理' },
   { name: 'StrategyLab', path: '/strategy-lab', label: '策略实验室' },
   { name: 'RiskCenter', path: '/risk-center', label: '风险观察' },
+  { name: 'RebalanceCenter', path: '/rebalance-center', label: '配置观察' },
   { name: 'Settings', path: '/settings', label: '设置' },
 ]
 

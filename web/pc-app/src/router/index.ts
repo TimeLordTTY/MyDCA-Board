@@ -32,6 +32,7 @@ const router = createRouter({
       redirect: '/dashboard',
       meta: { requiresAuth: true },
       children: [
+        { path: 'rebalance-center', name: 'RebalanceCenter', component: () => import('../views/RebalanceCenter.vue') },
         { path: 'risk-center', name: 'RiskCenter', component: () => import('../views/RiskCenter.vue') },
         {
           path: 'dashboard',

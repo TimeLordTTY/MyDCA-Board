@@ -25,6 +25,7 @@ export * from './todo'
 export * from './backtest'
 export * from './researchPlan'
 export * from './riskWatch'
+export * from './allocationPolicy'
 
 // 导出所有API对象
 export { authApi } from './auth'
