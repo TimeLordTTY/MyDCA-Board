@@ -8,6 +8,8 @@
 
 ## 当前阶段
 
+v0.17 发布硬化：Android 0.17.0 / 18 与 CI 命名一致，观察备注的合法空数值不误报 UNKNOWN，规则类型/作用域/方向提供中文文案，加载与错误态提供无障碍播报。回归与验收边界见 `docs/mydca_v017_release_hardening_20261002.md`。本次只本地提交，无真实 CI 制品证据；两个 v0.17 migration 未自动部署。
+
 v0.17 PC 已加入风险观察中心：规则配置、手工只读评估、UNKNOWN/陈旧快照、去重提醒历史筛选、手工已读与规则静默窗口。跨雷达/研究页面跳转仅带只读标识，不提供交易入口。详见 `docs/mydca_v017_risk_center_pc_20261002.md`；目标环境 migration 与真实体验仍待人工验收。
 
 Android 新增 v0.17 只读风险观察中心（总览入口）：本页规则提醒按 severity 分组、OPEN/RESOLVED 过滤，规则详情与分页评估历史保留 UNKNOWN/陈旧提示。仅 GET，不评估、不编辑、不 ACK/MUTE、不产生执行动作。详见 `docs/mydca_v017_risk_center_android_20261002.md`；真机及目标环境仍待人工验收。
@@ -26,8 +28,8 @@ v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.16.0`
-- `versionCode = 17`
+- `versionName = 0.17.0`
+- `versionCode = 18`
 
 v0.15 已加入持久化的 owner 作用域回测历史、2 至 5 条历史对比、只读策略研究候选与可校验证据包，以及 PC/Android 每日财富雷达。PC 策略实验室提供历史、对比、候选与证据导出；Android 展示只读雷达和最近成功回测。雷达未知值保留 `null`/「未知」，刷新失败的旧快照明确标识；研究结果不生成订单或交易。详见 `docs/mydca_v015_release_hardening_20260930.md`。
 

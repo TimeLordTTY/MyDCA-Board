@@ -22,6 +22,8 @@
 
 ## 当前关键文档
 
+- v0.17 发布硬化与回归：`docs/mydca_v017_release_hardening_20261002.md`
+
 - v0.16 发布硬化与回归：`docs/mydca_v016_release_hardening_20261001.md`
 - 当前状态：`docs/CURRENT_DEVELOPMENT_STATE.md`
 - v0.16 PC 研究方案工作台：`docs/mydca_v016_research_workbench_pc_20261001.md`

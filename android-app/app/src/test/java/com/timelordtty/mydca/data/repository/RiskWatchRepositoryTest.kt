@@ -85,6 +85,11 @@ class RiskWatchRepositoryTest {
         assertTrue(riskDataWarning(evidence.copy(sourceDataTimestamp = null), today).contains("时间未知"))
         assertTrue(riskDataWarning(evidence.copy(sourceDataTimestamp = "2026-10-03"), today).contains("异常"))
         assertTrue(riskDataWarning(evidence.copy(sourceDataTimestamp = "2026-09-29"), today).contains("3 天内"))
+        val note = evidence.copy(observedValue = null, threshold = null, sourceDataTimestamp = "2026-10-02")
+        assertTrue(riskDataWarning(note, today).contains("3 天内"))
+        assertTrue(riskDataWarning(note.copy(status = "UNKNOWN"), today).contains("不能视为"))
+        assertEquals("观察备注", riskLabel("NOTE"))
+        assertEquals("家庭", riskLabel("FAMILY"))
         assertEquals("仅供观察，不构成交易建议", RISK_DISCLAIMER)
     }
 }

@@ -17,7 +17,9 @@
 
 ## 当前版本与里程碑
 
-- Android：`0.16.0 / versionCode 17`；CI APK 证据待推送后真实成功构建回填。
+- Android：`0.17.0 / versionCode 18`；CI APK 证据待推送后真实成功构建回填。
+- v0.17 风险观察中心：PC 手工规则评估、去重提醒历史、已读/静默；Android 仅 GET 查看规则、提醒及分页历史。UNKNOWN 不视为解除，仅写观察元数据，无交易、订单、结算或正式账本写入口。详见 `docs/mydca_v017_release_hardening_20261002.md`。
+- v0.17 两个 migration `backend/migrations/20261002_risk_watch.sql`、`backend/migrations/20261002_risk_alert_history.sql` 仅提交、未自动部署；新安装可择一使用对应 `backend/sql/initsql/` 脚本，不得重复执行。
 - v0.16 研究闭环：owner/family 隔离的方案生命周期、不可变来源证据与独立参数草稿；PC 创建、编辑、归档及人工受控回测，Android 只读分页、详情和关联运行。复用 v0.15 compare/evidence，不创建订单、结算或账本。详见 `docs/mydca_v016_release_hardening_20261001.md`。
 - v0.16 migration `backend/migrations/20261001_research_plan.sql` 仅提交、未自动部署；新安装可择一使用 `backend/sql/initsql/research_plan.sql`，不得重复执行。
 - v0.15 回测历史、比较、研究候选、证据导出与每日财富雷达已实现；历史目录需部署方配置持久化与权限。

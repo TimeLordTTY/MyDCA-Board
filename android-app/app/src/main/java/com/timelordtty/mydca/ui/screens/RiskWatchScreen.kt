@@ -8,6 +8,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import com.timelordtty.mydca.core.network.NetworkResult
 import com.timelordtty.mydca.data.api.WealthHubApi
 import com.timelordtty.mydca.data.dto.*
@@ -54,16 +57,16 @@ fun RiskWatchScreen(api: WealthHubApi, onClose: () -> Unit) {
         val loading = if (rule == null) rules.loading || events.loading else events.loading || snapshots.loading
         OutlinedButton(onClick = { attempt++ }, enabled = !loading) { Text("刷新 / 重试") }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (loading) item { Text("正在读取风险数据…") }
+            if (loading) item { Text("正在读取风险数据…", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
             if (rule == null) {
-                rules.error?.let { item { Text("读取失败：$it") } }
+                rules.error?.let { item { Text("读取失败：$it", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) } }
                 item {
                     Text("当前提醒（本页规则各最近 20 条；完整记录请打开规则历史）")
                     listOf("OPEN", "RESOLVED", "ALL").forEach { value ->
                         OutlinedButton(onClick = { filter = value }, enabled = filter != value) { Text(if (value == "ALL") "全部（含已读 / 静默）" else riskLabel(value)) }
                     }
                 }
-                events.error?.let { item { Text("提醒读取失败：$it；当前状态未知") } }
+                events.error?.let { item { Text("提醒读取失败：$it；当前状态未知", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) } }
                 val currentGroups = riskGroups(events.data.orEmpty(), filter)
                 if (events.data != null && rules.data != null && currentGroups.isEmpty()) item { Text("已读取记录中暂无符合条件的提醒；不代表没有风险。") }
                 currentGroups.forEach { (severity, entries) ->
@@ -79,23 +82,23 @@ fun RiskWatchScreen(api: WealthHubApi, onClose: () -> Unit) {
                 if (rules.data?.isEmpty() == true) item { Text("暂无风险观察规则。") }
                 items(rules.data.orEmpty(), key = { it.id }) { entry ->
                     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
-                        Text("${entry.config.type ?: "未知规则"} · ${riskLabel(entry.config.severity)}")
+                        Text("${riskLabel(entry.config.type)} · ${riskLabel(entry.config.severity)}")
                         Text(entry.config.note ?: "无备注")
                         OutlinedButton(onClick = { rule = entry; page = 0 }) { Text("查看当前状态与历史") }
                     } }
                 }
             } else {
                 item {
-                    Text("规则：${rule!!.id} / ${rule!!.config.type}")
-                    Text("作用域：${rule!!.config.scope}；产品：${rule!!.config.productId ?: "无"}；类别：${rule!!.config.assetType ?: "无"}")
-                    Text("阈值：${rule!!.config.threshold ?: "未知"}；目标：${rule!!.config.target ?: "无"}；方向：${rule!!.config.direction ?: "无"}")
+                    Text("规则：${rule!!.id} / ${riskLabel(rule!!.config.type)}")
+                    Text("作用域：${riskLabel(rule!!.config.scope)}；产品：${rule!!.config.productId ?: "无"}；类别：${rule!!.config.assetType ?: "无"}")
+                    Text("阈值：${rule!!.config.threshold ?: "未知"}；目标：${rule!!.config.target ?: "无"}；方向：${rule!!.config.direction?.let { riskLabel(it) } ?: "无"}")
                     Text("备注：${rule!!.config.note ?: "无"}")
                     Text("提醒状态（本页按严重级别分组，过滤仅针对已读取页）")
                     listOf("OPEN", "RESOLVED", "ALL").forEach { value ->
                         OutlinedButton(onClick = { filter = value }, enabled = filter != value) { Text(if (value == "ALL") "全部（含已读 / 静默）" else riskLabel(value)) }
                     }
                 }
-                events.error?.let { item { Text("提醒读取失败：$it；当前状态未知") } }
+                events.error?.let { item { Text("提醒读取失败：$it；当前状态未知", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) } }
                 val groups = riskGroups(events.data.orEmpty(), filter)
                 if (events.data != null && groups.isEmpty()) item { Text("本页无符合过滤条件的提醒；不代表没有风险。") }
                 groups.forEach { (severity, entries) ->
@@ -105,7 +108,7 @@ fun RiskWatchScreen(api: WealthHubApi, onClose: () -> Unit) {
                     }
                 }
                 item { Text("评估历史（最近记录在前；包含未知及未命中证据）") }
-                snapshots.error?.let { item { Text("历史读取失败：$it") } }
+                snapshots.error?.let { item { Text("历史读取失败：$it", Modifier.semantics { liveRegion = LiveRegionMode.Polite }) } }
                 if (snapshots.data?.isEmpty() == true) item { Text("尚无评估历史；当前风险未知。") }
                 items(snapshots.data.orEmpty(), key = { "snapshot-${it.id}" }) { RiskEvidence(it) }
             }

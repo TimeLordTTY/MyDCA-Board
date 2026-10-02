@@ -13,7 +13,7 @@
 {"scope":"PERSONAL","type":"CONCENTRATION","productId":1,"threshold":0.3,"severity":"WARNING","muted":false}
 ```
 
-支持 RETURN、DRAWDOWN、ALLOCATION_DEVIATION、STALE、CONCENTRATION、NOTE。severity 仅 INFO/WARNING/CRITICAL。NOTE 支持中文备注，muted 静默不命中。
+支持 RETURN、DRAWDOWN、ALLOCATION_DEVIATION、STALE、CONCENTRATION、NOTE。severity 仅 INFO/WARNING/CRITICAL。NOTE 支持中文备注；muted 只控制提醒展示，不改变命中证据。
 
 ## 计算口径
 
@@ -25,7 +25,7 @@
 - STALE 为行情和估值日期中较旧者的自然日年龄，threshold 为0至3650整数天；缺日期或未来日期 UNKNOWN。
 - 无法可靠估值、总资产不完整或为非正数、两次读取的持仓总值不一致时保留 UNKNOWN/null，不以0替代。无该标的持仓时收益和集中度 UNKNOWN；完整组合中不存在某类别为0占比。
 
-快照记录规则ID、源雷达日期、SHA-256 输入hash、status、matched、中文原因、severity、observedValue、threshold、createdAt 和免责声明。hash 包含规则配置、当前owner/family、雷达日期/资产/行情日期、排序后持仓及回撤指标；同一输入复用快照。跨自然日重新评估，静默/备注也留观察快照。并发重复仅捕获主键冲突并按当前作用域重查；其他存储故障不伪装成功。历史GET不重新评估或更新快照。
+快照记录规则ID、源雷达日期、SHA-256 输入hash、status、matched、中文原因、severity、observedValue、threshold、createdAt 和免责声明。hash 包含规则配置、当前owner/family、雷达日期/资产/行情日期、排序后持仓及回撤指标；同一输入复用快照。跨自然日重新评估；静默及非 NOTE 备注不改变源 fingerprint，NOTE 备注属于评估输入。并发重复仅捕获主键冲突并按当前作用域重查；其他存储故障不伪装成功。历史GET不重新评估或更新快照。
 
 ## 部署与验证
 
