@@ -94,6 +94,15 @@ public class AllocationPolicyService {
         return observe(p,radar.getRadar(u.getId(),u.getFamilyId(),c.scope()),
                 holdings.calculateHoldings(family?null:u.getId(),family?u.getFamilyId():null));
     }
+    /** Uses only a saved, authorized policy and server-side read-only snapshots. */
+    @Transactional(readOnly=true)
+    public com.timelordtty.dca.dto.RebalancePreviewDTO preview(String id) throws IOException {
+        var p=detail(id);
+        if(!Boolean.TRUE.equals(p.config().enabled())) return RebalancePreviewEngine.calculate(p,null,null);
+        var u=users.getCurrentUser(); boolean family="FAMILY".equals(p.config().scope());
+        return RebalancePreviewEngine.calculate(p,radar.getRadar(u.getId(),u.getFamilyId(),p.config().scope()),
+                holdings.calculateHoldings(family?null:u.getId(),family?u.getFamilyId():null));
+    }
     private static boolean hasReturnWatch(Config c) {
         return c.returnThreshold()!=null || (c.takeProfitThresholds()!=null && !c.takeProfitThresholds().isEmpty());
     }

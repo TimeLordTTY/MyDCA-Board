@@ -17,6 +17,7 @@ public class AllocationPolicyController {
     @GetMapping("/{id}") public Policy detail(@PathVariable String id) throws IOException { return service.detail(id); }
     @PatchMapping("/{id}") public Policy edit(@PathVariable String id,@RequestBody Config c) throws IOException { return service.edit(id,c); }
     @PostMapping("/{id}/evaluate") public Evaluation evaluate(@PathVariable String id) throws IOException { return service.evaluate(id); }
+    @GetMapping("/{id}/preview") public com.timelordtty.dca.dto.RebalancePreviewDTO preview(@PathVariable String id) throws IOException { return service.preview(id); }
     @ExceptionHandler({IllegalArgumentException.class,IllegalStateException.class,IOException.class})
     public ResponseEntity<Map<String,String>> error(Exception e) {
         return ResponseEntity.status(e instanceof IOException?503:e instanceof IllegalStateException?409:400)
