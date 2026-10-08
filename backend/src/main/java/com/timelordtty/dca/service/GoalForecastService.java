@@ -33,6 +33,24 @@ public class GoalForecastService {
     }
     @Transactional(readOnly=true)
     public Forecast forecast(String id, Request request) throws IOException {
+        return forecastAllocated(id, request, null);
+    }
+    Forecast forecastAllocated(String id, Request request, List<BigDecimal> allocations) throws IOException {
+        return forecastAllocated(id, request, allocations, new Reads());
+    }
+    /** Request-local evidence cache: both scenarios consume the same authorized snapshots. */
+    static final class Reads {
+        final Map<String, Goal> goals = new HashMap<>();
+        final Map<String, Progress> progress = new HashMap<>();
+        final Map<String, MonthlyBudgetDTO.Budget> budgets = new HashMap<>();
+        final Map<String, MonthlyBudgetDTO.Comparison> actual = new HashMap<>();
+    }
+    private interface Read<T> { T get() throws IOException; }
+    private static <T> T cached(Map<String,T> cache, String id, Read<T> read) throws IOException {
+        if(!cache.containsKey(id)) cache.put(id, read.get());
+        return cache.get(id);
+    }
+    Forecast forecastAllocated(String id, Request request, List<BigDecimal> allocations, Reads reads) throws IOException {
         if(request==null || request.mode()==null) throw new IllegalArgumentException("须显式选择预测模式");
         var start=month(request.startMonth()); var end=month(request.endMonth());
         long count=ChronoUnit.MONTHS.between(start,end)+1;
@@ -42,7 +60,7 @@ public class GoalForecastService {
         if(rate!=null && (rate.compareTo(BigDecimal.ONE.negate())<0 || rate.compareTo(BigDecimal.ONE)>0 || rate.scale()>8))
             throw new IllegalArgumentException("年化假设须为-1至1的比例，最多8位小数");
         if(request.months()==null || request.months().size()!=count) throw new IllegalArgumentException("须逐月显式提供预算选择和覆盖声明");
-        var goal=goals.detail(id); var progress=goals.progress(id);
+        var goal=cached(reads.goals,id,()->goals.detail(id)); var progress=cached(reads.progress,id,()->goals.progress(id));
         var asOf=YearMonth.from(progress.asOfDate());
         if(start.isBefore(asOf) || (start.equals(asOf) && request.mode()==Mode.PLANNED))
             throw new IllegalArgumentException("计划模式从统计月之后开始；当月须使用已发生加未发生计划模式");
@@ -51,20 +69,20 @@ public class GoalForecastService {
         for(int i=0;i<count;i++) {
             var input=request.months().get(i);
             if(input==null || !start.plusMonths(i).equals(month(input.month()))) throw new IllegalArgumentException("月份须连续且按范围排序");
-            var budget=input.budgetId()==null?null:budgets.detail(input.budgetId());
+            var budget=input.budgetId()==null?null:cached(reads.budgets,input.budgetId(),()->budgets.detail(input.budgetId()));
             if(budget!=null && (!budget.config().month().equals(input.month()) || !budget.config().scope().equals(goal.config().scope())))
                 throw new IllegalArgumentException("预算月份或作用域与目标不一致");
             selected.add(budget);
-            readings.add(budget!=null && request.mode()==Mode.ACTUAL_PLUS_REMAINING?budgets.comparison(budget.id()):null);
+            readings.add(budget!=null && request.mode()==Mode.ACTUAL_PLUS_REMAINING?cached(reads.actual,budget.id(),()->budgets.comparison(budget.id())):null);
         }
         return new Forecast(id,goal.config().currency(),progress.asOfDate(),progress,request,
-                simulate(goal,progress,request,selected,readings,BigDecimal.ZERO),
-                rate==null?null:simulate(goal,progress,request,selected,readings,rate));
+                simulate(goal,progress,request,selected,readings,BigDecimal.ZERO,allocations),
+                rate==null?null:simulate(goal,progress,request,selected,readings,rate,allocations));
     }
     private static BigDecimal amount(BigDecimal n) { return n.setScale(2,RoundingMode.DOWN); }
     private static Scenario simulate(Goal goal, Progress progress, Request request,
                                      List<MonthlyBudgetDTO.Budget> selected,
-                                     List<MonthlyBudgetDTO.Comparison> readings, BigDecimal rate) {
+                                     List<MonthlyBudgetDTO.Comparison> readings, BigDecimal rate, List<BigDecimal> allocations) {
         BigDecimal cumulative=progress.quality()==Quality.OK?progress.currentValue():null;
         Quality overall=progress.quality();
         boolean uncoveredGap=month(request.startMonth()).isAfter(YearMonth.from(progress.asOfDate()).plusMonths(1));
@@ -108,10 +126,11 @@ public class GoalForecastService {
                 }
             }
             if(goal.config().measure()==Measure.POSITION_VALUE) { quality=Quality.UNKNOWN; reason="持仓目标未指定投入账户，不假设自动买入"; }
+            if(allocations!=null && allocations.get(i)==null && quality==Quality.OK) { quality=Quality.UNKNOWN; reason="未填写额度或共享预算不可行/未知；详见情景月度校验"; }
             BigDecimal starting=cumulative;
             if(cumulative!=null && quality==Quality.OK) {
                 growth=amount(cumulative.multiply(rate).divide(BigDecimal.valueOf(12),16,RoundingMode.HALF_UP));
-                contribution=amount(goal.config().targetValue().subtract(cumulative.add(growth)).max(BigDecimal.ZERO).min(upper));
+                contribution=amount(goal.config().targetValue().subtract(cumulative.add(growth)).max(BigDecimal.ZERO).min(allocations==null?upper:allocations.get(i).min(upper)));
                 cumulative=cumulative.add(growth).add(contribution);
                 if(achieved==null && cumulative.compareTo(goal.config().targetValue())>=0) achieved=input.month();
             } else {
