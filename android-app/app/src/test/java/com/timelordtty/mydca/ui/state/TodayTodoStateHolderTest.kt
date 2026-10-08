@@ -77,6 +77,7 @@ private class TodoApiFixture(
     private val todo: TodayTodoDto? = null,
     private val fail: Boolean = false,
 ) : WealthHubApi {
+    override suspend fun dataReadiness(scope: String, month: String): com.timelordtty.mydca.data.dto.DataReadinessDto = error("Not used in this fixture")
     override suspend fun getFinanceRadar(): com.timelordtty.mydca.data.dto.FinanceRadarDto = throw UnsupportedOperationException()
     override suspend fun goalForecast(id: String, request: com.timelordtty.mydca.data.dto.GoalForecastRequestDto): com.timelordtty.mydca.data.dto.GoalForecastDto = error("Not used in this fixture")
     override suspend fun goals(page: Int, size: Int): List<com.timelordtty.mydca.data.dto.GoalDto> = error("Not used in this fixture")

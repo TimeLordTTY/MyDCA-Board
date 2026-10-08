@@ -30,6 +30,7 @@ fun GoalBudgetScreen(api: WealthHubApi, onClose: () -> Unit) {
     PageScaffold {
         OutlinedButton(onClick = onClose) { Text("返回总览") }
         SafetyBanner("目标与预算仅供只读查看，不创建或编辑，不执行交易或正式入账。")
+        DataReadinessCard(api, month)
         OutlinedButton(onClick = { budgetTab = !budgetTab; page = 0 }) {
             Text(if (budgetTab) "查看目标进度" else "查看本月预算")
         }
