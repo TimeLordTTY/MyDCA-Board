@@ -3,7 +3,9 @@ import type { ForecastRequest } from '@wealth-hub/shared'
 export function monthRange(start: string, count: number) {
   if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(start) || !Number.isInteger(count) || count < 12 || count > 60) return []
   const [year, month] = start.split('-').map(Number)
-  return Array.from({ length: count }, (_, i) => { const n = year * 12 + month - 1 + i; return `${Math.floor(n / 12)}-${String(n % 12 + 1).padStart(2, '0')}` }).filter(m => Number(m.slice(0, 4)) <= 9998)
+  // Reject the entire horizon instead of silently shortening the owner's input.
+  if (year * 12 + month - 1 + count - 1 > 9998 * 12 + 11) return []
+  return Array.from({ length: count }, (_, i) => { const n = year * 12 + month - 1 + i; return `${Math.floor(n / 12)}-${String(n % 12 + 1).padStart(2, '0')}` })
 }
 export const validMoney = (value: string) => value === '' || /^\d{1,18}(\.\d{1,2})?$/.test(value)
 export function validateForecast(goals: Goal[], budgets: Budget[], request: ForecastRequest, allocations: string[]) {

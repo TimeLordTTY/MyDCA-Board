@@ -1,5 +1,7 @@
 # MyDCA Android App
 
+v0.20 功能增量：目标详情进入12个月零收益只读情景，保持未知/不完整数据与人工重试；不保存情景或执行资金计划。详见 [发布回归](../docs/mydca_v020_release_hardening_20261008.md)。
+
 v0.19 功能增量：总览「查看目标进度与本月预算」只读分页，PARTIAL/UNKNOWN 保持未知，中文作用域、仅计划预留和人工重试。详见 [专项说明](GOAL_BUDGET_VIEW.md) 与 [发布回归](../docs/mydca_v019_release_hardening_20261002.md)。
 
 v0.18 功能增量：总览「配置偏离与止盈观察」只读查看主人规则、区间与收益观察；主动读取数学情景预览。GET + 无请求体只读 POST evaluate，不创建/编辑配置、不交易、不占用、不结算、不入账。详见 [专项说明](ALLOCATION_VIEW.md) 与 [发布回归](../docs/mydca_v018_release_hardening_20261002.md)。
@@ -9,9 +11,10 @@ v0.17 功能增量：总览「风险观察中心」只读查看严重级别分�
 v0.16 功能增量：底部「研究」提供 DRAFT/ACTIVE 方案分页列表、证据警告、参数快照与关联回测历史只读详情。仅 GET，不能创建/编辑方案或发起回测。历史先读取最近 50 条，可手动继续读取更早记录；研究结果不代表未来表现。发布收口版本为 0.16.0 / 17，详见 [专项说明](../docs/mydca_v016_research_view_android_20261001.md)。
 
 <!-- CURRENT-SNAPSHOT:START -->
-## 当前发布状态（2026-10-02）
+## 当前发布状态（2026-10-08）
 
-- 当前 Android：`versionName=0.19.0`、`versionCode=20`。每日财富雷达与最近回测均为只读；刷新失败保留旧结果并明确标识，未知指标不显示为零。
+- 当前 Android：`versionName=0.20.0`、`versionCode=21`。目标情景刷新/失败清除旧结果；未知指标不显示为零。每日财富雷达与最近回测仍为只读。
+- v0.20.0 制品：尚无真实 CI Run / Artifact / APK SHA-256；预期 artifact 为 `mydca-android-v0.20.0-<full-sha>`，仅为命名约定。
 - v0.19.0 制品：尚无真实 CI Run / Artifact / APK SHA-256；预期 artifact 为 `mydca-android-v0.19.0-<full-sha>`，仅为命名约定。
 - v0.15.0 制品：本次只本地提交，尚无 CI Run / Artifact / APK SHA-256 证据。
 - v0.14.0 草稿箱支持历史查看、已忽略草稿二次确认恢复及已确认草稿显式复制；复制后仍为 DRAFT，必须重新预览并二次确认。

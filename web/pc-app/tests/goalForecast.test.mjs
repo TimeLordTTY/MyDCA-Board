@@ -23,6 +23,9 @@ async function setup(api = {}) {
 }
 test('bounded dates, amounts, matching currency/scope and partial inputs', () => {
   assert.equal(model.monthRange('2026-11', 12).at(-1), '2027-10')
+  assert.equal(model.monthRange('9998-01', 12).at(-1), '9998-12')
+  assert.deepEqual(model.monthRange('9997-01', 60), [])
+  assert.deepEqual(model.monthRange('9999-01', 12), [])
   for (const [start, n] of [['2026-13', 12], ['2026-11', 11], ['2026-11', 61], ['2026-11', 12.5]]) assert.deepEqual(model.monthRange(start, n), [])
   for (const value of ['-1', '1.001', 'NaN', '1e4']) assert.equal(model.validMoney(value), false)
   const months = model.monthRange('2026-11', 12).map(month => ({ month, budgetId: null, cashflowCovered: false }))

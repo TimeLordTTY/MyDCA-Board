@@ -1,7 +1,7 @@
 # 财富中枢文档索引与事实源优先级
 
 - **作者**：ChatGPT
-- **更新时间**：2026-10-02 +08:00
+- **更新时间**：2026-10-08 +08:00
 
 ## 读取顺序
 
@@ -21,6 +21,12 @@
 任何“当前处于初始化阶段”“Android 未接真实登录/OCR/通知监听”“draft_ledger_entry 尚未落地”等旧表述都只能按历史上下文理解。
 
 ## 当前关键文档
+
+- v0.20 发布硬化与实际验证：`docs/mydca_v020_release_hardening_20261008.md`
+- v0.20 单目标现金流契约：`backend/GOAL_CASHFLOW_FORECAST_API.md`
+- v0.20 多目标共享结余契约：`backend/MULTI_GOAL_SCENARIO_API.md`
+- v0.20 Android 零收益只读预测：`android-app/GOAL_BUDGET_VIEW.md`
+- v0.20 上游差异清单与数据库逐对象矩阵：`docs/v020_review_evidence.json`、`docs/v020_database_coverage.json`
 
 - v0.19 目标与预算发布硬化：`docs/mydca_v019_release_hardening_20261002.md`
 - v0.19 长期目标后端：`backend/GOAL_TRACKING_API.md`

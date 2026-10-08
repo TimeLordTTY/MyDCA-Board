@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "仓库": "D:\\Project\\ai-core-runtime\\agent-runtime\\dispatch\\dual-worker-state\\worktrees\\1b911c044e83de39\\task-mydca-v020-release-hardening-20261008",
+  "审查模式": "range",
+  "基线": "538d39524b54acdc594c590b8541ab28f691f5a4",
+  "目标": "3bd93154310f060711df044640f19f4cbdc462e4",
+  "差异范围": "538d39524b54acdc594c590b8541ab28f691f5a4..3bd93154310f060711df044640f19f4cbdc462e4",
+  "审查前工作区状态": "## HEAD (no branch)\n M android-app/app/build.gradle.kts\n M web/pc-app/src/components/goalForecastModel.ts\n M web/pc-app/tests/goalForecast.test.mjs",
+  "变更文件数": 31,
+  "变更文件": [
+    {
+      "状态": "M",
+      "路径": "android-app/GOAL_BUDGET_VIEW.md",
+      "分类": "其他",
+      "新增行数": 8,
+      "删除行数": 2
+    },
+    {
+      "状态": "M",
+      "路径": "android-app/app/src/main/java/com/timelordtty/mydca/data/api/WealthHubApi.kt",
+      "分类": "代码",
+      "新增行数": 4,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "android-app/app/src/main/java/com/timelordtty/mydca/data/dto/GoalForecastDto.kt",
+      "分类": "代码",
+      "新增行数": 15,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "android-app/app/src/main/java/com/timelordtty/mydca/data/repository/GoalBudgetRepository.kt",
+      "分类": "代码",
+      "新增行数": 22,
+      "删除行数": 1
+    },
+    {
+      "状态": "M",
+      "路径": "android-app/app/src/main/java/com/timelordtty/mydca/ui/screens/GoalBudgetScreen.kt",
+      "分类": "代码",
+      "新增行数": 8,
+      "删除行数": 1
+    },
+    {
+      "状态": "A",
+      "路径": "android-app/app/src/main/java/com/timelordtty/mydca/ui/screens/GoalForecastScreen.kt",
+      "分类": "代码",
+      "新增行数": 47,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "android-app/app/src/main/java/com/timelordtty/mydca/ui/state/GoalForecastState.kt",
+      "分类": "代码",
+      "新增行数": 20,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt",
+      "分类": "测试",
+      "新增行数": 95,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/WealthRepositoryTest.kt",
+      "分类": "测试",
+      "新增行数": 1,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "android-app/app/src/test/java/com/timelordtty/mydca/ui/state/TodayTodoStateHolderTest.kt",
+      "分类": "测试",
+      "新增行数": 1,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "android-app/app/src/test/java/com/timelordtty/mydca/ui/state/WealthStateHolderTest.kt",
+      "分类": "测试",
+      "新增行数": 1,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/GOAL_CASHFLOW_FORECAST_API.md",
+      "分类": "其他",
+      "新增行数": 32,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/MULTI_GOAL_SCENARIO_API.md",
+      "分类": "其他",
+      "新增行数": 24,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/main/java/com/timelordtty/dca/controller/GoalForecastController.java",
+      "分类": "代码",
+      "新增行数": 25,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/main/java/com/timelordtty/dca/controller/MultiGoalScenarioController.java",
+      "分类": "代码",
+      "新增行数": 22,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/main/java/com/timelordtty/dca/dto/GoalForecastDTO.java",
+      "分类": "代码",
+      "新增行数": 26,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/main/java/com/timelordtty/dca/dto/MultiGoalScenarioDTO.java",
+      "分类": "代码",
+      "新增行数": 23,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/main/java/com/timelordtty/dca/service/GoalForecastService.java",
+      "分类": "代码",
+      "新增行数": 148,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/main/java/com/timelordtty/dca/service/MultiGoalScenarioService.java",
+      "分类": "代码",
+      "新增行数": 98,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/test/java/com/timelordtty/dca/service/GoalForecastServiceTest.java",
+      "分类": "测试",
+      "新增行数": 147,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "backend/src/test/java/com/timelordtty/dca/service/MultiGoalScenarioServiceTest.java",
+      "分类": "测试",
+      "新增行数": 97,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "分类": "代码",
+      "新增行数": 95,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "web/pc-app/src/components/goalForecastModel.ts",
+      "分类": "代码",
+      "新增行数": 23,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "分类": "代码",
+      "新增行数": 2,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "web/pc-app/tests/goalBudgetCenter.test.mjs",
+      "分类": "测试",
+      "新增行数": 1,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "web/pc-app/tests/goalForecast.test.mjs",
+      "分类": "测试",
+      "新增行数": 72,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "web/pc-app/tests/tsconfig.goalForecast.json",
+      "分类": "测试",
+      "新增行数": 5,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "web/shared/src/api/goalForecast.ts",
+      "分类": "代码",
+      "新增行数": 7,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "web/shared/src/api/index.ts",
+      "分类": "代码",
+      "新增行数": 1,
+      "删除行数": 0
+    },
+    {
+      "状态": "A",
+      "路径": "web/shared/src/types/goalForecast.ts",
+      "分类": "代码",
+      "新增行数": 22,
+      "删除行数": 0
+    },
+    {
+      "状态": "M",
+      "路径": "web/shared/src/types/index.ts",
+      "分类": "代码",
+      "新增行数": 1,
+      "删除行数": 0
+    }
+  ],
+  "分类统计": {
+    "代码": 19,
+    "配置": 0,
+    "脚本": 0,
+    "依赖": 0,
+    "测试": 9,
+    "其他": 3
+  },
+  "候选信号": {
+    "新增行中的配置引用": {
+      "goal.config.name": [
+        "android-app/app/src/main/java/com/timelordtty/mydca/ui/screens/GoalForecastScreen.kt:20"
+      ],
+      "scenario.achievedMonth": [
+        "android-app/app/src/main/java/com/timelordtty/mydca/ui/state/GoalForecastState.kt:8"
+      ],
+      "result.source": [
+        "web/pc-app/src/components/GoalForecastWorkbench.vue:78"
+      ],
+      "result.readStartedAt": [
+        "web/pc-app/src/components/GoalForecastWorkbench.vue:78"
+      ],
+      "result.readCompletedAt": [
+        "web/pc-app/src/components/GoalForecastWorkbench.vue:78"
+      ]
+    },
+    "新增行中的脚本引用": {
+      "server.sh": [
+        "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt:41",
+        "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt:65",
+        "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt:84"
+      ],
+      "m.sh": [
+        "web/pc-app/src/components/GoalForecastWorkbench.vue:29"
+      ]
+    },
+    "缺失的被引用脚本": [
+      {
+        "脚本路径": "m.sh",
+        "引用位置": [
+          "web/pc-app/src/components/GoalForecastWorkbench.vue:29"
+        ]
+      },
+      {
+        "脚本路径": "server.sh",
+        "引用位置": [
+          "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt:41",
+          "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt:65",
+          "android-app/app/src/test/java/com/timelordtty/mydca/data/repository/GoalForecastRepositoryTest.kt:84"
+        ]
+      }
+    ],
+    "新增日志位置": [],
+    "新增注释位置": [
+      "android-app/app/src/main/java/com/timelordtty/mydca/data/api/WealthHubApi.kt:39",
+      "android-app/app/src/main/java/com/timelordtty/mydca/data/repository/GoalBudgetRepository.kt:10",
+      "android-app/app/src/main/java/com/timelordtty/mydca/data/repository/GoalBudgetRepository.kt:17",
+      "backend/src/main/java/com/timelordtty/dca/controller/GoalForecastController.java:15",
+      "backend/src/main/java/com/timelordtty/dca/dto/GoalForecastDTO.java:10",
+      "backend/src/main/java/com/timelordtty/dca/dto/MultiGoalScenarioDTO.java:8",
+      "backend/src/main/java/com/timelordtty/dca/service/GoalForecastService.java:15",
+      "backend/src/main/java/com/timelordtty/dca/service/GoalForecastService.java:41",
+      "backend/src/main/java/com/timelordtty/dca/service/GoalForecastService.java:122",
+      "backend/src/main/java/com/timelordtty/dca/service/MultiGoalScenarioService.java:61",
+      "web/shared/src/api/goalForecast.ts:3"
+    ],
+    "使用提示": "这些内容只是搜索候选，不是最终缺陷。缺少日志或注释关键词不能单独证明存在问题；分级前必须核实配置继承、外部配置、生成文件以及目标版本中的真实内容。"
+  }
+}
