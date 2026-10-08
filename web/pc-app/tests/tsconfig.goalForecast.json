@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/components/GoalForecastWorkbench.vue", "../src/components/goalForecastModel.ts", "../src/env.d.ts"],
+  "exclude": []
+}

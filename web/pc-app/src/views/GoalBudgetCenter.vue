@@ -28,10 +28,12 @@
         </article><article v-else><h2>让计划拥有清晰的刻度</h2><p>选择一项目标查看完成率，或选择月度预算比较计划与实际。部分数据与未知金额保留原始状态。</p></article>
       </main>
     </div>
+    <GoalForecastWorkbench />
   </section>
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import GoalForecastWorkbench from '../components/GoalForecastWorkbench.vue'
 import { goalApi, budgetApi, incomeCategories, expenseCategories } from '@wealth-hub/shared'
 import type { Goal, Budget, GoalConfig, BudgetConfig, GoalProgress, BudgetComparison } from '@wealth-hub/shared'
 import { labels, amount, percent, failure, validateGoal, validateBudget } from '../components/goalBudgetModel'

@@ -49,3 +49,4 @@ export { todoApi } from './todo'
 export { backtestApi } from './backtest'
 
 export * from './goalBudget'
+export * from './goalForecast'

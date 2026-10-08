@@ -26,3 +26,4 @@ export type { PendingSettlement } from './order'
 export type { Category } from '../constants/categories'
 
 export * from './goalBudget'
+export * from './goalForecast'

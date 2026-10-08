@@ -13,6 +13,7 @@ const budget = (items = [item()]) => ({ name: '月度计划', month: '2026-10', 
 async function setup(goalApi, budgetApi = {}) {
   const source = await readFile(new URL('src/views/GoalBudgetCenter.vue', root), 'utf8')
   let script = compileScript(parse(source).descriptor, { id: 'goal-budget-test' }).content
+  script = script.replace(/import GoalForecastWorkbench from '[^']+'/g, 'const GoalForecastWorkbench = {}')
   script = script.replace(/import \{([^}]+)\} from 'vue'/g, (_, names) => `const {${names.replace(/ as /g, ': ')}} = globalThis.__goalBudget.vue`)
   script = script.replace(/import \{([^}]+)\} from '@wealth-hub\/shared'/g, (_, names) => `const {${names}} = globalThis.__goalBudget`)
   script = script.replace(/import \{([^}]+)\} from '..\/components\/goalBudgetModel'/g, (_, names) => `const {${names}} = globalThis.__goalBudget.model`)
