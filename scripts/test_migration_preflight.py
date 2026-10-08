@@ -32,6 +32,21 @@ class PreflightTests(unittest.TestCase):
         for selected in cases:
             self.assertTrue(preflight.check(ROOT, selected=selected)["errors"])
 
+    def test_cross_group_dependencies_reject_individual_reordering(self):
+        for route in ("init", "migration"):
+            plan = preflight.check(ROOT, route)["review_order_only_not_executable"]
+            pairs = preflight.paths()
+            for before, after in [(pairs[0][1 if route == "init" else 2], pairs[1][1 if route == "init" else 2]),
+                                  (preflight.SUPPLEMENTS[2], pairs[1][1 if route == "init" else 2]),
+                                  (pairs[3][1 if route == "init" else 2], pairs[4][1 if route == "init" else 2])]:
+                changed = plan.copy()
+                changed.remove(after)
+                changed.insert(changed.index(before), after)
+                self.assertTrue(preflight.check(ROOT, route, changed)["errors"])
+            if route == "init":
+                changed = plan[1:] + plan[:1]
+                self.assertTrue(preflight.check(ROOT, route, changed)["errors"])
+
     def test_db001_exact_copy(self):
         _, init, migration = preflight.paths()[0]
         self.assertEqual((ROOT / init).read_bytes(), (ROOT / migration).read_bytes())

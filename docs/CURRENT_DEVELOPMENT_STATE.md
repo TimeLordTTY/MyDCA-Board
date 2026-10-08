@@ -8,6 +8,10 @@
 
 ## 当前阶段
 
+v0.21 数据就绪发布硬化：Android 0.21.0 / 22。PC 展示个人/家庭管理员诊断，Android 目标/预算页展示个人只读诊断与来源详情。READY 仅表示可读，UNKNOWN/PARTIAL 不当零；行情三日窗口、预算月份与诊断时间分别标明。schema 始终未知，不执行迁移或财务写入。详见 `docs/mydca_v021_release_hardening_20261008.md`。
+
+四个上游提交均在本地树。DB-001 通用初始化缺口已修复；v0.14～v0.19 双路径与重复运行保护仅经离线静态复核，隔离数据库演练 NOT_RUN，目标环境待部署方验证。未连接数据库、未部署、未推送，无 v0.21 CI 制品证据。真实角色登录、设备断网、无障碍与 goal_only 汇总由 owner/AiCore/Hermes 后续验收。
+
 v0.20 目标与现金流情景发布硬化：Android 0.20.0 / 21 与 CI 预期命名统一。PC 手动对比单目标及2至8个同作用域、同币种目标，共享月度结余仅计算一次，超限不生成可行进度；Android 展示12个月零收益情景，未声明完整现金流覆盖，不推断自由现金或达成日期。后端支持可选用户年化数学假设，始终保留0%基线；两个客户端当前仅使用零收益。PC 年份上界拒绝整个超界期间，避免截短输入。详见 `docs/mydca_v020_release_hardening_20261008.md`。
 
 四个上游提交均在本地树，代码与本地回归可追溯；外部 AiCore Delivery Manifest/企业微信收据未在本任务核验，不声称 Goal 已验收。情景 POST 为只读事务，无新 SQL、migration、持久化或财务写入。未连接数据库、未推送、无真实 CI APK 证据；真机、真实权限与目标环境验收待人工完成，goal_only 汇总由 AiCore/Hermes 负责。
@@ -40,8 +44,8 @@ v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
 当前 Android 应用版本：
-- `versionName = 0.20.0`
-- `versionCode = 21`
+- `versionName = 0.21.0`
+- `versionCode = 22`
 
 v0.15 已加入持久化的 owner 作用域回测历史、2 至 5 条历史对比、只读策略研究候选与可校验证据包，以及 PC/Android 每日财富雷达。PC 策略实验室提供历史、对比、候选与证据导出；Android 展示只读雷达和最近成功回测。雷达未知值保留 `null`/「未知」，刷新失败的旧快照明确标识；研究结果不生成订单或交易。详见 `docs/mydca_v015_release_hardening_20260930.md`。
 
@@ -163,6 +167,10 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 
 ## Android CI APK 真实证据
 
+### v0.21.0
+- 尚无真实 CI source commit / Run ID / Artifact ID / APK SHA-256；仅本地提交、不 push。
+- 预期制品：`mydca-android-v0.21.0-<full-sha>`；APK：`MyDCA-Board-v0.21.0-<short-sha>.apk`。本地构建不代表 CI 交付。
+
 ### v0.20.0
 - 尚无真实 CI source commit / Run ID / Artifact ID / APK SHA-256；本次仅本地提交、不 push。
 - 预期制品：`mydca-android-v0.20.0-<full-sha>`；APK：`MyDCA-Board-v0.20.0-<short-sha>.apk`。本地构建不代表 GitHub CI 成功。
@@ -265,6 +273,6 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 
 ## 下一工程任务
 
-v0.20 工程验证见发布硬化报告。下一步由 owner/AiCore 核验上游 Delivery Manifest、goal_only 汇总收据，安排真实权限、PC 键盘与断网、Android TalkBack/真机验收及推送后的 CI 制品证据。当前不执行部署或财务操作。
+v0.21 工程验证见发布硬化报告。下一步由 owner/AiCore 核验上游 Delivery Manifest、goal_only 汇总收据，安排真实权限、PC 键盘与断网、Android TalkBack/真机验收及推送后的 CI 制品证据。当前不执行部署或财务操作。
 
 目标环境的历史目录配置、未部署 migration 审核与执行仍需 owner 单独安排。任何生产数据库迁移、真实财务记录修改或交易均不属于本次授权。

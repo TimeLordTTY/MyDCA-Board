@@ -31,10 +31,10 @@ fun DataReadinessCard(api: WealthHubApi, month: String) {
         if (data != null) {
             KeyValueRow("诊断时间", data.checkedAt ?: "未知")
             if (state.error != null || state.stale(Instant.now())) Text("旧快照或时间未核实，不代表当前数据就绪；请手动刷新。")
-            data.evidence.forEach { item -> Text("${readinessArea(item.area)}：${readinessLabel(item.state)}") }
+            data.evidence.forEach { item -> Text("${readinessArea(item.area)}：${readinessEvidenceLabel(item.area, item.state)}") }
             OutlinedButton(onClick = { details = !details }) { Text(if (details) "收起来源详情" else "查看来源详情") }
             if (details) data.evidence.forEach { item ->
-                SectionCard(readinessArea(item.area), readinessLabel(item.state)) {
+                SectionCard(readinessArea(item.area), readinessEvidenceLabel(item.area, item.state)) {
                     Text(item.reason ?: "原因未知，需人工核验")
                     KeyValueRow("逻辑来源", item.source ?: "未知")
                     KeyValueRow("来源更新时间", item.dataTime ?: "未知")

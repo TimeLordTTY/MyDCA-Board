@@ -40,3 +40,7 @@ fun readinessArea(value: String?) = when (value) {
     "SCHEMA" -> "数据库部署"
     else -> "未识别项目"
 }
+
+// 业务读取不能证明数据库部署；即使服务误报 READY 也保留人工核验边界。
+fun readinessEvidenceLabel(area: String?, state: String?) =
+    if (area == "SCHEMA") "未知 UNKNOWN · 未核实部署" else readinessLabel(state)

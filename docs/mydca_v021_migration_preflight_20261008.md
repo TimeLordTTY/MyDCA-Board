@@ -71,3 +71,7 @@ DB-001 修复：新增 init 文件与 `sql/updatesql/20260610/01_create_draft_le
 验证：离线回归 5 项通过，包含 init/migration、DB-001 字节一致、重复路径/顺序/缺步骤、缺失对象与结构漂移、无效编码和 CLI 0/1/2；两条路径静态预检通过。post-task compile hook 的后端 package 与前端 build 通过，git diff --check 通过。hook 使用 MaxFixRounds=0，由当前代理负责修复，避免自动修复扩展到授权范围之外；成功仅 stdout/log，无声音或弹窗。PowerShell 外层启动遇到进程环境兼容错误后改用 cmd 启动同一 hook，未修改 hook。
 
 部署方签署前还需逐对象比对实际列类型、精度、空值、默认值、CHECK/JSON、主键、索引顺序、owner/family 隔离语义，确认只应用未部署脚本。记录环境标识（不要记录密码）、脚本 hash、执行人/审批人/时间、只读核验结果、备份与恢复演练记录；未提供这些证据之前，最终状态始终是 **待部署方验证**。
+
+## 发布硬化复核
+
+2026-10-08 发布硬化补齐跨组前置顺序校验：基础 DDL 先于补充 init/结算 ALTER，草稿及 v0.8 三步骤先于生命周期，风险规则先于提醒历史。默认核对清单同步排序；两条路径及单独重排反例经6项离线测试通过。清单仍仅供人工审核，不执行 SQL，不核验既有 schema。详见 `mydca_v021_release_hardening_20261008.md`。

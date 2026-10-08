@@ -1,7 +1,7 @@
 # 财富中枢系统（Wealth Hub / MyDCA-Board）
 
 **作者**：timelordtty  
-**当前事实同步**：2026-10-02
+**当前事实同步**：2026-10-08
 
 财富中枢是个人/家庭财富管理平台。当前工程已进入 Phase3，重点是在统一账本和草稿安全边界之上，提供 PC/Web 与 Android 原生端的日常资产查看、记账采集、人工确认、行情/指标和后续策略能力。
 
@@ -17,7 +17,8 @@
 
 ## 当前版本与里程碑
 
-- Android：`0.20.0 / versionCode 21`；CI APK 证据待推送后真实成功构建回填。
+- v0.21 数据就绪：PC 个人/家庭管理员诊断与 Android 个人只读提示；UNKNOWN/PARTIAL 不当零，数据库部署始终未核实。DB-001 初始化覆盖已补齐，迁移仅离线静态预检，未演练或部署。发布记录见 `docs/mydca_v021_release_hardening_20261008.md`。
+- Android：`0.21.0 / versionCode 22`；CI APK 证据待推送后真实成功构建回填。
 - v0.20 目标现金流情景：PC 手动对比单目标或多目标共享结余，Android 查看12个月零收益情景；UNKNOWN/PARTIAL 不推断自由现金。后端支持可选用户收益数学假设，页面默认零收益，不保存或执行情景。发布验证见 `docs/mydca_v020_release_hardening_20261008.md`。
 - v0.19 目标与预算：PC 创建/编辑目标、暂停/恢复/归档与月度计划，Android 仅 GET 查看目标进度与本月预算；PARTIAL/UNKNOWN 不当零，不自动记账、转账、建单、结算或交易。详见 `docs/mydca_v019_release_hardening_20261002.md`。
 - v0.19 目标/预算 migration 仅提交未部署；`backend/migrations/20261002_goal_tracking.sql`、`20261002_monthly_budget.sql` 与对应初始化脚本择一人工部署。

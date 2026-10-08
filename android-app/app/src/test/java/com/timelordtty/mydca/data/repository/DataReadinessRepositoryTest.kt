@@ -68,5 +68,8 @@ class DataReadinessRepositoryTest {
         assertEquals("不可用 UNAVAILABLE", readinessLabel("UNAVAILABLE"))
         for (value in listOf(null, "UNKNOWN", "FUTURE")) assertEquals("未知 UNKNOWN", readinessLabel(value))
         assertEquals("数据库部署", readinessArea("SCHEMA"))
+        for (state in listOf(null, "READY", "PARTIAL", "UNKNOWN", "UNAVAILABLE"))
+            assertEquals("未知 UNKNOWN · 未核实部署", readinessEvidenceLabel("SCHEMA", state))
+        assertEquals("部分可用 PARTIAL", readinessEvidenceLabel("BUDGETS", "PARTIAL"))
     }
 }

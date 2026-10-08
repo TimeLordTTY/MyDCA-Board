@@ -5844,7 +5844,6 @@
   "review_order_only_not_executable": [
     "sql/initsql/DDL.sql",
     "sql/initsql/20260610_draft_ledger_entry.sql",
-    "sql/initsql/20260928_draft_lifecycle_event.sql",
     "backend/sql/initsql/research_plan.sql",
     "backend/sql/initsql/risk_watch.sql",
     "backend/sql/initsql/risk_alert_history.sql",
@@ -5854,6 +5853,7 @@
     "sql/updatesql/20260927/01_precheck_draft_ledger_source_duplicates.sql",
     "sql/updatesql/20260927/02_normalize_blank_draft_ledger_source_ref.sql",
     "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+    "sql/initsql/20260928_draft_lifecycle_event.sql",
     "sql/updatesql/20260929/01_settlement_audit_link.sql"
   ],
   "errors": [],

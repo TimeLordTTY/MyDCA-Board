@@ -1,8 +1,8 @@
 {
   "结构版本": 1,
-  "仓库": "D:\\Project\\ai-core-runtime\\agent-runtime\\dispatch\\dual-worker-state\\worktrees\\1b911c044e83de39\\task-mydca-v021-migration-readiness-audit-20261008",
-  "目标版本": "WORKTREE",
-  "基线版本": "",
+  "仓库": "D:\\Project\\ai-core-runtime\\agent-runtime\\dispatch\\dual-worker-state\\worktrees\\1b911c044e83de39\\task-mydca-v021-release-hardening-20261008",
+  "目标版本": "99adee18abc08b79474b5fd3288fb8064d32ac02",
+  "基线版本": "15199a4",
   "配置清单": {
     "配置审查范围": "仅 application-dev.yml",
     "application-dev.yml文件数": 1,
@@ -22,7 +22,7 @@
     "有脚本覆盖的Mapper对象数": 28,
     "无仓库脚本覆盖的Mapper对象数": 0,
     "变更Mapper引用但无脚本覆盖的对象数": 0,
-    "本分支新增引用数据库对象数": 28,
+    "本分支新增引用数据库对象数": 0,
     "本分支新增引用但无脚本覆盖的对象数": 0,
     "仅非初始化脚本存在建表但通用初始化缺失对象数": 0,
     "未完整解析Mapper数": 0,
@@ -3286,8 +3286,8 @@
         "backend/src/main/resources/mapper/LedgerTxnMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "写数据",
@@ -3336,8 +3336,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/AllocationPolicyMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3376,8 +3376,8 @@
         "backend/src/main/resources/mapper/BrokerFeeConfigMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "写数据",
@@ -3419,8 +3419,8 @@
         "backend/src/main/resources/mapper/DraftLedgerEntryMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表",
@@ -3461,8 +3461,8 @@
         "backend/src/main/resources/mapper/DraftLifecycleEventMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3500,8 +3500,8 @@
         "backend/src/main/resources/mapper/FamilyMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "写数据",
@@ -3540,8 +3540,8 @@
         "backend/src/main/resources/mapper/FundSellFeeTierMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表",
@@ -3581,8 +3581,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/GoalTrackingMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3619,8 +3619,8 @@
         "backend/src/main/resources/mapper/HoldingsSnapshotMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3654,8 +3654,8 @@
         "backend/src/main/resources/mapper/IndicatorDailyMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "删表",
@@ -3699,8 +3699,8 @@
         "backend/src/main/resources/mapper/LedgerTxnMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表",
@@ -3742,8 +3742,8 @@
         "backend/src/main/resources/mapper/LedgerTxnMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表",
@@ -3780,8 +3780,8 @@
         "backend/src/main/resources/mapper/MarketBarDailyMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3816,8 +3816,8 @@
         "backend/src/main/resources/mapper/MarketQuoteRealtimeMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3851,8 +3851,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/MonthlyBudgetMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3890,8 +3890,8 @@
         "backend/src/main/resources/mapper/NavMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "删表",
@@ -3929,8 +3929,8 @@
         "backend/src/main/resources/mapper/NetWorthSnapshotMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -3964,8 +3964,8 @@
         "backend/src/main/resources/mapper/OrderFundingLineMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表",
@@ -4005,8 +4005,8 @@
         "backend/src/main/resources/mapper/OrderMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "删表",
@@ -4045,8 +4045,8 @@
         "backend/src/main/resources/mapper/ProductMasterMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "写数据",
@@ -4089,8 +4089,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/ResearchPlanMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -4128,8 +4128,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -4166,8 +4166,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -4205,8 +4205,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -4243,8 +4243,8 @@
         "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表"
@@ -4281,8 +4281,8 @@
         "backend/src/main/resources/mapper/SettlementConfirmMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "建表",
@@ -4320,8 +4320,8 @@
         "backend/src/main/resources/mapper/UserFamilyRoleMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "写数据",
@@ -4359,8 +4359,8 @@
         "backend/src/main/resources/mapper/UserMapper.xml"
       ],
       "是否来自变更Mapper": false,
-      "基线是否已引用": false,
-      "是否本分支新增引用": true,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
       "脚本覆盖": true,
       "脚本动作": [
         "写数据",

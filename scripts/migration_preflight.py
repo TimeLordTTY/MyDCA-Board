@@ -71,6 +71,11 @@ def check(repo, route="init", selected=None):
         if not exists or not equal:
             errors.append(f"双路径缺失或结构不一致: {name}")
     plan = selected if selected is not None else (["sql/initsql/DDL.sql"] if route == "init" else []) + [p[1 if route == "init" else 2] for p in paths()] + SUPPLEMENTS
+    # 默认核对清单也遵循跨组依赖顺序。
+    if selected is None:
+        lifecycle = paths()[1][1 if route == "init" else 2]
+        plan.remove(lifecycle)
+        plan.insert(plan.index(SUPPLEMENTS[2]) + 1, lifecycle)
     if len(plan) != len(set(plan)):
         errors.append("计划包含重复脚本")
     for pair in pairs:
@@ -95,6 +100,18 @@ def check(repo, route="init", selected=None):
         chosen = next((p for p in (init, migration) if p in plan), None)
         if name == "draft_ledger_entry" and chosen and SUPPLEMENTS[0] in plan and plan.index(chosen) > plan.index(SUPPLEMENTS[0]):
             errors.append("草稿建表必须早于强幂等预检")
+    # 同组择一后，仍须检查跨组前置；不是只检查强幂等三步的相对顺序。
+    chosen = {name: next((p for p in (init, migration) if p in plan), None)
+              for name, init, migration in paths()}
+    dependencies = [(chosen["draft_ledger_entry"], chosen["draft_lifecycle_event"]),
+                    (SUPPLEMENTS[2], chosen["draft_lifecycle_event"]),
+                    (chosen["risk_watch"], chosen["risk_alert_history"])]
+    if route == "init":
+        dependencies += [("sql/initsql/DDL.sql", p) for p in chosen.values()]
+        dependencies.append(("sql/initsql/DDL.sql", SUPPLEMENTS[3]))
+    for before, after in dependencies:
+        if before and after and before in plan and after in plan and plan.index(before) > plan.index(after):
+            errors.append(f"前置步骤顺序错误: {before} → {after}")
     for row in matrix:
         if not row["脚本覆盖"] or not row["通用初始化建表覆盖"]:
             errors.append(f"缺失对象/通用初始化: {row['数据库对象']}")

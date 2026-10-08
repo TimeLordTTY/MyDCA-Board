@@ -22,6 +22,11 @@
 
 ## 当前关键文档
 
+- v0.21 发布硬化与人工验收：`docs/mydca_v021_release_hardening_20261008.md`
+- v0.21 离线迁移预检：`docs/mydca_v021_migration_preflight_20261008.md`；完整矩阵 `scripts/v021_database_coverage.json`、`scripts/v021_migration_preflight.json`
+- v0.21 后端/PC/Android 契约：`backend/DATA_READINESS_API.md`、`web/pc-app/DATA_READINESS.md`、`android-app/DATA_READINESS_VIEW.md`
+- v0.21 上游全量差异：`docs/v021_review_evidence.json`
+
 - v0.20 发布硬化与实际验证：`docs/mydca_v020_release_hardening_20261008.md`
 - v0.20 单目标现金流契约：`backend/GOAL_CASHFLOW_FORECAST_API.md`
 - v0.20 多目标共享结余契约：`backend/MULTI_GOAL_SCENARIO_API.md`
