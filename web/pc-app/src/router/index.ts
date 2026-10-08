@@ -32,6 +32,7 @@ const router = createRouter({
       redirect: '/dashboard',
       meta: { requiresAuth: true },
       children: [
+        { path: 'data-readiness', name: 'DataReadiness', component: () => import('../views/DataReadiness.vue') },
         { path: 'goal-budget-center', name: 'GoalBudgetCenter', component: () => import('../views/GoalBudgetCenter.vue') },
         { path: 'rebalance-center', name: 'RebalanceCenter', component: () => import('../views/RebalanceCenter.vue') },
         { path: 'risk-center', name: 'RiskCenter', component: () => import('../views/RiskCenter.vue') },
