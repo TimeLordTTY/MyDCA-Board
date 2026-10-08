@@ -36,6 +36,10 @@ import retrofit2.http.Query
  * 只声明查看、预览和用户手动确认相关接口；移动端不直接写数据库。
  */
 interface WealthHubApi {
+    /** Read-only simulation; no persistence or financial side effects. */
+    @POST("api/v2/goals/{id}/forecast")
+    suspend fun goalForecast(@Path("id") id: String, @Body request: com.timelordtty.mydca.data.dto.GoalForecastRequestDto): com.timelordtty.mydca.data.dto.GoalForecastDto
+
     @GET("api/v2/goals")
     suspend fun goals(@Query("page") page: Int = 0, @Query("size") size: Int = 20): List<com.timelordtty.mydca.data.dto.GoalDto>
 

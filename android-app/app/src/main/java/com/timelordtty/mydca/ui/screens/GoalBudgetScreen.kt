@@ -15,6 +15,12 @@ import java.time.YearMonth
 
 @Composable
 fun GoalBudgetScreen(api: WealthHubApi, onClose: () -> Unit) {
+    var forecastGoal by remember { mutableStateOf<com.timelordtty.mydca.data.dto.GoalDto?>(null) }
+    val selected = forecastGoal
+    if (selected != null) {
+        GoalForecastScreen(api, selected) { forecastGoal = null }
+        return
+    }
     BackHandler(onBack = onClose)
     val repository = remember(api) { GoalBudgetRepository(api) }
     var budgetTab by remember { mutableStateOf(false) }
@@ -64,6 +70,7 @@ fun GoalBudgetScreen(api: WealthHubApi, onClose: () -> Unit) {
                 onPrevious = { page-- }, onNext = { page++ }) { goals ->
                 goals.forEach { goal ->
                     SectionCard(goal.config.name, "${goal.config.currency} · ${planningScope(goal.config.scope)}") {
+                        OutlinedButton(onClick = { forecastGoal = goal }) { Text("查看目标预测") }
                         KeyValueRow("目标日期", goal.config.targetDate)
                         KeyValueRow("目标金额", observedMoney(goal.config.targetValue, "OK", goal.config.currency))
                         KeyValueRow("状态", when (goal.config.state) { "ACTIVE" -> "进行中"; "PAUSED" -> "已暂停"; "ARCHIVED" -> "已归档"; else -> "未知" })
@@ -100,7 +107,7 @@ private fun <T> ReadPage(title: String, page: Int, refresh: Int,
 }
 
 @Composable
-private fun <T> ReadObservation(id: String, refresh: Int,
+internal fun <T> ReadObservation(id: String, refresh: Int,
     load: suspend () -> com.timelordtty.mydca.core.network.NetworkResult<T>, content: @Composable (T) -> Unit) {
     var state by remember(id, refresh) { mutableStateOf(ResearchReadState<T>()) }
     var retry by remember(id, refresh) { mutableStateOf(0) }
