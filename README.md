@@ -18,7 +18,7 @@
 ## 当前版本与里程碑
 
 - v0.21 数据就绪：PC 个人/家庭管理员诊断与 Android 个人只读提示；UNKNOWN/PARTIAL 不当零，数据库部署始终未核实。DB-001 初始化覆盖已补齐，迁移仅离线静态预检，未演练或部署。发布记录见 `docs/mydca_v021_release_hardening_20261008.md`。
-- Android：`0.21.0 / versionCode 22`；CI APK 证据待推送后真实成功构建回填。
+- Android：`0.21.0 / versionCode 22`；debug APK 已核验：[成功 CI Run 37724100264](https://github.com/TimeLordTTY/MyDCA-Board/actions/runs/37724100264)、[Artifact 11527146228](https://github.com/TimeLordTTY/MyDCA-Board/actions/runs/37724100264/artifacts/11527146228)。下载字节 SHA-256 与 CI 校验文件一致，详见 [交付凭证](docs/mydca_v021_android_ci_evidence_20261008.md)；仅调试包，真机安装待主人验收。
 - v0.20 目标现金流情景：PC 手动对比单目标或多目标共享结余，Android 查看12个月零收益情景；UNKNOWN/PARTIAL 不推断自由现金。后端支持可选用户收益数学假设，页面默认零收益，不保存或执行情景。发布验证见 `docs/mydca_v020_release_hardening_20261008.md`。
 - v0.19 目标与预算：PC 创建/编辑目标、暂停/恢复/归档与月度计划，Android 仅 GET 查看目标进度与本月预算；PARTIAL/UNKNOWN 不当零，不自动记账、转账、建单、结算或交易。详见 `docs/mydca_v019_release_hardening_20261002.md`。
 - v0.19 目标/预算 migration 仅提交未部署；`backend/migrations/20261002_goal_tracking.sql`、`20261002_monthly_budget.sql` 与对应初始化脚本择一人工部署。
