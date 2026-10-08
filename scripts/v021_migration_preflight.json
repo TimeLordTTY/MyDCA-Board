@@ -1,0 +1,5880 @@
+{
+  "evidence": {
+    "scripts_exist": true,
+    "static_coverage_pass": true,
+    "disposable_database_rehearsal": "NOT_RUN",
+    "target_manual_deployment": "待部署方验证"
+  },
+  "historical_v020_sha256": "386a1a604d9af1514ee36589ee304ab7c952995a18242d1f06196a5b396c4157",
+  "summary": {
+    "Mapper文件总数": 25,
+    "XML Mapper文件数": 20,
+    "注解Mapper文件数": 5,
+    "Mapper SQL语句总数": 164,
+    "Mapper引用数据库对象总数": 28,
+    "SQL脚本文件总数": 43,
+    "脚本涉及数据库对象总数": 66,
+    "有脚本覆盖的Mapper对象数": 28,
+    "无仓库脚本覆盖的Mapper对象数": 0,
+    "变更Mapper引用但无脚本覆盖的对象数": 0,
+    "本分支新增引用数据库对象数": 0,
+    "本分支新增引用但无脚本覆盖的对象数": 0,
+    "仅非初始化脚本存在建表但通用初始化缺失对象数": 0,
+    "未完整解析Mapper数": 0,
+    "动态表名引用数": 0,
+    "数量闭环": true,
+    "未完整解析Mapper": [],
+    "动态表名引用": []
+  },
+  "mappers": [
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/AccountMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.AccountMapper",
+      "语句数": 16,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByIds",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByCode",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByOwner",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectVisibleRealById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectVirtualAccountsByOwner",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectChildren",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectLeafAccounts",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByLinkedProduct",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByLinkedProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectAllLinkedAccounts",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateBalance",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateReservedAmount",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateInitialShares",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "accounts",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/BrokerFeeConfigMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.BrokerFeeConfigMapper",
+      "语句数": 6,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByAccountAndRuleType",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByAccountId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "broker_fee_config",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/DraftLedgerEntryMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.DraftLedgerEntryMapper",
+      "语句数": 12,
+      "语句": [
+        {
+          "标签": "sql",
+          "语句ID": "VisibleCondition",
+          "数据库方言": "",
+          "数据库对象": [],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectVisibleById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectVisibleBySource",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectVisibleByIdForUpdate",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectVisibleList",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "countVisibleByStatus",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateDraftContent",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updatePreview",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "markConfirmed",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "markIgnored",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "reopenIgnored",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_ledger_entry",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/DraftLifecycleEventMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.DraftLifecycleEventMapper",
+      "语句数": 2,
+      "语句": [
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_lifecycle_event",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByDraftId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "draft_lifecycle_event",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/FamilyMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.FamilyMapper",
+      "语句数": 4,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "families",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByCode",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "families",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "families",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "families",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/FundSellFeeTierMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.FundSellFeeTierMapper",
+      "语句数": 7,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByProductIdAndHoldingDays",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteByProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "fund_sell_fee_tier",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/HoldingsSnapshotMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.HoldingsSnapshotMapper",
+      "语句数": 2,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByUserAndDate",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "holdings_snapshot",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "upsert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "holdings_snapshot",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/IndicatorDailyMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.IndicatorDailyMapper",
+      "语句数": 4,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "indicator_daily",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectLatest",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "indicator_daily",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "indicator_daily",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "indicator_daily",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/LedgerPostingMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.LedgerPostingMapper",
+      "语句数": 14,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByTxnId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByTxnIds",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByAccountId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByAccountTypeAndOwner",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "sumDebitByAccount",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "sumCreditByAccount",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "batchInsert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByAccountIdOrderByTxnTime",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByAccountIdsOrderByTxnTime",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "batchUpdateBalanceAfter",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteByTxnId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectDistinctAccountIds",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectLatestTxnTimeByAccountIds",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/LedgerTxnMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.LedgerTxnMapper",
+      "语句数": 10,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByTxnId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByOrderId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByBizGroupKey",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByCondition",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "countByCondition",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteByTxnId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectStatsPostings",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "accounts",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/MarketBarDailyMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.MarketBarDailyMapper",
+      "语句数": 4,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_bar_daily",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectLatest",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_bar_daily",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_bar_daily",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_bar_daily",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/MarketQuoteRealtimeMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.MarketQuoteRealtimeMapper",
+      "语句数": 6,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByProductIds",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectLatest",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectHistory",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteByQuoteTimeBefore",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "market_quote_realtime",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/NavMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.NavMapper",
+      "语句数": 5,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "nav",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectLatest",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "nav",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByDate",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "nav",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "nav",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "nav",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/NetWorthSnapshotMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.NetWorthSnapshotMapper",
+      "语句数": 2,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByUserAndDate",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "net_worth_snapshot",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "upsert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "net_worth_snapshot",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/OrderFundingLineMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.OrderFundingLineMapper",
+      "语句数": 6,
+      "语句": [
+        {
+          "标签": "sql",
+          "语句ID": "Base_Column_List",
+          "数据库方言": "",
+          "数据库对象": [],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByOrderId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "order_funding_line",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "order_funding_line",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "batchInsert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "order_funding_line",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "deleteByOrderId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "order_funding_line",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "order_funding_line",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "sumPendingSellSharesByAccount",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "order_funding_line",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "orders",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/OrderMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.OrderMapper",
+      "语句数": 7,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByOrderId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByStatus",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByUserId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectConfirmedByProductId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "orders",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/ProductMasterMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.ProductMasterMapper",
+      "语句数": 7,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByCode",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByCodeOnly",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByCondition",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "batchUpdateSortOrder",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "product_master",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/SettlementConfirmMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.SettlementConfirmMapper",
+      "语句数": 2,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByOrderId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "settlement_confirm",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "settlement_confirm",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/UserFamilyRoleMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.UserFamilyRoleMapper",
+      "语句数": 7,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectByUserId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByFamilyId",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectRole",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "countAdmins",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateRole",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "delete",
+          "语句ID": "delete",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "user_family_roles",
+              "操作": "删除"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/resources/mapper/UserMapper.xml",
+      "命名空间": "com.timelordtty.dca.mapper.UserMapper",
+      "语句数": 8,
+      "语句": [
+        {
+          "标签": "select",
+          "语句ID": "selectById",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectByUsername",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "select",
+          "语句ID": "selectActiveUserIds",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "insert",
+          "语句ID": "insert",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "update",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateProfile",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updatePasswordHash",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "标签": "update",
+          "语句ID": "updateLastLoginAt",
+          "数据库方言": "",
+          "数据库对象": [
+            {
+              "数据库对象": "users",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/java/com/timelordtty/dca/mapper/AllocationPolicyMapper.java",
+      "语句数": 4,
+      "语句": [
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "allocation_policy",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "allocation_policy",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "allocation_policy",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "allocation_policy",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/java/com/timelordtty/dca/mapper/GoalTrackingMapper.java",
+      "语句数": 4,
+      "语句": [
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "goal_tracking",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "goal_tracking",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "goal_tracking",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "goal_tracking",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/java/com/timelordtty/dca/mapper/MonthlyBudgetMapper.java",
+      "语句数": 5,
+      "语句": [
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "monthly_budget",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "monthly_budget",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "monthly_budget",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "monthly_budget",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "ledger_txn",
+              "操作": "查询"
+            },
+            {
+              "数据库对象": "ledger_posting",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/java/com/timelordtty/dca/mapper/ResearchPlanMapper.java",
+      "语句数": 4,
+      "语句": [
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "research_plan",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "research_plan",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "research_plan",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "research_plan",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    },
+    {
+      "Mapper文件": "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java",
+      "语句数": 16,
+      "语句": [
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_rule",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_rule",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_rule",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_rule",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_snapshot",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_snapshot",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_snapshot",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_rule",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_event",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_event",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_event",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_event",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_event",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Update",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_event",
+              "操作": "修改"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Insert",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_mute",
+              "操作": "新增"
+            }
+          ],
+          "动态表名": []
+        },
+        {
+          "注解": "Select",
+          "数据库对象": [
+            {
+              "数据库对象": "risk_watch_mute",
+              "操作": "查询"
+            }
+          ],
+          "动态表名": []
+        }
+      ],
+      "解析状态": "已解析"
+    }
+  ],
+  "sql_scripts": [
+    {
+      "脚本文件": "backend/migrations/20261001_research_plan.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "research_plan",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/migrations/20261002_allocation_policy.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "allocation_policy",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/migrations/20261002_goal_tracking.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "goal_tracking",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/migrations/20261002_monthly_budget.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "monthly_budget",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/migrations/20261002_risk_alert_history.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "risk_watch_event",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "risk_watch_mute",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/migrations/20261002_risk_watch.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "risk_watch_rule",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "risk_watch_snapshot",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/sql/initsql/allocation_policy.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "allocation_policy",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/sql/initsql/goal_tracking.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "goal_tracking",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/sql/initsql/monthly_budget.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "monthly_budget",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/sql/initsql/research_plan.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "research_plan",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/sql/initsql/risk_alert_history.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "risk_watch_event",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "risk_watch_mute",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/sql/initsql/risk_watch.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "risk_watch_rule",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "risk_watch_snapshot",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "backend/src/main/resources/db/migration/V2026012801__add_funding_line_type.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "order_funding_line",
+          "脚本动作": "改表"
+        },
+        {
+          "数据库对象": "order_funding_line",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/V1/DDL.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 29,
+      "数据库对象": [
+        {
+          "数据库对象": "account_groups",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "account_pool_rules",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "advisor_suggestion",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "backtest_daily",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "backtest_summary",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "backtest_trades",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "budget_trace",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "categories",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "daily_balance",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "daily_snapshot",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "fund_custody_transfer",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "indicator_daily",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "job_config",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "ledger",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "market_bar_d",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "market_quote_rt",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "nav",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "orders",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "pending_buy_pool",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "product_nav_range",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "product_strategy_bind",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "products",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "qdii_premium_rt",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "strategy_config",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "strategy_state",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "trade_fills",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "transactions",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "account_groups",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "account_pool_rules",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "advisor_suggestion",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "backtest_daily",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "backtest_summary",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "backtest_trades",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "budget_trace",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "categories",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "daily_balance",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "daily_snapshot",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "fund_custody_transfer",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "indicator_daily",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "job_config",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "ledger",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "market_bar_d",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "market_quote_rt",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "nav",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "orders",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "pending_buy_pool",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "product_nav_range",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "product_strategy_bind",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "products",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "qdii_premium_rt",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "strategy_config",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "strategy_state",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "trade_fills",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "transactions",
+          "脚本动作": "删表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/V1/DML.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 6,
+      "数据库对象": [
+        {
+          "数据库对象": "account_groups",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "account_pool_rules",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "categories",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "products",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "strategy_config",
+          "脚本动作": "写数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "draft_ledger_entry",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/initsql/20260928_draft_lifecycle_event.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "draft_lifecycle_event",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/initsql/DDL.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 31,
+      "数据库对象": [
+        {
+          "数据库对象": "users",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "families",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "user_family_roles",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "user_product",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "broker_fee_config",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "fund_sell_fee_tier",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "debt_contract",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "debt_installment",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "ledger_txn",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "ledger_posting",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "orders",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "settlement_confirm",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "order_funding_line",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "holdings_snapshot",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "net_worth_snapshot",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "market_bar_daily",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "market_quote_realtime",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "nav",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "indicator_daily",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "strategy_config",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "product_strategy_bind",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "suggestions",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "product_tags",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "portfolio_targets",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "trading_gears",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "backtest_plan",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "backtest_run",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "py_job",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/initsql/DML.sql",
+      "脚本类型": "通用初始化",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 5,
+      "数据库对象": [
+        {
+          "数据库对象": "users",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "families",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "user_family_roles",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "users",
+          "脚本动作": "更新数据"
+        },
+        {
+          "数据库对象": "product_name",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260111/01_init_admin_user.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 3,
+      "数据库对象": [
+        {
+          "数据库对象": "users",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "families",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "user_family_roles",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "users",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260112/01_init_product_master.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "product_name",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260112/02_add_product_sort_order.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "改表"
+        },
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260112/03_add_category_and_reimbursable_fields.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "ledger_txn",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260113/01_allow_fund_usage_null_for_credit_accounts.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260113/02_fix_virtual_account_subtype.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "删除数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260114/01_add_posting_balance_fields.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "ledger_posting",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260114/02_add_product_note_field.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "broker_fee_config",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260114/04_init_huabao_broker_fee_example.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 3,
+      "数据库对象": [
+        {
+          "数据库对象": "broker_fee_config",
+          "脚本动作": "写数据"
+        },
+        {
+          "数据库对象": "buy_fee_rate",
+          "脚本动作": "更新数据"
+        },
+        {
+          "数据库对象": "buy_min_fee",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "fund_sell_fee_tier",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260114/06_update_fee_rate_precision.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 3,
+      "数据库对象": [
+        {
+          "数据库对象": "product_master",
+          "脚本动作": "改表"
+        },
+        {
+          "数据库对象": "broker_fee_config",
+          "脚本动作": "改表"
+        },
+        {
+          "数据库对象": "fund_sell_fee_tier",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260121/01_add_linked_product_id_to_accounts.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260121/02_add_shares_to_order_funding_line.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "order_funding_line",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260122/01_add_mmf_shares_fields.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260131/01_fix_amount_precision.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "ledger_posting",
+          "脚本动作": "改表"
+        },
+        {
+          "数据库对象": "ledger_posting",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260205/01_fix_xiaohe_holding.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "accounts",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260604/01_add_boll_kdj_indicator_columns.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "indicator_daily",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 2,
+      "数据库对象": [
+        {
+          "数据库对象": "draft_ledger_entry",
+          "脚本动作": "建表"
+        },
+        {
+          "数据库对象": "current_timestamp",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260927/01_precheck_draft_ledger_source_duplicates.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 0,
+      "数据库对象": []
+    },
+    {
+      "脚本文件": "sql/updatesql/20260927/02_normalize_blank_draft_ledger_source_ref.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "draft_ledger_entry",
+          "脚本动作": "更新数据"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "draft_ledger_entry",
+          "脚本动作": "改表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "draft_lifecycle_event",
+          "脚本动作": "建表"
+        }
+      ]
+    },
+    {
+      "脚本文件": "sql/updatesql/20260929/01_settlement_audit_link.sql",
+      "脚本类型": "未分类",
+      "方言目录": [
+        "未标明"
+      ],
+      "数据库对象数": 1,
+      "数据库对象": [
+        {
+          "数据库对象": "settlement_confirm",
+          "脚本动作": "改表"
+        }
+      ]
+    }
+  ],
+  "object_matrix": [
+    {
+      "数据库对象": "accounts",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 3,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/AccountMapper.xml",
+        "backend/src/main/resources/mapper/LedgerPostingMapper.xml",
+        "backend/src/main/resources/mapper/LedgerTxnMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "写数据",
+        "删表",
+        "删除数据",
+        "建表",
+        "改表",
+        "更新数据"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 8,
+      "脚本文件": [
+        "sql/V1/DDL.sql",
+        "sql/V1/DML.sql",
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260113/01_allow_fund_usage_null_for_credit_accounts.sql",
+        "sql/updatesql/20260113/02_fix_virtual_account_subtype.sql",
+        "sql/updatesql/20260121/01_add_linked_product_id_to_accounts.sql",
+        "sql/updatesql/20260122/01_add_mmf_shares_fields.sql",
+        "sql/updatesql/20260205/01_fix_xiaohe_holding.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/V1/DDL.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "allocation_policy",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/AllocationPolicyMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_allocation_policy.sql",
+        "backend/sql/initsql/allocation_policy.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/allocation_policy.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_allocation_policy.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "broker_fee_config",
+      "Mapper操作": [
+        "修改",
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/BrokerFeeConfigMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "写数据",
+        "建表",
+        "改表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 4,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+        "sql/updatesql/20260114/04_init_huabao_broker_fee_example.sql",
+        "sql/updatesql/20260114/06_update_fee_rate_precision.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/updatesql/20260114/03_add_broker_fee_config_table.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "draft_ledger_entry",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/DraftLedgerEntryMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表",
+        "改表",
+        "更新数据"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 4,
+      "脚本文件": [
+        "sql/initsql/20260610_draft_ledger_entry.sql",
+        "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+        "sql/updatesql/20260927/02_normalize_blank_draft_ledger_source_ref.sql",
+        "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/20260610_draft_ledger_entry.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/updatesql/20260610/01_create_draft_ledger_entry.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "draft_lifecycle_event",
+      "Mapper操作": [
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/DraftLifecycleEventMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "sql/initsql/20260928_draft_lifecycle_event.sql",
+        "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/20260928_draft_lifecycle_event.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "families",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/FamilyMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "写数据",
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/initsql/DML.sql",
+        "sql/updatesql/20260111/01_init_admin_user.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "fund_sell_fee_tier",
+      "Mapper操作": [
+        "修改",
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/FundSellFeeTierMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表",
+        "改表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+        "sql/updatesql/20260114/06_update_fee_rate_precision.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "goal_tracking",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/GoalTrackingMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_goal_tracking.sql",
+        "backend/sql/initsql/goal_tracking.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/goal_tracking.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_goal_tracking.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "holdings_snapshot",
+      "Mapper操作": [
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/HoldingsSnapshotMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 1,
+      "脚本文件": [
+        "sql/initsql/DDL.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "indicator_daily",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/IndicatorDailyMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "删表",
+        "建表",
+        "改表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "sql/V1/DDL.sql",
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260604/01_add_boll_kdj_indicator_columns.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/V1/DDL.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "ledger_posting",
+      "Mapper操作": [
+        "修改",
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 3,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/MonthlyBudgetMapper.java",
+        "backend/src/main/resources/mapper/LedgerPostingMapper.xml",
+        "backend/src/main/resources/mapper/LedgerTxnMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表",
+        "改表",
+        "更新数据"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260114/01_add_posting_balance_fields.sql",
+        "sql/updatesql/20260131/01_fix_amount_precision.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "ledger_txn",
+      "Mapper操作": [
+        "修改",
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 3,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/MonthlyBudgetMapper.java",
+        "backend/src/main/resources/mapper/LedgerPostingMapper.xml",
+        "backend/src/main/resources/mapper/LedgerTxnMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表",
+        "改表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260112/03_add_category_and_reimbursable_fields.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "market_bar_daily",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/MarketBarDailyMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 1,
+      "脚本文件": [
+        "sql/initsql/DDL.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "market_quote_realtime",
+      "Mapper操作": [
+        "修改",
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/MarketQuoteRealtimeMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 1,
+      "脚本文件": [
+        "sql/initsql/DDL.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "monthly_budget",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/MonthlyBudgetMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_monthly_budget.sql",
+        "backend/sql/initsql/monthly_budget.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/monthly_budget.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_monthly_budget.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "nav",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/NavMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "删表",
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "sql/V1/DDL.sql",
+        "sql/initsql/DDL.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/V1/DDL.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "net_worth_snapshot",
+      "Mapper操作": [
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/NetWorthSnapshotMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 1,
+      "脚本文件": [
+        "sql/initsql/DDL.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "order_funding_line",
+      "Mapper操作": [
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/OrderFundingLineMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表",
+        "改表",
+        "更新数据"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "backend/src/main/resources/db/migration/V2026012801__add_funding_line_type.sql",
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260121/02_add_shares_to_order_funding_line.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "orders",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 2,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/OrderFundingLineMapper.xml",
+        "backend/src/main/resources/mapper/OrderMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "删表",
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "sql/V1/DDL.sql",
+        "sql/initsql/DDL.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [
+        "sql/V1/DDL.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "product_master",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/ProductMasterMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "写数据",
+        "建表",
+        "改表",
+        "更新数据"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 6,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/initsql/DML.sql",
+        "sql/updatesql/20260112/01_init_product_master.sql",
+        "sql/updatesql/20260112/02_add_product_sort_order.sql",
+        "sql/updatesql/20260114/02_add_product_note_field.sql",
+        "sql/updatesql/20260114/06_update_fee_rate_precision.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "research_plan",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/ResearchPlanMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261001_research_plan.sql",
+        "backend/sql/initsql/research_plan.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/research_plan.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261001_research_plan.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "risk_watch_event",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_risk_alert_history.sql",
+        "backend/sql/initsql/risk_alert_history.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/risk_alert_history.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_risk_alert_history.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "risk_watch_mute",
+      "Mapper操作": [
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_risk_alert_history.sql",
+        "backend/sql/initsql/risk_alert_history.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/risk_alert_history.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_risk_alert_history.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "risk_watch_rule",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_risk_watch.sql",
+        "backend/sql/initsql/risk_watch.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/risk_watch.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_risk_watch.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "risk_watch_snapshot",
+      "Mapper操作": [
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/java/com/timelordtty/dca/mapper/RiskWatchMapper.java"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "backend/migrations/20261002_risk_watch.sql",
+        "backend/sql/initsql/risk_watch.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "backend/sql/initsql/risk_watch.sql"
+      ],
+      "非初始化建表脚本": [
+        "backend/migrations/20261002_risk_watch.sql"
+      ],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "settlement_confirm",
+      "Mapper操作": [
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/SettlementConfirmMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "建表",
+        "改表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 2,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/updatesql/20260929/01_settlement_audit_link.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "user_family_roles",
+      "Mapper操作": [
+        "修改",
+        "删除",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/UserFamilyRoleMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "写数据",
+        "建表"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/initsql/DML.sql",
+        "sql/updatesql/20260111/01_init_admin_user.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    },
+    {
+      "数据库对象": "users",
+      "Mapper操作": [
+        "修改",
+        "新增",
+        "查询"
+      ],
+      "Mapper文件数": 1,
+      "Mapper文件": [
+        "backend/src/main/resources/mapper/UserMapper.xml"
+      ],
+      "是否来自变更Mapper": false,
+      "基线是否已引用": true,
+      "是否本分支新增引用": false,
+      "脚本覆盖": true,
+      "脚本动作": [
+        "写数据",
+        "建表",
+        "更新数据"
+      ],
+      "脚本类型": [
+        "未分类",
+        "通用初始化"
+      ],
+      "方言目录": [
+        "未标明"
+      ],
+      "脚本文件数": 3,
+      "脚本文件": [
+        "sql/initsql/DDL.sql",
+        "sql/initsql/DML.sql",
+        "sql/updatesql/20260111/01_init_admin_user.sql"
+      ],
+      "通用初始化建表覆盖": true,
+      "通用初始化建表脚本": [
+        "sql/initsql/DDL.sql"
+      ],
+      "非初始化建表脚本": [],
+      "仅非初始化脚本存在建表": false
+    }
+  ],
+  "indexes_constraints": [
+    {
+      "file": "backend/migrations/20261001_research_plan.sql",
+      "line": 10,
+      "name": "chk_research_plan_json"
+    },
+    {
+      "file": "backend/migrations/20261001_research_plan.sql",
+      "line": 11,
+      "name": "idx_research_plan_owner"
+    },
+    {
+      "file": "backend/migrations/20261002_allocation_policy.sql",
+      "line": 9,
+      "name": "chk_allocation_policy_json"
+    },
+    {
+      "file": "backend/migrations/20261002_allocation_policy.sql",
+      "line": 10,
+      "name": "idx_allocation_policy_owner"
+    },
+    {
+      "file": "backend/migrations/20261002_goal_tracking.sql",
+      "line": 9,
+      "name": "chk_goal_tracking_json"
+    },
+    {
+      "file": "backend/migrations/20261002_goal_tracking.sql",
+      "line": 10,
+      "name": "idx_goal_tracking_owner"
+    },
+    {
+      "file": "backend/migrations/20261002_monthly_budget.sql",
+      "line": 9,
+      "name": "chk_monthly_budget_json"
+    },
+    {
+      "file": "backend/migrations/20261002_monthly_budget.sql",
+      "line": 10,
+      "name": "idx_monthly_budget_owner"
+    },
+    {
+      "file": "backend/migrations/20261002_risk_alert_history.sql",
+      "line": 9,
+      "name": "chk_risk_watch_event_json"
+    },
+    {
+      "file": "backend/migrations/20261002_risk_alert_history.sql",
+      "line": 10,
+      "name": "idx_risk_watch_event_owner"
+    },
+    {
+      "file": "backend/migrations/20261002_risk_watch.sql",
+      "line": 8,
+      "name": "chk_risk_watch_rule_json"
+    },
+    {
+      "file": "backend/migrations/20261002_risk_watch.sql",
+      "line": 9,
+      "name": "idx_risk_watch_rule_owner"
+    },
+    {
+      "file": "backend/migrations/20261002_risk_watch.sql",
+      "line": 17,
+      "name": "chk_risk_watch_snapshot_json"
+    },
+    {
+      "file": "backend/migrations/20261002_risk_watch.sql",
+      "line": 18,
+      "name": "idx_risk_watch_snapshot_owner"
+    },
+    {
+      "file": "backend/sql/initsql/allocation_policy.sql",
+      "line": 10,
+      "name": "chk_allocation_policy_json"
+    },
+    {
+      "file": "backend/sql/initsql/allocation_policy.sql",
+      "line": 11,
+      "name": "idx_allocation_policy_owner"
+    },
+    {
+      "file": "backend/sql/initsql/goal_tracking.sql",
+      "line": 9,
+      "name": "chk_goal_tracking_json"
+    },
+    {
+      "file": "backend/sql/initsql/goal_tracking.sql",
+      "line": 10,
+      "name": "idx_goal_tracking_owner"
+    },
+    {
+      "file": "backend/sql/initsql/monthly_budget.sql",
+      "line": 9,
+      "name": "chk_monthly_budget_json"
+    },
+    {
+      "file": "backend/sql/initsql/monthly_budget.sql",
+      "line": 10,
+      "name": "idx_monthly_budget_owner"
+    },
+    {
+      "file": "backend/sql/initsql/research_plan.sql",
+      "line": 9,
+      "name": "chk_research_plan_json"
+    },
+    {
+      "file": "backend/sql/initsql/research_plan.sql",
+      "line": 10,
+      "name": "idx_research_plan_owner"
+    },
+    {
+      "file": "backend/sql/initsql/risk_alert_history.sql",
+      "line": 9,
+      "name": "chk_risk_watch_event_json"
+    },
+    {
+      "file": "backend/sql/initsql/risk_alert_history.sql",
+      "line": 10,
+      "name": "idx_risk_watch_event_owner"
+    },
+    {
+      "file": "backend/sql/initsql/risk_watch.sql",
+      "line": 8,
+      "name": "chk_risk_watch_rule_json"
+    },
+    {
+      "file": "backend/sql/initsql/risk_watch.sql",
+      "line": 9,
+      "name": "idx_risk_watch_rule_owner"
+    },
+    {
+      "file": "backend/sql/initsql/risk_watch.sql",
+      "line": 17,
+      "name": "chk_risk_watch_snapshot_json"
+    },
+    {
+      "file": "backend/sql/initsql/risk_watch.sql",
+      "line": 18,
+      "name": "idx_risk_watch_snapshot_owner"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 33,
+      "name": "group_code"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 34,
+      "name": "idx_linked_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 35,
+      "name": "idx_profit_account"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 53,
+      "name": "uk_pool_account_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 54,
+      "name": "idx_from_account"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 55,
+      "name": "idx_to_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 78,
+      "name": "account_code"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 79,
+      "name": "idx_account_type"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 80,
+      "name": "idx_parent_account"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 81,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 82,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 83,
+      "name": "idx_balance"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 84,
+      "name": "idx_shares"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 117,
+      "name": "uk_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 118,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 138,
+      "name": "uk_summary_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 139,
+      "name": "idx_summary"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 140,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 166,
+      "name": "idx_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 167,
+      "name": "idx_strategy"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 168,
+      "name": "idx_param_set"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 169,
+      "name": "idx_start_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 188,
+      "name": "idx_summary"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 189,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 190,
+      "name": "idx_side"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 211,
+      "name": "uk_trace"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 212,
+      "name": "idx_time"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 213,
+      "name": "idx_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 230,
+      "name": "uk_category"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 231,
+      "name": "idx_entry_type"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 232,
+      "name": "idx_category_l1"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 252,
+      "name": "uk_date_account"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 284,
+      "name": "uk_date_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 285,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 303,
+      "name": "idx_fct_product_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 325,
+      "name": "uk_ind"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 326,
+      "name": "idx_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 327,
+      "name": "idx_prod_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 345,
+      "name": "job_code"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 346,
+      "name": "idx_enabled"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 367,
+      "name": "idx_event_time"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 388,
+      "name": "uk_bar_product_date_source"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 389,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 390,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 416,
+      "name": "uk_rt_product_time_source"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 417,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 418,
+      "name": "idx_quote_time"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 419,
+      "name": "idx_premium_rate"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 437,
+      "name": "uk_product_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 438,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 464,
+      "name": "order_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 465,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 484,
+      "name": "uk_pool_product_account"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 485,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 486,
+      "name": "idx_from_account"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 503,
+      "name": "uk_product_code"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 504,
+      "name": "idx_earliest_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 505,
+      "name": "idx_latest_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 527,
+      "name": "uk_product_strategy"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 528,
+      "name": "idx_strategy"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 529,
+      "name": "idx_product_type"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 559,
+      "name": "uk_prod_code_channel_market"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 560,
+      "name": "idx_code"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 561,
+      "name": "idx_channel"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 562,
+      "name": "idx_asset_type"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 563,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 579,
+      "name": "uk_prem_product_time_source"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 580,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 581,
+      "name": "idx_quote_time"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 598,
+      "name": "uk_strategy_param"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 599,
+      "name": "idx_strategy_key"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 600,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 615,
+      "name": "uk_state"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 640,
+      "name": "uk_fill_source_order"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 641,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 642,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 643,
+      "name": "idx_side"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 644,
+      "name": "idx_broker_order_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 645,
+      "name": "idx_account_id"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 667,
+      "name": "idx_date"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 668,
+      "name": "idx_product"
+    },
+    {
+      "file": "sql/V1/DDL.sql",
+      "line": 669,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "line": 5,
+      "name": "AUTO_INCREMENT"
+    },
+    {
+      "file": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "line": 23,
+      "name": "ck_draft_ledger_entry_status"
+    },
+    {
+      "file": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "line": 24,
+      "name": "idx_draft_ledger_owner_user_status"
+    },
+    {
+      "file": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "line": 25,
+      "name": "idx_draft_ledger_owner_family_status"
+    },
+    {
+      "file": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "line": 26,
+      "name": "idx_draft_ledger_source"
+    },
+    {
+      "file": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "line": 27,
+      "name": "idx_draft_ledger_confirm_txn"
+    },
+    {
+      "file": "sql/initsql/20260928_draft_lifecycle_event.sql",
+      "line": 13,
+      "name": "idx_draft_lifecycle_event_draft"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 42,
+      "name": "uk_username"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 43,
+      "name": "idx_family_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 44,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 57,
+      "name": "uk_family_code"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 58,
+      "name": "idx_admin_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 70,
+      "name": "uk_user_family"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 71,
+      "name": "idx_family_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 72,
+      "name": "idx_role"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 102,
+      "name": "uk_product_code_channel_market"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 103,
+      "name": "idx_product_code"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 104,
+      "name": "idx_asset_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 105,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 106,
+      "name": "idx_channel_sort_order"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 124,
+      "name": "uk_user_product"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 125,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 126,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 156,
+      "name": "uk_account_code"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 157,
+      "name": "idx_owner_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 158,
+      "name": "idx_owner_family_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 159,
+      "name": "idx_account_kind"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 160,
+      "name": "idx_account_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 161,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 162,
+      "name": "idx_parent_account_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 163,
+      "name": "idx_linked_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 164,
+      "name": "chk_virtual_subtype"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 187,
+      "name": "uk_account_fee_rule"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 188,
+      "name": "idx_account_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 189,
+      "name": "idx_fee_rule_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 190,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 191,
+      "name": "fk_broker_fee_account"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 207,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 208,
+      "name": "idx_min_days"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 209,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 210,
+      "name": "idx_product_sort"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 211,
+      "name": "fk_fund_sell_fee_product"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 238,
+      "name": "uk_contract_code"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 239,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 240,
+      "name": "idx_account_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 241,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 260,
+      "name": "uk_contract_period"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 261,
+      "name": "idx_contract_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 262,
+      "name": "idx_due_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 263,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 307,
+      "name": "uk_txn_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 308,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 309,
+      "name": "idx_family_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 310,
+      "name": "idx_txn_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 311,
+      "name": "idx_biz_group_key"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 312,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 313,
+      "name": "idx_order_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 314,
+      "name": "idx_related_txn_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 315,
+      "name": "idx_related_order_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 316,
+      "name": "idx_relation_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 317,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 318,
+      "name": "idx_confirm_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 319,
+      "name": "idx_fetch_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 320,
+      "name": "idx_requested_at"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 321,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 339,
+      "name": "idx_txn_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 340,
+      "name": "idx_account_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 341,
+      "name": "idx_posting_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 342,
+      "name": "idx_account_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 343,
+      "name": "chk_amount_positive"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 344,
+      "name": "chk_shares_non_negative"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 370,
+      "name": "uk_order_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 371,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 372,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 373,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 374,
+      "name": "idx_expected_confirm_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 375,
+      "name": "idx_requested_at"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 396,
+      "name": "uk_order_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 397,
+      "name": "idx_confirm_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 398,
+      "name": "idx_nav_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 413,
+      "name": "uk_order_line"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 414,
+      "name": "idx_order_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 415,
+      "name": "idx_account_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 416,
+      "name": "fk_funding_line_order"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 417,
+      "name": "fk_funding_line_account"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 418,
+      "name": "chk_funding_line_amount_or_shares"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 448,
+      "name": "uk_user_product_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 449,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 450,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 451,
+      "name": "idx_snapshot_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 452,
+      "name": "idx_fetch_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 453,
+      "name": "idx_is_dirty"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 476,
+      "name": "uk_user_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 477,
+      "name": "idx_family_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 478,
+      "name": "idx_snapshot_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 479,
+      "name": "idx_fetch_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 480,
+      "name": "idx_is_dirty"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 502,
+      "name": "uk_product_date_source"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 503,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 504,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 525,
+      "name": "uk_product_time_source"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 526,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 527,
+      "name": "idx_quote_time"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 542,
+      "name": "uk_product_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 543,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 544,
+      "name": "idx_nav_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 573,
+      "name": "uk_product_date_window"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 574,
+      "name": "idx_trade_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 575,
+      "name": "idx_product_date"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 593,
+      "name": "uk_strategy_param"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 594,
+      "name": "idx_strategy_key"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 595,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 611,
+      "name": "uk_user_product_strategy"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 612,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 613,
+      "name": "idx_strategy_key"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 640,
+      "name": "uk_suggestion_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 641,
+      "name": "uk_user_product_day_strategy"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 642,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 643,
+      "name": "idx_user_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 644,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 645,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 646,
+      "name": "idx_suggestion_day"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 647,
+      "name": "idx_generated_at"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 648,
+      "name": "idx_expires_at"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 666,
+      "name": "uk_user_product_tag"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 667,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 682,
+      "name": "uk_user_product"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 683,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 696,
+      "name": "uk_user_product"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 697,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 725,
+      "name": "uk_plan_code"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 726,
+      "name": "idx_user_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 727,
+      "name": "idx_strategy"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 728,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 756,
+      "name": "uk_run_code"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 757,
+      "name": "idx_plan_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 758,
+      "name": "idx_param_set_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 759,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 760,
+      "name": "idx_total_return"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 761,
+      "name": "idx_annual_return"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 790,
+      "name": "uk_job_id"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 791,
+      "name": "idx_job_type"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 792,
+      "name": "idx_status"
+    },
+    {
+      "file": "sql/initsql/DDL.sql",
+      "line": 793,
+      "name": "idx_created_at"
+    },
+    {
+      "file": "sql/updatesql/20260112/02_add_product_sort_order.sql",
+      "line": 42,
+      "name": "idx_channel_sort_order"
+    },
+    {
+      "file": "sql/updatesql/20260112/03_add_category_and_reimbursable_fields.sql",
+      "line": 20,
+      "name": "idx_category_id"
+    },
+    {
+      "file": "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+      "line": 39,
+      "name": "uk_account_fee_rule"
+    },
+    {
+      "file": "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+      "line": 40,
+      "name": "idx_account_id"
+    },
+    {
+      "file": "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+      "line": 41,
+      "name": "idx_fee_rule_type"
+    },
+    {
+      "file": "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+      "line": 42,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/updatesql/20260114/03_add_broker_fee_config_table.sql",
+      "line": 43,
+      "name": "fk_broker_fee_account"
+    },
+    {
+      "file": "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+      "line": 37,
+      "name": "idx_product_id"
+    },
+    {
+      "file": "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+      "line": 38,
+      "name": "idx_min_days"
+    },
+    {
+      "file": "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+      "line": 39,
+      "name": "idx_is_active"
+    },
+    {
+      "file": "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+      "line": 40,
+      "name": "idx_product_sort"
+    },
+    {
+      "file": "sql/updatesql/20260114/05_add_fund_sell_fee_tier_table.sql",
+      "line": 41,
+      "name": "fk_fund_sell_fee_product"
+    },
+    {
+      "file": "sql/updatesql/20260121/01_add_linked_product_id_to_accounts.sql",
+      "line": 6,
+      "name": "idx_linked_product_id"
+    },
+    {
+      "file": "sql/updatesql/20260121/01_add_linked_product_id_to_accounts.sql",
+      "line": 7,
+      "name": "fk_accounts_linked_product"
+    },
+    {
+      "file": "sql/updatesql/20260121/02_add_shares_to_order_funding_line.sql",
+      "line": 6,
+      "name": "chk_funding_line_amount_or_shares"
+    },
+    {
+      "file": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "line": 5,
+      "name": "AUTO_INCREMENT"
+    },
+    {
+      "file": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "line": 23,
+      "name": "ck_draft_ledger_entry_status"
+    },
+    {
+      "file": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "line": 24,
+      "name": "idx_draft_ledger_owner_user_status"
+    },
+    {
+      "file": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "line": 25,
+      "name": "idx_draft_ledger_owner_family_status"
+    },
+    {
+      "file": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "line": 26,
+      "name": "idx_draft_ledger_source"
+    },
+    {
+      "file": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "line": 27,
+      "name": "idx_draft_ledger_confirm_txn"
+    },
+    {
+      "file": "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+      "line": 16,
+      "name": "uk_draft_ledger_user_source"
+    },
+    {
+      "file": "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+      "line": 21,
+      "name": "uk_draft_ledger_family_source"
+    },
+    {
+      "file": "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql",
+      "line": 14,
+      "name": "idx_draft_lifecycle_event_draft"
+    }
+  ],
+  "path_pairs": [
+    {
+      "object_group": "draft_ledger_entry",
+      "init": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "migration": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "IF NOT EXISTS 仅跳过建表，不验证既有结构；生命周期增量无保护，重跑报错"
+    },
+    {
+      "object_group": "draft_lifecycle_event",
+      "init": "sql/initsql/20260928_draft_lifecycle_event.sql",
+      "migration": "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "IF NOT EXISTS 仅跳过建表，不验证既有结构；生命周期增量无保护，重跑报错"
+    },
+    {
+      "object_group": "research_plan",
+      "init": "backend/sql/initsql/research_plan.sql",
+      "migration": "backend/migrations/20261001_research_plan.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "CREATE TABLE 重跑报错；必须择一路径"
+    },
+    {
+      "object_group": "risk_watch",
+      "init": "backend/sql/initsql/risk_watch.sql",
+      "migration": "backend/migrations/20261002_risk_watch.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "CREATE TABLE 重跑报错；必须择一路径"
+    },
+    {
+      "object_group": "risk_alert_history",
+      "init": "backend/sql/initsql/risk_alert_history.sql",
+      "migration": "backend/migrations/20261002_risk_alert_history.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "CREATE TABLE 重跑报错；必须择一路径"
+    },
+    {
+      "object_group": "allocation_policy",
+      "init": "backend/sql/initsql/allocation_policy.sql",
+      "migration": "backend/migrations/20261002_allocation_policy.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "CREATE TABLE 重跑报错；必须择一路径"
+    },
+    {
+      "object_group": "goal_tracking",
+      "init": "backend/sql/initsql/goal_tracking.sql",
+      "migration": "backend/migrations/20261002_goal_tracking.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "CREATE TABLE 重跑报错；必须择一路径"
+    },
+    {
+      "object_group": "monthly_budget",
+      "init": "backend/sql/initsql/monthly_budget.sql",
+      "migration": "backend/migrations/20261002_monthly_budget.sql",
+      "scripts_exist": true,
+      "structure_equal": true,
+      "repeat_risk": "CREATE TABLE 重跑报错；必须择一路径"
+    }
+  ],
+  "review_order_only_not_executable": [
+    "sql/initsql/DDL.sql",
+    "sql/initsql/20260610_draft_ledger_entry.sql",
+    "sql/initsql/20260928_draft_lifecycle_event.sql",
+    "backend/sql/initsql/research_plan.sql",
+    "backend/sql/initsql/risk_watch.sql",
+    "backend/sql/initsql/risk_alert_history.sql",
+    "backend/sql/initsql/allocation_policy.sql",
+    "backend/sql/initsql/goal_tracking.sql",
+    "backend/sql/initsql/monthly_budget.sql",
+    "sql/updatesql/20260927/01_precheck_draft_ledger_source_duplicates.sql",
+    "sql/updatesql/20260927/02_normalize_blank_draft_ledger_source_ref.sql",
+    "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+    "sql/updatesql/20260929/01_settlement_audit_link.sql"
+  ],
+  "errors": [],
+  "unknowns_warnings": [
+    "v0.15 回测历史没有 SQL；持久化目录权限、损坏记录及备份待部署方验证",
+    "v0.14 settlement_confirm 新字段依赖 20260929 ALTER；重复执行报重复字段错误，不可把错误当成功",
+    "v0.8 唯一索引重复执行报错；01 必须无重复，02 改写数据仅由部署方另行授权执行",
+    "旧版更新含历史财务修复/示例 DML：完整清单只用于核对，不是可批量执行计划",
+    "主 DDL 与全部历史 ALTER 的字段/约束兼容性未做数据库语义验证",
+    "MySQL DDL 隐式提交，不能以事务 ROLLBACK 保证撤销；无一次性测试库演练证据"
+  ],
+  "route": "init",
+  "dependencies": [
+    "基础 DDL/既有 schema → draft → 强幂等 01/02/03 → lifecycle",
+    "基础 settlement_confirm → 20260929 字段 ALTER",
+    "risk_watch_rule/snapshot → risk_watch_event/mute（逻辑依赖，无 FK）",
+    "research/allocation/goal/budget 依赖既有 owner/family 隔离数据语义"
+  ],
+  "manual_checks": [
+    "核验 MySQL 8 版本、CHECK/JSON、权限、备份和恢复方案",
+    "用脱敏 SHOW CREATE TABLE/索引证据逐项比对字段类型、空值、约束和唯一键",
+    "记录每个脚本版本/hash、执行结果；确认未知项后由人工批准部署"
+  ]
+}
