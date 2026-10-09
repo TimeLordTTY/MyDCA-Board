@@ -3,6 +3,7 @@
     <header><div><small>WEALTH PLANNING · 财富规划</small><h1>目标与预算中心</h1><p>管理目标与月度计划，基于已有资产和流水只读观察进度。</p></div><button class="btn" :disabled="busy" @click="refresh">刷新本页</button></header>
     <nav aria-label="规划类型"><button class="btn" :aria-pressed="tab === 'goals'" :disabled="busy" @click="switchTab('goals')">资产目标</button><button class="btn" :aria-pressed="tab === 'budgets'" :disabled="busy" @click="switchTab('budgets')">月度预算</button><button class="btn primary" :disabled="busy" @click="edit()">{{ tab === 'goals' ? '创建目标' : '创建预算' }}</button></nav>
     <p v-if="busy" role="status">正在加载 / 保存…</p><p v-if="error" role="alert" class="warning">{{ error }} <button class="btn" :disabled="busy" @click="refresh">重试加载</button></p><p v-if="notice" role="status">{{ notice }}</p>
+    <BudgetSixMonthReview v-if="tab === 'budgets'" :disabled="busy" :revision="reviewRevision" @select="observe" />
     <div class="workspace">
       <aside><h2>{{ tab === 'goals' ? '目标列表' : '预算列表' }}</h2><p v-if="!busy && !error && !rows.length">暂无{{ tab === 'goals' ? '目标' : '预算' }}，可先创建一项规划。</p>
         <article v-for="row in rows" :key="row.id" :class="{ selected: selected?.id === row.id }"><h3>{{ row.config.name }}</h3><p>{{ labels[row.config.scope] }} · {{ row.config.currency }} · {{ 'state' in row.config ? labels[row.config.state] : row.config.month }}</p><p v-if="'targetValue' in row.config">目标 {{ amount(row.config.targetValue) }} · {{ row.config.targetDate }}</p><button class="btn" :disabled="busy" @click="observe(row)">详情与{{ tab === 'goals' ? '进度' : '对比' }}</button><button class="btn" :disabled="busy" @click="edit(row)">编辑</button></article>
@@ -34,6 +35,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import GoalForecastWorkbench from '../components/GoalForecastWorkbench.vue'
+import BudgetSixMonthReview from '../components/BudgetSixMonthReview.vue'
 import { goalApi, budgetApi, incomeCategories, expenseCategories } from '@wealth-hub/shared'
 import type { Goal, Budget, GoalConfig, BudgetConfig, GoalProgress, BudgetComparison } from '@wealth-hub/shared'
 import { labels, amount, percent, failure, validateGoal, validateBudget } from '../components/goalBudgetModel'
@@ -41,8 +43,9 @@ const tab = ref<'goals' | 'budgets'>('goals'), rows = ref<(Goal | Budget)[]>([])
 const busy = ref(false), error = ref(''), notice = ref(''), more = ref(false), archivePrompt = ref(false)
 const form = ref<GoalConfig | BudgetConfig | null>(null), editing = ref(''), formError = ref('')
 const progress = ref<GoalProgress | null>(null), comparison = ref<BudgetComparison | null>(null)
+const reviewRevision = ref(0)
 let page = 0
-function clearDetail() { selected.value = null; progress.value = null; comparison.value = null; archivePrompt.value = false }
+function clearDetail() { reviewRevision.value++; selected.value = null; progress.value = null; comparison.value = null; archivePrompt.value = false }
 async function refresh() {
   if (busy.value) return
   busy.value = true; error.value = ''; rows.value = []; more.value = false; page = 0; clearDetail()

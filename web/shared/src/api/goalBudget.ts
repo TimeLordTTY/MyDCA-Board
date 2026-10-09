@@ -10,9 +10,9 @@ export const goalApi = {
   progress: async (id: string): Promise<GoalProgress> => (await apiClient.get(`${goalPath(id)}/progress`)).data,
 }
 export const budgetApi = {
-  list: async (page = 0): Promise<Budget[]> => (await apiClient.get('/monthly-budgets', { params: { page, size: 20 } })).data,
+  list: async (page = 0, signal?: AbortSignal): Promise<Budget[]> => (await apiClient.get('/monthly-budgets', { params: { page, size: 20 }, signal })).data,
   detail: async (id: string): Promise<Budget> => (await apiClient.get(budgetPath(id))).data,
   create: async (config: BudgetConfig): Promise<Budget> => (await apiClient.post('/monthly-budgets', config)).data,
   edit: async (id: string, config: BudgetConfig): Promise<Budget> => (await apiClient.patch(budgetPath(id), config)).data,
-  comparison: async (id: string): Promise<BudgetComparison> => (await apiClient.get(`${budgetPath(id)}/comparison`)).data,
+  comparison: async (id: string, signal?: AbortSignal): Promise<BudgetComparison> => (await apiClient.get(`${budgetPath(id)}/comparison`, { signal })).data,
 }

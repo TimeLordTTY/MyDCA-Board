@@ -14,6 +14,7 @@ async function setup(goalApi, budgetApi = {}) {
   const source = await readFile(new URL('src/views/GoalBudgetCenter.vue', root), 'utf8')
   let script = compileScript(parse(source).descriptor, { id: 'goal-budget-test' }).content
   script = script.replace(/import GoalForecastWorkbench from '[^']+'/g, 'const GoalForecastWorkbench = {}')
+  script = script.replace(/import BudgetSixMonthReview from '[^']+'/g, 'const BudgetSixMonthReview = {}')
   script = script.replace(/import \{([^}]+)\} from 'vue'/g, (_, names) => `const {${names.replace(/ as /g, ': ')}} = globalThis.__goalBudget.vue`)
   script = script.replace(/import \{([^}]+)\} from '@wealth-hub\/shared'/g, (_, names) => `const {${names}} = globalThis.__goalBudget`)
   script = script.replace(/import \{([^}]+)\} from '..\/components\/goalBudgetModel'/g, (_, names) => `const {${names}} = globalThis.__goalBudget.model`)
@@ -62,7 +63,7 @@ test('API paths are metadata-only; read-only evidence GET; encoded identifiers',
   try {
     await goalApi.list(2); await goalApi.create(goal()); await goalApi.edit('a/b', goal()); await goalApi.detail('a/b'); await goalApi.progress('a/b')
     await budgetApi.list(1); await budgetApi.create(budget()); await budgetApi.edit('a/b', budget()); await budgetApi.detail('a/b'); await budgetApi.comparison('a/b')
-    assert.equal(calls[0][2].params.page, 2); assert.deepEqual(calls[4], ['get', '/goals/a%2Fb/progress']); assert.deepEqual(calls[9], ['get', '/monthly-budgets/a%2Fb/comparison'])
+    assert.equal(calls[0][2].params.page, 2); assert.deepEqual(calls[4], ['get', '/goals/a%2Fb/progress']); assert.deepEqual(calls[9], ['get', '/monthly-budgets/a%2Fb/comparison', { signal: undefined }])
     assert.ok(calls.every(c => /^\/(goals|monthly-budgets)/.test(c[1])))
   } finally { Object.assign(apiClient, saved) }
   const source = await readFile(new URL('src/views/GoalBudgetCenter.vue', root), 'utf8')
