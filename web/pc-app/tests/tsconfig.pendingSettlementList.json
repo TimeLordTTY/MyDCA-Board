@@ -1,0 +1,1 @@
+{ "extends": "../tsconfig.json", "include": ["../src/components/pendingSettlementListModel.ts", "../src/env.d.ts"], "exclude": [] }

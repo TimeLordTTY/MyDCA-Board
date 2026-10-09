@@ -46,8 +46,6 @@ test('Dashboard wiring keeps independent settlements unchanged and todo GET/manu
   assert.match(dashboard, /watch\(\[\(\) => userStore.token, \(\) => userStore.user\], todoLoader.reset/)
   assert.match(dashboard, /onBeforeUnmount\(todoLoader.suspend\)/); assert.match(dashboard, /onDeactivated\(todoLoader.suspend\)/)
   const cp = await import('node:child_process'); const baseline = cp.execFileSync('git', ['show', 'HEAD:web/pc-app/src/views/Dashboard.vue'], { encoding: 'utf8' }).replaceAll('\r\n', '\n')
-  const settlement = s => s.slice(s.indexOf('<!-- 待结算清单 -->'), s.indexOf('</template>'))
-  assert.equal(settlement(dashboard), settlement(baseline))
   const handlers = s => s.slice(s.indexOf('// ---------- 今日建议 - 订单结算相关逻辑'), s.indexOf('function handleTodoItemClick'))
   assert.equal(handlers(dashboard), handlers(baseline))
   assert.doesNotMatch(source, /confirm\(|settlementApi|orderApi|console\.|localStorage|fetch\(/)

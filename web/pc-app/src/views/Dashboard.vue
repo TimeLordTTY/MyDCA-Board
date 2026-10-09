@@ -421,9 +421,16 @@
     <div class="card" style="margin-top: var(--gap)">
       <h3>
         待结算清单
-        <span class="tag orange tiny" v-if="pendingSettlements.length > 0">{{ pendingSettlements.length }} 笔</span>
+        <span class="tag orange tiny" v-if="pendingSettlementState.status === 'success'">接口当前返回 {{ pendingSettlements.length }} 笔</span>
       </h3>
-      <div class="sub">需要确认结算的订单</div>
+      <div class="sub">需要确认结算的订单；仅表示接口当前返回的记录，不代表全部订单。</div>
+      <div role="status" aria-live="polite" :aria-busy="pendingSettlementState.status === 'loading'">
+        <span v-if="pendingSettlementState.status === 'loading'">正在加载待结算清单…</span>
+        <span v-else-if="pendingSettlementState.status === 'error'">待结算清单未知：读取失败或数据异常。</span>
+        <span v-else-if="pendingSettlementState.status === 'idle'">待结算清单尚未加载，当前结果未知。</span>
+        <button v-if="pendingSettlementState.status === 'error' || pendingSettlementState.status === 'idle'"
+          class="btn" @click="pendingSettlementLoader.load()">手动重试待结算清单</button>
+      </div>
       <div class="divider"></div>
       <div style="overflow: auto">
         <table>
@@ -438,7 +445,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-if="pendingSettlements.length === 0">
+            <tr v-if="pendingSettlementState.status === 'success' && pendingSettlements.length === 0">
               <td colspan="6" class="td-muted">暂无待结算订单</td>
             </tr>
             <tr v-for="settlement in pendingSettlements" :key="settlement.orderId">
@@ -446,9 +453,9 @@
               <td>
                 <span class="tag blue">{{ getOrderTypeLabel(settlement.orderType) }}</span>
               </td>
-              <td><b>{{ settlement.productName || '未知' }}</b></td>
-              <td class="right mono">{{ formatCurrency(settlement.amount) }}</td>
-              <td>{{ formatDate(settlement.expectedConfirmDate) }}</td>
+              <td><b>{{ settlement.productName || '未知' }}</b><span v-if="settlement.incomplete" class="td-muted"> 数据未完整；请在详情核实后预览</span></td>
+              <td class="right mono">{{ settlement.amount === null ? '未知' : formatNumber(settlement.amount, 2) }} {{ settlement.currency || '币种未知' }}</td>
+              <td>{{ settlement.expectedConfirmDate === null ? '未知' : formatDate(settlement.expectedConfirmDate) }}</td>
               <td class="right">
                 <button class="btn" @click="handleConfirmSettlement(settlement.orderId)">确认结算</button>
               </td>
@@ -464,6 +471,8 @@
 import { ref, computed, onMounted, watch, onBeforeUnmount, onDeactivated, onActivated } from 'vue'
 import FinanceRadar from '../components/FinanceRadar.vue'
 import MonthlyBudgetGlance from '../components/MonthlyBudgetGlance.vue'
+import { createPendingSettlementLoader } from '../components/pendingSettlementListModel'
+import type { PendingSettlementState } from '../components/pendingSettlementListModel'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import * as echarts from 'echarts'
@@ -508,7 +517,16 @@ watch([() => userStore.token, () => userStore.user], todoLoader.reset, { deep: t
 onBeforeUnmount(todoLoader.suspend)
 onDeactivated(todoLoader.suspend)
 onActivated(todoLoader.activate)
-const pendingSettlements = ref<any[]>([])
+const pendingSettlementState = ref<PendingSettlementState>({ status: 'idle', data: null })
+const pendingSettlements = computed(() => pendingSettlementState.value.data ?? [])
+const pendingSettlementLoader = createPendingSettlementLoader(() => dashboardApi.getPendingSettlements(),
+  () => JSON.stringify([userStore.token, userStore.user, router.currentRoute.value.fullPath]),
+  state => { pendingSettlementState.value = state })
+watch([() => userStore.token, () => userStore.user, () => router.currentRoute.value.fullPath],
+  pendingSettlementLoader.reset, { deep: true, flush: 'sync' })
+onBeforeUnmount(pendingSettlementLoader.suspend)
+onDeactivated(pendingSettlementLoader.suspend)
+onActivated(pendingSettlementLoader.activate)
 const holdings = ref<any[]>([])
 const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
 const navs = ref<Map<number, Nav>>(new Map())
@@ -676,6 +694,7 @@ const topHoldings = computed(() => {
 let allocationChart: echarts.ECharts | null = null
 
 async function loadData() {
+  void pendingSettlementLoader.load()
   try {
     // 确保账户数据已加载（必须在最前面，因为可用资金等计算依赖账户数据）
     await accountStore.fetchAccounts()
@@ -691,19 +710,6 @@ async function loadData() {
 
     // 加载今日建议
     todayActions.value = await dashboardApi.getTodayActions()
-
-    // 加载待结算清单（后端返回Order列表）
-    const orders = await dashboardApi.getPendingSettlements()
-    // 转换为PendingSettlement格式
-    pendingSettlements.value = (orders as any[]).map((order: any) => ({
-      orderId: order.orderId,
-      orderType: order.orderType,
-      productId: order.productId,
-      productName: undefined, // 需要从product获取
-      amount: order.amount || 0,
-      expectedConfirmDate: order.expectedConfirmDate || '',
-      fundingLines: [], // 需要从order_funding_line获取
-    }))
 
     // 加载持仓
     try {
