@@ -192,51 +192,56 @@
     </el-dialog>
 
     <!-- 资产概览KPI -->
+    <div class="mini" role="status" aria-live="polite">
+      {{ kpiState.loading ? "资产来源读取中" : "跨接口读取，口径未完全核实；不代表实时原子快照" }}
+      <span v-if="kpiState.readAt"> · 读取时间 {{ kpiState.readAt }}</span>
+      <button type="button" @click="kpiLoader.load()">手动重试资产 KPI</button>
+    </div>
     <div class="kpis">
       <div class="kpi primary">
         <div class="label">✨ 净资产（Net Worth）</div>
-        <div class="value">{{ formatCurrency(netWorthCalc) }}</div>
+        <div class="value">{{ kpiText(kpis.netWorth) }}</div>
         <div class="mini">= 现金 + 持仓市值 - 负债</div>
         <div class="row">
-          <span class="chip" :class="overview.todayPnl && overview.todayPnl >= 0 ? 'good' : 'bad'">
-            今日 {{ overview.todayPnl && overview.todayPnl >= 0 ? '+' : '' }}{{ formatCurrency(overview.todayPnl) }}
+          <span class="chip">
+            今日 {{ kpiText(kpis.todayPnl) }}
           </span>
           <span class="chip">
-            本月净流入 {{ overview.monthInflow && overview.monthInflow >= 0 ? '+' : '' }}{{ formatCurrency(overview.monthInflow) }}
+            本月净流入 {{ kpiText(kpis.monthInflow) }}
           </span>
         </div>
       </div>
 
       <div class="kpi">
         <div class="label">💧 可用资金</div>
-        <div class="value">{{ formatCurrency(availableFunds) }}</div>
+        <div class="value">{{ kpiText(kpis.available) }}</div>
         <div class="mini">= Σ(现金叶子余额) - Σ(占用)</div>
         <div class="row">
-          <span class="chip warn">占用 {{ formatCurrency(reservedAmount) }}</span>
-          <span class="chip">生活费可支出 {{ formatCurrency(spendableAmount) }}</span>
+          <span class="chip warn">占用 {{ kpiText(kpis.reserved) }}</span>
+          <span class="chip">生活费可支出 {{ kpiText(kpis.spendable) }}</span>
         </div>
       </div>
 
       <div class="kpi">
         <div class="label">📈 持仓市值</div>
-        <div class="value">{{ formatCurrency(positionValue) }}</div>
+        <div class="value">{{ kpiText(kpis.position) }}</div>
         <div class="mini">= Σ(持仓 shares × 价格)</div>
         <div class="row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-          <span class="chip" :class="totalPnl >= 0 ? 'good' : 'bad'">
-            总盈亏 {{ totalPnl >= 0 ? '+' : '' }}{{ formatCurrency(totalPnl) }}
+          <span class="chip">
+            总盈亏 {{ kpiText(kpis.totalPnl) }}
           </span>
-          <span class="chip" :class="exchangePnl >= 0 ? 'good' : 'bad'" style="font-size: 11px;">
-            场内盈亏 {{ exchangePnl >= 0 ? '+' : '' }}{{ formatCurrency(exchangePnl) }}
+          <span class="chip" style="font-size: 11px;">
+            场内盈亏 {{ kpiText(kpis.exchangePnl) }}
           </span>
-          <span class="chip" :class="otcPnl >= 0 ? 'good' : 'bad'" style="font-size: 11px;">
-            场外盈亏 {{ otcPnl >= 0 ? '+' : '' }}{{ formatCurrency(otcPnl) }}
+          <span class="chip" style="font-size: 11px;">
+            场外盈亏 {{ kpiText(kpis.otcPnl) }}
           </span>
         </div>
       </div>
 
       <div class="kpi">
         <div class="label">💳 负债</div>
-        <div class="value">{{ formatCurrency(overview.liability) }}</div>
+        <div class="value">{{ kpiText(kpis.liability) }}</div>
         <div class="mini">= Σ(信贷账户余额：花呗/信用卡/白条/贷款)</div>
       </div>
     </div>
@@ -469,6 +474,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, onBeforeUnmount, onDeactivated, onActivated } from 'vue'
+import { kpiTruth, amountText, createKpiLoader } from '../components/dashboardKpiTruthModel'
+import type { KpiState, Amount, Snapshot } from '../components/dashboardKpiTruthModel'
 import FinanceRadar from '../components/FinanceRadar.vue'
 import MonthlyBudgetGlance from '../components/MonthlyBudgetGlance.vue'
 import { createPendingSettlementLoader } from '../components/pendingSettlementListModel'
@@ -531,6 +538,67 @@ const holdings = ref<any[]>([])
 const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
 const navs = ref<Map<number, Nav>>(new Map())
 
+// KPI uses request-local copies, never the mutable shared store as its display source.
+const kpiState = ref<KpiState>({ loading: false, snapshot: null, readAt: null })
+const kpis = computed(() => kpiTruth(kpiState.value.snapshot, kpiState.value.loading))
+const kpiText = (a: Amount) => amountText(a, formatCurrency)
+let accountReadQueue: Promise<unknown> = Promise.resolve()
+const kpiLoader = createKpiLoader(async valid => {
+  const snapshot: Snapshot = { accounts: null, overview: null, holdings: null, prices: new Map() }
+  // Serialize this page's store fetches so an older fetch cannot taint a newer copy.
+  const accountRead = accountReadQueue.then(async () => {
+    if (!valid()) return
+    try {
+      await accountStore.fetchAccounts()
+      if (valid() && Array.isArray(accountStore.accounts)) {
+        snapshot.accounts = accountStore.cashLeafAccounts.map(a => ({ ...a }))
+      }
+    } catch { /* Unknown, including network/403; never publish response details. */ }
+  })
+  accountReadQueue = accountRead
+  await accountRead
+  if (!valid()) return snapshot
+  await Promise.all([
+    dashboardApi.getAssetOverview().then(data => {
+      if (data && typeof data === 'object') snapshot.overview = { ...data }
+    }).catch(() => {}),
+    holdingApi.getHoldings().then((data: unknown) => {
+      const list = data instanceof Map ? Array.from(data.values()) : Array.isArray(data) ? data
+        : data && typeof data === 'object' ? Object.values(data) : null
+      if (list && list.every(h => h && typeof h === 'object')) snapshot.holdings = list.map(h => ({ ...h }))
+    }).catch(() => {}),
+  ])
+  if (!valid()) return snapshot
+  const rows = snapshot.holdings ?? []
+  const exchangeIds = [...new Set(rows.filter(h => h.channel === 'EXCHANGE').map(h => h.productId))]
+  const otcIds = [...new Set(rows.filter(h => h.channel === 'OTC').map(h => h.productId))]
+  const localQuotes = new Map<number, MarketQuoteRealtime>()
+  const localNavs = new Map<number, Nav>()
+  await Promise.all([
+    exchangeIds.length ? marketApi.getRealtimeQuotes(exchangeIds).then(data => {
+      for (const q of data) { localQuotes.set(q.productId, q); snapshot.prices.set(q.productId, q.price) }
+    }).catch(() => {}) : Promise.resolve(),
+    ...otcIds.map(id => navApi.getLatestNav(id).then(n => {
+      if (n && n.productId === id) { localNavs.set(id, n); snapshot.prices.set(id, n.nav) }
+    }).catch(() => {})),
+  ])
+  if (valid()) {
+    if (snapshot.overview) overview.value = snapshot.overview as AssetOverview
+    holdings.value = rows
+    quotes.value = localQuotes
+    navs.value = localNavs
+    updateAllocationChart()
+  }
+  return snapshot
+}, () => JSON.stringify([userStore.token, userStore.user, localStorage.getItem('token')]), state => { kpiState.value = state })
+watch([() => userStore.token, () => userStore.user], kpiLoader.reset, { deep: true, flush: 'sync' })
+const resetKpiStorage = (event: StorageEvent) => { if (event.key === 'token' || event.key === null) kpiLoader.reset() }
+window.addEventListener('storage', resetKpiStorage)
+onBeforeUnmount(() => window.removeEventListener('storage', resetKpiStorage))
+onBeforeUnmount(kpiLoader.suspend)
+onDeactivated(kpiLoader.suspend)
+onActivated(kpiLoader.activate)
+
 // 今日建议 - 订单结算弹窗状态
 const settlementVisible = ref(false)
 const settlementOrder = ref<any | null>(null)
@@ -547,29 +615,6 @@ const settlementForm = ref({
 const isBuyType = computed(() => {
   if (!settlementOrder.value) return false
   return settlementOrder.value.orderType === 'BUY' || settlementOrder.value.orderType === 'SUBSCRIPTION'
-})
-
-const availableFunds = computed(() => {
-  if (!accountStore.cashLeafAccounts || !Array.isArray(accountStore.cashLeafAccounts)) {
-    return 0
-  }
-  return accountStore.cashLeafAccounts.reduce((sum, acc) => sum + (acc.balance || 0) - (acc.reservedAmount || 0), 0)
-})
-
-const reservedAmount = computed(() => {
-  if (!accountStore.cashLeafAccounts || !Array.isArray(accountStore.cashLeafAccounts)) {
-    return 0
-  }
-  return accountStore.cashLeafAccounts.reduce((sum, acc) => sum + (acc.reservedAmount || 0), 0)
-})
-
-const spendableAmount = computed(() => {
-  if (!accountStore.cashLeafAccounts || !Array.isArray(accountStore.cashLeafAccounts)) {
-    return 0
-  }
-  return accountStore.cashLeafAccounts
-    .filter((acc) => acc.fundUsage === 'SPENDABLE')
-    .reduce((sum, acc) => sum + (acc.balance || 0) - (acc.reservedAmount || 0), 0)
 })
 
 // 合并持仓和行情数据
@@ -613,63 +658,6 @@ const holdingsWithQuote = computed(() => {
   })
 })
 
-// 计算总盈亏、场内盈亏、场外盈亏
-const totalPnl = computed(() => {
-  return holdingsWithQuote.value.reduce((sum, h) => {
-    // 确保计算正确：市值 - 成本
-    const shares = h.totalShares || h.shares || 0
-    const avgCost = h.averageCost || h.avgCost || 0
-    const totalCost = shares * avgCost
-    const marketValue = h.marketValue || 0
-    const pnl = marketValue - totalCost
-    return sum + pnl
-  }, 0)
-})
-
-const exchangePnl = computed(() => {
-  return holdingsWithQuote.value
-    .filter(h => h.channel === 'EXCHANGE')
-    .reduce((sum, h) => {
-      const shares = h.totalShares || h.shares || 0
-      const avgCost = h.averageCost || h.avgCost || 0
-      const totalCost = shares * avgCost
-      const marketValue = h.marketValue || 0
-      const pnl = marketValue - totalCost
-      return sum + pnl
-    }, 0)
-})
-
-const otcPnl = computed(() => {
-  return holdingsWithQuote.value
-    .filter(h => h.channel === 'OTC')
-    .reduce((sum, h) => {
-      const shares = h.totalShares || h.shares || 0
-      const avgCost = h.averageCost || h.avgCost || 0
-      const totalCost = shares * avgCost
-      const marketValue = h.marketValue || 0
-      const pnl = marketValue - totalCost
-      return sum + pnl
-    }, 0)
-})
-
-const positionValue = computed(() => {
-  return holdingsWithQuote.value.reduce((sum, h) => sum + (h.marketValue || 0), 0)
-})
-
-// 总览净资产/总资产：必须与“持仓市值”同一口径（前端按实时行情计算）
-// 否则会出现：持仓市值接近10万，但净资产仍只有现金-负债的情况。
-const totalAssetsCalc = computed(() => {
-  const cash = Number(overview.value.cashBalance || 0)
-  const pos = Number(positionValue.value || 0)
-  return cash + pos
-})
-
-const netWorthCalc = computed(() => {
-  const assets = Number(totalAssetsCalc.value || 0)
-  const liab = Number((overview.value as any).liability || 0)
-  return assets - liab
-})
-
 // 按盈亏排序，取绝对值最大的前5个
 const topHoldings = computed(() => {
   return holdingsWithQuote.value
@@ -696,76 +684,10 @@ let allocationChart: echarts.ECharts | null = null
 async function loadData() {
   void pendingSettlementLoader.load()
   try {
-    // 确保账户数据已加载（必须在最前面，因为可用资金等计算依赖账户数据）
-    await accountStore.fetchAccounts()
-    
-    // 加载资产概览
-    const overviewData = await dashboardApi.getAssetOverview()
-    console.log('资产概览数据:', overviewData)
-    console.log('账户数据:', accountStore.accounts)
-    console.log('账户树:', accountStore.accountTree)
-    overview.value = overviewData
-
+    await kpiLoader.load()
     await loadTodayTodos()
-
-    // 加载今日建议
+    // 今日建议独立于资产来源质量。
     todayActions.value = await dashboardApi.getTodayActions()
-
-    // 加载持仓
-    try {
-      const holdingsData = await holdingApi.getHoldings()
-      // holdingsData 可能是 Map 或对象，需要转换为数组
-      if (holdingsData instanceof Map) {
-        holdings.value = Array.from(holdingsData.values())
-      } else if (Array.isArray(holdingsData)) {
-        holdings.value = holdingsData
-      } else if (typeof holdingsData === 'object' && holdingsData !== null) {
-        holdings.value = Object.values(holdingsData)
-      } else {
-        holdings.value = []
-      }
-      
-      // 加载实时行情和净值（用于计算持仓市值）
-      // 场内产品用实时行情，场外产品用净值
-      if (holdings.value.length > 0) {
-        // 区分场内和场外产品
-        const exchangeIds = holdings.value
-          .filter(h => h.channel === 'EXCHANGE')
-          .map(h => h.productId)
-          .filter(id => id)
-        const otcIds = holdings.value
-          .filter(h => h.channel !== 'EXCHANGE')
-          .map(h => h.productId)
-          .filter(id => id)
-        
-        // 场内：批量获取实时行情
-        if (exchangeIds.length > 0) {
-          try {
-            const quotesData = await marketApi.getRealtimeQuotes(exchangeIds)
-            quotes.value = new Map(quotesData.map(q => [q.productId, q]))
-          } catch (error: any) {
-            console.warn('加载实时行情失败:', error)
-          }
-        }
-        
-        // 场外：批量获取最新净值（每个请求独立处理，避免单个失败影响全部）
-        if (otcIds.length > 0) {
-          const navPromises = otcIds.map(id => 
-            navApi.getLatestNav(id).catch(err => {
-              console.warn(`获取产品${id}净值失败:`, err)
-              return null
-            })
-          )
-          const navsData = await Promise.all(navPromises)
-          navs.value = new Map(
-            navsData.filter(n => n !== null).map(n => [n!.productId, n!])
-          )
-        }
-      }
-    } catch (error: any) {
-      console.error('Failed to load holdings:', error)
-      holdings.value = []
-    }
 
     // 更新图表
     updateAllocationChart()

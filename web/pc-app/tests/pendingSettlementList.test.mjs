@@ -42,8 +42,8 @@ test('Dashboard independent GET survives upstream failure; wiring preserves orig
   assert.match(dashboard,/router.currentRoute.value.fullPath/);assert.match(dashboard,/pendingSettlementState.status === 'success' && pendingSettlements.length === 0/)
   assert.match(dashboard,/@click="handleConfirmSettlement\(settlement.orderId\)"/)
   assert.match(dashboard,/未接入 \/ 未统计/);assert.doesNotMatch(source,/settlementCount|todoApi|console\.|confirm\(|localStorage/)
-  const start=dashboard.slice(dashboard.indexOf('async function loadData() {'),dashboard.indexOf('// 加载资产概览'))
-  assert.ok(start.indexOf('pendingSettlementLoader.load()')<start.indexOf('await accountStore.fetchAccounts()'))
+  const start=dashboard.slice(dashboard.indexOf('async function loadData() {'),dashboard.indexOf('async function loadTodayTodos()'))
+  assert.ok(start.indexOf('pendingSettlementLoader.load()')<start.indexOf('await kpiLoader.load()'))
   const h=setup(async()=>[row()]);let requested
   await assert.rejects((async()=>{requested=h.loader.load();await Promise.reject(Error('upstream'))})());await requested;assert.equal(h.state().status,'success')
 })
