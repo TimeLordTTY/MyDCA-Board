@@ -1,0 +1,1 @@
+{ "extends": "../tsconfig.json", "include": ["../src/components/todayTodoModel.ts", "../src/env.d.ts"], "exclude": [] }

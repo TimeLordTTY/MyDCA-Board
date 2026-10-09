@@ -246,42 +246,46 @@
         <div>
           <h3>
             今日待办
-            <span class="tag orange tiny" v-if="todayTodo.totalCount > 0">{{ todayTodo.totalCount }} 项</span>
-            <span class="tag green tiny" v-else>已清空</span>
+            <span class="tag orange tiny" v-if="todayTodo">{{ todayTodo.totalCount }} 项（本接口）</span>
+            <span class="tag gray tiny" v-else>{{ todoState.status === 'loading' ? '加载中' : todoState.status === 'error' ? '加载失败' : '未加载' }}</span>
           </h3>
           <div class="sub">
-            只展示待处理事项，不会自动确认草稿、执行结算或写入正式账本。
+            仅统计本接口覆盖的草稿待办，与“今天建议”和独立“待结算清单”口径分开；不会自动确认或入账。
+            <span v-if="todayTodo">服务端日期：{{ todayTodo.date }}。</span>
           </div>
         </div>
         <button class="btn" @click="loadTodayTodos" style="padding: 6px 10px; font-size: 12px">
-          刷新待办
+          {{ todoState.status === 'error' ? '手动重试' : '刷新待办' }}
         </button>
       </div>
       <div class="today-todo-metrics">
         <div class="todo-metric" @click="router.push({ name: 'DraftInbox' })">
           <span>待确认草稿</span>
-          <strong>{{ todayTodo.draftCount }}</strong>
+          <strong>{{ todayTodo ? todayTodo.draftCount : '未知' }}</strong>
         </div>
         <div class="todo-metric muted">
           <span>待结算</span>
-          <strong>{{ todayTodo.settlementCount }}</strong>
+          <strong>未接入 / 未统计</strong>
         </div>
         <div class="todo-metric muted">
           <span>策略建议</span>
-          <strong>{{ todayTodo.suggestionCount }}</strong>
+          <strong>未接入 / 未统计</strong>
         </div>
       </div>
-      <div v-if="todayTodo.items.length === 0" class="td-muted todo-empty">
-        暂无待确认草稿。待结算和策略建议首版暂未接入，当前返回 0。
+      <div v-if="!todayTodo" role="status" aria-live="polite" class="td-muted todo-empty">
+        {{ todoState.status === 'error' ? '今日待办加载失败或数据不完整，草稿数量未知，请手动重试。' : todoState.status === 'loading' ? '正在加载草稿待办…' : '草稿待办尚未加载，请刷新待办。' }}
       </div>
-      <div v-else class="today-todo-list">
+      <div v-else-if="todayTodo.draftCount === 0" class="td-muted todo-empty">
+        当前已加载的草稿待办为0；不代表全部订单、交易或结算已清空。
+      </div>
+      <div v-else-if="todayTodo" class="today-todo-list">
         <button
           v-for="item in todayTodo.items"
           :key="`${item.type}-${item.refId}`"
           class="todo-item"
           @click="handleTodoItemClick(item)"
         >
-          <span class="tag blue tiny">{{ item.type }}</span>
+          <span class="tag blue tiny">待确认草稿</span>
           <span class="todo-item-main">
             <strong>{{ item.title }}</strong>
             <em>{{ item.description || '打开草稿箱复核并确认。' }}</em>
@@ -457,15 +461,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, onBeforeUnmount, onDeactivated, onActivated } from 'vue'
 import FinanceRadar from '../components/FinanceRadar.vue'
 import MonthlyBudgetGlance from '../components/MonthlyBudgetGlance.vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import * as echarts from 'echarts'
-import { dashboardApi, holdingApi, marketApi, navApi, orderApi, settlementApi, todoApi, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
+import { dashboardApi, holdingApi, marketApi, navApi, orderApi, settlementApi, todoApi, useUserStore, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
 import { formatCurrency, formatNumber, formatDate, formatDateTime, getOrderTypeLabel, buildSettlementPreviewText, buildSettlementBlockingText, buildSettlementConfirmTitle } from '@wealth-hub/shared'
-import type { MarketQuoteRealtime, Nav, AssetOverview, Account, TodayTodo, TodoItem, SettlementPreviewRequest } from '@wealth-hub/shared'
+import type { MarketQuoteRealtime, Nav, AssetOverview, Account, TodoItem, SettlementPreviewRequest } from '@wealth-hub/shared'
+
+import { createTodayTodoLoader, draftDestination } from '../components/todayTodoModel'
+import type { TodoState } from '../components/todayTodoModel'
 
 const router = useRouter()
 const accountStore = useAccountStore()
@@ -482,14 +489,25 @@ const overview = ref<AssetOverview>({
 })
 
 const todayActions = ref<any[]>([])
-const todayTodo = ref<TodayTodo>({
-  date: '',
-  totalCount: 0,
-  draftCount: 0,
-  settlementCount: 0,
-  suggestionCount: 0,
-  items: [],
-})
+const todoState = ref<TodoState>({ status: 'idle', data: null })
+const todayTodo = computed(() => todoState.value.data)
+const userStore = useUserStore()
+let todoExpiry: ReturnType<typeof setTimeout> | undefined
+function publishTodoState(state: TodoState) {
+  clearTimeout(todoExpiry)
+  todoState.value = state
+  if (state.status === 'success') {
+    const midnight = new Date()
+    midnight.setHours(24, 0, 0, 0)
+    todoExpiry = setTimeout(() => todoLoader.reset(), midnight.getTime() - Date.now())
+  }
+}
+const todoLoader = createTodayTodoLoader(() => todoApi.getTodayTodos(),
+  () => JSON.stringify([userStore.token, userStore.user]), publishTodoState)
+watch([() => userStore.token, () => userStore.user], todoLoader.reset, { deep: true, flush: 'sync' })
+onBeforeUnmount(todoLoader.suspend)
+onDeactivated(todoLoader.suspend)
+onActivated(todoLoader.activate)
 const pendingSettlements = ref<any[]>([])
 const holdings = ref<any[]>([])
 const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
@@ -751,19 +769,7 @@ async function loadData() {
 }
 
 async function loadTodayTodos() {
-  try {
-    todayTodo.value = await todoApi.getTodayTodos()
-  } catch (error: any) {
-    console.warn('加载今日待办失败:', error)
-    todayTodo.value = {
-      date: '',
-      totalCount: 0,
-      draftCount: 0,
-      settlementCount: 0,
-      suggestionCount: 0,
-      items: [],
-    }
-  }
+  await todoLoader.load()
 }
 
 // 辅助函数：盈亏颜色
@@ -1166,14 +1172,9 @@ function handleTodayActionClick(action: any) {
 }
 
 function handleTodoItemClick(item: TodoItem) {
-  if (item.type === 'DRAFT') {
-    router.push({ name: 'DraftInbox', query: { draftId: item.refId } })
-    return
-  }
-
-  if (item.actionPath) {
-    router.push(item.actionPath)
-  }
+  if (todoState.value.status !== 'success' || !todayTodo.value?.items.includes(item)) return
+  const destination = draftDestination(item)
+  if (destination) router.push(destination)
 }
 
 // 辅助函数：获取产品名称
