@@ -1,6 +1,7 @@
 <template>
   <div>
     <FinanceRadar />
+    <MonthlyBudgetGlance />
     <!-- 今日建议 - 订单详情弹窗（直接在总览里操作，与订单管理界面完全一致） -->
     <el-dialog v-model="settlementVisible" title="订单详情" width="700px" class="order-detail-dialog">
       <div v-if="settlementOrder" class="order-detail-content">
@@ -458,6 +459,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import FinanceRadar from '../components/FinanceRadar.vue'
+import MonthlyBudgetGlance from '../components/MonthlyBudgetGlance.vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import * as echarts from 'echarts'

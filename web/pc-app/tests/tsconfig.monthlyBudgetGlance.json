@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/components/MonthlyBudgetGlance.vue", "../src/components/monthlyBudgetGlanceModel.ts", "../src/env.d.ts"],
+  "exclude": []
+}
