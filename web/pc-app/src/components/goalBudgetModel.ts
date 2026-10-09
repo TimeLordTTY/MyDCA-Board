@@ -24,3 +24,21 @@ export function validateBudget(c: BudgetConfig) {
   }
   return ''
 }
+
+// Copy only plan fields. Runtime shape checks precede the existing business validation.
+export function copyBudgetNextMonth(source: BudgetConfig): BudgetConfig {
+  if (!source || typeof source.name !== 'string' || typeof source.month !== 'string' ||
+      !Array.isArray(source.items) || source.items.some(i => !i || typeof i.name !== 'string' ||
+        !['string', 'number'].includes(typeof i.planned))) throw new Error('预算配置格式无效，无法复制。')
+  const invalid = validateBudget(source)
+  if (invalid) throw new Error(invalid)
+  let year = Number(source.month.slice(0, 4)), month = Number(source.month.slice(5)) + 1
+  if (month === 13) { year++; month = 1 }
+  if (year > 9998) throw new Error('下一月份超出1000至9998年范围，无法复制。')
+  const copy: BudgetConfig = {
+    name: source.name, scope: source.scope, currency: source.currency,
+    month: `${year}-${String(month).padStart(2, '0')}`,
+    items: source.items.map(i => ({ name: i.name, kind: i.kind, categoryId: i.categoryId, planned: i.planned })),
+  }
+  return copy
+}
