@@ -1,0 +1,1739 @@
+{
+  "status": [
+    "STATIC_REVIEW",
+    "ENGINE_NOT_TESTED",
+    "PRODUCTION_SCHEMA_BLOCKED"
+  ],
+  "static_coverage_pass": true,
+  "engine_test": "NOT_RUN",
+  "production_ready": false,
+  "source_of_gap_counts": "owner-approved task 20261009；本工具未独立访问目标环境",
+  "counts": {
+    "missing_tables": 9,
+    "missing_columns": 2,
+    "missing_unique_indexes": 2
+  },
+  "route": "migration",
+  "groups": [
+    {
+      "group": "draft_ledger_entry",
+      "missing_tables": [],
+      "table_evidence": {},
+      "init": "sql/initsql/20260610_draft_ledger_entry.sql",
+      "migration": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "selected_for_review_only": "sql/updatesql/20260610/01_create_draft_ledger_entry.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 owner/family 与基础 schema 人工核验",
+      "repeatability": "IF NOT EXISTS 仅跳过，不验证结构",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "draft_lifecycle_event",
+      "missing_tables": [
+        "draft_lifecycle_event"
+      ],
+      "table_evidence": {
+        "draft_lifecycle_event": {
+          "sql/initsql/20260928_draft_lifecycle_event.sql": 3,
+          "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql": 4
+        }
+      },
+      "init": "sql/initsql/20260928_draft_lifecycle_event.sql",
+      "migration": "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql",
+      "selected_for_review_only": "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 draft_ledger_entry；v0.8 独立审批链先完成；逻辑依赖无 FK",
+      "repeatability": "init 可跳过；migration 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "research_plan",
+      "missing_tables": [
+        "research_plan"
+      ],
+      "table_evidence": {
+        "research_plan": {
+          "backend/sql/initsql/research_plan.sql": 2,
+          "backend/migrations/20261001_research_plan.sql": 3
+        }
+      },
+      "init": "backend/sql/initsql/research_plan.sql",
+      "migration": "backend/migrations/20261001_research_plan.sql",
+      "selected_for_review_only": "backend/migrations/20261001_research_plan.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 owner/family 与基础 schema 人工核验",
+      "repeatability": "CREATE TABLE 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "risk_watch",
+      "missing_tables": [
+        "risk_watch_rule",
+        "risk_watch_snapshot"
+      ],
+      "table_evidence": {
+        "risk_watch_rule": {
+          "backend/sql/initsql/risk_watch.sql": 3,
+          "backend/migrations/20261002_risk_watch.sql": 3
+        },
+        "risk_watch_snapshot": {
+          "backend/sql/initsql/risk_watch.sql": 11,
+          "backend/migrations/20261002_risk_watch.sql": 11
+        }
+      },
+      "init": "backend/sql/initsql/risk_watch.sql",
+      "migration": "backend/migrations/20261002_risk_watch.sql",
+      "selected_for_review_only": "backend/migrations/20261002_risk_watch.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 owner/family 与基础 schema 人工核验",
+      "repeatability": "CREATE TABLE 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "risk_alert_history",
+      "missing_tables": [
+        "risk_watch_event",
+        "risk_watch_mute"
+      ],
+      "table_evidence": {
+        "risk_watch_event": {
+          "backend/sql/initsql/risk_alert_history.sql": 2,
+          "backend/migrations/20261002_risk_alert_history.sql": 2
+        },
+        "risk_watch_mute": {
+          "backend/sql/initsql/risk_alert_history.sql": 12,
+          "backend/migrations/20261002_risk_alert_history.sql": 12
+        }
+      },
+      "init": "backend/sql/initsql/risk_alert_history.sql",
+      "migration": "backend/migrations/20261002_risk_alert_history.sql",
+      "selected_for_review_only": "backend/migrations/20261002_risk_alert_history.sql",
+      "risk": "HIGH",
+      "depends_on": "risk_watch_rule/snapshot → event/mute；逻辑依赖无 FK",
+      "repeatability": "CREATE TABLE 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "allocation_policy",
+      "missing_tables": [
+        "allocation_policy"
+      ],
+      "table_evidence": {
+        "allocation_policy": {
+          "backend/sql/initsql/allocation_policy.sql": 4,
+          "backend/migrations/20261002_allocation_policy.sql": 3
+        }
+      },
+      "init": "backend/sql/initsql/allocation_policy.sql",
+      "migration": "backend/migrations/20261002_allocation_policy.sql",
+      "selected_for_review_only": "backend/migrations/20261002_allocation_policy.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 owner/family 与基础 schema 人工核验",
+      "repeatability": "CREATE TABLE 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "goal_tracking",
+      "missing_tables": [
+        "goal_tracking"
+      ],
+      "table_evidence": {
+        "goal_tracking": {
+          "backend/sql/initsql/goal_tracking.sql": 3,
+          "backend/migrations/20261002_goal_tracking.sql": 3
+        }
+      },
+      "init": "backend/sql/initsql/goal_tracking.sql",
+      "migration": "backend/migrations/20261002_goal_tracking.sql",
+      "selected_for_review_only": "backend/migrations/20261002_goal_tracking.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 owner/family 与基础 schema 人工核验",
+      "repeatability": "CREATE TABLE 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    },
+    {
+      "group": "monthly_budget",
+      "missing_tables": [
+        "monthly_budget"
+      ],
+      "table_evidence": {
+        "monthly_budget": {
+          "backend/sql/initsql/monthly_budget.sql": 3,
+          "backend/migrations/20261002_monthly_budget.sql": 3
+        }
+      },
+      "init": "backend/sql/initsql/monthly_budget.sql",
+      "migration": "backend/migrations/20261002_monthly_budget.sql",
+      "selected_for_review_only": "backend/migrations/20261002_monthly_budget.sql",
+      "risk": "HIGH",
+      "depends_on": "既有 owner/family 与基础 schema 人工核验",
+      "repeatability": "CREATE TABLE 重跑报错",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "生产缺口/其余 schema 未完整核验；5.7 引擎 NOT_RUN；缺迁移授权和恢复证据"
+    }
+  ],
+  "supplement_objects": [
+    {
+      "kind": "column",
+      "table": "settlement_confirm",
+      "object": "preview_digest",
+      "file": "sql/updatesql/20260929/01_settlement_audit_link.sql",
+      "line": 3,
+      "risk": "HIGH",
+      "repeatability": "重复 ADD 报错；错误不能当已应用，需核对实际定义",
+      "depends_on": "既有 settlement_confirm 逐列核验",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "缺目标环境升级/迁移授权；实际字段/索引与数据未核实"
+    },
+    {
+      "kind": "column",
+      "table": "settlement_confirm",
+      "object": "ledger_txn_id",
+      "file": "sql/updatesql/20260929/01_settlement_audit_link.sql",
+      "line": 4,
+      "risk": "HIGH",
+      "repeatability": "重复 ADD 报错；错误不能当已应用，需核对实际定义",
+      "depends_on": "既有 settlement_confirm 逐列核验",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL"
+      ],
+      "execution_blocker": "缺目标环境升级/迁移授权；实际字段/索引与数据未核实"
+    },
+    {
+      "kind": "unique_index",
+      "table": "draft_ledger_entry",
+      "object": "uk_draft_ledger_user_source",
+      "file": "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+      "line": 16,
+      "risk": "HIGH",
+      "repeatability": "重复 ADD 报错；错误不能当已应用，需核对实际定义",
+      "depends_on": "draft 已存在 → v0.8 01 只读预检 → 人工决定 → 02 独立数据授权 → 03 独立 DDL 授权",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL",
+        "user/family 非 NULL 来源重复、空 source_ref、排序规则等价与并发写入；不可静默删行"
+      ],
+      "execution_blocker": "缺目标环境升级/迁移授权；实际字段/索引与数据未核实"
+    },
+    {
+      "kind": "unique_index",
+      "table": "draft_ledger_entry",
+      "object": "uk_draft_ledger_family_source",
+      "file": "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql",
+      "line": 21,
+      "risk": "HIGH",
+      "repeatability": "重复 ADD 报错；错误不能当已应用，需核对实际定义",
+      "depends_on": "draft 已存在 → v0.8 01 只读预检 → 人工决定 → 02 独立数据授权 → 03 独立 DDL 授权",
+      "manual_checks": [
+        "脱敏 SHOW CREATE TABLE 与逐列类型、空值、默认值、主键/唯一键列顺序；脚本执行记录",
+        "owner/family 隔离语义、实际默认引擎/字符集/排序规则；JSON_VALID 与应用层非法 payload 拒绝证据",
+        "sql_mode、explicit_defaults_for_timestamp、时区、TIMESTAMP(6) 精度/默认值",
+        "innodb_large_prefix、row_format、file_format、page_size 与实际索引字节长度",
+        "DDL 权限、锁表窗口、备份校验和独立恢复演练；事务 ROLLBACK 无法撤销 DDL",
+        "user/family 非 NULL 来源重复、空 source_ref、排序规则等价与并发写入；不可静默删行"
+      ],
+      "execution_blocker": "缺目标环境升级/迁移授权；实际字段/索引与数据未核实"
+    }
+  ],
+  "files": {
+    "sql/initsql/20260610_draft_ledger_entry.sql": {
+      "sha256": "46accef2acaba3a41df5a2884dd5d4688cc1f9397ed70db9ed9b7d7b9fcdbdb5",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 23,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 23,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_TYPE",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 11,
+          "note": "原生 JSON 自 5.7.8 支持并验证输入；不得与 LONGTEXT 等同；JSON 规范化/重复 key 与 8 不同"
+        },
+        {
+          "feature": "JSON_TYPE",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 12,
+          "note": "原生 JSON 自 5.7.8 支持并验证输入；不得与 LONGTEXT 等同；JSON 规范化/重复 key 与 8 不同"
+        },
+        {
+          "feature": "JSON_TYPE",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 15,
+          "note": "原生 JSON 自 5.7.8 支持并验证输入；不得与 LONGTEXT 等同；JSON 规范化/重复 key 与 8 不同"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 19,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 19,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 20,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 20,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 20,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 21,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 22,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 5,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 24,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 25,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 26,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 27,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 4,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "sql/updatesql/20260610/01_create_draft_ledger_entry.sql": {
+      "sha256": "46accef2acaba3a41df5a2884dd5d4688cc1f9397ed70db9ed9b7d7b9fcdbdb5",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 23,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 23,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_TYPE",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 11,
+          "note": "原生 JSON 自 5.7.8 支持并验证输入；不得与 LONGTEXT 等同；JSON 规范化/重复 key 与 8 不同"
+        },
+        {
+          "feature": "JSON_TYPE",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 12,
+          "note": "原生 JSON 自 5.7.8 支持并验证输入；不得与 LONGTEXT 等同；JSON 规范化/重复 key 与 8 不同"
+        },
+        {
+          "feature": "JSON_TYPE",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 15,
+          "note": "原生 JSON 自 5.7.8 支持并验证输入；不得与 LONGTEXT 等同；JSON 规范化/重复 key 与 8 不同"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 19,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 19,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 20,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 20,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 20,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 21,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 22,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 5,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 24,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 25,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 26,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 27,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 4,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "sql/initsql/20260928_draft_lifecycle_event.sql": {
+      "sha256": "0da3d43847f45ddb4e0c8835b68933dbe2ce6a4107cbbeedf22b5d2cff2da563",
+      "findings": [
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 12,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 12,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "sql/updatesql/20260928/01_create_draft_lifecycle_event.sql": {
+      "sha256": "cdf31ccfce929a64bb83013da5e6be9bfb8ef87040bc826cf7339a8f8a64c9e1",
+      "findings": [
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 13,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 13,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 5,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 14,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 4,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/sql/initsql/research_plan.sql": {
+      "sha256": "806f5d4a806ffd69d0278c9af62ee24a5cc96a6d8bcbcd248e3ad997396a39d1",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 2,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/migrations/20261001_research_plan.sql": {
+      "sha256": "3161d34f1a260ffbf0405cf887358c3a89fd6ddbe92c81b29f92b33971401afa",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 10,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 10,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 10,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 11,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/sql/initsql/risk_watch.sql": {
+      "sha256": "df52f72c38674cb62ad40807ccc1a2eab9c2be45f5be124f3abc9649a54a8b77",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 8,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 17,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 8,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 17,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 17,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 16,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 16,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 9,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 12,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 12,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 12,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 18,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 11,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/migrations/20261002_risk_watch.sql": {
+      "sha256": "df52f72c38674cb62ad40807ccc1a2eab9c2be45f5be124f3abc9649a54a8b77",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 8,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 17,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 8,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 17,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 17,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 16,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 16,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 9,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 12,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 12,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 12,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 18,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 11,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/sql/initsql/risk_alert_history.sql": {
+      "sha256": "88a558d9d3e43592fa87b575d594e0d515d01d31fae0dd720eda1c1d51840285",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 15,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 2,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 12,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/migrations/20261002_risk_alert_history.sql": {
+      "sha256": "88a558d9d3e43592fa87b575d594e0d515d01d31fae0dd720eda1c1d51840285",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 7,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 15,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 3,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 13,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 2,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 12,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/sql/initsql/allocation_policy.sql": {
+      "sha256": "c8dbaa4ceb1fb97358f6f42eb529852c3b051e5ab1b203d407145be834a408e8",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 10,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 10,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 10,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 5,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 5,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 5,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 11,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 4,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/migrations/20261002_allocation_policy.sql": {
+      "sha256": "45ddf6520e4c0286f14d1e6a13ca36f6628e3ac3fdf32d2ab18f075b431a62f2",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/sql/initsql/goal_tracking.sql": {
+      "sha256": "da14864f443a8fd3b576a60b3bac3f4546d485c73925122a6affffc9a66e4213",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/migrations/20261002_goal_tracking.sql": {
+      "sha256": "da14864f443a8fd3b576a60b3bac3f4546d485c73925122a6affffc9a66e4213",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/sql/initsql/monthly_budget.sql": {
+      "sha256": "6c193b68716a22b3d4d9831132f2ad226f22801319beae1d59d5d98e0ce705f1",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "backend/migrations/20261002_monthly_budget.sql": {
+      "sha256": "6c193b68716a22b3d4d9831132f2ad226f22801319beae1d59d5d98e0ce705f1",
+      "findings": [
+        {
+          "feature": "NAMED_CHECK",
+          "category": "MYSQL8_FEATURE",
+          "line": 9,
+          "note": "5.7 文档的有限 CHECK 语法不含 CONSTRAINT 名称；不能保证此原文可解析；具体脚本引擎实测 NOT_RUN"
+        },
+        {
+          "feature": "CHECK_NOT_ENFORCED",
+          "category": "INCOMPATIBLE_SEMANTICS",
+          "line": 9,
+          "note": "5.7 即使接受有限 CHECK 语法也忽略约束；不能保证 JSON_VALID/status 强制执行。8.0.16+ 才支持 CHECK 强制语义"
+        },
+        {
+          "feature": "JSON_VALID",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 9,
+          "note": "5.7 有 JSON_VALID 函数；函数存在不意味着 LONGTEXT + CHECK 得到自动 JSON 验证"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "TIME_DEFAULT",
+          "category": "POSSIBLY_COMPATIBLE",
+          "line": 8,
+          "note": "5.7 支持 0..6 位精度；核查 sql_mode、默认值/NULL、explicit_defaults_for_timestamp、时区与范围"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 4,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 10,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 3,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "sql/updatesql/20260927/01_precheck_draft_ledger_source_duplicates.sql": {
+      "sha256": "689cd1d2fb75d8be92b456309401ca9055e79ddffbc560ca8fdcc6efe32adbf0",
+      "findings": []
+    },
+    "sql/updatesql/20260927/02_normalize_blank_draft_ledger_source_ref.sql": {
+      "sha256": "5fd945ce0c3baad8b5df07d4c51b76548b64e1c36100e3a65804f45e6f8db47d",
+      "findings": [
+        {
+          "feature": "MANUAL_DATA_AUTHORIZATION",
+          "category": "MANUAL_SEPARATE_APPROVAL",
+          "line": 17,
+          "note": "真实数据修改必须独立人工授权；本工具只读文件文本，绝不执行"
+        }
+      ]
+    },
+    "sql/updatesql/20260927/03_add_draft_ledger_source_unique_keys.sql": {
+      "sha256": "20f4230fd221e2a05114c3e18e1619a311ed7ea83af2c2a08fdc638db784a280",
+      "findings": [
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 16,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "CHARSET_INDEX",
+          "category": "UNCLASSIFIED",
+          "line": 21,
+          "note": "既有/继承字符集与排序规则、索引长度及 row_format 未核实；767/3072 字节受 5.7 设置影响"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 15,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        },
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 20,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    },
+    "sql/updatesql/20260929/01_settlement_audit_link.sql": {
+      "sha256": "c88adf2f2033d5c0ef42e788058aea9ae6c2abc07cabdbb15cb74c7721ce8501",
+      "findings": [
+        {
+          "feature": "DDL_IMPLICIT_COMMIT",
+          "category": "INCOMPATIBLE_RECOVERY_ASSUMPTION",
+          "line": 2,
+          "note": "DDL 隐式提交；多个 ALTER 可部分成功；不能用自动事务 rollback 保证恢复"
+        }
+      ]
+    }
+  },
+  "approval_order_only": [
+    "v0.8 01 只读预检（本任务不执行）",
+    "人工审查重复/空来源与处理方案",
+    "独立批准 02 normalization（UPDATE 同时改 updated_at）",
+    "复核预检/并发窗口后独立批准 03 两个唯一索引"
+  ],
+  "limitations": [
+    "有限规则扫描非 SQL parser；未分类部分不能推断兼容；不全量验证其余生产对象",
+    "无 SQL 原文/凭据/业务数据输出，无数据库/网络/远端执行入口",
+    "核对清单不可执行；不批量选择历史 updatesql；DDL 不具备事务回退保障"
+  ],
+  "errors": []
+}

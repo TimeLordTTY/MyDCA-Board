@@ -19,13 +19,19 @@ try {
         try { & npm run build; if ($LASTEXITCODE -ne 0) { throw 'Web build failed.' } } finally { Pop-Location }
     }
     if (-not (Test-Path -LiteralPath $jar)) { throw "Missing artifact: $jar" }
-    if (-not (Test-Path -LiteralPath $webDist)) { throw "Missing artifact: $webDist" }
+    if (-not (Test-Path -LiteralPath (Join-Path $webDist 'index.html') -PathType Leaf)) { throw "Missing frontend index.html: $webDist" }
 
     New-Item -ItemType Directory -Force (Join-Path $stage 'frontend') | Out-Null
     Copy-Item -LiteralPath $jar -Destination (Join-Path $stage 'wealth-hub-1.0.0.jar')
     Copy-Item -Path (Join-Path $webDist '*') -Destination (Join-Path $stage 'frontend') -Recurse -Force
     $sha = (Get-FileHash -LiteralPath (Join-Path $stage 'wealth-hub-1.0.0.jar') -Algorithm SHA256).Hash.ToLowerInvariant()
-    [IO.File]::WriteAllText((Join-Path $stage 'SHA256SUMS'), "$sha  wealth-hub-1.0.0.jar`n", [Text.UTF8Encoding]::new($false))
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'health_probe.py') -Destination $stage
+    $manifest = Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
+        $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+        $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  $relative"
+    }
+    [IO.File]::WriteAllText((Join-Path $stage 'SHA256SUMS'), (($manifest -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
     $archive = "$stage.tar.gz"
     & tar -czf $archive -C $stage .
     if ($LASTEXITCODE -ne 0) { throw 'Unable to create deployment archive.' }
@@ -34,58 +40,15 @@ try {
     & scp -q $archive "${SshTarget}:$remoteArchive"
     if ($LASTEXITCODE -ne 0) { throw 'Artifact upload failed.' }
 
-    $remoteScript = @'
-set -euo pipefail
-archive="$1"
-deploy_root="$2"
-health_url="$3"
-stamp="$(date +%Y%m%d-%H%M%S)"
-work="$(mktemp -d /tmp/mydca-release.XXXXXX)"
-backup="$deploy_root/backups/$stamp"
-jar="$deploy_root/backend/wealth-hub-1.0.0.jar"
-java_bin="/www/server/java/jdk-17.0.8/bin/java"
-pid=""
-cleanup() { rm -rf "$work" "$archive"; }
-trap cleanup EXIT
-mkdir -p "$work" "$backup" "$deploy_root/frontend"
-tar -xzf "$archive" -C "$work"
-(cd "$work" && sha256sum -c SHA256SUMS)
-cp -a "$jar" "$backup/wealth-hub-1.0.0.jar"
-if [ -d "$deploy_root/frontend/dist" ]; then cp -a "$deploy_root/frontend/dist" "$backup/frontend-dist"; fi
-pid="$(pgrep -f "[w]ealth-hub-1.0.0.jar" | head -n1 || true)"
-if [ -n "$pid" ]; then kill "$pid"; for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done; fi
-install -o www -g www -m 0644 "$work/wealth-hub-1.0.0.jar" "$jar"
-rm -rf "$deploy_root/frontend/dist.new"
-mkdir -p "$deploy_root/frontend/dist.new"
-cp -a "$work/frontend/." "$deploy_root/frontend/dist.new/"
-chown -R www:www "$deploy_root/frontend/dist.new"
-rm -rf "$deploy_root/frontend/dist"
-mv "$deploy_root/frontend/dist.new" "$deploy_root/frontend/dist"
-start_service() {
-  cd "$deploy_root/backend"
-  nohup "$java_bin" -Xmx1024M -Xms256M -jar "$jar" >> logs/wealth-hub.log 2>&1 &
-}
-start_service
-healthy=false
-for _ in $(seq 1 60); do
-  code="$(curl -ksS -o /dev/null -w '%{http_code}' "$health_url" || true)"
-  if [ "$code" = 200 ]; then healthy=true; break; fi
-  sleep 2
-done
-if [ "$healthy" != true ]; then
-  new_pid="$(pgrep -f "[w]ealth-hub-1.0.0.jar" | head -n1 || true)"
-  [ -z "$new_pid" ] || kill "$new_pid" || true
-  install -o www -g www -m 0644 "$backup/wealth-hub-1.0.0.jar" "$jar"
-  if [ -d "$backup/frontend-dist" ]; then rm -rf "$deploy_root/frontend/dist"; cp -a "$backup/frontend-dist" "$deploy_root/frontend/dist"; fi
-  start_service
-  echo 'deployment_status=rolled_back'
-  exit 1
-fi
-echo 'deployment_status=success'
-echo "backup_path=$backup"
-echo 'health_status=200'
-'@
-    $remoteScript | ssh $SshTarget 'bash -s' -- $remoteArchive $DeployRoot $HealthUrl
+    # Send the same function library exercised by the offline Bash simulation.
+    $remoteScript = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'remote_deploy.sh')).Replace("`r", '')
+    $remoteScript += "`ndeploy " + '"$@"' + "`n# end of script"
+    function ConvertTo-BashLiteral([string]$Value) {
+        if ($Value.Contains("`n") -or $Value.Contains("`r")) { throw 'Invalid remote argument.' }
+        return "'" + $Value.Replace("'", "'" + '"' + "'" + '"' + "'") + "'"
+    }
+    $remoteCommand = 'bash -s -- ' + ((@($remoteArchive, $DeployRoot, $HealthUrl) | ForEach-Object { ConvertTo-BashLiteral $_ }) -join ' ')
+    $remoteScript | ssh $SshTarget $remoteCommand
     if ($LASTEXITCODE -ne 0) { throw 'Remote deployment failed or rolled back.' }
     Write-Output "artifact_sha256=$sha"
 } finally {

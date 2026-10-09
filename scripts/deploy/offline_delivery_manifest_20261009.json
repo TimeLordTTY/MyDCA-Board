@@ -1,0 +1,50 @@
+{
+  "task_id": "task-mydca-deploy-health-mysql57-offline-readiness-20261009",
+  "repository": "TimeLordTTY/MyDCA-Board",
+  "target_branch": "v2",
+  "source_commit": "9d93f00085adcdd89c9ce69aff0c7cf13a2356de",
+  "result_commit_resolution": "The local commit containing this manifest; resolve with git log -1 --format=%H -- scripts/deploy/offline_delivery_manifest_20261009.json",
+  "engineering_delivery": "LOCAL_OFFLINE_VERIFIED",
+  "deployment": "NOT_RUN",
+  "database_connections_and_sql_execution": "NOT_RUN",
+  "mysql57_engine": "ENGINE_NOT_TESTED",
+  "production_schema": "PRODUCTION_SCHEMA_BLOCKED",
+  "production_ready": false,
+  "gap_counts": {
+    "tables": 9,
+    "columns": 2,
+    "unique_indexes": 2
+  },
+  "artifacts": [
+    "scripts/deploy/standard_deploy.ps1",
+    "scripts/deploy/remote_deploy.sh",
+    "scripts/deploy/health_probe.py",
+    "scripts/deploy/test_deploy_offline.py",
+    "scripts/deploy/test_standard_deploy_offline.ps1",
+    "scripts/deploy/README.md",
+    "scripts/mysql57_compat_preflight.py",
+    "scripts/test_mysql57_compat_preflight.py",
+    "scripts/deploy/mysql57_static_review_20261009.json",
+    "docs/mydca_deploy_health_mysql57_offline_preflight_20261009.md"
+  ],
+  "validation": {
+    "bash_deployment_scenarios": 22,
+    "deployment_unittest_methods": 7,
+    "powershell_mock_upload_and_manifest": "PASS",
+    "mysql57_unittest_methods": 8,
+    "existing_migration_unittest_methods": 6,
+    "existing_migration_route": "STATIC_PASS",
+    "post_task_compile_hook_max_fix_rounds": 0,
+    "build": "BACKEND_PACKAGE_AND_WEB_BUILD_PASS",
+    "git_diff_check": "PASS"
+  },
+  "limits": [
+    "Bash filesystem recovery tested with fake process/network/ownership/lock primitives",
+    "Real Linux Java service recovery NOT_RUN",
+    "No production access, SQL, financial writes, push or follow-up task creation",
+    "Static SQL scanner is not a full parser and does not prove engine or production compatibility"
+  ],
+  "aicore_external_delivery_manifest": "PENDING_EXTERNAL_CHAIN",
+  "independent_hermes_wecom_verified_receipt": "NOT_VERIFIED",
+  "external_delivery_blocker": "No callable AiCore/Hermes delivery tool; external paths outside authorized allowed_paths"
+}
