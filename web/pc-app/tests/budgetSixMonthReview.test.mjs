@@ -8,22 +8,46 @@ const root = new URL('../', import.meta.url)
 const source = await readFile(new URL('src/components/BudgetSixMonthReview.vue', root), 'utf8')
 const transpile = s => ts.transpileModule(s, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
 const model = await import(`data:text/javascript,${encodeURIComponent(transpile(await readFile(new URL('src/components/budgetReviewModel.ts', root), 'utf8')))}`)
+globalThis.__csvModel = model
+const csv = await import(`data:text/javascript,${encodeURIComponent(transpile(await readFile(new URL('src/components/budgetReviewCsv.ts', root), 'utf8')).replace("import { completeActual } from './budgetReviewModel';", 'const { completeActual } = globalThis.__csvModel;'))}`)
 const labelsModel = await import(`data:text/javascript,${encodeURIComponent(transpile(await readFile(new URL('src/components/goalBudgetModel.ts', root), 'utf8')))}`)
 const row = (id, extra = {}) => ({ id: String(id), createdAt: '2026-10-09', config: { name: '预算', month: '2026-10', scope: 'PERSONAL', currency: 'CNY', items: [], ...extra } })
 const comparison = (id, extra = {}) => ({ budgetId: String(id), quality: 'OK', actualIncome: 10, actualExpenses: 5, actualSurplus: 5, remainingBudget: 2, overspent: false, warnings: [], items: [], ...extra })
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r }); return { promise, resolve } }
-async function setup(api) {
+async function setup(api, download) {
   const user = vue.reactive({ token: 'test', user: { id: 1, familyId: 1 } }), props = vue.reactive({ disabled: false, revision: 0 })
   let script = compileScript(parse(source).descriptor, { id: 'review-test' }).content
   script = script.replace(/import \{([^}]+)\} from 'vue'/g, (_, n) => `const {${n.replace(/ as /g, ': ')}} = globalThis.__review.vue`)
   script = script.replace(/import \{([^}]+)\} from '@wealth-hub\/shared'/g, (_, n) => `const {${n}} = globalThis.__review`)
   script = script.replace(/import \{([^}]+)\} from '.\/goalBudgetModel'/g, (_, n) => `const {${n}} = globalThis.__review.labelsModel`)
   script = script.replace(/import \{([^}]+)\} from '.\/budgetReviewModel'/g, (_, n) => `const {${n}} = globalThis.__review.model`)
+  script = script.replace(/import \{([^}]+)\} from '.\/budgetReviewCsv'/g, (_, n) => `const {${n}} = globalThis.__review.csv`)
   let cleanup
-  globalThis.__review = { vue: { ...vue, onBeforeUnmount(fn) { cleanup = fn } }, model, labelsModel, budgetApi: api, useUserStore: () => user }
+  const downloads = []
+  globalThis.__review = { vue: { ...vue, onBeforeUnmount(fn) { cleanup = fn } }, model, labelsModel, csv: { ...csv, downloadBudgetReviewCsv: download || ((...args) => downloads.push(args)) }, budgetApi: api, useUserStore: () => user }
   const state = (await import(`data:text/javascript,${encodeURIComponent(transpile(script))}#${Math.random()}`)).default.setup(props, { expose() {}, emit() {} })
-  return { state, props, user, cleanup: () => cleanup() }
+  return { state, props, user, downloads, cleanup: () => cleanup() }
 }
+
+test('CSV export is manual, loaded only, and never requests more data; invalidation blocks old data', async () => {
+  for (const invalidate of [s => s.state.toggle(), s => s.state.reset(), s => { s.state.scope.value = 'FAMILY' }, s => { s.state.currency.value = 'USD' }, s => { s.user.user.id++ }, s => { s.user.token = 'changed' }, s => { s.props.disabled = true }, s => s.cleanup()]) {
+    let calls = 0
+    const s = await setup({ list: async () => { calls++; return [row(1)] }, comparison: async id => { calls++; return comparison(id) } })
+    s.state.exportCsv(); s.state.toggle(); s.state.exportCsv(); assert.equal(s.downloads.length, 0)
+    const pending = s.state.load(); s.state.exportCsv(); assert.equal(s.downloads.length, 0); await pending
+    s.state.exportCsv(); assert.equal(s.downloads.length, 1); assert.equal(calls, 2)
+    invalidate(s); s.state.exportCsv(); assert.equal(s.downloads.length, 1); assert.equal(calls, 2)
+  }
+  const s = await setup({ list: async () => { throw new Error('failed') } })
+  s.state.toggle(); await s.state.load(); s.state.exportCsv(); assert.equal(s.downloads.length, 0)
+})
+
+test('download failures are reported in Chinese without losing the loaded review', async () => {
+  const s = await setup({ list: async () => [], comparison: () => assert.fail() }, () => { throw new Error('denied') })
+  s.state.toggle(); await s.state.load()
+  s.state.exportCsv(); assert.match(s.state.exportError.value, /CSV 导出失败/)
+  assert.equal(s.state.canExport.value, true)
+})
 test('local calendar: six continuous months across year, leap day, UTC boundary', () => {
   assert.deepEqual(model.recentMonths(new Date(2026, 0, 31)), ['2025-08','2025-09','2025-10','2025-11','2025-12','2026-01'])
   assert.deepEqual(model.recentMonths(new Date(2024, 1, 29)), ['2023-09','2023-10','2023-11','2023-12','2024-01','2024-02'])

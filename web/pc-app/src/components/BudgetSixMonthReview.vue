@@ -4,7 +4,9 @@
     <template v-if="open">
       <p>按月并列已建预算，不合并不同计划。家庭口径仅为后端授权的当前用户流水，不代表家庭总现金流。预留仅为计划。</p>
       <div class="filters"><label>作用域<select v-model="scope"><option value="PERSONAL">个人</option><option value="FAMILY">家庭（需管理员权限）</option></select></label><label>币种<select v-model="currency"><option v-for="c in ['CNY','USD','HKD','EUR','JPY','GBP']" :key="c">{{ c }}</option></select></label><button class="btn" :disabled="loading || disabled" @click="load">{{ loaded ? '刷新回顾' : error ? '重试加载回顾' : '加载回顾' }}</button><button v-if="loading" class="btn" @click="reset">取消加载</button></div>
-      <p>每次最多扫描5页 / 100份预算、对比30份，并发3个；超限不生成不完整回顾。</p>
+      <button v-if="canExport" class="btn" @click="exportCsv">导出 CSV</button>
+      <p v-if="exportError" role="alert" class="warning">{{ exportError }}</p>
+      <p>每次最多扫描5页 / 100份预算、对比30份，并发3个；超限不生成不完整回顾。导出是本人主动下载的本地副本；浏览器是否保存成功请自行确认。</p>
       <p v-if="loading" role="status">正在读取近六个月预算…</p><p v-else-if="error" role="alert" class="warning">{{ error }}</p><p v-else-if="!loaded" role="status">{{ months[0] }} 至 {{ months[5] }} · 点击“加载回顾”读取。</p>
       <div v-if="loaded" class="table-scroll" tabindex="0" role="region" aria-label="近六个月预算回顾表格，可横向滚动">
         <table><caption>{{ months[0] }} 至 {{ months[5] }} · {{ scope === 'PERSONAL' ? '个人' : '家庭（管理员）' }} · {{ currency }} · 金额来源：既有预算对比 API；时间为客户端读取时间，非账务快照</caption><thead><tr><th scope="col">月份 / 预算</th><th scope="col">币种 / 口径</th><th scope="col">计划收入 / 支出</th><th scope="col">计划预留 / 结余</th><th scope="col">实际收入 / 支出</th><th scope="col">实际结余 / 剩余预算</th><th scope="col">完整性 / 超支 / 来源</th><th scope="col">读取时间</th></tr></thead>
@@ -20,19 +22,28 @@
   </article>
 </template>
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { budgetApi, useUserStore } from '@wealth-hub/shared'
 import type { Budget, BudgetComparison } from '@wealth-hub/shared'
 import { labels, amount, failure } from './goalBudgetModel'
 import { recentMonths, completeActual, readReview, REVIEW_LIMITS } from './budgetReviewModel'
 import type { ReviewEntry } from './budgetReviewModel'
+import { serializeBudgetReviewCsv, budgetReviewFilename, downloadBudgetReviewCsv } from './budgetReviewCsv'
 const props = defineProps<{ disabled: boolean; revision: number }>()
 const emit = defineEmits<{ select: [budget: Budget] }>()
 const user = useUserStore()
 const open = ref(false), loading = ref(false), loaded = ref(false), error = ref('')
 const scope = ref('PERSONAL'), currency = ref('CNY'), months = ref(recentMonths()), entries = ref<ReviewEntry[]>([])
+const exportError = ref('')
+const canExport = computed(() => open.value && loaded.value && !loading.value && !error.value && !props.disabled)
+function exportCsv() {
+  if (!canExport.value) return
+  exportError.value = ''
+  try { downloadBudgetReviewCsv(serializeBudgetReviewCsv(months.value, entries.value, scope.value, currency.value), budgetReviewFilename(months.value, scope.value, currency.value)) }
+  catch { exportError.value = 'CSV 导出失败：浏览器可能不支持或拒绝下载，请检查下载权限后手动重试。' }
+}
 let generation = 0, controller: AbortController | null = null
-function reset() { generation++; controller?.abort(); controller = null; entries.value = []; loaded.value = false; loading.value = false; error.value = '' }
+function reset() { generation++; controller?.abort(); controller = null; entries.value = []; loaded.value = false; loading.value = false; error.value = ''; exportError.value = '' }
 function toggle() { reset(); open.value = !open.value }
 function select(budget: Budget) { reset(); emit('select', budget) }
 const quality = (c: BudgetComparison) => c.quality === 'OK' && !completeActual(c) ? '未知 / UNKNOWN（实际字段缺失）' : labels[c.quality] || (String(c.quality) === 'UNAVAILABLE' ? '不可用 / UNAVAILABLE' : '未知 / UNKNOWN')
@@ -48,7 +59,7 @@ async function load() {
   } catch (e) { if (version === generation) { reset(); error.value = failure(e) } }
   finally { clearTimeout(timer); if (version === generation) { loading.value = false; controller = null } }
 }
-watch([scope, currency, () => props.revision, () => user.token, () => user.user], reset, { deep: true, flush: 'sync' })
+watch([scope, currency, () => props.disabled, () => props.revision, () => user.token, () => user.user], reset, { deep: true, flush: 'sync' })
 onBeforeUnmount(reset)
 </script>
 <style scoped>
