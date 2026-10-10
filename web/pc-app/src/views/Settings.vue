@@ -1,5 +1,6 @@
 <template>
   <div class="settings-page">
+    <AppearanceSettings />
     <div class="card">
       <h3>设置</h3>
       <div class="sub">个人信息、安全与家庭成员管理</div>
@@ -109,6 +110,7 @@
 </template>
 
 <script setup lang="ts">
+import AppearanceSettings from '../components/AppearanceSettings.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessageBox, ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import { familyApi, type FamilyMember, userApi, useUserStore } from '@wealth-hub/shared'

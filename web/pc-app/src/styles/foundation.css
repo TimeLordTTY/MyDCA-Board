@@ -1,0 +1,169 @@
+/* Appearance tokens are opt-in by root attribute; legacy keeps main.css intact. */
+:root {
+  --wh-page: #f7f6f2;
+  --wh-surface: #fffefa;
+  --wh-ink: #232521;
+  --wh-muted: #62645b;
+  --wh-line: #e7e6de;
+  --wh-border: #85867d;
+  --wh-accent: #3458dc;
+  --wh-on-accent: #ffffff;
+  --wh-positive: #28704f;
+  --wh-danger: #b52c33;
+  --wh-warning: #86570e;
+  /* Existing market meaning: red rise/profit, green fall/loss. */
+  --wh-rise: #b52c33;
+  --wh-fall: #28704f;
+  --wh-mint-bright: #c5ee91;
+  --wh-mint-soft: #eaf3dc;
+  --wh-decoration: var(--wh-mint-soft);
+  --wh-card-radius: 23px;
+  --wh-pill-radius: 999px;
+  --wh-space-1: 8px;
+  --wh-space-2: 12px;
+  --wh-space-3: 16px;
+  --wh-space-4: 24px;
+  --wh-space-5: 32px;
+  --wh-duration: 160ms;
+}
+:root[data-wh-palette='blue'] { --wh-decoration: #9bc1ff; }
+:root[data-wh-palette='peach'] { --wh-decoration: #ffc2a4; }
+:root[data-wh-theme='dark'] {
+  --wh-page: #20221f;
+  --wh-surface: #292c27;
+  --wh-ink: #fffefa;
+  --wh-muted: #c0c3b8;
+  --wh-line: #484d44;
+  --wh-border: #92998a;
+  --wh-accent: #9bc1ff;
+  --wh-on-accent: #20221f;
+  --wh-positive: #a5dfbc;
+  --wh-danger: #ffb3b8;
+  --wh-warning: #f6cc87;
+  --wh-rise: #ffb3b8;
+  --wh-fall: #a5dfbc;
+  --wh-mint-soft: #39472e;
+  --wh-decoration: #39472e;
+}
+:root[data-wh-theme='dark'][data-wh-palette='blue'] { --wh-decoration: #303e55; }
+:root[data-wh-theme='dark'][data-wh-palette='peach'] { --wh-decoration: #513b30; }
+
+/* Bridge original classes and Element Plus, including teleported dialogs. */
+:root[data-wh-theme]:not([data-wh-theme='legacy']) {
+  color-scheme: light;
+  --bg: var(--wh-page);
+  --bg2: var(--wh-page);
+  --card: var(--wh-surface);
+  --bg-card: var(--wh-surface);
+  --border: var(--wh-border);
+  --text-secondary: var(--wh-muted);
+  --text: var(--wh-ink);
+  --muted: var(--wh-muted);
+  --line: var(--wh-line);
+  --primary: var(--wh-accent);
+  --primary2: var(--wh-accent);
+  --primarySoft: var(--wh-decoration);
+  --warn: var(--wh-warning);
+  --good: var(--wh-rise);
+  --bad: var(--wh-fall);
+  --r20: var(--wh-card-radius);
+  --gap: var(--wh-space-4);
+  --el-color-primary: var(--wh-accent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--wh-accent), var(--wh-surface) 20%);
+  --el-color-primary-light-5: color-mix(in srgb, var(--wh-accent), var(--wh-surface) 35%);
+  --el-color-primary-light-7: color-mix(in srgb, var(--wh-accent), var(--wh-surface) 60%);
+  --el-color-primary-light-8: color-mix(in srgb, var(--wh-accent), var(--wh-surface) 75%);
+  --el-color-primary-light-9: color-mix(in srgb, var(--wh-accent), var(--wh-surface) 90%);
+  --el-color-primary-dark-2: var(--wh-accent);
+  --el-color-success: var(--wh-positive);
+  --el-color-danger: var(--wh-danger);
+  --el-color-warning: var(--wh-warning);
+  --el-bg-color: var(--wh-surface);
+  --el-bg-color-page: var(--wh-page);
+  --el-bg-color-overlay: var(--wh-surface);
+  --el-fill-color-blank: var(--wh-surface);
+  --el-fill-color-light: var(--wh-page);
+  --el-text-color-primary: var(--wh-ink);
+  --el-text-color-regular: var(--wh-ink);
+  --el-text-color-secondary: var(--wh-muted);
+  --el-text-color-placeholder: var(--wh-muted);
+  --el-border-color: var(--wh-border);
+  --el-border-color-light: var(--wh-line);
+  --el-disabled-bg-color: var(--wh-page);
+  --el-disabled-text-color: var(--wh-muted);
+  --el-disabled-border-color: var(--wh-line);
+}
+:root[data-wh-theme='dark'] { color-scheme: dark; }
+html[data-wh-theme]:not([data-wh-theme='legacy']) body {
+  background: var(--wh-page);
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Noto Sans CJK SC', sans-serif;
+}
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.card, .kpi, .modal, .toast, .nav, .avatar) {
+  background: var(--wh-surface); color: var(--wh-ink); border-color: var(--wh-line);
+}
+html[data-wh-theme]:not([data-wh-theme='legacy']) .topbar { background: var(--wh-page); border-color: var(--wh-line); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.pill, .btn, .btn-small, .closeX, .tag, .chip) {
+  color: var(--wh-ink); background: var(--wh-surface); border-color: var(--wh-border);
+}
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.pill.active, .pill:hover, tbody tr:hover td) { background: var(--wh-decoration); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.btn.primary, .logo) { background: var(--wh-accent); color: var(--wh-on-accent); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) .el-button--primary:not(.is-plain) {
+  --el-button-text-color: var(--wh-on-accent);
+  --el-button-hover-text-color: var(--wh-on-accent);
+  --el-button-hover-bg-color: var(--wh-accent);
+  --el-button-hover-border-color: var(--wh-accent);
+  --el-button-disabled-text-color: var(--wh-muted);
+  --el-button-disabled-bg-color: var(--wh-page);
+}
+html[data-wh-theme]:not([data-wh-theme='legacy']) .kpi.primary { background: var(--wh-decoration); color: var(--wh-ink); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.chip.good, .tag.green) { color: var(--good); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.chip.bad, .tag.red) { color: var(--bad); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.chip.warn, .tag.orange) { color: var(--wh-warning); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) .text-red { color: var(--good) !important; }
+html[data-wh-theme]:not([data-wh-theme='legacy']) .text-green { color: var(--bad) !important; }
+html[data-wh-theme]:not([data-wh-theme='legacy']) .btn-danger { color: var(--wh-danger); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) .field :is(input, select, textarea) { background: var(--wh-surface); color: var(--wh-ink); border-color: var(--wh-border); }
+/* Old scoped business blocks keep their paper appearance until page migration.
+   Supply a readable foreground where those blocks otherwise inherit dark ink. */
+html[data-wh-theme='dark'] :is(.lab, .radar) { background: #f9fcfd; color: #193b49; color-scheme: light; }
+html[data-wh-theme='dark'] :is(.platform-item, .todo-metric, .todo-item) { color: #232521; }
+html[data-wh-theme='dark'] .detail-label { color: var(--wh-muted); }
+html[data-wh-theme='dark'] .detail-value { color: var(--wh-ink); }
+
+/* Native semantics stay with callers: labels need for/id; chips are text. */
+.wh-card { padding: var(--wh-space-4); border: 1px solid var(--wh-line); border-radius: var(--wh-card-radius); background: var(--wh-surface); color: var(--wh-ink); margin-bottom: var(--wh-space-4); }
+.wh-number { font-variant-numeric: tabular-nums; font-size: clamp(24px, 2.5vw, 36px); font-weight: 700; overflow-wrap: anywhere; }
+.wh-chip { display: inline-flex; padding: 6px 12px; border-radius: var(--wh-pill-radius); background: var(--wh-decoration); color: var(--wh-ink); }
+.wh-label { display: block; color: var(--wh-ink); font-weight: 600; }
+.wh-note { color: var(--wh-muted); font-size: 13px; line-height: 1.6; }
+.wh-form-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--wh-space-3); margin-top: var(--wh-space-3); }
+.wh-input, .wh-button { min-height: 44px; padding: 10px 16px; border: 1px solid var(--wh-border); border-radius: 12px; background: var(--wh-surface); color: var(--wh-ink); font: inherit; }
+.wh-button { border-radius: var(--wh-pill-radius); cursor: pointer; transition: background var(--wh-duration); }
+.wh-button--primary { background: var(--wh-accent); color: var(--wh-on-accent); border-color: var(--wh-accent); }
+.wh-state { padding: var(--wh-space-4); color: var(--wh-ink); background: var(--wh-surface); border: 1px solid var(--wh-border); border-radius: var(--wh-card-radius); }
+.wh-state--error { border-color: var(--wh-danger); }
+.wh-loading-mark { font-size: 24px; }
+.wh-number, .kpi .value { font-variant-numeric: tabular-nums; }
+:is(.wh-button, .wh-input):disabled { cursor: not-allowed; color: var(--wh-muted); background: var(--wh-page); }
+html[data-wh-theme]:not([data-wh-theme='legacy']) :is(.btn, .btn-small, .pill):disabled { cursor: not-allowed; transform: none; box-shadow: none; color: var(--wh-muted); background: var(--wh-page); }
+/* Higher specificity restores focus even where the old field CSS removes it. */
+html body :is(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 3px solid var(--wh-accent); outline-offset: 3px; }
+@media (max-width: 1440px) {
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .topbar-inner { flex-wrap: wrap; }
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .nav { order: 3; flex-basis: 100%; }
+}
+@media (max-width: 1080px) {
+  :root { --wh-space-4: 16px; }
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .topbar { padding: 12px 18px; }
+}
+@media (max-width: 640px) {
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .topbar-inner { gap: 8px; }
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .nav { flex-wrap: nowrap; overflow-x: auto; border-radius: 12px; }
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .actions { flex-wrap: wrap; min-width: 0; gap: 8px; }
+  html[data-wh-theme]:not([data-wh-theme='legacy']) .form { grid-template-columns: 1fr; }
+  .wh-form-row { align-items: stretch; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body *, html body *::before, html body *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  html body :is(.btn, .btn-small):hover { transform: none; }
+}

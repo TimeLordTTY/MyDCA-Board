@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/styles/appearance.ts", "../src/components/AppearanceSettings.vue", "../src/components/FoundationState.vue", "../src/env.d.ts"],
+  "exclude": []
+}

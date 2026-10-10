@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>UI foundation isolated test</title></head>
+<body style="overflow:auto"><div id="app"></div><script type="module">
+import { createApp, h } from 'vue'
+import ElementPlus, { ElInput, ElButton } from 'element-plus'
+import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import '../src/styles/main.css'
+import '../src/styles/foundation.css'
+import { initializeAppearance } from '../src/styles/appearance.ts'
+import AppearanceSettings from '../src/components/AppearanceSettings.vue'
+import FoundationState from '../src/components/FoundationState.vue'
+initializeAppearance()
+createApp({ render: () => h('main', { style: 'padding:16px;max-width:1400px;margin:auto' }, [
+  h(AppearanceSettings),
+  h('section', { class: 'wh-card' }, [h('h2', '基础外观验收'), h('span', { class: 'wh-number' }, '0.00'), h('span', { class: 'wh-chip' }, 'UNKNOWN'), h('label', { class: 'wh-label', for: 'draft-input' }, '保留的输入'), h('input', { id: 'draft-input', class: 'wh-input', value: '未提交输入' }), h('button', { class: 'wh-button wh-button--primary', disabled: true }, '禁用动作')]),
+  h(FoundationState, { kind: 'loading' }), h(FoundationState, { kind: 'empty' }), h(FoundationState, { kind: 'error', retryable: true, disabled: true }),
+  h(ElInput, { placeholder: 'Element Plus input', disabled: true }), h(ElButton, { type: 'primary' }, () => 'Element Plus action'),
+]) }).use(ElementPlus).mount('#app')
+</script></body></html>
