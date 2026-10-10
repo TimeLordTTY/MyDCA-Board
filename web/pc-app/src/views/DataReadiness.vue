@@ -10,8 +10,8 @@
     </form>
     <p role="status" aria-live="polite">{{ busy ? '正在读取授权范围内的证据…' : report ? `诊断时间：${report.checkedAt}（来源更新时间见各项）` : '尚无诊断证据，请刷新。' }} {{ copyStatus }}</p>
     <p v-if="error" role="alert" class="error">{{ error }}</p>
-    <aside class="deployment"><strong>数据库迁移：未核实部署</strong><p>v0.21 离线预检仅为源码静态覆盖报告；一次性数据库演练未执行，目标环境待部署方验证。静态报告不代表线上已就绪，业务读取成功也不证明全部迁移已部署。</p>
-      <p>人工验收：核对目标环境 schema 与执行记录；同组 init / migration 仅选一条；核对前置、重复来源与索引；由获授权部署管理员确认。此页不执行 SQL 或修改财务记录。</p></aside>
+    <aside class="deployment"><strong>数据库结构：以目标环境部署记录为准</strong><p>数据库结构由部署记录核验，当前页面不能实时验证其结构状态。业务来源的 READY / PARTIAL / UNKNOWN 仍以本次只读诊断为准，部署成功不代表资产、目标或预算数据完整。</p>
+      <p>可阅读来源：仓库文档 docs/mydca_production_deployment_20261010.md（2026-10-10 部署报告，仅适用于报告中的目标环境）。需有仓库访问权限；详细部署证据由获授权部署管理员核对。本页不提供服务器证据访问，也不执行 SQL 或修改财务记录。</p></aside>
     <div class="sections"><section v-for="group in groups" :key="group.title" class="evidence-group"><h2>{{ group.title }}</h2>
       <article v-for="item in rows(report, group.areas)" :key="item.area">
         <h3>{{ labels[item.area] }} <span class="state" :class="item.area === 'SCHEMA' ? 'UNKNOWN' : item.state">{{ stateLabel(item) }}</span></h3>
@@ -61,7 +61,7 @@ onMounted(refresh)
 h1 { margin: 8px 0; font-size: 30px; } h2 { font-size: 19px; } h3 { font-size: 15px; line-height: 1.8; }
 .toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; margin: 24px 0 16px; }
 label { display: grid; gap: 6px; } select, input { padding: 9px; border: 1px solid #85979e; border-radius: 6px; background: var(--card, white); color: inherit; }
-.deployment { border-left: 4px solid #a97527; padding: 18px 22px; background: #fff5df; color: #513d20; }
+.deployment { border-left: 4px solid #718c92; padding: 18px 22px; background: #eef3f5; color: #34434b; }
 .sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 24px; }
 .evidence-group { border-top: 2px solid #718c92; min-width: 0; } article { padding: 8px 0 16px; border-bottom: 1px solid #b9c7ca; }
 .state { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 4px; font-size: 12px; background: #e6ecee; color: #34434b; }

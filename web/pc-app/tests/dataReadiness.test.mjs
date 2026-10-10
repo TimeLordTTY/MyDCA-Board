@@ -26,7 +26,7 @@ test('missing, partial, unavailable, stale and schema evidence remain explicit',
   assert.match(model.freshness(evidence({ dataTime: '2026-10-05' }), new Date('2026-10-08T12:00:00')), /近期/)
   assert.match(model.freshness(evidence({ dataTime: '2026-10-09' }), new Date('2026-10-08T12:00:00')), /时间异常/)
   assert.match(model.freshness(evidence({ dataTime: '2026-10' })), /未核实/)
-  assert.match(model.stateLabel(evidence({ area: 'SCHEMA', state: 'READY' })), /未核实部署/)
+  assert.match(model.stateLabel(evidence({ area: 'SCHEMA', state: 'READY' })), /无法实时验证/)
   assert.equal(model.rows({ evidence: [evidence()] }, ['ASSETS', 'MARKET'])[1].state, 'UNKNOWN')
 })
 test('page clears previous evidence after permission, network or timeout failure and recovers', async () => {
@@ -44,7 +44,7 @@ test('empty evidence produces unknown sections; summary copies no server prose o
   await state.refresh(); assert.equal(model.rows(state.report.value, ['GOALS'])[0].state, 'UNKNOWN')
   const summary = model.issueSummary({ scope: 'PERSONAL', evidence: [evidence({ reason: 'token=secret 123456', source: 'db-password', nextStep: 'private host' })] })
   assert.doesNotMatch(summary, /secret|123456|db-password|private host/)
-  assert.match(summary, /部分已知/); assert.match(summary, /未核实部署/)
+  assert.match(summary, /部分已知/); assert.match(summary, /无法实时验证/)
 })
 test('refresh is bounded and clipboard failure has a safe retry state', async () => {
   let resolve, calls = 0
@@ -74,4 +74,53 @@ test('shared API uses only authorized GET with scope/month; navigation excludes 
   assert.doesNotMatch(view, /orderApi|settlementApi|ledgerApi|apiClient\.post|v-html/)
   assert.match(view, /role="alert"/); assert.match(view, /role="status"/); assert.match(view, /focus-visible/)
   assert.deepEqual(compileTemplate({ source: parse(view).descriptor.template.content, filename: 'DataReadiness.vue', id: 'readiness' }).errors, [])
+})
+
+test('静态迁移告警消失，结构说明限定目标环境和证据访问权限', () => {
+  assert.doesNotMatch(view, /未核实部署|演练未执行|目标环境待部署方验证/)
+  assert.match(view, /当前页面不能实时验证其结构状态/)
+  assert.match(view, /docs\/mydca_production_deployment_20261010\.md/)
+  assert.match(view, /仅适用于报告中的目标环境/)
+  assert.match(view, /需有仓库访问权限/)
+  assert.doesNotMatch(view, /所有环境已完成部署/)
+})
+
+test('结构来源缺失或旧接口断言不伪装成功，也不误报迁移未部署', async () => {
+  for (const items of [[], [evidence({ area: 'SCHEMA', state: 'UNKNOWN', reason: '未获部署确认' })], [evidence({ area: 'SCHEMA', state: 'READY' })]]) {
+    const state = await setup({ diagnose: async (scope, month) => ({ scope, month, evidence: items }) })
+    await state.refresh()
+    const schema = model.rows(state.report.value, ['SCHEMA'])[0]
+    assert.equal(schema.state, 'UNKNOWN')
+    assert.match(schema.reason, /接口不提供迁移覆盖事实/)
+    assert.doesNotMatch(schema.reason, /未获部署确认|所有环境已完成部署/)
+    assert.match(model.issueSummary(state.report.value), /无法实时验证/)
+  }
+})
+
+test('手动刷新保留资产目标预算部分已知，权限和网络失败清空证据后可重试', async () => {
+  let failure, calls = 0
+  const items = ['ASSETS', 'GOALS', 'BUDGETS'].map(area => evidence({ area }))
+  const state = await setup({ diagnose: async (scope, month) => {
+    calls++
+    if (failure) throw failure
+    return { scope, month, evidence: items }
+  } })
+  for (const [error, message] of [[{ response: { status: 401 } }, /登录已失效/], [{ response: { status: 403 } }, /家庭管理员权限/], [new Error('private network'), /网络断开/]]) {
+    failure = null
+    await state.refresh()
+    for (const row of model.rows(state.report.value, ['ASSETS', 'GOALS', 'BUDGETS'])) {
+      assert.equal(row.state, 'PARTIAL')
+      assert.match(model.stateLabel(row), /部分已知/)
+    }
+    failure = error
+    await state.refresh()
+    assert.equal(state.report.value, null)
+    assert.match(state.error.value, message)
+    assert.equal(model.rows(state.report.value, ['GOALS'])[0].state, 'UNKNOWN')
+  }
+  failure = null
+  await state.refresh()
+  assert.equal(calls, 7)
+  assert.equal(state.error.value, '')
+  assert.equal(state.report.value.evidence[1].state, 'PARTIAL')
 })
