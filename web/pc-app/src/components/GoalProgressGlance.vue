@@ -6,15 +6,15 @@
       <label>币种<select v-model="currency"><option v-for="c in goalCurrencies" :key="c">{{ c }}</option></select></label>
       <button class="btn" :disabled="loading" @click="load">{{ error ? '手动重试' : loaded ? '手动刷新目标' : '手动加载目标' }}</button>
     </div>
-    <p v-if="loading" role="status">正在读取目标与进度…</p><p v-else-if="error" role="alert">{{ error }}</p><p v-else-if="!loaded" role="status">点击后读取；切换作用域或币种后请重新手动加载。</p>
+    <p v-if="loading" role="status">正在读取目标与进度…</p><p v-else-if="error" role="alert">{{ error }}</p><p v-else-if="!loaded" role="status">还未读取目标。点击“手动加载目标”后查看；切换作用域或币种后需重新读取。</p>
     <p v-if="loaded && !entries.length" role="status">当前作用域与币种没有进行中目标；无目标不等于资产为0。</p>
     <div class="goals">
       <section v-for="e in entries" :key="e.goal.id" class="goal" :aria-label="e.goal.config.name">
         <h3>{{ e.goal.config.name }}</h3><small>{{ e.goal.config.currency }} · {{ e.goal.config.scope === 'PERSONAL' ? '个人' : '家庭（后端授权）' }} · {{ measures[e.goal.config.measure] }}</small>
         <dl><div><dt>目标金额</dt><dd>{{ goalAmount(e.goal.config.targetValue) }}</dd></div><div><dt>目标日期</dt><dd>{{ e.goal.config.targetDate }}</dd></div></dl>
         <template v-if="completeGoalProgress(e.progress)"><p class="rate">{{ goalPercent(e.progress) }} <small>{{ e.progress.completed ? '已达目标' : '尚未达目标' }}</small></p><progress :value="Math.max(0, Math.min(1, e.progress.completionRate!))" max="1" aria-label="目标完成率"></progress><p>当前金额 {{ goalAmount(e.progress.currentValue) }}</p></template>
-        <p v-else>完成率与达标状态未知<span v-if="e.progress.quality === 'PARTIAL'"> · 部分已知金额 {{ goalAmount(e.progress.knownValue) }}</span></p>
-        <p>质量：{{ e.progress.quality === 'OK' && !completeGoalProgress(e.progress) ? '未知（完整进度契约不足）' : qualities[e.progress.quality] }} · {{ goalReason(e.progress) }}</p>
+        <p v-else>数据未读全，暂无法确认完成率或是否达标<span v-if="e.progress.quality === 'PARTIAL'"> · 已读到的部分金额 {{ goalAmount(e.progress.knownValue) }}</span></p>
+        <p>{{ completeGoalProgress(e.progress) ? '根据本次读取的资产计算进度' : e.progress.quality === 'PARTIAL' ? '仍有资产数据缺失' : '暂无法确认完整资产进度' }} · {{ goalReason(e.progress) }}</p>
         <p>数据截至 {{ validGoalDate(e.progress.asOfDate) ? e.progress.asOfDate : '未知' }}</p><p>{{ goalCountdown(e.progress, e.goal.config.targetDate) }}</p>
       </section>
     </div>
@@ -31,7 +31,6 @@ const user = useUserStore(), route = useRoute()
 const scope = ref('PERSONAL'), currency = ref('CNY'), entries = ref<GoalGlanceEntry[]>([])
 const loading = ref(false), loaded = ref(false), error = ref('')
 const measures = { TOTAL_ASSETS: '总资产', CASH: '现金', POSITION_VALUE: '持仓市值' }
-const qualities = { OK: '完整 / OK', PARTIAL: '部分已知 / PARTIAL', UNKNOWN: '未知 / UNKNOWN' }
 let generation = 0, timer: ReturnType<typeof setTimeout> | undefined
 function reset() { generation++; clearTimeout(timer); entries.value = []; loading.value = false; loaded.value = false; error.value = '' }
 async function load() {

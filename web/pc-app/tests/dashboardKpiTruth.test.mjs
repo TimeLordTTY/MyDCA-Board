@@ -63,3 +63,16 @@ test('Dashboard top cards use truth model and preserve financial action handlers
 test('HTTP identity revocation without store watch clears loading on completion',async()=>{
  const d=deferred();let owner='a',state;const l=m.createKpiLoader(()=>d.promise,()=>owner,s=>state=s);const p=l.load();owner='revoked';d.resolve(zero());await p;assert.deepEqual(state,{loading:false,snapshot:null,readAt:null})
 })
+
+test('friendly amount copy preserves real zero and exposes incomplete amounts', () => {
+ assert.equal(m.amountText({status:'complete',value:0},String),'0')
+ assert.equal(m.amountText({status:'complete',value:-7},String),'-7')
+ assert.match(m.amountText({status:'partial',value:3},String),/已读到 3.*还有数据缺失/)
+ assert.match(m.amountText({status:'unavailable',value:null},String),/暂无法确认/)
+ assert.equal(m.amountText({status:'loading',value:null},String),'正在读取…')
+})
+test('amount explanation uses a native keyboard accessible disclosure', async () => {
+ const s=await readFile(new URL('../src/views/Dashboard.vue',import.meta.url),'utf8')
+ assert.match(s,/<details[^>]*kpi-explanation[^>]*><summary>这些金额怎么算？<\/summary>/)
+ assert.match(s,/不能作为完整余额/)
+})

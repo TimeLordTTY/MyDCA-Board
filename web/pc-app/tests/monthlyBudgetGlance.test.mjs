@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import ts from 'typescript'
-import { parse, compileScript } from '@vue/compiler-sfc'
+import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import * as vue from 'vue'
 const read = p => readFile(new URL(`../src/components/${p}`, import.meta.url), 'utf8')
 const transpile = s => ts.transpileModule(s, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
@@ -60,7 +60,7 @@ test('manual load, failure clears data, authorization and network retries', asyn
   let fail = 0, calls = 0
   const s = await setup({ list: async () => { calls++; if (fail) throw fail === 500 ? new Error('网络中断') : { response: { status: fail } }; return [row(1)] }, comparison: async id => comparison(id) })
   assert.equal(calls, 0); await s.state.load(); assert.equal(s.state.loaded.value, true)
-  for (const status of [401, 403, 500]) { fail = status; await s.state.load(); assert.equal(s.state.entries.value.length, 0); assert.equal(s.state.loaded.value, false); assert.match(s.state.error.value, status === 500 ? /网络/ : /权限/); fail = 0; await s.state.load(); assert.equal(s.state.loaded.value, true) }
+  for (const status of [401, 403, 500]) { fail = status; await s.state.load(); assert.equal(s.state.entries.value.length, 0); assert.equal(s.state.loaded.value, false); assert.match(s.state.error.value, status === 500 ? /网络/ : status === 401 ? /登录已失效/ : /权限/); fail = 0; await s.state.load(); assert.equal(s.state.loaded.value, true) }
   s.cleanup()
 })
 test('cancel, session identity, filters, route and lifecycle invalidate late responses', async () => {
@@ -88,4 +88,47 @@ test('late old request cannot overwrite a successful retry', async () => {
 test('safe route, labels and no persistence or financial actions', async () => {
   assert.match(source, /name: 'GoalBudgetCenter'/); assert.match(source, /aria-label="本月预算速览"/); assert.match(source, /role="status"/); assert.match(source, /role="alert"/); assert.match(source, /<label>作用域/); assert.match(source, /无计划不等于0元/)
   assert.doesNotMatch(source + await read('monthlyBudgetGlanceModel.ts'), /localStorage|sessionStorage|\.create\(|\.edit\(|\.post\(|\.patch\(|orderApi|settlementApi|recalculate|refreshAssets/)
+})
+
+const template = compileTemplate({ source: parse(source).descriptor.template.content, filename: 'MonthlyBudgetGlance.vue', id: 'copy-test' })
+assert.deepEqual(template.errors, [])
+globalThis.__copyVue = { ...vue, vModelSelect: {} } // DOM select directive is outside this text-rendering test.
+const render = (await imp(template.code.replace(/import \{([^}]+)\} from "vue"/, (_, names) => `const {${names.replace(/ as /g, ': ')}} = globalThis.__copyVue`))).render
+function rendered(state) {
+  const renderer = vue.createRenderer({
+    createElement: tag => ({ tag, children: [] }), createText: text => ({ text }), createComment: () => ({}),
+    setText: (node, text) => { node.text = text }, setElementText: (node, text) => { node.text = text },
+    insert: (node, parent) => { parent.children.push(node) }, remove() {},
+    patchProp: (node, key, value, next) => { (node.props ||= {})[key] = next }, parentNode: () => null, nextSibling: () => null,
+  })
+  const root = { children: [] }
+  const app = renderer.createApp({ render: () => render(vue.proxyRefs(state), []) })
+  app.component('router-link', { setup: (_, { slots }) => () => vue.h('a', slots.default?.()) })
+  app.mount(root)
+  const collect = node => [node.text || '', ...(node.children || []).map(collect)].join(' ')
+  const text = collect(root)
+  app.unmount()
+  return text
+}
+test('rendered budget states distinguish idle, empty, denied, failure and real zero', async () => {
+  let mode = 'empty'
+  const s = await setup({ list: async () => {
+    if (mode === 'denied') throw { response: { status: 403 } }
+    if (mode === 'failed') throw new Error('网络中断')
+    return mode === 'empty' ? [] : [row(1)]
+  }, comparison: async id => comparison(id, mode === 'partial' ? { quality: 'PARTIAL' } : {}) })
+  assert.match(rendered(s.state), /还未读取本月预算/)
+  await s.state.load(); assert.match(rendered(s.state), /还没有本月预算/); assert.match(rendered(s.state), /前往目标与预算创建/)
+  mode = 'denied'; await s.state.load(); assert.match(rendered(s.state), /没有读取此预算的权限/); assert.doesNotMatch(rendered(s.state), /还没有本月预算|0\.00/)
+  mode = 'failed'; await s.state.load(); assert.match(rendered(s.state), /预算读取失败/)
+  mode = 'zero'; await s.state.load(); assert.match(rendered(s.state), /0\.00/); assert.doesNotMatch(rendered(s.state), /还没有本月预算|UNKNOWN|输入完整/)
+  mode = 'partial'; await s.state.load(); assert.match(rendered(s.state), /部分流水未读全/); assert.doesNotMatch(rendered(s.state), /未超支（本预算口径）/)
+  s.cleanup()
+})
+test('friendly quality labels leave missing actuals unresolved and offer creation navigation', () => {
+  assert.match(model.budgetQualityText(comparison(1)), /核对流水/)
+  for (const quality of ['PARTIAL', 'UNKNOWN', 'UNAVAILABLE']) assert.match(model.budgetQualityText(comparison(1, { quality })), /无法确认/)
+  assert.match(model.budgetQualityText(comparison(1, { actualExpenses: null })), /不能按0支出/)
+  assert.match(model.budgetGlanceFailure({ response: { status: 401 } }), /登录已失效/)
+  assert.match(source, /前往目标与预算创建/); assert.match(source, /focus-visible/)
 })

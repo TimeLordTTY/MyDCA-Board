@@ -198,7 +198,8 @@
       <span v-if="kpiState.readAt"> · 读取时间 {{ kpiState.readAt }}</span>
       <button type="button" @click="kpiLoader.load()">手动重试资产 KPI</button>
     </div>
-    <div class="kpis">
+    <details class="mini kpi-explanation"><summary>这些金额怎么算？</summary><p>金额根据本次读取的数据计算。标有“还有数据缺失”的金额只包含已读到的部分，不能作为完整余额；暂无法确认时不按0元计算。各来源分别读取，口径未完全核实；不代表实时原子快照。</p></details>
+    <div class="kpis" :aria-busy="kpiState.loading">
       <div class="kpi primary">
         <div class="label">✨ 净资产（Net Worth）</div>
         <div class="value">{{ kpiText(kpis.netWorth) }}</div>
@@ -1283,6 +1284,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.kpi-explanation summary { cursor: pointer; }
+.kpi-explanation summary:focus-visible { outline: 2px solid var(--primary, #568979); outline-offset: 3px; }
 .today-todo-card {
   margin-bottom: 16px;
   border: 1px solid rgba(64, 158, 255, 0.12);

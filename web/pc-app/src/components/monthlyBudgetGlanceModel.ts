@@ -4,7 +4,7 @@ import { completeActual } from './budgetReviewModel'
 export const GLANCE_LIMITS = { pages: 5, comparisons: 20, concurrency: 3, timeoutMs: 30000 }
 export const localMonth = (now = new Date()) => `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 export const glanceAmount = (n: unknown) => typeof n === 'number' && Number.isFinite(n) ? n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '未知'
-export const actualAmount = (c: BudgetComparison, n: unknown) => completeActual(c) ? glanceAmount(n) : c.quality === 'PARTIAL' ? '部分已知（完整实际未知）' : '未知'
+export const actualAmount = (c: BudgetComparison, n: unknown) => completeActual(c) ? glanceAmount(n) : c.quality === 'PARTIAL' ? '流水未读全（完整实际未知）' : '未知'
 export interface GlanceEntry { budget: Budget; comparison: BudgetComparison; readAt: string }
 interface ReadApi {
   list(page: number, signal?: AbortSignal): Promise<Budget[]>
@@ -50,4 +50,17 @@ export async function readMonthlyGlance(api: ReadApi, month: string, scope: stri
   }))
   check()
   return entries.sort((a, b) => a.budget.id.localeCompare(b.budget.id))
+}
+
+// Presentation only: retain completeActual and the API quality contract.
+export function budgetQualityText(c: BudgetComparison) {
+  if (completeActual(c)) return '已按本预算分类核对流水'
+  if (c.quality === 'PARTIAL') return '部分流水未读全，暂无法确认剩余预算或是否超支'
+  return '实际流水暂无法确认，不能按0支出计算'
+}
+export function budgetGlanceFailure(e: unknown) {
+  const status = (e as { response?: { status?: number } })?.response?.status
+  if (status === 401) return '登录已失效，请重新登录后手动重试；暂无法读取预算与流水。'
+  if (status === 403) return '没有读取此预算的权限，请联系家庭管理员；暂无法确认余额与流水。'
+  return '预算读取失败，请手动重试。' + (e instanceof Error ? e.message : '网络或服务暂不可用。')
 }

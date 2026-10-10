@@ -113,3 +113,10 @@ test('identity change during progress and malformed response clear all card data
   const bad = await setup({ list: async () => [row(1)], progress: async () => progress(2) })
   await bad.state.load(); assert.match(bad.state.error.value, /响应无效/); assert.equal(bad.state.entries.value.length, 0); bad.cleanup()
 })
+
+test('goal quality copy explains missing data without exposing enum labels', () => {
+ assert.doesNotMatch(source, /完整 \/ OK|部分已知 \/ PARTIAL|未知 \/ UNKNOWN|质量：/)
+ assert.match(source, /仍有资产数据缺失/)
+ assert.match(source, /暂无法确认完成率或是否达标/)
+ assert.match(source, /还未读取目标/)
+})

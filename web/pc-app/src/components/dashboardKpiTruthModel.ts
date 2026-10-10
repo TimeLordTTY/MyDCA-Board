@@ -57,9 +57,9 @@ export function kpiTruth(s: Snapshot | null, loading = false) {
   return result
 }
 export function amountText(a: Amount, format: (v: number) => string) {
-  if (a.status === 'loading') return '读取中 · 未知'
-  if (a.value === null) return '未知 · 来源未完整取得'
-  return `${a.status === 'partial' ? '已知部分 ' : ''}${format(a.value)} · ${a.status === 'complete' ? '输入完整' : '部分已知'}`
+  if (a.status === 'loading') return '正在读取…'
+  if (a.value === null) return '暂无法确认 · 数据未读全'
+  return a.status === 'partial' ? `已读到 ${format(a.value)} · 还有数据缺失` : format(a.value)
 }
 export interface KpiState { loading: boolean; snapshot: Snapshot | null; readAt: string | null }
 export function createKpiLoader(read: (valid: () => boolean) => Promise<Snapshot>, identity: () => string, publish: (s: KpiState) => void) {

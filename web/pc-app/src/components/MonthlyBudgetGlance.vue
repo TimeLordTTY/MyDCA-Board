@@ -4,14 +4,14 @@
     <div class="filters">
       <label>作用域<select v-model="scope"><option value="PERSONAL">个人</option><option value="FAMILY">家庭（由后端授权）</option></select></label>
       <label>币种<select v-model="currency"><option v-for="c in ['CNY', 'USD', 'HKD', 'EUR', 'JPY', 'GBP']" :key="c">{{ c }}</option></select></label>
-      <button class="btn" :disabled="loading" @click="load">{{ loaded ? '刷新本月预算' : '手动加载本月预算' }}</button><button v-if="loading" class="btn" @click="cancel">取消加载</button>
+      <button class="btn" :disabled="loading" @click="load">{{ error ? '手动重试预算' : loaded ? '刷新本月预算' : '手动读取本月预算' }}</button><button v-if="loading" class="btn" @click="cancel">取消加载</button>
     </div>
-    <p v-if="loading" role="status">正在读取本月预算…</p><p v-else-if="error" role="alert">{{ error }}</p><p v-else-if="!loaded" role="status">点击后读取；切换作用域或币种后请重新手动加载。</p>
-    <p v-if="loaded && !entries.length" role="status">当前作用域与币种未找到本月计划，金额未知；无计划不等于0元。</p>
+    <p v-if="loading" role="status">正在读取本月预算…</p><p v-else-if="error" role="alert">{{ error }}</p><p v-else-if="!loaded" role="status">还未读取本月预算。点击“手动读取本月预算”后查看；切换作用域或币种后需重新读取。</p>
+    <div v-if="loaded && !entries.length" class="plan" role="status"><p>当前作用域与币种还没有本月预算。无计划不等于0元，也不能据此判断实际支出。</p><router-link :to="{ name: 'GoalBudgetCenter' }">前往目标与预算创建</router-link></div>
     <section v-for="e in entries" :key="e.budget.id" class="plan" :aria-label="e.budget.config.name">
       <h3>{{ e.budget.config.name }} <small>独立预算 #{{ e.budget.id }} · {{ e.budget.config.currency }} · {{ e.budget.config.scope === 'PERSONAL' ? '个人' : '家庭' }}</small></h3>
       <dl><div><dt>计划支出</dt><dd>{{ glanceAmount(e.comparison.plannedExpenses) }}</dd></div><div><dt>计划收入</dt><dd>{{ glanceAmount(e.comparison.plannedIncome) }}</dd></div><div><dt>计划预留</dt><dd>{{ glanceAmount(e.comparison.plannedReserve) }}</dd></div><div><dt>计划结余</dt><dd>{{ glanceAmount(e.comparison.plannedSurplus) }}</dd></div><div><dt>实际支出</dt><dd>{{ actualAmount(e.comparison, e.comparison.actualExpenses) }}</dd></div><div><dt>剩余预算</dt><dd>{{ actualAmount(e.comparison, e.comparison.remainingBudget) }}</dd></div></dl>
-      <p>质量：{{ quality(e.comparison) }} · {{ completeActual(e.comparison) ? e.comparison.overspent ? '已超支' : '未超支（本预算口径）' : '超支状态未知' }}</p>
+      <p>{{ budgetQualityText(e.comparison) }} · {{ completeActual(e.comparison) ? e.comparison.overspent ? '已超支' : '未超支（本预算口径）' : '超支状态未知' }}</p>
       <p v-for="w in e.comparison.warnings" :key="w">{{ w }}</p><small>来源：既有预算对比 GET · 客户端读取 {{ e.readAt }}</small>
     </section>
     <footer>各份预算单独展示，不求和为整月或家庭总额。家庭数据仅代表后端授权口径；预留是计划，不是实际转账。读取时间不是财务统一快照。最多5页 / 100份列表、20份对比、并发3个、30秒超时。</footer>
@@ -21,10 +21,8 @@
 import { ref, watch, onBeforeUnmount, onDeactivated } from 'vue'
 import { useRoute } from 'vue-router'
 import { budgetApi, useUserStore } from '@wealth-hub/shared'
-import type { BudgetComparison } from '@wealth-hub/shared'
 import { completeActual } from './budgetReviewModel'
-import { failure } from './goalBudgetModel'
-import { localMonth, readMonthlyGlance, glanceAmount, actualAmount, GLANCE_LIMITS } from './monthlyBudgetGlanceModel'
+import { localMonth, readMonthlyGlance, glanceAmount, actualAmount, budgetQualityText, budgetGlanceFailure, GLANCE_LIMITS } from './monthlyBudgetGlanceModel'
 import type { GlanceEntry } from './monthlyBudgetGlanceModel'
 const user = useUserStore(), route = useRoute()
 const month = ref(localMonth()), scope = ref('PERSONAL'), currency = ref('CNY')
@@ -32,7 +30,6 @@ const entries = ref<GlanceEntry[]>([]), loading = ref(false), loaded = ref(false
 let generation = 0, controller: AbortController | null = null, timer: ReturnType<typeof setTimeout> | undefined
 function reset() { generation++; controller?.abort(); controller = null; clearTimeout(timer); entries.value = []; loading.value = false; loaded.value = false; error.value = ''; month.value = localMonth() }
 function cancel() { reset(); error.value = '加载已取消，请手动重试。' }
-const quality = (c: BudgetComparison) => completeActual(c) ? '完整 / OK' : c.quality === 'PARTIAL' ? '部分已知 / PARTIAL' : String(c.quality) === 'UNAVAILABLE' ? '不可用 / UNAVAILABLE' : '未知 / UNKNOWN'
 async function load() {
   reset(); loading.value = true
   const version = generation, active = new AbortController(); controller = active
@@ -41,7 +38,7 @@ async function load() {
     const result = await readMonthlyGlance(budgetApi, month.value, scope.value, currency.value, active.signal)
     if (version !== generation) return
     entries.value = result; loaded.value = true
-  } catch (e) { if (version === generation) { reset(); error.value = failure(e) } }
+  } catch (e) { if (version === generation) { reset(); error.value = budgetGlanceFailure(e) } }
   finally { if (version === generation) { clearTimeout(timer); controller = null; loading.value = false } }
 }
 watch([scope, currency, () => user.token, () => user.user, () => route.fullPath], reset, { deep: true, flush: 'sync' })
