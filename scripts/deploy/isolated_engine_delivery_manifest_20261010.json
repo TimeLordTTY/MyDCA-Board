@@ -1,0 +1,38 @@
+{
+  "task_id": "task-mydca-mysql57-80-isolated-engine-rehearsal-20261010",
+  "repository": "TimeLordTTY/MyDCA-Board",
+  "target_branch": "v2",
+  "source_commit": "3e76587fa3b6f639e9a0f4d004d64cc02495faa2",
+  "result_commit_resolution": "Local commit containing this file; git log -1 --format=%H -- scripts/deploy/isolated_engine_delivery_manifest_20261010.json",
+  "engineering_delivery": "LOCAL_OFFLINE_VERIFIED_ENGINE_BLOCKED",
+  "engine_status": "ENGINE_NOT_TESTED",
+  "mysql57_actual_version": "UNKNOWN",
+  "mysql80_actual_version": "UNKNOWN",
+  "production_schema": "PRODUCTION_SCHEMA_BLOCKED",
+  "production_ready": false,
+  "gate_blocker": "DOCKER_NOT_AVAILABLE",
+  "deployment": "NOT_RUN",
+  "database_connections_and_sql_execution": "NOT_RUN",
+  "push": "NOT_RUN",
+  "gap_counts": {"tables": 9, "columns": 2, "unique_indexes": 2},
+  "artifacts": [
+    "scripts/deploy/mysql_isolated_rehearsal.py",
+    "scripts/deploy/test_mysql_isolated_rehearsal.py",
+    "scripts/deploy/mysql_isolated_dry_run_20261010.json",
+    "scripts/deploy/mysql_isolated_engine_evidence_20261010.json",
+    "docs/mydca_mysql57_80_isolated_engine_rehearsal_20261010.md"
+  ],
+  "validation": {
+    "migration_preflight_tests": 6,
+    "mysql57_static_preflight_tests": 8,
+    "new_offline_safety_tests": 25,
+    "tests": "PASS",
+    "post_task_compile_hook_max_fix_rounds": 0,
+    "build": "BACKEND_PACKAGE_AND_SHARED_PC_MOBILE_BUILD_PASS",
+    "backend_unit_tests_in_hook": "SKIPPED_BY_EXISTING_HOOK",
+    "git_diff_check": "PASS"
+  },
+  "aicore_external_delivery_manifest": "PENDING_EXTERNAL_CHAIN",
+  "independent_hermes_wecom_verified_receipt": "NOT_VERIFIED",
+  "external_delivery_blocker": "No callable AiCore/Hermes tool; external directories outside allowed_paths"
+}
