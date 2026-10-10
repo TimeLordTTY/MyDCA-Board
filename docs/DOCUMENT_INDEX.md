@@ -1,26 +1,35 @@
 # 财富中枢文档索引与事实源优先级
 
 - **作者**：ChatGPT
-- **更新时间**：2026-10-08 +08:00
+- **更新时间**：2026-10-11 +08:00
 
 ## 读取顺序
 
 1. `AGENTS.md`、`AGENT.MD`：仓库执行规则与验证要求。
 2. `docs/CURRENT_DEVELOPMENT_STATE.md`：当前版本、已完成能力、安全边界、真实待办。
-3. `docs/Phase3-开发进度总结.md`：Phase3 时间线与能力演进。
-4. `docs/Phase3-移动端原生App与自动记账.md`：移动端/草稿闭环架构。
-5. 当前任务对应专项文档。
-6. `docs/财富中枢系统完整设计方案.md`、`docs/wealth_hub_design_full_v1.2.md`、`docs/开发实施指南.md`：目标架构与长期计划。
+3. [2026-10-10 当前事实核对](mydca_current_truth_20261010.md) 与 [生产部署报告](mydca_production_deployment_20261010.md)：实际环境、发布与验收边界。
+4. `docs/Phase3-开发进度总结.md`：Phase3 时间线与能力演进。
+5. `docs/Phase3-移动端原生App与自动记账.md`：移动端/草稿闭环架构。
+6. 当前任务对应专项文档。
+7. `docs/财富中枢系统完整设计方案.md`、`docs/wealth_hub_design_full_v1.2.md`、`docs/开发实施指南.md`：目标架构与长期计划。
 
 ## 冲突处理
 
-**代码/测试/迁移脚本 > CURRENT_DEVELOPMENT_STATE > Phase3 当前总结 > 专项文档 > 长期设计文档 > 历史 Phase1/Phase2 记录**。
+部署状态以指定环境的已核实 release/部署证据为准；代码存在、迁移脚本存在、只读 smoke 和 SCHEMA UNKNOWN 均不能替代部署事实。2026-10-10 已迁移 9表/2字段/2唯一索引，MySQL 仍5.7，Android APK 未发布，恢复演练 NOT_RUN。后续 PC Git 交付不等于生产包含最新提交。
+
+实现能力的优先级为 **代码/测试/迁移脚本 > CURRENT_DEVELOPMENT_STATE > Phase3 当前总结 > 专项文档 > 长期设计文档 > 历史 Phase1/Phase2 记录**。
 
 版本专项文档记录当时任务事实；其历史“下一步/未完成”若已被后续任务完成，不得覆盖当前状态。
 
 任何“当前处于初始化阶段”“Android 未接真实登录/OCR/通知监听”“draft_ledger_entry 尚未落地”等旧表述都只能按历史上下文理解。
 
 ## 当前关键文档
+
+- [当前事实与分类待办](mydca_current_truth_20261010.md)
+- [2026-10-10 生产部署与只读验收](mydca_production_deployment_20261010.md)
+- [PC 首页目标进度速览](mydca_pc_dashboard_goal_progress_glance_20261010.md)
+- [结构验证边界文案](mydca_data_readiness_status_copy_20261010.md)
+- [KPI 与预算空态文案](mydca_user_friendly_kpi_budget_copy_20261010.md)
 
 - v0.21 发布硬化与人工验收：`docs/mydca_v021_release_hardening_20261008.md`
 - v0.21 离线迁移预检：`docs/mydca_v021_migration_preflight_20261008.md`；完整矩阵 `scripts/v021_database_coverage.json`、`scripts/v021_migration_preflight.json`

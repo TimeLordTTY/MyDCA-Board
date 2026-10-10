@@ -1,16 +1,26 @@
 # 财富中枢当前开发状态
 
 - **作者**：ChatGPT（依据 v2 代码、AiCore Delivery Manifest 与 GitHub Actions 证据同步）
-- **更新时间**：2026-10-08 +08:00
+- **更新时间**：2026-10-11 +08:00（核对 2026-10-10 交付）
 - **工程仓库**：`TimeLordTTY/MyDCA-Board@v2`
 
 > 本文件是“当前实现状态”的首要事实源。长篇设计文档、版本专项报告和 Phase1/Phase2 历史总结保留设计/历史价值；若其中的“当前状态、下一步、尚未实现”与本文件冲突，以本文件和实际代码为准。
 
+## 2026-10-10 实际部署与后续 Git 交付
+
+生产事实以 [生产部署报告](mydca_production_deployment_20261010.md) 的最终线上验收为准：MySQL **5.7.44-log**；9 张新表、settlement_confirm 两个可空字段及两个草稿来源唯一索引已完成结构迁移。来源归一化和历史回填未执行，11 张受保护表原有字段的迁移前后指纹与行数一致。2026-10-10 10:46 +08:00 最终后端 UP，PC 与兼容 H5 已部署；最终 JAR SHA-256 为 `0f54b41430c150004d7c71a2667898d204b513b535c759bd5be25e0f435e39bf`。
+
+**Android APK 本轮未发布；独立数据库恢复演练 NOT_RUN；MySQL 未升级至 8。** 临时表演练和只读 smoke 不代表全套端到端验收，真实角色写入、交易与正式入账未测试。本次文档任务只读取已有证据，没有再次连接生产。
+
+部署后 Git 已交付首页目标速览 `cbab2c57`、结构状态文案 `cd89f6a6`、资产 KPI/预算空态文案 `dd9a4ffd`。远端 v2 在本次读取时为 dd9a4ffd；这些提交晚于报告的最终切换，**生产是否包含它们须另查 release/source commit 与制品哈希证据，目前未确认**。SCHEMA 接口固定 UNKNOWN 是实时验证能力边界，不能反推迁移未部署；业务 READY 也不证明来源完整或全套验收通过。
+
+最新证据矩阵、真实待办分类及本次验证/Delivery 边界见 [当前事实核对报告](mydca_current_truth_20261010.md)。以下版本描述记录工程演进；其中“本任务未部署/未推送”仅指当时工程任务，不覆盖上述指定生产环境的新证据。
+
 ## 当前阶段
 
-v0.21 数据就绪发布硬化：Android 0.21.0 / 22。PC 展示个人/家庭管理员诊断，Android 目标/预算页展示个人只读诊断与来源详情。READY 仅表示可读，UNKNOWN/PARTIAL 不当零；行情三日窗口、预算月份与诊断时间分别标明。schema 始终未知，不执行迁移或财务写入。详见 `docs/mydca_v021_release_hardening_20261008.md`。
+v0.21 数据就绪发布硬化：Android 0.21.0 / 22。PC 展示个人/家庭管理员诊断，Android 目标/预算页展示个人只读诊断与来源详情。READY 仅表示可读，UNKNOWN/PARTIAL 不当零；行情三日窗口、预算月份与诊断时间分别标明。接口 SCHEMA 固定 UNKNOWN，不实时验证部署结构；工程读取不执行迁移或财务写入。详见 `docs/mydca_v021_release_hardening_20261008.md`。
 
-四个上游提交均在本地树。DB-001 通用初始化缺口已修复；v0.14～v0.19 双路径与重复运行保护仅经离线静态复核，隔离数据库演练 NOT_RUN，目标环境待部署方验证。未连接数据库、未部署、未推送，无 v0.21 CI 制品证据。真实角色登录、设备断网、无障碍与 goal_only 汇总由 owner/AiCore/Hermes 后续验收。
+四个上游提交均在本地树。DB-001 通用初始化缺口已修复；v0.14～v0.19 双路径与重复运行保护仅经离线静态复核，隔离双引擎演练 NOT_RUN；指定生产环境的结构迁移和服务上线已见上方报告，其他环境仍须分别核验。当时工程任务未连接数据库或部署，无 v0.21 CI 制品证据。真实角色登录、设备断网、无障碍与 goal_only 汇总由 owner/AiCore/Hermes 后续验收。
 
 v0.20 目标与现金流情景发布硬化：Android 0.20.0 / 21 与 CI 预期命名统一。PC 手动对比单目标及2至8个同作用域、同币种目标，共享月度结余仅计算一次，超限不生成可行进度；Android 展示12个月零收益情景，未声明完整现金流覆盖，不推断自由现金或达成日期。后端支持可选用户年化数学假设，始终保留0%基线；两个客户端当前仅使用零收益。PC 年份上界拒绝整个超界期间，避免截短输入。详见 `docs/mydca_v020_release_hardening_20261008.md`。
 
@@ -18,28 +28,28 @@ v0.20 目标与现金流情景发布硬化：Android 0.20.0 / 21 与 CI 预期�
 
 v0.19 目标与预算发布收口：Android 0.19.0 / 20 与 CI 预期命名同步。PC 支持目标创建、编辑、暂停/恢复/归档、只读完成率与月度预算计划/实际；Android 总览进入只读分页目标与本月预算，中文作用域、计划预留提示、加载/错误无障碍播报和人工重试。PARTIAL 的已知部分单列，UNKNOWN/null 不当零，不误报完成或未超支。详见 `docs/mydca_v019_release_hardening_20261002.md`。
 
-v0.19 后端、PC 和 Android 依赖交付均在当前代码树。仅创建/编辑目标和预算元数据；进度/对比只读，不自动记账、转账、建单、占用、结算或交易。`backend/migrations/20261002_goal_tracking.sql`、`20261002_monthly_budget.sql` 与对应 `backend/sql/initsql/` 脚本结构一致，部署方择一人工部署，未连接数据库。未推送，无真实 CI 制品证据；目标 schema、真机 TalkBack、PC 键盘与真实断网重试仍待人工验收，goal_only 企业微信汇总由 AiCore/Hermes 交付。
+v0.19 后端、PC 和 Android 依赖交付均在当前代码树。仅创建/编辑目标和预算元数据；进度/对比只读，不自动记账、转账、建单、占用、结算或交易。`backend/migrations/20261002_goal_tracking.sql`、`20261002_monthly_budget.sql` 与对应 `backend/sql/initsql/` 脚本结构一致；上述生产环境已使用互斥的 MySQL 5.7 路径部署，其他环境须选适配路径。原工程任务未连接数据库。未推送，无真实 CI 制品证据；其他环境 schema、真机 TalkBack、PC 键盘与真实断网重试仍待人工验收，goal_only 企业微信汇总由 AiCore/Hermes 交付。
 
 v0.18 发布硬化：Android 0.18.0 / 19 与 CI 命名统一。主人自定义目标区间、收益与分段止盈阈值；PC 配置规则并手工评估，Android 只读分页、详情及观察（无请求体 POST evaluate 为只读事务），情景 GET 仅在主动点击后读取。假设金额守恒、包含边界、UNKNOWN 不变成零；税费、滑点、交易限制及外汇保留 NOT_MODELED。补齐评估缺失/重复行情、作用域和现金汇总校验，PC 未知收益不显示“无已达阈值”。详见 `docs/mydca_v018_release_hardening_20261002.md`。
 
-v0.18 依赖交付已包含于本地树：配置后端、纯数学情景引擎、PC 与 Android。配置只写 allocation_policy 元数据；评估/预览不写财务数据，不创建订单、不占用资金/份额、不结算、不正式入账。`backend/migrations/20261002_allocation_policy.sql` 与 `backend/sql/initsql/allocation_policy.sql` 结构相同，按环境择一人工部署；本任务未连接数据库或部署。真实 CI 制品、目标环境及真机无障碍仍待人工验收，企业微信 Goal 汇总由 AiCore/Hermes 交付。
+v0.18 依赖交付已包含于本地树：配置后端、纯数学情景引擎、PC 与 Android。配置只写 allocation_policy 元数据；评估/预览不写财务数据，不创建订单、不占用资金/份额、不结算、不正式入账。`backend/migrations/20261002_allocation_policy.sql` 与 `backend/sql/initsql/allocation_policy.sql` 结构相同；上述生产环境已按 MySQL 5.7 路径创建，其他环境按实际引擎选择互斥路径。原工程任务未连接数据库或部署。真实 CI 制品、目标环境及真机无障碍仍待人工验收，企业微信 Goal 汇总由 AiCore/Hermes 交付。
 
 v0.17 发布硬化：Android 0.17.0 / 18 与 CI 命名一致，观察备注的合法空数值不误报 UNKNOWN，规则类型/作用域/方向提供中文文案，加载与错误态提供无障碍播报。回归与验收边界见 `docs/mydca_v017_release_hardening_20261002.md`。本次只本地提交，无真实 CI 制品证据；两个 v0.17 migration 未自动部署。
 
-v0.17 PC 已加入风险观察中心：规则配置、手工只读评估、UNKNOWN/陈旧快照、去重提醒历史筛选、手工已读与规则静默窗口。跨雷达/研究页面跳转仅带只读标识，不提供交易入口。详见 `docs/mydca_v017_risk_center_pc_20261002.md`；目标环境 migration 与真实体验仍待人工验收。
+v0.17 PC 已加入风险观察中心：规则配置、手工只读评估、UNKNOWN/陈旧快照、去重提醒历史筛选、手工已读与规则静默窗口。跨雷达/研究页面跳转仅带只读标识，不提供交易入口。详见 `docs/mydca_v017_risk_center_pc_20261002.md`；指定生产环境 migration 已部署，真实体验仍待人工验收。
 
 Android 新增 v0.17 只读风险观察中心（总览入口）：本页规则提醒按 severity 分组、OPEN/RESOLVED 过滤，规则详情与分页评估历史保留 UNKNOWN/陈旧提示。仅 GET，不评估、不编辑、不 ACK/MUTE、不产生执行动作。详见 `docs/mydca_v017_risk_center_android_20261002.md`；真机及目标环境仍待人工验收。
 
-v0.17 风险提醒历史新增稳定 fingerprint 去重、OPEN/ACKNOWLEDGED/MUTED/RESOLVED、规则静默窗口与未解除列表。静默不改变评估证据，未知数据不视为解除。新增 backend/migrations/20261002_risk_alert_history.sql 仅提交未部署；只写观察元数据，无财务副作用。详见 `docs/mydca_v017_risk_alert_history_20261002.md`。
+v0.17 风险提醒历史新增稳定 fingerprint 去重、OPEN/ACKNOWLEDGED/MUTED/RESOLVED、规则静默窗口与未解除列表。静默不改变评估证据，未知数据不视为解除。新增 backend/migrations/20261002_risk_alert_history.sql 已在上述生产环境创建；只写观察元数据，无财务副作用。详见 `docs/mydca_v017_risk_alert_history_20261002.md`。
 
 
-v0.17 后端新增 owner/family 双隔离风险观察规则、显式只读财务评估和幂等历史快照，支持收益/回撤、类别偏离、行情陈旧、集中度及备注/静默。仅供观察，不构成交易建议；只写观察元数据。`backend/migrations/20261002_risk_watch.sql` 仅提交、未部署，未连接数据库。详见 `docs/mydca_v017_risk_watch_backend_20261002.md`。
+v0.17 后端新增 owner/family 双隔离风险观察规则、显式只读财务评估和幂等历史快照，支持收益/回撤、类别偏离、行情陈旧、集中度及备注/静默。仅供观察，不构成交易建议；只写观察元数据。`backend/migrations/20261002_risk_watch.sql` 已在上述生产环境创建；原开发任务未连接数据库。详见 `docs/mydca_v017_risk_watch_backend_20261002.md`。
 
 v0.16 发布收口：Android 0.16.0 / 17 与 CI 制品命名一致；PC 刷新失败清除旧研究详情和选择，中文错误支持人工重试。验证与人工验收边界见 `docs/mydca_v016_release_hardening_20261001.md`。研究入口只写研究元数据/本地回测历史，无财务副作用；本任务未部署 migration。
 
 Android 已增加 v0.16 研究方案轻量只读入口：DRAFT/ACTIVE 分页列表、来源证据与参数快照详情、关联历史运行和失败状态。历史按最近 50 条开始手动加载更早记录，不创建/编辑方案、不发起回测。详见 `docs/mydca_v016_research_view_android_20261001.md`；真机体验与目标环境 migration 仍待人工验收。
 
-v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据 API、创建时证据快照、独立参数草稿、DRAFT/ACTIVE/ARCHIVED 生命周期及只读失效警告。PC 策略实验室已接入研究方案列表、详情、候选创建、编辑/归档、受控回测状态和历史 compare/evidence 入口，详见 `docs/mydca_v016_research_workbench_pc_20261001.md`。Android 只读查看已接入。数据库脚本 `backend/migrations/20261001_research_plan.sql` 仅提交、未部署。历史研究不代表未来表现；已新增显式研究方案回测入口，复用现有白名单与离线引擎，成功/失败运行保留方案关联并复用 compare/evidence，不触发交易。详见 `docs/mydca_v016_research_backtest_loop_20261001.md`。详见 `docs/mydca_v016_research_plan_backend_20261001.md`。
+v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据 API、创建时证据快照、独立参数草稿、DRAFT/ACTIVE/ARCHIVED 生命周期及只读失效警告。PC 策略实验室已接入研究方案列表、详情、候选创建、编辑/归档、受控回测状态和历史 compare/evidence 入口，详见 `docs/mydca_v016_research_workbench_pc_20261001.md`。Android 只读查看已接入。数据库脚本 `backend/migrations/20261001_research_plan.sql` 已在上述生产环境创建。历史研究不代表未来表现；已新增显式研究方案回测入口，复用现有白名单与离线引擎，成功/失败运行保留方案关联并复用 compare/evidence，不触发交易。详见 `docs/mydca_v016_research_backtest_loop_20261001.md`。详见 `docs/mydca_v016_research_plan_backend_20261001.md`。
 
 财富中枢已不处于项目初始化阶段。当前主线为 **Phase3：原生 Android + 草稿式安全记账闭环**，并持续保持 PC/Web、Java 后端、MySQL、Python 工具能力。
 
@@ -49,13 +59,13 @@ v0.16 研究方案后端新增 owner/family 双隔离的持久化研究元数据
 
 v0.15 已加入持久化的 owner 作用域回测历史、2 至 5 条历史对比、只读策略研究候选与可校验证据包，以及 PC/Android 每日财富雷达。PC 策略实验室提供历史、对比、候选与证据导出；Android 展示只读雷达和最近成功回测。雷达未知值保留 `null`/「未知」，刷新失败的旧快照明确标识；研究结果不生成订单或交易。详见 `docs/mydca_v015_release_hardening_20260930.md`。
 
-v0.15 回测历史使用部署方提供的本地持久化目录 `../data/backtest-history`（可配置 `backtest.history-root`），**没有新增 SQL migration**。既有 v0.8、v0.14 migration 在 Git 中，目标环境是否已部署仍待逐环境确认；本次未连接数据库或执行迁移。目录不可写或记录损坏时历史接口会失败，界面显示错误而不报空列表或假成功。
+v0.15 回测历史使用部署方提供的本地持久化目录 `../data/backtest-history`（可配置 `backtest.history-root`），**没有新增 SQL migration**。既有 v0.8、v0.14 migration 在 Git 中，指定生产环境已部署，其他环境仍待分别确认；原开发任务未连接数据库或执行迁移。目录不可写或记录损坏时历史接口会失败，界面显示错误而不报空列表或假成功。
 
 v0.14 发布硬化已对齐 GitHub Actions APK 制品名与 Android 版本，并补齐 Android 最近回测、PC 待结算和策略实验室的失败态。完整验证与未完成的真机/生产迁移边界见 `docs/mydca_v014_release_hardening_20260929.md`。
 
-v0.14 草稿生命周期审计与安全恢复已写入代码；需要部署 `sql/updatesql/20260928/01_create_draft_lifecycle_event.sql` 后才可使用事件持久化。详细边界见 `docs/mydca_v014_draft_lifecycle_audit_20260928.md`。
+v0.14 草稿生命周期审计与安全恢复已写入代码；`sql/updatesql/20260928/01_create_draft_lifecycle_event.sql` 已在上述生产环境部署；其他环境须确认后才可使用事件持久化。详细边界见 `docs/mydca_v014_draft_lifecycle_audit_20260928.md`。
 
-v0.14 人工结算历史与只读对账已写入代码；新结算精确流水关联和展示用预览摘要依赖部署 `sql/updatesql/20260929/01_settlement_audit_link.sql`。历史旧记录、关联账户份额无法可靠回溯时显示 `WARNING`，不会自动修复。详见 `docs/mydca_v014_settlement_audit_reconciliation_20260929.md`。
+v0.14 人工结算历史与只读对账已写入代码；新结算精确流水关联和展示用预览摘要依赖的两个字段已在上述生产环境添加；原路径为 `sql/updatesql/20260929/01_settlement_audit_link.sql`，生产报告记录实际执行路径，未回填历史。历史旧记录、关联账户份额无法可靠回溯时显示 `WARNING`，不会自动修复。详见 `docs/mydca_v014_settlement_audit_reconciliation_20260929.md`。
 
 “v0.8 草稿强幂等”是后端可靠性里程碑；Android 当前 `0.20.0` 增加零收益目标现金流情景；`0.19.0` 增加目标与本月预算只读查看；`0.18.0` 增加配置偏离与止盈观察只读查看；`0.17.0` 增加风险观察中心；`0.16.0` 增加研究方案只读查看；`0.15.0` 增加只读雷达与回测结果展示（`0.14.0` 为草稿历史查看与安全恢复）。前后端版本号不属于同一层，互不依赖即可独立发布。
 
@@ -263,16 +273,17 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 
 ## 当前真正未完成
 
-1. **真实设备体验验收**：转账草稿的双账户选择 / 确认弹窗 / 流水页转出与转入两条视图，投资卖出 / 赎回草稿的持仓来源选择 / 可用份额预览 / 到账账户过滤 / 二次确认文案，待结算的结算编辑 / 现金与持仓影响预览 / 二次确认弹窗 / 成功后订单与持仓刷新，桌面小组件添加 / 尺寸回调 / 点击跳转，以及系统 Share Sheet 文本 / 单图、Photo Picker、支付截图 OCR、不同厂商 Content URI 与通知监听授权 / 候选体验仍需真机人工验收。
-2. **投资订单结算**：BUY / SUBSCRIPTION 已纳入草稿确认闭环（v0.11.0），SELL / REDEMPTION 已在 v0.12.0 纳入；v0.13.0 起四类 PENDING 订单均可人工生成只读结算预览（`POST /api/v2/settlements/preview`）并经主人二次确认后携带 fresh 令牌 confirm（`POST /api/v2/settlements/confirm`）落内部账。既有 OrderService 真实语义保持不变：BUY / SUBSCRIPTION 创建 PENDING 订单时同步生成付款账本（CASH CREDIT + RECEIVABLE DEBIT），结算时清理 RECEIVABLE 并形成 POSITION / 关联账户与手续费、不重复扣下单现金；SELL / REDEMPTION 只创建 PENDING 订单并登记 SOURCE / TARGET 资金线与份额占用，结算时才产生 CASH / POSITION / FEE 影响。全流程不自动结算、不后台 confirm、不调用真实交易渠道。
-3. **数据库 migration 上线**：v0.8 唯一键、v0.14 草稿生命周期与结算审计脚本、v0.16 研究方案表脚本都只在 Git 中确认存在；目标环境部署状态未由本任务验证。生产执行前必须先按各脚本的预检、备份和人工变更流程处理，尤其 v0.8 唯一键必须先检查重复来源。
-4. **v0.15 运行与体验验收**：回测历史目录需在目标环境单独配置持久化和权限；PC/Android Radar、历史与研究候选需人工完成真实登录、权限、断网、过期行情和设备体验验收。真实 CI APK 证据须在后续推送并成功构建后回填。
-5. **v0.16 运行与体验验收**：研究表须由部署方人工审核与部署；PC 生命周期/受控运行和 Android 分页/证据/关联历史的真实登录、断网、TalkBack/键盘体验仍需人工验收。模拟 API/mock Mapper 测试不证明数据库已上线。
-6. **v0.19 运行与体验验收**：目标/预算表需部署方人工审核与部署；真实权限、PC 生命周期与键盘、Android 本月筛选/分页/TalkBack、断网后人工重试待验收。只有真实 CI 成功才回填制品证据。
-7. **长期能力**：研究候选仍仅是历史证据，不构成自动策略执行；结算后的更多持仓影响场景继续按设计推进。
+| 分类 | 当前待办与边界 |
+| --- | --- |
+| 自动工程可做 | 在独立授权任务中补充离线回归、核对最新 release/source commit/制品哈希、整理 CI APK 与 Delivery 证据；全量 PC type-check 的历史诊断仍未清零。不能把构建通过写成后端单元测试通过。 |
+| 真实设备/角色人工验收 | Android Share Sheet、OCR、通知授权、Outbox、小组件、TalkBack；转账双账户、投资持仓来源、结算 fresh preview 与二次确认；PC 键盘、个人/家庭权限、真实断网重试。Android 本轮未发布 APK。不得用 mock 或只读 smoke 替代。 |
+| 运行维护需另行授权 | 独立恢复演练 NOT_RUN；Docker 双引擎演练 NOT_RUN；MySQL 仍 5.7，升级与恢复方案需单独规划。回测历史目录的持久化/权限和实际研究运行仍须核验，部署 Python 文件及 --help 不等于生产回测通过。 |
+| 长期设想 | 更多结算后持仓影响场景、研究与配置能力继续按设计推进；研究候选只是历史证据，不形成自动执行承诺。 |
+| 搁置/本轮未执行 | 来源归一化、历史结算字段回填、历史视图权限修复均未执行；没有将真实记录修复自动纳入普通工程。自动交易、后台结算和自动正式入账仍在禁止边界内。 |
+| 被取代历史计划 | “9表/2列/2索引未部署”、研究/目标/预算表仍待首次生产部署，已被 2026-10-10 报告取代；“Android 未接真实登录/OCR/通知”是旧历史。旧 Phase/专项报告保留原貌，不能再据其下一步重复实现。 |
+
+投资订单结算已有 v0.13 人工 preview/confirm 闭环，是已实现能力及待人工体验验收，不是尚未开发功能。BUY/SUBSCRIPTION 下单付款与 SELL/REDEMPTION 结算影响遵循既有账本语义，不自动执行。
 
 ## 下一工程任务
 
-v0.21 工程验证见发布硬化报告。下一步由 owner/AiCore 核验上游 Delivery Manifest、goal_only 汇总收据，安排真实权限、PC 键盘与断网、Android TalkBack/真机验收及推送后的 CI 制品证据。当前不执行部署或财务操作。
-
-目标环境的历史目录配置、未部署 migration 审核与执行仍需 owner 单独安排。任何生产数据库迁移、真实财务记录修改或交易均不属于本次授权。
+按 [当前事实核对报告](mydca_current_truth_20261010.md) 区分工程证据、生产 release 与人工验收。AiCore/Hermes 负责正式 Delivery Manifest 和 goal_only 汇总；第一轮 Goal 的现有记录仍 pending，不因本次文档提交自行宣称 Goal 完成或已通知。不创建后续业务任务，不修改调度/审批，不推送；任何生产迁移、部署、真实财务修改或交易均不属于本次授权。
