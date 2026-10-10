@@ -140,7 +140,7 @@ class DeploymentTests(unittest.TestCase):
     def setUpClass(cls):
         cls.bash = bash_binary()
 
-    def simulate(self, scenario):
+    def simulate(self, scenario, nested=False):
         with tempfile.TemporaryDirectory(prefix="offline-", dir=HERE) as directory:
             sandbox = Path(directory)
             live = sandbox / "live"
@@ -163,6 +163,16 @@ class DeploymentTests(unittest.TestCase):
                 (stage / "frontend/index.html").write_text("corrupt")
             if scenario == "missing_backup":
                 (live / "frontend/dist/index.html").unlink()
+            if nested:
+                for base in (live / "frontend/dist", stage / "frontend"):
+                    (base / "wealth-hub").mkdir()
+                    (base / "index.html").rename(base / "wealth-hub/index.html")
+                    (base / "wealth-hub-mobile").mkdir()
+                    (base / "wealth-hub-mobile/index.html").write_text("mobile-ui")
+                # 清单必须包含两个真实生产目录中的全部文件。
+                manifest = "".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(stage).as_posix()}\n"
+                                   for p in sorted(stage.rglob("*")) if p.is_file() and p.name != "SHA256SUMS")
+                (stage / "SHA256SUMS").write_text(manifest, newline="\n")
             with tarfile.open(sandbox / "release.tar.gz", "w:gz") as archive:
                 for p in stage.iterdir():
                     archive.add(p, arcname=p.name)
@@ -178,12 +188,20 @@ class DeploymentTests(unittest.TestCase):
                                      shell_path(sandbox), scenario], capture_output=True, text=True, timeout=90)
             events = (sandbox / "events").read_text() if (sandbox / "events").exists() else ""
             jar = (live / "backend/wealth-hub-1.0.0.jar").read_text()
-            ui = (live / "frontend/dist/index.html").read_text() if (live / "frontend/dist/index.html").exists() else ""
+            ui_path = live / ("frontend/dist/wealth-hub/index.html" if nested else "frontend/dist/index.html")
+            ui = ui_path.read_text() if ui_path.exists() else ""
             self.assertNotIn("Traceback", result.stderr)
             if result.returncode:
                 self.assertTrue((sandbox / "release.tar.gz").exists(), "failed release archive must be retained")
                 self.assertTrue(list((sandbox / "tmp").rglob("failure-status.txt")), "failure evidence must be retained")
             return result, events, jar, ui
+
+    def test_production_pc_mobile_layout_deploys_and_rolls_back(self):
+        for scenario, expected_code, expected in [("success", 0, ("new", "new-ui")), ("down", 1, ("old", "old-ui"))]:
+            with self.subTest(scenario=scenario):
+                result, _, jar, ui = self.simulate(scenario, nested=True)
+                self.assertEqual(expected_code, result.returncode, result.stdout + result.stderr)
+                self.assertEqual(expected, (jar, ui))
 
     def test_success_requires_backend_and_frontend(self):
         result, events, jar, ui = self.simulate("success")

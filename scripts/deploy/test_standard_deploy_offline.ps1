@@ -4,12 +4,14 @@ $fixtureRoot = Join-Path $PSScriptRoot ('offline-ps-' + [guid]::NewGuid().ToStri
 $originalTemp = $env:TEMP
 $originalTmp = $env:TMP
 try {
-    New-Item -ItemType Directory -Path "$fixtureRoot/scripts/deploy", "$fixtureRoot/backend/target", "$fixtureRoot/web/dist", "$fixtureRoot/tmp" -Force | Out-Null
+    New-Item -ItemType Directory -Path "$fixtureRoot/scripts/deploy", "$fixtureRoot/backend/target", "$fixtureRoot/web/pc-app/dist", "$fixtureRoot/web/mobile-app/dist", "$fixtureRoot/web/dist", "$fixtureRoot/tmp" -Force | Out-Null
     foreach ($name in @('standard_deploy.ps1', 'remote_deploy.sh', 'health_probe.py')) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination "$fixtureRoot/scripts/deploy/$name"
     }
     [IO.File]::WriteAllText("$fixtureRoot/backend/target/wealth-hub-1.0.0.jar", 'fixture-new-jar')
-    [IO.File]::WriteAllText("$fixtureRoot/web/dist/index.html", 'fixture-new-ui')
+    [IO.File]::WriteAllText("$fixtureRoot/web/dist/index.html", 'stale-ui-must-not-ship')
+    [IO.File]::WriteAllText("$fixtureRoot/web/pc-app/dist/index.html", 'fixture-new-ui')
+    [IO.File]::WriteAllText("$fixtureRoot/web/mobile-app/dist/index.html", 'fixture-mobile-ui')
     $env:TEMP = "$fixtureRoot/tmp"
     $env:TMP = "$fixtureRoot/tmp"
     $global:mydcaOfflineUploadFails = $true
@@ -53,6 +55,9 @@ try {
     if (-not $global:mydcaOfflineSshCalled) { throw 'Mock SSH entry point was not exercised.' }
     & tar -xzf "$fixtureRoot/captured.tar.gz" -C "$fixtureRoot/tmp"
     if ($LASTEXITCODE -ne 0) { throw 'Fixture archive extraction failed.' }
+    if ([IO.File]::ReadAllText("$fixtureRoot/tmp/frontend/wealth-hub/index.html") -ne 'fixture-new-ui') { throw 'PC build output missing.' }
+    if ([IO.File]::ReadAllText("$fixtureRoot/tmp/frontend/wealth-hub-mobile/index.html") -ne 'fixture-mobile-ui') { throw 'Mobile build output missing.' }
+    if (Test-Path "$fixtureRoot/tmp/frontend/index.html") { throw 'Stale web/dist must not ship.' }
     foreach ($line in [IO.File]::ReadAllLines("$fixtureRoot/tmp/SHA256SUMS")) {
         $hash, $path = $line -split '  ', 2
         if ((Get-FileHash -LiteralPath (Join-Path "$fixtureRoot/tmp" $path) -Algorithm SHA256).Hash.ToLowerInvariant() -ne $hash) {

@@ -83,8 +83,13 @@ frontend_healthy() {
     [[ "$code" == 200 ]]
 }
 
+frontend_present() {
+    # 兼容旧平铺备份与生产中 PC/H5 各自的目录。
+    [[ -s "$1/index.html" ]] || [[ -s "$1/wealth-hub/index.html" && -s "$1/wealth-hub-mobile/index.html" ]]
+}
+
 verify_backup() {
-    [[ -s "$backup/wealth-hub-1.0.0.jar" && -s "$backup/frontend-dist/index.html" && -s "$backup/health_probe.py" ]] &&
+    [[ -s "$backup/wealth-hub-1.0.0.jar" && -s "$backup/health_probe.py" ]] && frontend_present "$backup/frontend-dist" &&
         (cd "$backup" && sha256sum -c SHA256SUMS >/dev/null 2>&1)
 }
 
@@ -158,11 +163,11 @@ deploy() {
     flock -n 9
     for command in python3 curl sha256sum install diff; do command -v "$command" >/dev/null; done
     check_java
-    [[ -s "$jar" && ! -L "$jar" && -s "$deploy_root/frontend/dist/index.html" ]]
+    [[ -s "$jar" && ! -L "$jar" ]] && frontend_present "$deploy_root/frontend/dist"
     [[ ! -L "$deploy_root/frontend/dist" && -z "$(find "$deploy_root/frontend/dist" -type l -print -quit)" ]]
     [[ -d "$deploy_root/backend/logs" && -w "$deploy_root/backend/logs" ]]
     tar -xzf "$archive" -C "$work"
-    [[ -s "$work/wealth-hub-1.0.0.jar" && -s "$work/frontend/index.html" && -s "$work/health_probe.py" ]]
+    [[ -s "$work/wealth-hub-1.0.0.jar" && -s "$work/health_probe.py" ]] && frontend_present "$work/frontend"
     (cd "$work" && sha256sum -c SHA256SUMS >/dev/null)
     echo "artifact_sha256=$(sha256sum "$work/wealth-hub-1.0.0.jar" | cut -d ' ' -f1)"
     mkdir -p "$backup"

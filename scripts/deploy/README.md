@@ -1,5 +1,9 @@
 # 标准部署
 
+2026-10-10 生产核验修正：实际构建产物位于 `web/pc-app/dist` 与 `web/mobile-app/dist`，打包后分别进入生产 `frontend/dist/wealth-hub` 与 `frontend/dist/wealth-hub-mobile`。不再读取可能残留旧版本的 `web/dist`。旧平铺备份仍可校验与恢复；生产双目录布局必须同时具备 PC 和 H5 首页。
+
+MySQL 5.7 的新空表路径见 `sql/updatesql/20261010/01_mysql57_observation_tables.sql`：原生 JSON 列用于保留有效 JSON 校验，与原始 `backend/migrations` 建表路径互斥。不得用于已有表自动转换；历史 SQL 保持不变。实际备份、迁移、部署证据见 `docs/mydca_production_deployment_20261010.md`。
+
 `standard_deploy.ps1` 保留固定目标与原有参数。它构建本地产物（原有 Maven 参数跳过单元测试）、校验 JAR/前端/探针 SHA-256，验证完整旧包备份后停止、替换、启动。成功必须同时满足新启动 PID 存活、服务器本机 `http://127.0.0.1:8766/actuator/health` HTTP 200 且可解析 JSON `status=UP`、独立 HTTPS 前端检查；前端 200 不能代替后端健康，HTTPS 不再跳过证书校验。
 
 停服后任一步失败均尝试恢复旧 JAR 与完整旧前端，并确认恢复后端 UP。旧包/首页缺失、备份或复制失败在停服前阻断；停止超时不强行换包。失败保留工作目录、上传包、备份和脱敏状态。退出码 1 表示阻断或已确认健康的回滚，2 表示 `ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED`，两者都不是成功。目标需 Bash/Linux `/proc`、Python 3、curl、flock 和既有 `www` 用户/组、Java 与日志目录；不修改运行配置。

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.timelordtty.dca.dto.BacktestRunDTO;
 import com.timelordtty.dca.dto.AuthResponse;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -40,10 +41,12 @@ public class BacktestLabService {
         @Override protected boolean removeEldestEntry(Map.Entry<String, JsonNode> eldest) { return size() > MAX_CACHE; }
     };
 
+    // 明确生产注入入口；其余构造函数仅供隔离测试传入路径和超时。
+    @Autowired
     public BacktestLabService(BacktestRunRepository history, UserService users) {
         this(Path.of(System.getProperty("backtest.data-root", "../data/backtest")),
                 Path.of(System.getProperty("backtest.script", "../scripts/backtest/run_backtest.py")),
-                System.getProperty("backtest.python", "python"), history, users);
+                System.getProperty("backtest.python", "python3"), history, users);
     }
 
     BacktestLabService(Path root, Path script, String python, BacktestRunRepository history, UserService users) {

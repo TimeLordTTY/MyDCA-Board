@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $jar = Join-Path $repoRoot 'backend\target\wealth-hub-1.0.0.jar'
-$webDist = Join-Path $repoRoot 'web\dist'
+$pcDist = Join-Path $repoRoot 'web\pc-app\dist'
+$mobileDist = Join-Path $repoRoot 'web\mobile-app\dist'
 $stage = Join-Path ([IO.Path]::GetTempPath()) ('mydca-deploy-' + [guid]::NewGuid().ToString('N'))
 
 try {
@@ -19,11 +20,15 @@ try {
         try { & npm run build; if ($LASTEXITCODE -ne 0) { throw 'Web build failed.' } } finally { Pop-Location }
     }
     if (-not (Test-Path -LiteralPath $jar)) { throw "Missing artifact: $jar" }
-    if (-not (Test-Path -LiteralPath (Join-Path $webDist 'index.html') -PathType Leaf)) { throw "Missing frontend index.html: $webDist" }
+    foreach ($dist in @($pcDist, $mobileDist)) {
+        if (-not (Test-Path -LiteralPath (Join-Path $dist 'index.html') -PathType Leaf)) { throw "Missing frontend index.html: $dist" }
+    }
 
     New-Item -ItemType Directory -Force (Join-Path $stage 'frontend') | Out-Null
     Copy-Item -LiteralPath $jar -Destination (Join-Path $stage 'wealth-hub-1.0.0.jar')
-    Copy-Item -Path (Join-Path $webDist '*') -Destination (Join-Path $stage 'frontend') -Recurse -Force
+    # 使用本次构建的产物，按生产 Nginx 的两个目录打包。
+    Copy-Item -LiteralPath $pcDist -Destination (Join-Path $stage 'frontend\wealth-hub') -Recurse
+    Copy-Item -LiteralPath $mobileDist -Destination (Join-Path $stage 'frontend\wealth-hub-mobile') -Recurse
     $sha = (Get-FileHash -LiteralPath (Join-Path $stage 'wealth-hub-1.0.0.jar') -Algorithm SHA256).Hash.ToLowerInvariant()
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'health_probe.py') -Destination $stage
     $manifest = Get-ChildItem -LiteralPath $stage -Recurse -File | Sort-Object FullName | ForEach-Object {
