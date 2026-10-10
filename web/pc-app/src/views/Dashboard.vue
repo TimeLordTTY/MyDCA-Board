@@ -2,6 +2,7 @@
   <div>
     <FinanceRadar />
     <MonthlyBudgetGlance />
+    <GoalProgressGlance />
     <!-- 今日建议 - 订单详情弹窗（直接在总览里操作，与订单管理界面完全一致） -->
     <el-dialog v-model="settlementVisible" title="订单详情" width="700px" class="order-detail-dialog">
       <div v-if="settlementOrder" class="order-detail-content">
@@ -478,6 +479,7 @@ import { kpiTruth, amountText, createKpiLoader } from '../components/dashboardKp
 import type { KpiState, Amount, Snapshot } from '../components/dashboardKpiTruthModel'
 import FinanceRadar from '../components/FinanceRadar.vue'
 import MonthlyBudgetGlance from '../components/MonthlyBudgetGlance.vue'
+import GoalProgressGlance from '../components/GoalProgressGlance.vue'
 import { createPendingSettlementLoader } from '../components/pendingSettlementListModel'
 import type { PendingSettlementState } from '../components/pendingSettlementListModel'
 import { useRouter } from 'vue-router'

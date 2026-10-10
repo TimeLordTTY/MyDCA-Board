@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/components/GoalProgressGlance.vue", "../src/components/goalProgressGlanceModel.ts", "../src/env.d.ts"],
+  "exclude": []
+}
