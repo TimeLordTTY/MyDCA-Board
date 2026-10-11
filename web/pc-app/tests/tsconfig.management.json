@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/views/Accounts.vue", "../src/views/Products.vue", "../src/views/managementViewModel.ts", "../src/env.d.ts"],
+  "exclude": []
+}

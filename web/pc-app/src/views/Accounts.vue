@@ -1,58 +1,48 @@
 <template>
-  <div class="accounts-page-container">
-    <div class="accounts-layout">
-      <!-- 两列布局 -->
-      <div class="accounts-two-column">
-        <!-- 第一列 -->
-        <div class="accounts-column">
-          <div class="card">
-          <div class="row-between">
-            <div>
-              <h3>
-                账户管理
-                <span class="tag blue tiny">可编辑</span>
-              </h3>
-            </div>
-            <div class="row-gap">
-              <el-button @click="handleAddPlatform">＋ 新增平台</el-button>
-              <el-button @click="handleAddBucket">＋ 新增信封</el-button>
-            </div>
-          </div>
-          <div class="divider"></div>
-
+  <div class="accounts-page-container management-page">
+    <header class="management-hero">
+      <div><span class="management-eyebrow">ACCOUNTS / 资产来源</span><h1>让每一笔钱，有自己的位置。</h1><p>按平台查看账户与信封，分清现金、持仓和虚拟记录。当前沿用个人账户读取范围，家庭归属和访问权限由后端校验。</p></div>
+      <div class="row-gap"><el-button @click="loadAccounts">重新读取</el-button><el-button @click="handleAddPlatform">＋ 新增平台</el-button><el-button type="primary" @click="handleAddBucket">＋ 新增信封</el-button></div>
+    </header>
+    <div class="management-guide"><span><b>平台 → 信封</b> · 父账户用于组织，叶子账户承载余额</span><span><b>现金 / 持仓 / 虚拟</b> · 三种语义分开查看</span><span><b>金额未知</b> · 缺失信息不当作零，负余额按原值展示</span></div>
+    <div class="management-filter"><el-input v-model="accountKeyword" aria-label="搜索账户名称或代码" placeholder="搜索平台或信封名称、代码" clearable style="max-width: 340px" /><el-select v-model="accountTypeFilter" aria-label="筛选账户类型" placeholder="全部账户类型" clearable style="width: 240px"><el-option v-for="(label, value) in accountTypeMap" :key="value" :label="label" :value="value" /></el-select><span class="muted">{{ filteredTree.length }} 个平台 · 搜索保留完整父子关系</span></div>
+    <div v-if="accountError" class="management-state" role="alert">{{ accountError }} <el-button @click="loadAccounts">重试</el-button></div>
+    <div v-else class="card" aria-live="polite" :aria-busy="accountLoading">
           <!-- 账户树 -->
-          <div v-if="accountStore.loading" class="td-muted" style="text-align: center; padding: 20px">
+          <div v-if="accountLoading" class="td-muted" style="text-align: center; padding: 20px">
             加载中...
           </div>
-          <div v-else-if="!accountTree || accountTree.length === 0" class="td-muted" style="text-align: center; padding: 20px">
-            暂无平台账户
+          <div v-else-if="!accountReady" class="management-state">身份或访问范围已变化，请点击“重新读取”查看当前账户。</div>
+          <div v-else-if="filteredTree.length === 0" class="td-muted" style="text-align: center; padding: 20px">
+            {{ accountTree.length ? '没有匹配的账户。试试清除搜索或类型筛选。' : '还没有可见账户。先新增平台，再为它添加信封；访问范围由后端决定。' }}
           </div>
           <div v-else class="account-tree-container">
-            <div v-for="platform in accountTree.slice(0, Math.ceil(accountTree.length / 2))" :key="platform.id" class="platform-item">
-              <div class="platform-header" @click="togglePlatform(platform.id)">
-                <span class="expand-icon">{{ expandedPlatforms.has(platform.id) ? '▼' : '▶' }}</span>
+            <div v-for="platform in filteredTree" :key="platform.id" class="platform-item">
+              <div class="platform-header">
+                <button class="expand-icon" :aria-expanded="expandedPlatforms.has(platform.id)" :aria-label="`${expandedPlatforms.has(platform.id) ? '收起' : '展开'}${platform.accountName}`" @click="togglePlatform(platform.id)">{{ expandedPlatforms.has(platform.id) ? '−' : '+' }}</button>
                 <div style="flex: 1;">
-                  <div style="font-weight: 700;">{{ platform.accountName }}</div>
+                  <div style="font-weight: 700;">{{ platform.accountName }} <span class="tag tiny">{{ accountTypeMap[platform.accountType] || platform.accountType }}</span></div>
                   <!-- MMF 平台显示份额信息 -->
-                  <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
+                  <div v-if="platform.accountType === 'MMF' && platform.initialShares != null" class="tiny muted">
                     总份额：<span class="mono">{{ formatNumber(platform.initialShares, 2) }}</span>；
-                    总金额：<span class="mono">{{ formatCurrency(getMmfTotalAmount(platform)) }}</span>
+                    总金额：<span class="mono">{{ formatCurrency(hasMmfNav(platform) ? getMmfTotalAmount(platform) : undefined) }}</span>
                     <span v-if="platform.linkedProductId" class="tag blue tiny" style="margin-left: 8px;">已关联产品</span>
+                    <span>；净值日期：{{ platform.linkedProductId ? mmfNavDates.get(platform.linkedProductId) || '未知' : '未知' }}</span>
                   </div>
                   <div v-else class="tiny muted">
                     <template v-if="platform.accountType === 'BROKER'">
                       券商总资产 = 现金子账户余额 + 标的市值：
-                      <span class="mono">{{ formatCurrency(getBrokerCashBalance(platform)) }}</span>
+                      <span class="mono">{{ formatCurrency(hasKnownBalances(platform) ? getBrokerCashBalance(platform) : undefined) }}</span>
                       +
                       <span class="mono">{{ formatCurrency(getBrokerHoldingsMarketValue(platform.id)) }}</span>
                       =
                       <span class="mono" style="font-weight: 700;">
-                        {{ formatCurrency(getBrokerCashBalance(platform) + getBrokerHoldingsMarketValue(platform.id)) }}
+                        {{ formatCurrency(hasKnownBalances(platform) && knownNumber(getBrokerHoldingsMarketValue(platform.id)) ? getBrokerCashBalance(platform) + getBrokerHoldingsMarketValue(platform.id)! : undefined) }}
                       </span>
-                      ；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                      ；占用：<span class="mono">{{ formatCurrency(hasKnownReserved(platform) ? calculateParentReservedAmount(platform) : undefined) }}</span>
                     </template>
                     <template v-else>
-                      父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
+                      父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(hasKnownBalances(platform) ? calculateParentBalance(platform) : undefined) }}</span>；占用：<span class="mono">{{ formatCurrency(hasKnownReserved(platform) ? calculateParentReservedAmount(platform) : undefined) }}</span>
                     </template>
                   </div>
                 </div>
@@ -83,6 +73,7 @@
                 >
                   <div style="font-weight: 800">
                     {{ child.accountName }}
+                    <span class="tag tiny">{{ child.virtualSubtype === 'POSITION' ? '持仓账户' : child.accountKind === 'VIRTUAL' ? '虚拟账户' : '真实账户' }}</span>
                     <span v-if="!child.isActive" class="tag red" style="margin-left: 8px;">已停用</span>
                     <span v-if="child.isFixedAmount" class="tag orange tiny">固定</span>
                     <span class="tag" :class="getFundUsageTagClass(child.fundUsage)">
@@ -90,25 +81,25 @@
                     </span>
                   </div>
                   <!-- MMF 子账户显示份额和金额 -->
-                  <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
+                  <div v-if="platform.accountType === 'MMF' && platform.initialShares != null" class="tiny muted">
                     <template v-if="child.isFixedAmount">
                       <span class="tag orange tiny">固定</span>
-                      金额：<span class="mono">{{ formatCurrency(child.fixedAmount || 0) }}</span>；
-                      折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
+                      金额：<span class="mono">{{ formatCurrency(child.fixedAmount) }}</span>；
+                      折算份额：<span class="mono">{{ formatNumber(hasMmfNav(platform) && knownNumber(child.fixedAmount) ? getMmfChildShares(platform, child) : undefined, 2) }}</span>
                     </template>
                     <template v-else-if="isUnallocatedAccount(child)">
                       <!-- 待分配账户：显示总份额减去其他子账户折算份额的差额 -->
                       <span class="tag gray tiny">待分配</span>
-                      金额：<span class="mono">{{ formatCurrency(getMmfUnallocatedAmount(platform)) }}</span>；
-                      份额：<span class="mono">{{ formatNumber(getMmfUnallocatedShares(platform), 2) }}</span>
+                      金额：<span class="mono">{{ formatCurrency(hasMmfNav(platform) && hasKnownMmfAllocation(platform) ? getMmfUnallocatedAmount(platform) : undefined) }}</span>；
+                      份额：<span class="mono">{{ formatNumber(hasMmfNav(platform) && hasKnownMmfAllocation(platform) ? getMmfUnallocatedShares(platform) : undefined, 2) }}</span>
                     </template>
-                    <template v-else-if="child.balance && child.balance > 0">
+                    <template v-else-if="knownNumber(child.balance)">
                       金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
-                      折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
+                      折算份额：<span class="mono">{{ formatNumber(hasMmfNav(platform) && child.balance >= 0 ? getMmfChildShares(platform, child) : undefined, 2) }}</span>
                     </template>
                     <template v-else>
-                      金额：<span class="mono">{{ formatCurrency(0) }}</span>；
-                      份额：<span class="mono">0</span>
+                      金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
+                      份额：<span class="mono">未知</span>
                     </template>
                   </div>
                   <div v-else class="tiny muted">
@@ -120,6 +111,7 @@
                     </template>
                   </div>
                   <div class="bucket-actions">
+                    <button class="btn" @click="accountDetail = child">详情</button>
                     <button class="btn" @click="handleEditAccount(child)">编辑</button>
                   </div>
                 </div>
@@ -138,12 +130,13 @@
                     </span>
                   </div>
 
+                  <p v-if="holdingsError" role="alert">{{ holdingsError }}</p>
                   <div
-                    v-if="(brokerHoldingsByBrokerId.get(platform.id)?.length || 0) === 0"
+                    v-if="!holdingsError && (brokerHoldingsByBrokerId.get(platform.id)?.length || 0) === 0"
                     class="tiny muted"
                     style="padding: 8px 10px; border: 1px dashed #e2e8f0; border-radius: 8px;"
                   >
-                    暂无该券商的场内持仓（如果你刚下单/刚录入，请点右上角“刷新数据”或等待 15 秒自动更新）。
+                    当前没有可见的场内持仓。可点击“重新读取”核对；持仓只读，不参与现金账户选择。
                   </div>
 
                   <div
@@ -159,6 +152,7 @@
                     <div class="tiny muted">
                       份额：<span class="mono">{{ formatNumber(h.shares, 2) }}</span>；
                       市值：<span class="mono">{{ formatCurrency(h.marketValue) }}</span>
+                      <span>；行情时间：{{ h.quoteTime || '未知' }}</span>
                       <span v-if="h.currentPrice && h.currentPrice > 0" class="mono" style="margin-left: 8px;">
                         （价格 {{ formatNumber(h.currentPrice, 4) }}）
                       </span>
@@ -166,183 +160,21 @@
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-          </div>
-        </div>
-        <!-- 第二列 -->
-        <div class="accounts-column">
-          <div class="card">
-            <div class="row-between">
-              <div>
-                <h3>
-                  账户管理
-                  <span class="tag blue tiny">可编辑</span>
-                </h3>
-              </div>
-              <div class="row-gap">
-                <el-button @click="handleAddPlatform">＋ 新增平台</el-button>
-                <el-button @click="handleAddBucket">＋ 新增信封</el-button>
-              </div>
-            </div>
-            <div class="divider"></div>
 
-            <!-- 账户树 -->
-            <div v-if="accountStore.loading" class="td-muted" style="text-align: center; padding: 20px">
-              加载中...
-            </div>
-            <div v-else-if="!accountTree || accountTree.length === 0" class="td-muted" style="text-align: center; padding: 20px">
-              暂无平台账户
-            </div>
-            <div v-else class="account-tree-container">
-              <div
-                v-for="platform in accountTree.slice(Math.ceil(accountTree.length / 2))"
-                :key="platform.id"
-                class="platform-item"
-              >
-                <div class="platform-header" @click="togglePlatform(platform.id)">
-                  <span class="expand-icon">{{ expandedPlatforms.has(platform.id) ? '▼' : '▶' }}</span>
-                  <div style="flex: 1;">
-                    <div style="font-weight: 700;">{{ platform.accountName }}</div>
-                    <!-- MMF 平台显示份额信息 -->
-                    <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
-                      总份额：<span class="mono">{{ formatNumber(platform.initialShares, 2) }}</span>；
-                      总金额：<span class="mono">{{ formatCurrency(getMmfTotalAmount(platform)) }}</span>
-                      <span v-if="platform.linkedProductId" class="tag blue tiny" style="margin-left: 8px;">已关联产品</span>
-                    </div>
-                    <div v-else class="tiny muted">
-                      <template v-if="platform.accountType === 'BROKER'">
-                        券商总资产 = 现金子账户余额 + 标的市值：
-                        <span class="mono">{{ formatCurrency(getBrokerCashBalance(platform)) }}</span>
-                        +
-                        <span class="mono">{{ formatCurrency(getBrokerHoldingsMarketValue(platform.id)) }}</span>
-                        =
-                        <span class="mono" style="font-weight: 700;">
-                          {{ formatCurrency(getBrokerCashBalance(platform) + getBrokerHoldingsMarketValue(platform.id)) }}
-                        </span>
-                        ；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
-                      </template>
-                      <template v-else>
-                        父账户（容器）余额 = Σ子账户余额（不含信贷账户）：<span class="mono">{{ formatCurrency(calculateParentBalance(platform)) }}</span>；占用：<span class="mono">{{ formatCurrency(calculateParentReservedAmount(platform)) }}</span>
-                      </template>
-                    </div>
-                  </div>
-                  <div class="row-gap">
-                    <button 
-                      v-if="platform.accountType === 'BROKER'" 
-                      class="btn" 
-                      @click.stop="handleManageFeeConfig(platform)"
-                    >
-                      费率配置
-                    </button>
-                    <button 
-                      v-if="platform.accountType === 'MMF'" 
-                      class="btn" 
-                      @click.stop="handleEditMmfPlatform(platform)"
-                    >
-                      编辑
-                    </button>
-                    <button class="btn" @click.stop="handleRenamePlatform(platform)">改名</button>
-                  </div>
-                </div>
-                <div v-if="expandedPlatforms.has(platform.id)" class="platform-children">
-                  <div
-                    v-for="child in platform.children"
-                    :key="child.id"
-                    class="bucket-item"
-                    :class="{ 'bucket-inactive': !child.isActive }"
-                  >
-                    <div style="font-weight: 800">
-                      {{ child.accountName }}
-                      <span v-if="!child.isActive" class="tag red" style="margin-left: 8px;">已停用</span>
-                      <span v-if="child.isFixedAmount" class="tag orange tiny">固定</span>
-                      <span class="tag" :class="getFundUsageTagClass(child.fundUsage)">
-                        {{ getFundUsageLabel(child.fundUsage) }}
-                      </span>
-                    </div>
-                    <!-- MMF 子账户显示份额和金额 -->
-                    <div v-if="platform.accountType === 'MMF' && platform.initialShares" class="tiny muted">
-                      <template v-if="child.isFixedAmount">
-                        <span class="tag orange tiny">固定</span>
-                        金额：<span class="mono">{{ formatCurrency(child.fixedAmount || 0) }}</span>；
-                        折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
-                      </template>
-                      <template v-else-if="isUnallocatedAccount(child)">
-                        <!-- 待分配账户：显示总份额减去其他子账户折算份额的差额 -->
-                        <span class="tag gray tiny">待分配</span>
-                        金额：<span class="mono">{{ formatCurrency(getMmfUnallocatedAmount(platform)) }}</span>；
-                        份额：<span class="mono">{{ formatNumber(getMmfUnallocatedShares(platform), 2) }}</span>
-                      </template>
-                      <template v-else-if="child.balance && child.balance > 0">
-                        金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；
-                        折算份额：<span class="mono">{{ formatNumber(getMmfChildShares(platform, child), 2) }}</span>
-                      </template>
-                      <template v-else>
-                        金额：<span class="mono">{{ formatCurrency(0) }}</span>；
-                        份额：<span class="mono">0</span>
-                      </template>
-                    </div>
-                    <div v-else class="tiny muted">
-                      <template v-if="isCreditAccount(child.accountType)">
-                        信贷金额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
-                      </template>
-                      <template v-else>
-                      余额：<span class="mono">{{ formatCurrency(child.balance) }}</span>；占用：<span class="mono">{{ formatCurrency(child.reservedAmount) }}</span>
-                      </template>
-                    </div>
-                    <div class="bucket-actions">
-                      <button class="btn" @click="handleEditAccount(child)">编辑</button>
-                    </div>
-                  </div>
-
-                  <!-- 券商：展示各标的持仓（只读；不进入下拉框） -->
-                  <div v-if="platform.accountType === 'BROKER'" style="margin-top: 8px;">
-                    <div class="tiny muted" style="margin: 6px 0 8px; display: flex; justify-content: space-between; gap: 12px;">
-                      <span>
-                        持仓（仅场内标的；仅展示，不参与记账下拉框）
-                        <span class="mono" style="margin-left: 8px;">
-                          {{ (brokerHoldingsByBrokerId.get(platform.id)?.length || 0) }} 条
-                        </span>
-                      </span>
-                      <span v-if="brokerHoldingsLoadedAt" class="mono" style="color: #94a3b8;">
-                        更新于 {{ brokerHoldingsLoadedAt }}
-                      </span>
-                    </div>
-
-                    <div
-                      v-if="(brokerHoldingsByBrokerId.get(platform.id)?.length || 0) === 0"
-                      class="tiny muted"
-                      style="padding: 8px 10px; border: 1px dashed #e2e8f0; border-radius: 8px;"
-                    >
-                      暂无该券商的场内持仓（如果你刚下单/刚录入，请点右上角“刷新数据”或等待 15 秒自动更新）。
-                    </div>
-
-                    <div
-                      v-for="h in brokerHoldingsByBrokerId.get(platform.id)"
-                      :key="`${String(platform.id)}:${String(h.productId)}`"
-                      class="bucket-item"
-                      style="border-left: 3px solid #60a5fa;"
-                    >
-                      <div style="font-weight: 800">
-                        {{ h.productName || `产品${h.productId}` }}
-                        <span class="tag blue tiny" style="margin-left: 8px;">持仓</span>
-                      </div>
-                      <div class="tiny muted">
-                        份额：<span class="mono">{{ formatNumber(h.shares, 2) }}</span>；
-                        市值：<span class="mono">{{ formatCurrency(h.marketValue) }}</span>
-                        <span v-if="h.currentPrice && h.currentPrice > 0" class="mono" style="margin-left: 8px;">
-                          （价格 {{ formatNumber(h.currentPrice, 4) }}）
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
+    </div>
+    <el-dialog :model-value="accountDetail !== null" title="账户详情" width="min(640px, 92vw)" @close="accountDetail = null">
+      <el-descriptions v-if="accountDetail" :column="1" border>
+        <el-descriptions-item label="名称 / 代码">{{ accountDetail.accountName }} / {{ accountDetail.accountCode }}</el-descriptions-item>
+        <el-descriptions-item label="类型 / 语义">{{ accountTypeMap[accountDetail.accountType] }} / {{ accountDetail.accountKind }}</el-descriptions-item>
+        <el-descriptions-item label="父账户">{{ accountTree.find(p => p.id === accountDetail?.parentAccountId)?.accountName || '无父账户' }}</el-descriptions-item>
+        <el-descriptions-item label="币种">{{ accountDetail.currency }}</el-descriptions-item>
+        <el-descriptions-item label="余额 / 占用">{{ formatCurrency(accountDetail.balance) }} / {{ formatCurrency(accountDetail.reservedAmount) }}</el-descriptions-item>
+        <el-descriptions-item label="用途 / 状态">{{ getFundUsageLabel(accountDetail.fundUsage) }} / {{ accountDetail.isActive ? '启用' : '停用' }}</el-descriptions-item>
+      </el-descriptions>
+      <p class="muted">只读查看当前接口返回信息。虚拟与持仓账户不等同于可支用现金；未知金额需要补齐来源。</p>
+    </el-dialog>
     <!-- 账户编辑对话框 -->
     <el-dialog
       v-model="accountDialogVisible"
@@ -814,12 +646,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, onActivated, onDeactivated } from 'vue'
 import { ElMessageBox, ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import {
   useAccountStore,
-  formatCurrency,
-  formatNumber,
+  useUserStore,
+  buildAccountTree,
+  formatCurrency as sharedFormatCurrency,
+  formatNumber as sharedFormatNumber,
   fundUsageMap,
   getFundUsageLabel,
   calculateParentBalance,
@@ -832,9 +666,32 @@ import {
   marketApi,
 } from '@wealth-hub/shared'
 import { brokerFeeApi, type BrokerFeeConfig, productApi, type ProductMaster } from '@wealth-hub/shared'
-import type { Account, HoldingInfo, MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
+import type { Account, HoldingInfo, MarketQuoteRealtime } from '@wealth-hub/shared'
+
+import { filterAccountTree, knownNumber, readError, createReadGate } from './managementViewModel'
 
 const accountStore = useAccountStore()
+const userStore = useUserStore()
+const identity = () => JSON.stringify([userStore.token, userStore.user?.id, userStore.user?.familyId])
+const accountGate = createReadGate(identity)
+const holdingGate = createReadGate(identity)
+const navGate = createReadGate(identity)
+const optionGate = createReadGate(identity)
+const feeGate = createReadGate(identity)
+const accountDetail = ref<Account | null>(null)
+const accountKeyword = ref('')
+const accountTypeFilter = ref('')
+const accountError = ref('')
+const accountLoading = ref(false)
+const accountReady = ref(false)
+const holdingsError = ref('')
+const filteredTree = computed(() => filterAccountTree(accountTree.value, accountKeyword.value, accountTypeFilter.value))
+const formatCurrency = (value: unknown) => knownNumber(value) ? sharedFormatCurrency(value) : '未知'
+const formatNumber = (value: unknown, decimals = 2) => knownNumber(value) ? sharedFormatNumber(value, decimals) : '未知'
+const hasMmfNav = (platform: Account) => platform.initialShares === 0 || (platform.linkedProductId != null && mmfNavCache.value.has(platform.linkedProductId))
+const hasKnownMmfAllocation = (platform: Account) => (platform.children || []).every(c => isUnallocatedAccount(c) || (c.isFixedAmount ? knownNumber(c.fixedAmount) : knownNumber(c.balance)))
+const hasKnownBalances = (platform: Account): boolean => (platform.children || []).every(c => (c.children?.length ? hasKnownBalances(c) : knownNumber(c.balance)))
+const hasKnownReserved = (platform: Account): boolean => (platform.children || []).every(c => (c.children?.length ? hasKnownReserved(c) : knownNumber(c.reservedAmount)))
 
 // 使用本地ref来存储数据，确保响应式
 const accountTree = ref<Account[]>([])
@@ -845,8 +702,9 @@ type BrokerHoldingRow = {
   productName?: string | null
   channel?: string | null
   shares: number
-  currentPrice: number
-  marketValue: number
+  currentPrice: number | null
+  marketValue: number | null
+  quoteTime?: string
 }
 
 const brokerHoldings = ref<BrokerHoldingRow[]>([])
@@ -880,9 +738,11 @@ function getBrokerCashBalance(platform: Account): number {
   return total
 }
 
-function getBrokerHoldingsMarketValue(brokerId: number): number {
+function getBrokerHoldingsMarketValue(brokerId: number): number | null {
+  if (holdingsError.value) return null
   const list = brokerHoldingsByBrokerId.value.get(Number(brokerId)) || []
-  return list.reduce((sum, h) => sum + (Number(h.marketValue) || 0), 0)
+  if (list.some(h => !knownNumber(h.marketValue))) return null
+  return list.reduce((sum, h) => sum + h.marketValue!, 0)
 }
 
 // 树状结构展开状态
@@ -1005,6 +865,7 @@ function getFundUsageDescription(value: string): string {
 
 // 存储 MMF 平台的最新净值
 const mmfNavCache = ref<Map<number, number>>(new Map())
+const mmfNavDates = ref<Map<number, string>>(new Map())
 
 // 获取 MMF 平台的净值
 function getMmfNav(platform: Account): number {
@@ -1038,18 +899,6 @@ function getMmfChildShares(platform: Account, child: Account): number {
   
   // balance 为 0，份额为 0
   return 0
-}
-
-// 获取非固定且未分配金额的子账户数量
-function getNonAllocatedChildrenCount(platform: Account): number {
-  if (!platform.children) return 1
-  let count = 0
-  for (const c of platform.children) {
-    if (!c.isFixedAmount && (!c.balance || c.balance === 0)) {
-      count++
-    }
-  }
-  return count || 1
 }
 
 // 获取 MMF 平台未分配的份额
@@ -1090,40 +939,20 @@ function isUnallocatedAccount(account: Account): boolean {
   return name.includes('待分配') || code.includes('待分配')
 }
 
-// 获取 MMF 子账户的金额
-function getMmfChildAmount(platform: Account, child: Account): number {
-  if (child.isFixedAmount) {
-    return child.fixedAmount || 0
-  }
-  // 使用子账户自己的 balance 值
-  return child.balance || 0
-}
-
 // 加载 MMF 平台关联产品的净值
 async function loadMmfNavs() {
-  const mmfPlatforms = accountTree.value.filter(p => p.accountType === 'MMF' && p.linkedProductId)
-  console.log('加载 MMF 平台净值，平台数量:', mmfPlatforms.length)
-  
-  for (const platform of mmfPlatforms) {
+  const current = navGate.begin()
+  const cache = new Map<number, number>()
+  const dates = new Map<number, string>()
+  for (const platform of accountTree.value.filter(p => p.accountType === 'MMF' && p.linkedProductId)) {
     try {
-      console.log(`正在加载产品 ${platform.linkedProductId} 的净值...`)
       const nav = await navApi.getLatestNav(platform.linkedProductId!)
-      console.log(`产品 ${platform.linkedProductId} 净值返回:`, nav)
-      if (nav && nav.nav) {
-        mmfNavCache.value.set(platform.linkedProductId!, nav.nav)
-        console.log(`设置产品 ${platform.linkedProductId} 净值为 ${nav.nav}`)
-      } else {
-        console.warn(`产品 ${platform.linkedProductId} 没有净值数据，使用默认值 1`)
-        mmfNavCache.value.set(platform.linkedProductId!, 1)
-      }
-    } catch (error) {
-      console.warn(`加载产品 ${platform.linkedProductId} 净值失败:`, error)
-      // 默认净值为 1
-      mmfNavCache.value.set(platform.linkedProductId!, 1)
-    }
+      if (!current()) return
+      if (knownNumber(nav?.nav) && nav.nav > 0) cache.set(platform.linkedProductId!, nav.nav)
+      if (nav?.navDate) dates.set(platform.linkedProductId!, nav.navDate)
+    } catch { if (!current()) return }
   }
-  
-  console.log('MMF 净值缓存:', Object.fromEntries(mmfNavCache.value))
+  if (current()) { mmfNavCache.value = cache; mmfNavDates.value = dates }
 }
 
 // 编辑 MMF 平台（完整编辑，包括关联产品和初始份额）
@@ -1278,15 +1107,17 @@ function resetAccountForm() {
 // 加载产品列表（用于关联产品下拉，只加载场外产品）
 async function loadProducts() {
   if (products.value.length > 0) return // 已加载过
+  const current = optionGate.begin()
   loadingProducts.value = true
   try {
     // 只加载场外产品（OTC），然后在前端过滤 isActive
     const allProducts = await productApi.getProducts({ channel: 'OTC' })
+    if (!current()) return
     products.value = allProducts.filter(p => p.isActive)
   } catch (error: any) {
-    console.error('加载产品列表失败:', error)
+    if (current()) ElNotification.error({ title: '关联产品未读取', message: readError(error, '产品') })
   } finally {
-    loadingProducts.value = false
+    if (current()) loadingProducts.value = false
   }
 }
 
@@ -1383,25 +1214,37 @@ async function handleBalanceSave() {
 
 // 加载账户数据
 async function loadAccounts() {
+  if (!accountGate.active) return
+  const current = accountGate.begin()
+  accountLoading.value = true
+  accountError.value = ''
   try {
-    await accountStore.fetchAccounts()
-    // 从store中获取数据并更新本地ref
-    accountTree.value = accountStore.accountTree || []
-    await loadBrokerHoldingsForAccounts()
-    console.log('Accounts loaded:', accountStore.accounts.length, 'accounts')
-    console.log('Account tree:', accountTree.value.length, 'platforms')
+    const accounts = await accountApi.getAccounts()
+    if (!current()) return
+    accountStore.accounts = accounts
+    accountTree.value = buildAccountTree(accounts)
+    accountReady.value = true
+    await Promise.all([loadBrokerHoldingsForAccounts(), loadMmfNavs()])
   } catch (error) {
-    console.error('Failed to load accounts:', error)
+    if (!current()) return
     accountTree.value = []
+    accountReady.value = false
+    accountError.value = readError(error, '账户')
+  } finally {
+    if (current()) accountLoading.value = false
   }
 }
 
 async function loadBrokerHoldingsForAccounts() {
+  if (!holdingGate.active) return
+  const current = holdingGate.begin()
   try {
     // holdingApi.getHoldings() 已定义为数组返回
     // 加时间戳参数，避免任何缓存导致“第二笔交易没刷新”
     const list: HoldingInfo[] = await holdingApi.getHoldings({ _ts: Date.now() } as any)
 
+    if (!current()) return
+    holdingsError.value = ''
     // 账户管理页的券商持仓：只认可场内（EXCHANGE）标的。
     // 业务口径：OTC（场外）不属于券商持仓，与券商账户无关。
     const brokerHoldingsOnly = list
@@ -1424,17 +1267,18 @@ async function loadBrokerHoldingsForAccounts() {
         const q = await marketApi.getRealtimeQuotes(exchangeIds)
         for (const it of q) quotes.set(it.productId, it)
       } catch (e) {
-        console.warn('账户管理页：加载实时行情失败，将使用0价格', e)
+        // Missing quotes remain unknown in the display.
       }
     }
 
+    if (!current()) return
     brokerHoldings.value = brokerHoldingsOnly.map((h: any) => {
       const brokerAccountId = Number(h.brokerAccountId)
       const productId = Number(h.productId)
       const shares = Number(h.totalShares ?? h.shares ?? 0)
       const q = quotes.get(productId)
-      const currentPrice = Number(q?.price ?? 0)
-      const marketValue = shares * currentPrice
+      const currentPrice = knownNumber(q?.price) && q!.price > 0 ? q!.price : null
+      const marketValue = currentPrice == null ? null : shares * currentPrice
       return {
         brokerAccountId,
         productId,
@@ -1443,11 +1287,13 @@ async function loadBrokerHoldingsForAccounts() {
         shares,
         currentPrice,
         marketValue,
+        quoteTime: q?.quoteTime,
       }
     })
     brokerHoldingsLoadedAt.value = new Date().toISOString().slice(0, 19).replace('T', ' ')
   } catch (e) {
-    console.warn('账户管理页：加载券商持仓失败', e)
+    if (!current()) return
+    holdingsError.value = readError(e, '持仓')
     brokerHoldings.value = []
     brokerHoldingsLoadedAt.value = ''
   }
@@ -1466,14 +1312,17 @@ async function handleManageFeeConfig(account: Account) {
 }
 
 async function loadFeeConfigs(accountId: number) {
+  const current = feeGate.begin()
   try {
     const configs = await brokerFeeApi.getFeeConfigs(accountId)
+    if (!current() || currentBrokerAccount.value?.id !== accountId) return
     feeConfigs.value = configs.map(config => ({
       ...config,
       buyFeeRatePercent: (config.buyFeeRate || 0) * 100,
       sellFeeRatePercent: (config.sellFeeRate || 0) * 100,
     }))
   } catch (error: any) {
+    if (!current()) return
     console.error('加载费率配置失败:', error)
     ElNotification.error({ title: '错误', message: '加载费率配置失败', position: 'bottom-right' })
     feeConfigs.value = []
@@ -1481,6 +1330,7 @@ async function loadFeeConfigs(accountId: number) {
 }
 
 function handleFeeConfigDialogClose() {
+  feeGate.invalidate()
   currentBrokerAccount.value = null
   feeConfigs.value = []
 }
@@ -1502,7 +1352,7 @@ function handleEditFeeConfig(config: BrokerFeeConfig & { buyFeeRatePercent?: num
   feeConfigEditDialogVisible.value = true
 }
 
-async function handleDeleteFeeConfig(id: number | undefined, index: number) {
+async function handleDeleteFeeConfig(id: number | undefined, _index: number) {
   if (!id || !currentBrokerAccount.value) return
   
   try {
@@ -1582,9 +1432,8 @@ async function handleSaveFeeConfig() {
 
 onMounted(async () => {
   await loadAccounts()
-  // 加载 MMF 平台的净值
-  await loadMmfNavs()
 
+  if (!accountGate.active) return
   // 行情/净值会变化：轻量轮询刷新券商标的市值与父账户总资产展示
   brokerHoldingsTimer = window.setInterval(() => {
     loadBrokerHoldingsForAccounts()
@@ -1596,7 +1445,26 @@ onMounted(async () => {
 
 let brokerHoldingsTimer: number | undefined
 
+function clearAccountView() {
+  accountGate.invalidate(); holdingGate.invalidate(); navGate.invalidate(); optionGate.invalidate(); feeGate.invalidate()
+  accountTree.value = []; brokerHoldings.value = []; mmfNavCache.value.clear()
+  mmfNavDates.value.clear()
+  expandedPlatforms.value.clear(); brokerHoldingsLoadedAt.value = ''
+  accountError.value = ''; holdingsError.value = ''; accountLoading.value = false
+  accountReady.value = false
+  accountDetail.value = null; products.value = []; loadingProducts.value = false
+  accountDialogVisible.value = false; feeConfigDialogVisible.value = false; feeConfigEditDialogVisible.value = false; balanceDialogVisible.value = false
+  currentAccount.value = null; currentBrokerAccount.value = null; feeConfigs.value = []; resetAccountForm(); resetFeeConfigForm()
+}
+watch(identity, (_, previous) => {
+  clearAccountView()
+  // MainLayout initializes the signed-in identity after its child has mounted.
+  if (JSON.parse(previous)[1] == null && userStore.user?.id && userStore.token) void loadAccounts()
+}, { flush: 'sync' })
+onDeactivated(() => { clearAccountView(); accountGate.suspend(); holdingGate.suspend(); navGate.suspend() })
+onActivated(() => { accountGate.activate(); holdingGate.activate(); navGate.activate() })
 onUnmounted(() => {
+  clearAccountView(); accountGate.suspend(); holdingGate.suspend(); navGate.suspend()
   if (brokerHoldingsTimer != null) {
     window.clearInterval(brokerHoldingsTimer)
     brokerHoldingsTimer = undefined
@@ -1760,3 +1628,5 @@ h3 .field-en {
   margin-left: 4px;
 }
 </style>
+
+<style scoped src="../styles/management-pages.css"></style>

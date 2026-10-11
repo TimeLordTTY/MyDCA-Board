@@ -1,24 +1,11 @@
 <template>
-  <div class="products-page-container">
-    <div class="card" style="flex-shrink: 0; margin-bottom: 12px; padding: 12px 16px;">
-      <div class="row-between">
-        <div>
-          <h3 style="margin: 0 0 4px 0; font-size: 16px;">
-            产品管理
-            <span class="tag blue tiny">可新增/编辑/停用</span>
-          </h3>
-          <div class="sub" style="margin: 0; font-size: 12px;">
-            产品是全局字典：ETF / 基金 / 货基 / 逆回购。后续接行情服务时，code 用于查询。
-          </div>
-        </div>
-        <div class="row-gap">
-          <el-button type="primary" size="small" @click="handleAddProduct">＋ 新增产品</el-button>
-        </div>
-      </div>
-    </div>
-
+  <div class="products-page-container management-page">
+    <header class="management-hero"><div><span class="management-eyebrow">PRODUCTS / 产品档案</span><h1>把投资标的，整理得明明白白。</h1><p>场内与场外分开管理。这里维护全局产品字典和费率配置，产品名称可跳转查看持仓；行情与持仓金额以各自页面的数据为准。</p></div><div class="row-gap"><el-button @click="loadAllProducts">重新读取</el-button><el-button type="primary" @click="handleAddProduct">＋ 新增产品</el-button></div></header>
+    <div class="management-guide"><span><b>场内 / 场外</b> · 按名称、代码、类型和启用状态筛选</span><span><b>确认日期</b> · 延迟天数与截单时间在编辑中维护</span><span><b>费率配置</b> · 配置值不代表某笔交易实际手续费</span></div>
+    <div v-if="loadError" class="management-state" role="alert">{{ loadError }} <el-button @click="loadAllProducts">重试</el-button></div>
+    <div v-else-if="!productsReady && !loading" class="management-state">身份或访问范围已变化，请点击“重新读取”查看当前产品。</div>
     <!-- 产品列表 - 左右分栏 -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; min-height: 0; overflow: hidden;">
+    <div v-else class="management-columns" aria-live="polite" :aria-busy="loading">
         <!-- 左侧：场内产品 -->
         <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
           <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
@@ -28,6 +15,8 @@
           <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
             <el-input
               v-model="exchangeFilters.keyword"
+              aria-label="搜索场内产品"
+              @input="loadExchangeProducts"
               placeholder="搜索产品名称或代码"
               style="width: 180px"
               clearable
@@ -35,7 +24,7 @@
               @keyup.enter="loadExchangeProducts"
             />
             <el-select
-              v-model="exchangeFilters.assetType"
+              v-model="exchangeFilters.assetType" aria-label="筛选产品类型"
               placeholder="资产类型"
               style="width: 130px"
               clearable
@@ -49,7 +38,7 @@
               />
             </el-select>
             <el-select
-              v-model="exchangeFilters.isActive"
+              v-model="exchangeFilters.isActive" aria-label="筛选启用状态"
               placeholder="是否启用"
               style="width: 100px"
               @change="loadExchangeProducts"
@@ -77,7 +66,7 @@
                 </template>
                 <template v-else-if="exchangeProducts.length === 0">
                   <tr>
-                    <td colspan="4" class="td-muted" style="text-align: center">暂无场内产品</td>
+                    <td colspan="4" class="td-muted" style="text-align: center">没有匹配的场内产品。可清除关键词，或将启用状态改为“全部”。</td>
                   </tr>
                 </template>
                 <template v-else>
@@ -97,11 +86,11 @@
                       <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="color: #999; font-size: 12px; user-select: none;">⋮⋮</span>
                         <div>
-                          <b style="cursor: pointer; color: #4ea4ff;" @click="handleViewHolding(product)">
+                          <button class="management-link" @click="handleViewHolding(product)" :aria-label="`查看${product.productName}持仓`">
                             {{ product.productName }}
-                          </b>
+                          </button>
                           <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
-                            {{ product.productCode }}
+                            {{ product.productCode }} <span class="tag tiny">{{ product.isActive ? '启用' : '停用' }}</span>
                           </div>
                         </div>
                       </div>
@@ -111,7 +100,10 @@
                     </td>
                     <td>{{ getMarketLabel(product.market) }}</td>
                     <td class="right" style="white-space: nowrap; padding: 8px;">
-                      <button class="btn-small" @click="handleEdit(product)" title="编辑产品">✏️ 编辑</button>
+                      <button class="btn-small" @click="productDetail = product">详情</button>
+                      <button class="btn-small" @click="handleEdit(product)" title="编辑场内产品">编辑</button>
+                      <button class="btn-small" :disabled="index === 0 || sorting" :aria-label="`上移${product.productName}`" @click="moveProduct(index, -1, 'exchange')">↑</button>
+                      <button class="btn-small" :disabled="index === exchangeProducts.length - 1 || sorting" :aria-label="`下移${product.productName}`" @click="moveProduct(index, 1, 'exchange')">↓</button>
                     </td>
                   </tr>
                 </template>
@@ -129,6 +121,8 @@
           <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
             <el-input
               v-model="otcFilters.keyword"
+              aria-label="搜索场外产品"
+              @input="loadOtcProducts"
               placeholder="搜索产品名称或代码"
               style="width: 180px"
               clearable
@@ -136,7 +130,7 @@
               @keyup.enter="loadOtcProducts"
             />
             <el-select
-              v-model="otcFilters.assetType"
+              v-model="otcFilters.assetType" aria-label="筛选产品类型"
               placeholder="资产类型"
               style="width: 130px"
               clearable
@@ -150,7 +144,7 @@
               />
             </el-select>
             <el-select
-              v-model="otcFilters.isActive"
+              v-model="otcFilters.isActive" aria-label="筛选启用状态"
               placeholder="是否启用"
               style="width: 100px"
               @change="loadOtcProducts"
@@ -177,7 +171,7 @@
                 </template>
                 <template v-else-if="otcProducts.length === 0">
                   <tr>
-                    <td colspan="3" class="td-muted" style="text-align: center">暂无场外产品</td>
+                    <td colspan="3" class="td-muted" style="text-align: center">没有匹配的场外产品。可清除关键词，或将启用状态改为“全部”。</td>
                   </tr>
                 </template>
                 <template v-else>
@@ -198,11 +192,11 @@
                       <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="color: #999; font-size: 12px; user-select: none;">⋮⋮</span>
                         <div>
-                          <b style="cursor: pointer; color: #4ea4ff;" @click="handleViewHolding(product)">
+                          <button class="management-link" @click="handleViewHolding(product)" :aria-label="`查看${product.productName}持仓`">
                             {{ product.productName }}
-                          </b>
+                          </button>
                           <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
-                            {{ product.productCode }}
+                            {{ product.productCode }} <span class="tag tiny">{{ product.isActive ? '启用' : '停用' }}</span>
                           </div>
                         </div>
                       </div>
@@ -211,7 +205,10 @@
                       <span class="tag blue">{{ getAssetTypeLabel(product.assetType) }}</span>
                     </td>
                     <td class="right" style="white-space: nowrap; padding: 8px;">
-                      <button class="btn-small" @click="handleEdit(product)" title="编辑产品">✏️ 编辑</button>
+                      <button class="btn-small" @click="productDetail = product">详情</button>
+                      <button class="btn-small" @click="handleEdit(product)" title="编辑产品">编辑</button>
+                      <button class="btn-small" :disabled="index === 0 || sorting" :aria-label="`上移${product.productName}`" @click="moveProduct(index, -1, 'otc')">↑</button>
+                      <button class="btn-small" :disabled="index === otcProducts.length - 1 || sorting" :aria-label="`下移${product.productName}`" @click="moveProduct(index, 1, 'otc')">↓</button>
                     </td>
                   </tr>
                 </template>
@@ -221,6 +218,18 @@
         </div>
       </div>
 
+    <el-dialog :model-value="productDetail !== null" title="产品详情" width="min(640px, 92vw)" @close="productDetail = null">
+      <el-descriptions v-if="productDetail" :column="1" border>
+        <el-descriptions-item label="名称 / 代码">{{ productDetail.productName }} / {{ productDetail.productCode }}</el-descriptions-item>
+        <el-descriptions-item label="类型 / 渠道">{{ getAssetTypeLabel(productDetail.assetType) }} / {{ channelMap[productDetail.channel] }}</el-descriptions-item>
+        <el-descriptions-item label="市场 / 币种">{{ getMarketLabel(productDetail.market) }} / {{ productDetail.currency }}</el-descriptions-item>
+        <el-descriptions-item label="启用 / QDII">{{ productDetail.isActive ? '启用' : '停用' }} / {{ productDetail.isQdii ? '是' : '否' }}</el-descriptions-item>
+        <el-descriptions-item label="买入 / 卖出确认延迟">{{ productDetail.buyConfirmOffset ?? '未知' }} / {{ productDetail.sellConfirmOffset ?? '未知' }} 个交易日</el-descriptions-item>
+        <el-descriptions-item label="截单时间 / 行情来源">{{ productDetail.cutoffTime || '未知' }} / {{ productDetail.dataSource || '未知' }}</el-descriptions-item>
+        <el-descriptions-item label="买入费率">{{ knownNumber(productDetail.buyFeeRate) ? `${productDetail.buyFeeRate * 100}%` : '未知' }}</el-descriptions-item>
+      </el-descriptions>
+      <p class="muted">此处展示产品配置，不推断最新行情日期、价格、收益或实际手续费。分段费率可在编辑表单中查看。</p>
+    </el-dialog>
     <!-- 新增/编辑产品对话框 -->
     <el-dialog
       v-model="dialogVisible"
@@ -228,6 +237,7 @@
       width="800px"
       @close="handleDialogClose"
     >
+      <p v-if="feeLoadError" class="management-state" role="alert">{{ feeLoadError }} 请关闭表单后重新打开，读取成功前不能保存。</p>
       <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
         <el-row :gutter="20">
           <el-col :span="12">
@@ -448,11 +458,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, onActivated, onDeactivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElNotification, type FormInstance, type FormRules } from 'element-plus'
 import {
   useProductStore,
+  useUserStore,
   assetTypeMap,
   channelMap,
   marketMap,
@@ -462,10 +473,20 @@ import {
   productApi,
 } from '@wealth-hub/shared'
 import type { ProductMaster } from '@wealth-hub/shared'
-import type { FundSellFeeTier } from '@wealth-hub/shared/src/api/product'
+import type { FundSellFeeTier } from '@wealth-hub/shared'
+import { readError, createReadGate, knownNumber } from './managementViewModel'
 
 const productStore = useProductStore()
 const router = useRouter()
+const userStore = useUserStore()
+const identity = () => JSON.stringify([userStore.token, userStore.user?.id, userStore.user?.familyId])
+const productGate = createReadGate(identity)
+const editGate = createReadGate(identity)
+const productDetail = ref<ProductMaster | null>(null)
+const loadError = ref('')
+const productsReady = ref(false)
+const sorting = ref(false)
+const feeLoadError = ref('')
 
 // 使用本地ref来存储产品列表，确保响应式
 const allProducts = ref<ProductMaster[]>([])
@@ -526,11 +547,6 @@ const buyFeeRatePercent = computed({
   set: (val) => { form.buyFeeRate = val != null ? val / 100 : 0 }
 })
 
-const sellFeeRatePercent = computed({
-  get: () => form.sellFeeRate != null ? form.sellFeeRate * 100 : 0,
-  set: (val) => { form.sellFeeRate = val != null ? val / 100 : 0 }
-})
-
 // 卖出费率分段配置（前端扩展字段，包含百分比显示）
 interface FeeTier extends Omit<FundSellFeeTier, 'sellFeeRate'> {
   sellFeeRatePercent: number
@@ -556,22 +572,38 @@ const rules: FormRules = {
 
 // 加载所有产品（调用同一个接口）
 async function loadAllProducts() {
+  if (!productGate.active) return
+  const current = productGate.begin()
   loading.value = true
+  loadError.value = ''
   try {
-    await productStore.fetchProducts()
-    // 从store中获取所有产品
-    allProducts.value = productStore.products || []
-    // 分别加载场内和场外产品
+    // Read through the shared API so swallowed store errors cannot look like empty data.
+    const products = await productApi.getProducts()
+    if (!current()) return
+    allProducts.value = products.map(p => ({ ...p, isQdii: p.isQdii ?? (p as ProductMaster & { isqdii?: boolean }).isqdii ?? false, isActive: p.isActive ?? true }))
+    productsReady.value = true
     loadExchangeProducts()
     loadOtcProducts()
-  } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
-    allProducts.value = []
-    exchangeProducts.value = []
-    otcProducts.value = []
+  } catch (error) {
+    if (!current()) return
+    loadError.value = readError(error, '产品')
+    productsReady.value = false
+    allProducts.value = []; exchangeProducts.value = []; otcProducts.value = []
   } finally {
-    loading.value = false
+    if (current()) loading.value = false
   }
+}
+
+async function moveProduct(index: number, direction: number, type: 'exchange' | 'otc') {
+  const rows = type === 'exchange' ? exchangeProducts : otcProducts
+  const destination = index + direction
+  if (sorting.value || destination < 0 || destination >= rows.value.length) return
+  const next = [...rows.value]
+  const [item] = next.splice(index, 1)
+  next.splice(destination, 0, item)
+  sorting.value = true
+  try { await saveProductOrder(next, type === 'exchange' ? 'EXCHANGE' : 'OTC'); loadExchangeProducts(); loadOtcProducts() }
+  finally { sorting.value = false }
 }
 
 // 加载场内产品（基于左侧筛选条件）
@@ -580,7 +612,7 @@ function loadExchangeProducts() {
 
   // 应用筛选条件
   if (exchangeFilters.keyword) {
-    const keyword = exchangeFilters.keyword.toLowerCase()
+    const keyword = exchangeFilters.keyword.trim().toLowerCase()
     filtered = filtered.filter(
       (p) =>
         p.productName.toLowerCase().includes(keyword) ||
@@ -606,7 +638,7 @@ function loadOtcProducts() {
 
   // 应用筛选条件
   if (otcFilters.keyword) {
-    const keyword = otcFilters.keyword.toLowerCase()
+    const keyword = otcFilters.keyword.trim().toLowerCase()
     filtered = filtered.filter(
       (p) =>
         p.productName.toLowerCase().includes(keyword) ||
@@ -814,6 +846,8 @@ function handleAddProduct() {
 }
 
 async function handleEdit(product: ProductMaster) {
+  const current = editGate.begin()
+  feeLoadError.value = ''
   editingProduct.value = product
   Object.assign(form, product)
   
@@ -824,12 +858,12 @@ async function handleEdit(product: ProductMaster) {
   
   // 如果是场外产品，加载费率分段配置
   if (product.channel === 'OTC' && product.assetType !== 'BANK_WM_NAV' && product.assetType !== 'MMF') {
-    await loadFeeTiers(product.id)
+    await loadFeeTiers(product.id, current)
   } else {
     sellFeeTiers.value = []
   }
   
-  dialogVisible.value = true
+  if (current()) dialogVisible.value = true
 }
 
 
@@ -862,7 +896,6 @@ function handleAddFeeTier() {
     maxDays: null,
     maxDaysInput: '',
     sellFeeRatePercent: 0,
-    sellFeeRate: 0,
     sortOrder: sellFeeTiers.value.length,
     isActive: true,
     note: '',
@@ -885,21 +918,27 @@ function handleRemoveFeeTier(index: number) {
 }
 
 // 加载费率分段配置
-async function loadFeeTiers(productId: number) {
+async function loadFeeTiers(productId: number, current: () => boolean) {
+  const owner = identity()
   try {
     const tiers = await productApi.getSellFeeTiers(productId)
+    if (!current() || owner !== identity() || editingProduct.value?.id !== productId || !productGate.active) return
     sellFeeTiers.value = tiers.map(t => ({
       ...t,
       sellFeeRatePercent: (t.sellFeeRate || 0) * 100,
       maxDaysInput: t.maxDays === null || t.maxDays === undefined ? '' : t.maxDays
     }))
   } catch (error: any) {
+    if (!current() || owner !== identity() || editingProduct.value?.id !== productId || !productGate.active) return
+    feeLoadError.value = readError(error, '分段费率')
     console.error('加载费率分段失败:', error)
     sellFeeTiers.value = []
   }
 }
 
 function handleDialogClose() {
+  editGate.invalidate()
+  feeLoadError.value = ''
   editingProduct.value = null
   resetForm()
   sellFeeTiers.value = []
@@ -907,7 +946,7 @@ function handleDialogClose() {
 }
 
 async function handleSave() {
-  if (!formRef.value) return
+  if (!formRef.value || feeLoadError.value) return
 
   await formRef.value.validate(async (valid) => {
     if (!valid) return
@@ -993,8 +1032,24 @@ onMounted(async () => {
   await loadAllProducts()
 })
 
+function clearProductView() {
+  productGate.invalidate(); editGate.invalidate(); productDetail.value = null
+  allProducts.value = []; exchangeProducts.value = []; otcProducts.value = []
+  dialogVisible.value = false; editingProduct.value = null; sellFeeTiers.value = []
+  resetForm(); loading.value = false; loadError.value = ''; stopAutoScroll()
+  productsReady.value = false; feeLoadError.value = ''
+}
+watch(identity, (_, previous) => {
+  clearProductView()
+  if (JSON.parse(previous)[1] == null && userStore.user?.id && userStore.token) void loadAllProducts()
+}, { flush: 'sync' })
+onDeactivated(() => { clearProductView(); productGate.suspend() })
+onActivated(() => productGate.activate())
 onBeforeUnmount(() => {
+  clearProductView(); productGate.suspend()
   // 清理时停止自动滚动
   stopAutoScroll()
 })
 </script>
+
+<style scoped src="../styles/management-pages.css"></style>

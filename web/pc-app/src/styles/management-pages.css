@@ -1,0 +1,35 @@
+.management-hero { display: flex; justify-content: space-between; align-items: center; gap: 24px; margin-bottom: 20px; }
+.management-hero h1 { margin: 4px 0 10px; font-size: 30px; font-family: 'Songti SC', SimSun, serif; }
+.management-hero p { margin: 0; color: var(--muted); line-height: 1.7; max-width: 700px; }
+.management-eyebrow { color: var(--primary); font-size: 12px; letter-spacing: .15em; }
+.management-guide { display: flex; flex-wrap: wrap; gap: 12px 24px; padding: 16px 20px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--primarySoft); color: var(--text); font-size: 13px; line-height: 1.6; }
+.management-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 18px; }
+.management-state { padding: 24px; color: var(--muted); line-height: 1.8; border: 1px dashed var(--border); border-radius: 16px; margin-bottom: 16px; }
+.management-state[role='alert'] { color: var(--bad); }
+.management-link { border: 0; padding: 4px 0; background: transparent; color: var(--primary); font: inherit; font-weight: 700; cursor: pointer; text-align: left; }
+.management-page { overflow: auto !important; }
+.management-hero, .management-guide, .management-filter, .management-state { flex-shrink: 0; }
+.management-page > .card { flex-shrink: 0; }
+.management-page .account-tree-container { overflow: visible; flex: none; }
+.management-page .mono { font-variant-numeric: tabular-nums; }
+.management-page .row-gap { flex-wrap: wrap; }
+.management-page button:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+:root[data-wh-theme]:not([data-wh-theme='legacy']) .management-page .card { border-radius: var(--wh-card-radius); padding: 24px !important; box-shadow: none; }
+:root[data-wh-theme]:not([data-wh-theme='legacy']) .management-page .platform-header { background: var(--wh-decoration); color: var(--wh-ink); border-radius: 14px; }
+:root[data-wh-theme]:not([data-wh-theme='legacy']) .management-page .bucket-item { background: var(--wh-surface); border-color: var(--wh-line); color: var(--wh-ink); }
+.management-page .platform-item { margin-bottom: 20px; }
+.management-page .platform-header { gap: 12px; align-items: flex-start; }
+.management-page .expand-icon { border: 0; background: transparent; color: inherit; cursor: pointer; min-width: 44px; min-height: 44px; }
+.management-page .bucket-item { margin-left: 18px; }
+.management-page .bucket-actions { position: static; display: flex; gap: 8px; margin-top: 12px; }
+:root[data-wh-theme]:not([data-wh-theme='legacy']) .management-page .platform-item { background: var(--wh-surface); border-color: var(--wh-line); border-radius: 16px; }
+:root[data-wh-theme]:not([data-wh-theme='legacy']) .management-page .bucket-inactive { opacity: 1; color: var(--wh-muted); }
+:root[data-wh-theme]:not([data-wh-theme='legacy']) .management-page .mono { color: var(--wh-muted) !important; }
+.management-page .btn, .management-page .btn-small, .management-link { min-height: 44px; }
+.management-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; align-items: start; }
+.management-columns table { width: 100%; }
+.management-columns th { position: sticky; top: 0; background: var(--card); }
+.management-columns td { vertical-align: top; }
+.management-page .management-columns .hide-scrollbar { scrollbar-width: auto; }
+.management-page .management-columns .hide-scrollbar::-webkit-scrollbar { display: block; width: 8px; height: 8px; }
+@media (max-width: 1200px) { .management-columns { grid-template-columns: 1fr; } .management-hero { align-items: flex-start; flex-direction: column; } }
