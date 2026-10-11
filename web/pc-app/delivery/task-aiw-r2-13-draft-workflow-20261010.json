@@ -1,0 +1,43 @@
+{
+  "task_id": "task-aiw-r2-13-draft-workflow-20261010",
+  "repository": "TimeLordTTY/MyDCA-Board",
+  "target_branch": "v2",
+  "baseline_commit": "8f18d6a726bab65db60dbafbbcbee7ecbacef623",
+  "baseline_remote_comparison": "FETCHED_origin_v2_EQUALS_HEAD_DEPENDENCY_INCLUDED",
+  "dependency_task": "task-aiw-r2-12-ledger-entry-experience-20261010",
+  "dependency_local_delivery": "LOCAL_VERIFIED_INCLUDED_AT_BASELINE",
+  "source_commit_resolution": "git log -1 --format=%H -- web/pc-app/delivery/task-aiw-r2-13-draft-workflow-20261010.json",
+  "engineering_delivery": "LOCAL_VERIFIED",
+  "owner_approved_scope": "PC DraftInbox UI and frontend regression only; existing draft/ledger API, backend idempotency and explicit second confirmation preserved",
+  "validation": {
+    "pc_node_baseline": "180/180 PASS_AFTER_REQUESTED_SHARED_BUILD",
+    "pc_node_final": "202/202 PASS",
+    "draft_workflow_node": "22/22 PASS",
+    "local_types": "PASS_STRICT_WITH_HISTORICAL_UNUSED_CHECKS_DISABLED",
+    "full_pc_types": "BASELINE_FAILED_56_FINAL_FAILED_56_NO_NEW_DIAGNOSTICS",
+    "browser_fixture": "PASS_1440_1100_760_DARK_ZERO_PAGEERRORS_26_REQUESTS_ONE_DRAFT_PUT_ONE_INTERCEPTED_CONFIRM_AFTER_EXPLICIT_SECOND_CONFIRMATION",
+    "browser_expected_console_errors": "2_FIXTURE_HTTP_409_AND_500",
+    "compile_hook": "PASS_MaxFixRounds_0_BACKEND_SHARED_PC_H5",
+    "backend_unit_tests": "NOT_RUN_HOOK_USES_DskipTests",
+    "git_diff_check": "PASS"
+  },
+  "artifacts": [
+    "web/pc-app/src/views/DraftInbox.vue",
+    "web/pc-app/tests/draftWorkflow.test.mjs",
+    "web/pc-app/tests/draftWorkflow.browser.js",
+    "web/pc-app/tests/tsconfig.draftWorkflow.json",
+    "docs/wealthhub_pc_draft_workflow_20261010.md"
+  ],
+  "local_evidence_logs": "web/pc-app/tests/draft-*.log (ignored)",
+  "local_browser_screenshots": "web/pc-app/output/playwright/draft-*.png (ignored)",
+  "draft_preview_contract": "NO_TOKEN_IN_EXISTING_DRAFT_DTO_OR_CONFIRM_REQUEST_FRONTEND_REPREVIEWS_BEFORE_SECOND_CONFIRM_BACKEND_CONFIRM_RECALCULATES_FRESH_PREVIEW",
+  "financial_retry_boundary": "COMPONENT_MEMORY_PER_DRAFT_UNCERTAIN_CONFIRM_LOCK_ONLY_NO_NEW_BACKEND_OR_CROSS_RELOAD_IDEMPOTENCY_CLAIM",
+  "production_database_and_financial_writes": "NOT_RUN",
+  "production_deployment": "NOT_RUN",
+  "push": "NOT_RUN",
+  "real_role_and_financial_e2e": "NOT_RUN",
+  "aicore_external_delivery_manifest": "PENDING_EXTERNAL_CHAIN",
+  "hermes_wecom_receipt": "NOT_VERIFIED",
+  "external_delivery_blocker": "No callable AiCore/Hermes delivery tool; external paths outside allowed_paths",
+  "owner_notification_policy": "goal_only"
+}

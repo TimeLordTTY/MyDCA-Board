@@ -1,32 +1,48 @@
 <template>
   <div class="draft-inbox-page">
-    <div class="pagehead">
-      <h1>草稿箱</h1>
-      <p>文本记账与 AI 解析只生成待确认草稿，不会直接入账。</p>
-    </div>
-
-    <div class="safety-banner">
-      <strong>安全边界：</strong>
-      AI/文本解析只会创建 DRAFT 草稿；只有在草稿预览显示可确认，并由你点击“确认记账”后，才会请求后端生成正式流水。
-    </div>
-
-    <div class="draft-grid">
-      <section class="card text-entry-card">
-        <div class="row-between">
-          <div>
-            <h3>
-              文本记账入口
-              <span class="tag blue tiny">Phase3 MVP</span>
-            </h3>
-            <div class="sub">先解析自然语言，再手动创建草稿；首版不接入真实大模型。</div>
-          </div>
+    <header class="draft-hero">
+      <div><span class="draft-eyebrow">REVIEW ROOM / 人工复核</span><h1>先留草稿，再认真确认。</h1><p>把零散记录放在这里，逐笔补齐、预览、核对。</p></div>
+      <button class="btn primary" :disabled="operationBusy" @click="textEntryVisible = true">＋ 文本录入</button>
+    </header>
+    <div class="draft-safety"><strong>草稿不计入余额</strong><span>01 补齐字段 → 02 服务器影响预览 → 03 你明确二次确认。投资订单仍需后续人工结算。</span></div>
+    <section class="card draft-list-card" aria-label="草稿列表">
+      <div class="draft-toolbar">
+        <div class="draft-status-tabs" role="group" aria-label="草稿状态">
+          <button v-for="tab in statusTabs" :key="tab.value" :aria-pressed="statusFilter === tab.value" :class="{ active: statusFilter === tab.value }" :disabled="operationBusy" @click="changeStatus(tab.value)">{{ tab.label }}</button>
         </div>
-        <div class="divider"></div>
-
+        <el-button :loading="loadingDrafts" :disabled="operationBusy" @click="loadDrafts">刷新草稿</el-button>
+      </div>
+      <div class="draft-filters">
+        <label><span>搜索本页</span><el-input v-model="searchText" clearable placeholder="原文、来源标识或草稿编号" /></label>
+        <label><span>来源</span><el-select v-model="sourceFilter" placeholder="全部来源" clearable><el-option v-for="source in sourceOptions" :key="source" :value="source" :label="sourceLabel(source)" /></el-select></label>
+        <label><span>方向</span><el-select v-model="typeFilter" placeholder="全部方向" clearable><el-option v-for="type in txnTypes" :key="type" :value="type" :label="formatTxnType(type)" /></el-select></label>
+        <label><span>更新时间</span><el-select v-model="timeFilter" placeholder="不限时间"><el-option label="不限时间" value="" /><el-option label="最近 7 天" value="7" /><el-option label="最近 30 天" value="30" /></el-select></label>
+      </div>
+      <p class="draft-scope">状态由服务器筛选；来源、方向、时间与搜索只筛选当前页（每页最多 50 条）。不汇总草稿金额为资产。</p>
+      <div v-if="loadingDrafts" class="draft-state" role="status">正在读取草稿…</div>
+      <div v-else-if="listError" class="draft-state" role="alert"><p>{{ listError }}</p><el-button @click="loadDrafts">重试读取</el-button></div>
+      <div v-else-if="!drafts.length" class="draft-state"><strong>这一页还没有草稿</strong><p>试试其他状态，或用文本录入留下一笔候选记录。</p></div>
+      <div v-else-if="!visibleDrafts.length" class="draft-state"><strong>本页没有匹配的草稿</strong><p>调整筛选，或继续翻页查看。</p><el-button @click="resetFilters">清除本页筛选</el-button></div>
+      <div v-else class="draft-cards">
+        <article v-for="draft in visibleDrafts" :key="draft.id" class="draft-item" :class="{ active: selectedDraft?.id === draft.id }">
+          <div class="draft-item-top"><span class="tag" :class="statusTagClass(draft.status)">{{ formatStatus(draft.status) }}</span><span class="draft-number">#{{ draft.id }}</span></div>
+          <h3>{{ draftHeading(draft) }}</h3><p class="draft-raw">{{ draft.rawInput || '未提供原始输入' }}</p>
+          <p class="draft-summary">{{ summarizeDraft(draft) }}</p>
+          <div class="missing-chips"><span v-for="field in parseMissingFields(draft.missingFieldsJson)" :key="field" class="tag orange tiny">待补 {{ fieldLabel(field) }}</span><span v-if="!parseMissingFields(draft.missingFieldsJson).length" class="draft-scope">字段待服务器复核</span></div>
+          <div class="draft-meta"><span>{{ sourceLabel(draft.sourceType) }}</span><time>{{ formatDateTime(draft.updatedAt || draft.createdAt) }}</time></div>
+          <div v-if="draft.sourceRef" class="draft-ref">来源标识：{{ draft.sourceRef }}</div>
+          <div class="draft-item-actions"><button class="btn" :disabled="operationBusy" @click="selectDraft(draft)">{{ draft.status === 'DRAFT' ? '复核这笔 →' : '查看记录 →' }}</button><button v-if="draft.status === 'DRAFT'" class="btn" :disabled="operationBusy" @click="openEditDraft(draft)">补齐字段</button></div>
+        </article>
+      </div>
+      <div class="draft-pagination"><span>第 {{ page }} 页 · 本页显示 {{ visibleDrafts.length }} / {{ drafts.length }} 条</span><div><el-button :disabled="page === 1 || loadingDrafts || operationBusy" @click="changePage(-1)">上一页</el-button><el-button :disabled="drafts.length < 50 || loadingDrafts || operationBusy" @click="changePage(1)">下一页</el-button></div></div>
+    </section>
+    <el-dialog v-model="textEntryVisible" title="文本录入 · 只生成草稿" width="min(640px, 94vw)" :before-close="closeTextEntry" :close-on-click-modal="false" :close-on-press-escape="!parsing && !creatingDraft">
+      <p class="draft-scope">描述一笔记录，先解析，再由你手动生成草稿。解析结果仍需复核。</p>
         <el-input
           v-model="textInput"
           type="textarea"
           :rows="5"
+          :disabled="parsing || creatingDraft"
           maxlength="500"
           show-word-limit
           placeholder="例如：午饭花了 32.5，用余额宝生活费，备注公司楼下简餐"
@@ -36,14 +52,14 @@
           <el-button
             type="primary"
             :loading="parsing"
-            :disabled="!textInput.trim()"
+            :disabled="!textInput.trim() || parsing || creatingDraft"
             @click="handleParseText"
           >
             解析文本
           </el-button>
           <el-button
             :loading="creatingDraft"
-            :disabled="!parsedIntent"
+            :disabled="!parsedIntent || parsing || creatingDraft"
             @click="handleCreateDraft"
           >
             生成草稿
@@ -69,6 +85,18 @@
               <span class="field-label">金额</span>
               <strong>{{ formatAmount(parsedIntent.amount) }}</strong>
             </div>
+            <div v-if="parsedIntent.shares != null">
+              <span class="field-label">份额</span><strong>{{ formatShares(parsedIntent.shares) }}</strong>
+            </div>
+            <div v-if="parsedIntent.productNameHint">
+              <span class="field-label">产品提示 · 仍需选择真实产品</span><strong>{{ parsedIntent.productNameHint }}</strong>
+            </div>
+            <div v-if="parsedIntent.sourceAccountNameHint">
+              <span class="field-label">持仓来源提示</span><strong>{{ parsedIntent.sourceAccountNameHint }}</strong>
+            </div>
+            <div v-if="parsedIntent.targetAccountNameHint">
+              <span class="field-label">转入 / 到账提示</span><strong>{{ parsedIntent.targetAccountNameHint }}</strong>
+            </div>
             <div>
               <span class="field-label">账户提示</span>
               <strong>{{ parsedIntent.accountNameHint || '-' }}</strong>
@@ -89,27 +117,22 @@
               :key="field"
               class="tag orange tiny"
             >
-              {{ field }}
+              {{ fieldLabel(field) }}
             </span>
           </div>
         </div>
-      </section>
 
-      <section class="card detail-card">
-        <div class="row-between">
-          <div>
-            <h3>草稿预览</h3>
-            <div class="sub">确认按钮只在 preview.confirmSupported=true 时启用。</div>
-          </div>
-          <span v-if="selectedDraft" class="tag gray tiny">#{{ selectedDraft.id }}</span>
-        </div>
-        <div class="divider"></div>
-
-        <div v-if="!selectedDraft" class="empty-detail">
-          从下方列表选择一条草稿后，可以预览、忽略或确认。
-        </div>
-
-        <template v-else>
+      <p v-if="textError" role="alert" class="draft-error">{{ textError }}</p>
+    </el-dialog>
+    <el-drawer v-model="detailVisible" title="逐笔复核" size="min(760px, 96vw)" :before-close="closeDetail" :close-on-click-modal="!operationBusy" :close-on-press-escape="!operationBusy">
+      <p v-if="detailLoading" role="status">正在读取最新草稿…</p>
+      <p v-if="detailError" role="alert" class="draft-error">{{ detailError }}</p>
+      <template v-if="selectedDraft">
+        <div class="draft-review-heading"><span class="draft-eyebrow">草稿 #{{ selectedDraft.id }}</span><h2>{{ draftHeading(selectedDraft) }}</h2><p>先补齐，再预览。最终操作需要你再次确认。</p></div>
+        <p class="draft-summary">{{ summarizeDraft(selectedDraft) }}</p>
+        <p v-if="selectedDraft.sourceRef" class="draft-ref">来源标识：{{ selectedDraft.sourceRef }}</p>
+        <p v-if="actionError" role="alert" class="draft-error">{{ actionError }}</p>
+        <p v-if="uncertainConfirmIds.has(selectedDraft.id)" role="alert" class="draft-error">确认结果未知，请刷新草稿并核对关联流水或订单。本次页面禁止重提，不自动重试。</p>
           <div class="detail-section">
             <div class="detail-row">
               <span>状态</span>
@@ -119,7 +142,7 @@
             </div>
             <div class="detail-row">
               <span>来源</span>
-              <strong>{{ selectedDraft.sourceType || '-' }}</strong>
+              <strong>{{ sourceLabel(selectedDraft.sourceType) }}</strong>
             </div>
             <div class="detail-row">
               <span>更新时间</span>
@@ -135,23 +158,23 @@
           <div class="detail-actions">
             <el-button @click="loadHistory(selectedDraft.id)">查看历史</el-button>
             <el-button v-if="selectedDraft.confirmOrderId" @click="openSettlementAudit(selectedDraft.confirmOrderId)">查看关联订单与结算审计</el-button>
-            <el-button v-if="selectedDraft.status === 'IGNORED'" @click="handleReopen(selectedDraft)">恢复草稿</el-button>
-            <el-button v-if="selectedDraft.status === 'CONFIRMED'" @click="handleCopy(selectedDraft)">复制为新草稿</el-button>
+            <el-button v-if="selectedDraft.status === 'IGNORED'" :disabled="operationBusy || detailLoading" @click="handleReopen(selectedDraft)">恢复草稿</el-button>
+            <el-button v-if="selectedDraft.status === 'CONFIRMED'" :disabled="operationBusy || detailLoading" @click="handleCopy(selectedDraft)">复制为新草稿</el-button>
             <el-button
               type="primary"
               plain
-              :disabled="selectedDraft.status !== 'DRAFT'"
+              :disabled="selectedDraft.status !== 'DRAFT' || operationBusy || detailLoading"
               @click="openEditDraft(selectedDraft)"
             >
               编辑草稿
             </el-button>
-            <el-button :loading="previewing" @click="handlePreview(selectedDraft)">
+            <el-button :loading="previewing" :disabled="selectedDraft.status !== 'DRAFT' || operationBusy || detailLoading" @click="handlePreview(selectedDraft)">
               生成预览
             </el-button>
             <el-button
               type="warning"
               plain
-              :disabled="selectedDraft.status !== 'DRAFT'"
+              :disabled="selectedDraft.status !== 'DRAFT' || operationBusy || detailLoading"
               @click="handleIgnore(selectedDraft)"
             >
               忽略
@@ -162,7 +185,7 @@
               :loading="confirming"
               @click="handleConfirm(selectedDraft)"
             >
-              确认记账
+              {{ isProductPreview ? '确认内部订单' : '确认记账' }}
             </el-button>
           </div>
 
@@ -181,7 +204,159 @@
             当前草稿已{{ formatStatus(selectedDraft.status) }}，不能再编辑或重新确认。
           </div>
 
-          <div v-if="editingDraft" class="edit-panel">
+          <div v-if="preview" class="preview-panel">
+            <div class="intent-title">
+              <span>确认预览</span>
+              <span class="tag" :class="preview.confirmSupported ? 'green' : 'orange'">
+                {{ preview.confirmSupported ? '可进入二次确认' : '暂不可确认' }}
+              </span>
+            </div>
+            <div class="intent-grid">
+              <div>
+                <span class="field-label">类型</span>
+                <strong>{{ formatTxnType(preview.txnType) }}</strong>
+              </div>
+              <div>
+                <span class="field-label">{{ isSellRedeemPreview ? '份额' : '金额' }}</span>
+                <strong>{{
+                  isSellRedeemPreview ? formatShares(preview.shares) : formatAmount(preview.amount)
+                }}</strong>
+              </div>
+              <div>
+                <span class="field-label">
+                  {{
+                    isTransferPreview
+                      ? '转出账户'
+                      : isSellRedeemPreview
+                        ? '持仓来源'
+                        : isProductPreview
+                          ? '付款账户'
+                          : '账户'
+                  }}
+                </span>
+                <strong>{{ formatPreviewAccount(preview.accountId) }}</strong>
+              </div>
+              <div v-if="isProductPreview">
+                <span class="field-label">产品</span>
+                <strong>
+                  {{ preview.productName || '未选择' }}
+                  <span v-if="preview.productCode"> / {{ preview.productCode }}</span>
+                  <span v-if="preview.productAssetType"> / {{ preview.productAssetType }}</span>
+                </strong>
+              </div>
+              <div v-if="isTransferPreview">
+                <span class="field-label">转入账户</span>
+                <strong>{{
+                  formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
+                }}</strong>
+              </div>
+              <div v-if="isSellRedeemPreview">
+                <span class="field-label">到账账户</span>
+                <strong>{{
+                  formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
+                }}</strong>
+              </div>
+              <div v-if="isSellRedeemPreview">
+                <span class="field-label">可用 / 本次 / 预计剩余份额</span>
+                <strong>
+                  {{ formatShares(preview.availableShares) }} / {{ formatShares(preview.shares) }} /
+                  {{ formatShares(preview.remainingShares) }}
+                </strong>
+              </div>
+              <div v-if="isInvestmentPreview"><span class="field-label">付款账户可用余额 · 服务器预览</span><strong>{{ formatAmount(preview.availableBefore) }}</strong></div>
+              <div v-if="isProductPreview"><span class="field-label">产品币种</span><strong>{{ preview.productCurrency || '未知' }}</strong></div>
+              <div v-if="isInvestmentPreview"><span class="field-label">预计净值日 / 确认日</span><strong>{{ preview.expectedNavDate || '未指定' }} / {{ preview.expectedConfirmDate || '未指定' }}</strong></div>
+              <div>
+                <span class="field-label">草稿 ID</span>
+                <strong>{{ preview.draftId }}</strong>
+              </div>
+            </div>
+            <div class="preview-impact-grid">
+              <div class="impact-card">
+                <span class="field-label">{{ isTransferPreview ? '转出账户影响' : '账户影响' }}</span>
+                <strong>{{ formatImpactDirection(preview.impactDirection) }}</strong>
+                <p>
+                  {{ formatPreviewAccount(preview.accountId, preview.accountName) }}
+                  <span v-if="preview.accountType"> / {{ preview.accountType }}</span>
+                  <span v-if="preview.fundUsage"> / {{ preview.fundUsage }}</span>
+                </p>
+                <em>{{ formatSignedAmount(preview.accountDelta) }}</em>
+              </div>
+              <div v-if="isTransferPreview" class="impact-card">
+                <span class="field-label">转入账户影响</span>
+                <strong>转入</strong>
+                <p>
+                  {{ formatPreviewAccount(preview.targetAccountId, preview.targetAccountName) }}
+                  <span v-if="preview.targetAccountType"> / {{ preview.targetAccountType }}</span>
+                  <span v-if="preview.targetFundUsage"> / {{ preview.targetFundUsage }}</span>
+                </p>
+                <em>{{ formatSignedAmount(preview.targetAccountDelta) }}</em>
+              </div>
+              <div v-if="isInvestmentPreview" class="impact-card">
+                <span class="field-label">待结算应收影响</span>
+                <strong>应收增加</strong>
+                <p>付款账户立即减少，同额待结算应收增加</p>
+                <em>{{ formatSignedAmount(preview.receivableDelta) }}</em>
+              </div>
+              <div v-if="isSellRedeemPreview" class="impact-card">
+                <span class="field-label">份额占用影响</span>
+                <strong>仅内部待处理</strong>
+                <p>确认只创建内部 PENDING 记录，登记待处理份额占用</p>
+                <em>不减少持仓 · 不增加到账余额</em>
+              </div>
+              <div class="impact-card">
+                <span class="field-label">正式对象影响</span>
+                <p>正式流水：{{ formatBooleanImpact(preview.willCreateLedgerTxn) }}</p>
+                <p>订单：{{ formatBooleanImpact(preview.willCreateOrder) }}</p>
+                <p>待结算：{{ formatBooleanImpact(preview.willCreateSettlement) }}</p>
+                <p>持仓：{{ formatBooleanImpact(preview.willAffectHolding) }}</p>
+              </div>
+            </div>
+            <div class="intent-note">
+              <span class="field-label">提示</span>
+              <p>{{ preview.message || '预览完成，请确认内容无误后再正式记账。' }}</p>
+            </div>
+            <div v-if="isInvestmentPreview && preview.fundingMessage" class="intent-note">
+              <span class="field-label">资金来源</span>
+              <p>{{ preview.fundingMessage }}</p>
+            </div>
+            <div v-if="isSellRedeemPreview && preview.sharesMessage" class="intent-note">
+              <span class="field-label">确认影响</span>
+              <p>{{ preview.sharesMessage }}</p>
+            </div>
+            <div v-if="preview.warnings?.length" class="warning-list">
+              <span class="field-label">风险 / 提示</span>
+              <p v-for="warning in preview.warnings" :key="warning">{{ warning }}</p>
+            </div>
+            <div v-if="preview.missingFields?.length" class="missing-list">
+              <span class="field-label">仍缺失</span>
+              <span
+                v-for="field in preview.missingFields"
+                :key="field"
+                class="tag orange tiny"
+              >
+                {{ fieldLabel(field) }}
+              </span>
+            </div>
+          </div>
+
+          <details class="json-details">
+            <summary>查看解析 JSON</summary>
+            <pre>{{ formatJson(selectedDraft.parsedPayloadJson) }}</pre>
+          </details>
+
+        <div class="detail-section draft-result" v-if="selectedDraft.status !== 'DRAFT'">
+          <p v-if="selectedDraft.ignoreReason">忽略原因：{{ selectedDraft.ignoreReason }}</p>
+          <p v-if="selectedDraft.confirmTxnId">关联流水：{{ selectedDraft.confirmTxnId }}</p>
+          <p v-if="selectedDraft.confirmOrderId">关联内部订单：{{ selectedDraft.confirmOrderId }}；确认订单不代表已结算到账。</p>
+          <p>创建：{{ formatDateTime(selectedDraft.createdAt) }} · 确认：{{ formatDateTime(selectedDraft.confirmedAt) }} · 忽略：{{ formatDateTime(selectedDraft.ignoredAt) }}</p>
+        </div>
+      </template>
+    </el-drawer>
+    <el-dialog v-model="editingDraft" title="补齐草稿字段" width="min(720px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!savingDraft" :before-close="closeEditor">
+      <p v-if="!editOptionsReady && !editError" role="status">正在读取账户、产品及持仓来源…</p>
+      <div v-if="editError" role="alert" class="draft-error">{{ editError }}<el-button :disabled="savingDraft" @click="retryEditOptions">重试选项</el-button></div>
+          <div v-if="selectedDraft" class="edit-panel" :inert="savingDraft || !editOptionsReady">
             <div class="intent-title">
               <span>编辑草稿字段</span>
               <span class="tag blue tiny">只更新草稿</span>
@@ -232,7 +407,7 @@
                   v-model="draftEditForm.productId"
                   filterable
                   clearable
-                  :loading="productStore.loading"
+                  :loading="optionsLoading"
                   placeholder="请选择真实产品"
                   @change="handleProductChange"
                 >
@@ -282,7 +457,7 @@
                   v-model="draftEditForm.accountId"
                   filterable
                   clearable
-                  :loading="accountStore.loading"
+                  :loading="optionsLoading"
                   placeholder="请选择实际记账账户"
                 >
                   <el-option
@@ -340,7 +515,7 @@
                   v-model="draftEditForm.targetAccountId"
                   filterable
                   clearable
-                  :loading="accountStore.loading"
+                  :loading="optionsLoading"
                   placeholder="请选择到账账户"
                 >
                   <el-option
@@ -363,7 +538,7 @@
                   v-model="draftEditForm.targetAccountId"
                   filterable
                   clearable
-                  :loading="accountStore.loading"
+                  :loading="optionsLoading"
                   placeholder="请选择转入账户"
                 >
                   <el-option
@@ -429,256 +604,24 @@
             </div>
           </div>
 
-          <div v-if="preview" class="preview-panel">
-            <div class="intent-title">
-              <span>确认预览</span>
-              <span class="tag" :class="preview.confirmSupported ? 'green' : 'orange'">
-                {{ preview.confirmSupported ? '可确认' : '暂不可确认' }}
-              </span>
-            </div>
-            <div class="intent-grid">
-              <div>
-                <span class="field-label">类型</span>
-                <strong>{{ formatTxnType(preview.txnType) }}</strong>
-              </div>
-              <div>
-                <span class="field-label">{{ isSellRedeemPreview ? '份额' : '金额' }}</span>
-                <strong>{{
-                  isSellRedeemPreview ? formatShares(preview.shares) : formatAmount(preview.amount)
-                }}</strong>
-              </div>
-              <div>
-                <span class="field-label">
-                  {{
-                    isTransferPreview
-                      ? '转出账户'
-                      : isSellRedeemPreview
-                        ? '持仓来源'
-                        : isProductPreview
-                          ? '付款账户'
-                          : '账户'
-                  }}
-                </span>
-                <strong>{{ formatPreviewAccount(preview.accountId) }}</strong>
-              </div>
-              <div v-if="isProductPreview">
-                <span class="field-label">产品</span>
-                <strong>
-                  {{ preview.productName || '未选择' }}
-                  <span v-if="preview.productCode"> / {{ preview.productCode }}</span>
-                  <span v-if="preview.productAssetType"> / {{ preview.productAssetType }}</span>
-                </strong>
-              </div>
-              <div v-if="isTransferPreview">
-                <span class="field-label">转入账户</span>
-                <strong>{{
-                  formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
-                }}</strong>
-              </div>
-              <div v-if="isSellRedeemPreview">
-                <span class="field-label">到账账户</span>
-                <strong>{{
-                  formatPreviewAccount(preview.targetAccountId, preview.targetAccountName)
-                }}</strong>
-              </div>
-              <div v-if="isSellRedeemPreview">
-                <span class="field-label">可用 / 本次 / 预计剩余份额</span>
-                <strong>
-                  {{ formatShares(preview.availableShares) }} / {{ formatShares(preview.shares) }} /
-                  {{ formatShares(preview.remainingShares) }}
-                </strong>
-              </div>
-              <div>
-                <span class="field-label">草稿 ID</span>
-                <strong>{{ preview.draftId }}</strong>
-              </div>
-            </div>
-            <div class="preview-impact-grid">
-              <div class="impact-card">
-                <span class="field-label">{{ isTransferPreview ? '转出账户影响' : '账户影响' }}</span>
-                <strong>{{ formatImpactDirection(preview.impactDirection) }}</strong>
-                <p>
-                  {{ formatPreviewAccount(preview.accountId, preview.accountName) }}
-                  <span v-if="preview.accountType"> / {{ preview.accountType }}</span>
-                  <span v-if="preview.fundUsage"> / {{ preview.fundUsage }}</span>
-                </p>
-                <em>{{ formatSignedAmount(preview.accountDelta) }}</em>
-              </div>
-              <div v-if="isTransferPreview" class="impact-card">
-                <span class="field-label">转入账户影响</span>
-                <strong>转入</strong>
-                <p>
-                  {{ formatPreviewAccount(preview.targetAccountId, preview.targetAccountName) }}
-                  <span v-if="preview.targetAccountType"> / {{ preview.targetAccountType }}</span>
-                  <span v-if="preview.targetFundUsage"> / {{ preview.targetFundUsage }}</span>
-                </p>
-                <em>{{ formatSignedAmount(preview.targetAccountDelta) }}</em>
-              </div>
-              <div v-if="isInvestmentPreview" class="impact-card">
-                <span class="field-label">待结算应收影响</span>
-                <strong>应收增加</strong>
-                <p>付款账户立即减少，同额待结算应收增加</p>
-                <em>{{ formatSignedAmount(preview.receivableDelta) }}</em>
-              </div>
-              <div v-if="isSellRedeemPreview" class="impact-card">
-                <span class="field-label">份额占用影响</span>
-                <strong>仅内部待处理</strong>
-                <p>确认只创建内部 PENDING 记录并占用持仓来源份额</p>
-                <em>不减少持仓 · 不增加到账余额</em>
-              </div>
-              <div class="impact-card">
-                <span class="field-label">正式对象影响</span>
-                <p>正式流水：{{ formatBooleanImpact(preview.willCreateLedgerTxn) }}</p>
-                <p>订单：{{ formatBooleanImpact(preview.willCreateOrder) }}</p>
-                <p>待结算：{{ formatBooleanImpact(preview.willCreateSettlement) }}</p>
-                <p>持仓：{{ formatBooleanImpact(preview.willAffectHolding) }}</p>
-              </div>
-            </div>
-            <div class="intent-note">
-              <span class="field-label">提示</span>
-              <p>{{ preview.message || '预览完成，请确认内容无误后再正式记账。' }}</p>
-            </div>
-            <div v-if="isInvestmentPreview && preview.fundingMessage" class="intent-note">
-              <span class="field-label">资金来源</span>
-              <p>{{ preview.fundingMessage }}</p>
-            </div>
-            <div v-if="isSellRedeemPreview && preview.sharesMessage" class="intent-note">
-              <span class="field-label">确认影响</span>
-              <p>{{ preview.sharesMessage }}</p>
-            </div>
-            <div v-if="preview.warnings?.length" class="warning-list">
-              <span class="field-label">风险 / 提示</span>
-              <p v-for="warning in preview.warnings" :key="warning">{{ warning }}</p>
-            </div>
-            <div v-if="preview.missingFields?.length" class="missing-list">
-              <span class="field-label">仍缺失</span>
-              <span
-                v-for="field in preview.missingFields"
-                :key="field"
-                class="tag orange tiny"
-              >
-                {{ field }}
-              </span>
-            </div>
-          </div>
 
-          <details class="json-details">
-            <summary>查看解析 JSON</summary>
-            <pre>{{ formatJson(selectedDraft.parsedPayloadJson) }}</pre>
-          </details>
-        </template>
-      </section>
-    </div>
-
-    <section class="card draft-list-card">
-      <div class="row-between">
-        <div>
-          <h3>草稿列表</h3>
-          <div class="sub">列表读取 draftApi.listDrafts，支持按草稿状态过滤。</div>
-        </div>
-        <div class="row-gap">
-          <el-select v-model="statusFilter" size="small" style="width: 140px" @change="loadDrafts">
-            <el-option label="全部状态" value="" />
-            <el-option label="待确认" value="DRAFT" />
-            <el-option label="已确认" value="CONFIRMED" />
-            <el-option label="已忽略" value="IGNORED" />
-          </el-select>
-          <el-button size="small" :loading="loadingDrafts" @click="loadDrafts">刷新</el-button>
-        </div>
-      </div>
-      <div class="divider"></div>
-
-      <div class="draft-table-container hide-scrollbar">
-        <table class="draft-table">
-          <thead>
-            <tr>
-              <th style="width: 90px;">状态</th>
-              <th style="width: 120px;">来源</th>
-              <th>原始输入</th>
-              <th style="width: 210px;">候选摘要</th>
-              <th style="width: 180px;">缺失字段</th>
-              <th style="width: 150px;">更新时间</th>
-              <th class="right" style="width: 190px;">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="loadingDrafts">
-              <td colspan="7" class="td-muted table-empty">草稿加载中...</td>
-            </tr>
-            <tr v-else-if="drafts.length === 0">
-              <td colspan="7" class="td-muted table-empty">暂无草稿</td>
-            </tr>
-            <tr
-              v-for="draft in drafts"
-              v-else
-              :key="draft.id"
-              :class="{ active: selectedDraft?.id === draft.id }"
-              @click="selectDraft(draft)"
-            >
-              <td>
-                <span class="tag tiny" :class="statusTagClass(draft.status)">
-                  {{ formatStatus(draft.status) }}
-                </span>
-              </td>
-              <td>
-                <div class="mono tiny">{{ draft.sourceType || '-' }}</div>
-                <div class="td-muted tiny">{{ draft.sourceRef || '' }}</div>
-              </td>
-              <td class="draft-raw">{{ draft.rawInput || '-' }}</td>
-              <td>{{ summarizeDraft(draft) }}</td>
-              <td>
-                <div class="missing-chips">
-                  <span
-                    v-for="field in parseMissingFields(draft.missingFieldsJson)"
-                    :key="field"
-                    class="tag orange tiny"
-                  >
-                    {{ field }}
-                  </span>
-                  <span v-if="parseMissingFields(draft.missingFieldsJson).length === 0" class="td-muted">
-                    -
-                  </span>
-                </div>
-              </td>
-              <td class="mono tiny">{{ formatDateTime(draft.updatedAt || draft.createdAt) }}</td>
-              <td class="right">
-                <div class="table-actions">
-                  <button class="btn-small" @click.stop="selectDraft(draft)">详情</button>
-                  <button
-                    class="btn-small"
-                    :disabled="draft.status !== 'DRAFT'"
-                    @click.stop="openEditDraft(draft)"
-                  >
-                    编辑
-                  </button>
-                  <button class="btn-small" @click.stop="handlePreview(draft)">预览</button>
-                  <button
-                    class="btn-small btn-danger"
-                    :disabled="draft.status !== 'DRAFT'"
-                    @click.stop="handleIgnore(draft)"
-                  >
-                    忽略
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, onActivated, onDeactivated, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
 import {
   aiAccountingApi,
   draftApi,
   holdingApi,
-  useAccountStore,
-  useProductStore,
+  accountApi,
+  productApi,
+  buildAccountTree,
+  getLeafAccounts,
+  useUserStore,
 } from '@wealth-hub/shared'
 import type {
   Account,
@@ -690,6 +633,8 @@ import type {
   DraftPreview,
   ProductMaster,
 } from '@wealth-hub/shared'
+
+import { createReadGate } from './managementViewModel'
 
 type DraftTxnType =
   | 'EXPENSE'
@@ -723,8 +668,63 @@ interface DraftEditForm {
   sourceAccountNameHint: string
 }
 
-const accountStore = useAccountStore()
-const productStore = useProductStore()
+const user = useUserStore()
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId])
+const listGate = createReadGate(identity)
+const detailGate = createReadGate(identity)
+const previewGate = createReadGate(identity)
+const historyGate = createReadGate(identity)
+const optionsGate = createReadGate(identity)
+const holdingsGate = createReadGate(identity)
+const textGate = createReadGate(identity)
+const gates = [listGate, detailGate, previewGate, historyGate, optionsGate, holdingsGate, textGate]
+const accounts = ref<Account[]>([])
+const products = ref<ProductMaster[]>([])
+const leafAccounts = computed(() => getLeafAccounts(buildAccountTree(accounts.value)))
+const cashLeafAccounts = computed(() => leafAccounts.value.filter(a => a.accountKind === 'REAL' && ['CASH', 'BANK', 'PAYMENT', 'MMF', 'BROKER'].includes(a.accountType)))
+const optionsLoading = ref(false)
+const editOptionsReady = ref(false)
+const editError = ref('')
+const detailVisible = ref(false)
+const detailLoading = ref(false)
+const detailError = ref('')
+const textEntryVisible = ref(false)
+const textError = ref('')
+const listError = ref('')
+const actionError = ref('')
+const page = ref(1)
+const searchText = ref('')
+const sourceFilter = ref('')
+const typeFilter = ref('')
+const timeFilter = ref('')
+const lifecycleBusy = ref(false)
+// A lost confirm response is not permission to replay a financial operation.
+const uncertainConfirmIds = ref(new Set<number>())
+const operationBusy = computed(() => confirming.value || savingDraft.value || lifecycleBusy.value || creatingDraft.value || previewing.value || loadingDrafts.value)
+const txnTypes: DraftTxnType[] = ['EXPENSE', 'INCOME', 'TRANSFER', 'BUY', 'SUBSCRIPTION', 'SELL', 'REDEMPTION']
+const statusTabs: { value: DraftLedgerStatus | ''; label: string }[] = [{ value: 'DRAFT', label: '待复核' }, { value: 'CONFIRMED', label: '已确认' }, { value: 'IGNORED', label: '已忽略' }, { value: '', label: '全部' }]
+const sourceOptions = computed(() => [...new Set(drafts.value.map(d => d.sourceType))])
+const visibleDrafts = computed(() => drafts.value.filter(draft => {
+  const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson))
+  const term = searchText.value.trim().toLowerCase()
+  const timestamp = new Date(draft.updatedAt || draft.createdAt || '').getTime()
+  return (!sourceFilter.value || draft.sourceType === sourceFilter.value)
+    && (!typeFilter.value || payload?.txnType === typeFilter.value)
+    && (!timeFilter.value || (Number.isFinite(timestamp) && timestamp >= Date.now() - Number(timeFilter.value) * 86400000 && timestamp <= Date.now()))
+    && (!term || `${draft.id} ${draft.rawInput || ''} ${draft.sourceRef || ''}`.toLowerCase().includes(term))
+}))
+function resetFilters() { searchText.value = ''; sourceFilter.value = ''; typeFilter.value = ''; timeFilter.value = '' }
+function changeStatus(status: DraftLedgerStatus | '') { statusFilter.value = status; page.value = 1; resetFilters(); void loadDrafts() }
+function changePage(delta: number) { page.value = Math.max(1, page.value + delta); void loadDrafts() }
+function sourceLabel(source: string) { return ({ HERMES_TEXT: '文本解析', HERMES_IMAGE: '图片候选', APP_FORM: '手工录入', PAYMENT_NOTIFICATION: '支付通知', MANUAL: '手工录入', manual: '手工录入', wechat: '微信来源', import: '导入', ocr: '图片识别' } as Record<string, string>)[source] || source || '未知来源' }
+function fieldLabel(field: string) { return ({ txnType: '交易方向', amount: '金额', accountId: '资金账户', targetAccountId: '转入 / 到账账户', productId: '真实产品', shares: '份额', sourceAccountId: '持仓来源' } as Record<string, string>)[field] || field }
+function draftHeading(draft: DraftLedgerEntry) { const payload = normalizeIntentPayload(parseJsonRecord(draft.parsedPayloadJson)); return `${formatTxnType(asString(payload?.txnType))} · ${['SELL', 'REDEMPTION'].includes(String(payload?.txnType)) ? formatShares(asNumber(payload?.shares)) : formatAmount(asNumber(payload?.amount))}` }
+function clearPreview() { previewGate.invalidate(); preview.value = null; previewing.value = false }
+function closeDetail(done: () => void) { if (operationBusy.value) return; detailVisible.value = false; selectedDraft.value = null; detailGate.invalidate(); historyGate.invalidate(); clearPreview(); done() }
+function closeEditor(done: () => void) { if (savingDraft.value) return; cancelEditDraft(); done() }
+function closeTextEntry(done: () => void) { if (parsing.value || creatingDraft.value) return; textGate.invalidate(); done() }
+function validSelection(draftId: number, owner: string) { return detailGate.active && identity() === owner && detailVisible.value && selectedDraft.value?.id === draftId }
+
 const route = useRoute()
 const textInput = ref('')
 const parsedIntent = ref<AccountingIntent | null>(null)
@@ -754,7 +754,7 @@ const holdingsLoading = ref(false)
 
 const draftQueryParams = computed(() => ({
   status: statusFilter.value || undefined,
-  page: 1,
+  page: page.value,
   pageSize: 50,
 }))
 
@@ -763,16 +763,16 @@ const canConfirmSelectedDraft = computed(() => {
     selectedDraft.value?.status === 'DRAFT' &&
       preview.value?.draftId === selectedDraft.value.id &&
       preview.value.confirmSupported &&
-      !confirming.value
+      !operationBusy.value && !loadingDrafts.value && !detailLoading.value && !editingDraft.value && !uncertainConfirmIds.value.has(selectedDraft.value.id)
   )
 })
 
 const editableAccountOptions = computed(() => {
-  const preferredAccounts = accountStore.cashLeafAccounts.length
-    ? accountStore.cashLeafAccounts
-    : accountStore.getAllLeafAccounts()
+  const preferredAccounts = cashLeafAccounts.value.length
+    ? cashLeafAccounts.value
+    : leafAccounts.value
 
-  return preferredAccounts.filter((account) => account.isActive !== false)
+  return preferredAccounts.filter((account) => account.isActive !== false && account.accountKind === 'REAL')
 })
 
 const rankedAccountOptions = computed(() => {
@@ -794,7 +794,7 @@ const transferTargetAccountOptions = computed(() =>
 
 /** 投资编辑态只允许 INVESTABLE 叶子账户；BOND_REPO 额外允许 RESERVED 专款。 */
 const accountOptionsForEdit = computed(() =>
-  isInvestmentEdit.value ? investmentAccountOptions.value : rankedAccountOptions.value
+  isInvestmentEdit.value ? investmentAccountOptions.value : draftEditForm.value.txnType === 'EXPENSE' ? rankedAccountOptions.value.filter(a => a.fundUsage === 'SPENDABLE') : rankedAccountOptions.value
 )
 
 /** 转账编辑态：只有 TRANSFER 才显示转入账户，避免目标账户残留到 EXPENSE / INCOME。 */
@@ -836,8 +836,7 @@ const sellRedeemSourceOptions = computed(() =>
 /** 卖出 / 赎回到账账户：当前启用 REAL 叶子账户，币种与产品一致；禁止 POSITION / VIRTUAL / 父账户。 */
 const sellRedeemTargetAccountOptions = computed(() => {
   const productCurrency = selectedProduct.value?.currency
-  return accountStore
-    .getAllLeafAccounts()
+  return leafAccounts.value
     .filter((account) => account.isActive !== false && account.accountKind === 'REAL')
     .filter((account) => account.virtualSubtype !== 'POSITION')
     .filter((account) => !productCurrency || account.currency === productCurrency)
@@ -846,7 +845,7 @@ const sellRedeemTargetAccountOptions = computed(() => {
 
 /** 只展示启用中的产品；产品 ID 必须由主人明确选择，不使用名称自动匹配。 */
 const productOptions = computed(() =>
-  productStore.products.filter((product) => product.isActive !== false)
+  products.value.filter((product) => product.isActive !== false)
 )
 
 const selectedProduct = computed(() => {
@@ -860,8 +859,7 @@ const selectedProductAssetType = computed(() => selectedProduct.value?.assetType
 /** 投资资金来源：只有 INVESTABLE 叶子账户；国债逆回购 BOND_REPO 额外允许 RESERVED 专款。 */
 const investmentAccountOptions = computed(() => {
   const bondRepo = selectedProductAssetType.value === 'BOND_REPO'
-  return accountStore
-    .getAllLeafAccounts()
+  return leafAccounts.value
     .filter((account) => account.isActive !== false && account.accountKind === 'REAL')
     .filter((account) => {
       if (account.fundUsage === 'INVESTABLE') return true
@@ -927,103 +925,72 @@ const confirmDialogMessage = computed(() => {
 
 /** 切换交易类型时清掉不属于该类型的残留字段，保证候选 payload 干净。 */
 function handleEditTxnTypeChange(type: DraftTxnType) {
-  if (type !== 'TRANSFER' && type !== 'SELL' && type !== 'REDEMPTION') {
-    draftEditForm.value.targetAccountId = undefined
-    draftEditForm.value.targetAccountNameHint = ''
-  }
-  if (type !== 'SELL' && type !== 'REDEMPTION') {
-    draftEditForm.value.shares = ''
-    draftEditForm.value.sourceAccountId = undefined
-    draftEditForm.value.sourceAccountNameHint = ''
-    productHoldings.value = []
-  }
-  if (type !== 'BUY' && type !== 'SUBSCRIPTION' && type !== 'SELL' && type !== 'REDEMPTION') {
-    draftEditForm.value.productId = undefined
-    draftEditForm.value.productNameHint = ''
-    draftEditForm.value.expectedNavDate = ''
-    draftEditForm.value.expectedConfirmDate = ''
-    return
-  }
-  void ensureProductsLoaded()
-  if (type === 'SELL' || type === 'REDEMPTION') {
-    void ensureHoldingsLoaded()
-  }
+  clearPreview()
+  holdingsGate.invalidate()
+  if (!['TRANSFER', 'SELL', 'REDEMPTION'].includes(type)) { draftEditForm.value.targetAccountId = undefined; draftEditForm.value.targetAccountNameHint = '' }
+  if (!['SELL', 'REDEMPTION'].includes(type)) { draftEditForm.value.shares = ''; draftEditForm.value.sourceAccountId = undefined; draftEditForm.value.sourceAccountNameHint = ''; productHoldings.value = [] }
+  if (!['BUY', 'SUBSCRIPTION', 'SELL', 'REDEMPTION'].includes(type)) { draftEditForm.value.productId = undefined; draftEditForm.value.productNameHint = ''; draftEditForm.value.expectedNavDate = ''; draftEditForm.value.expectedConfirmDate = '' }
+  void retryEditOptions()
 }
 
-/** 只读加载启用中的产品主数据；PC 绝不用产品名称自动匹配 productId。 */
-async function ensureProductsLoaded() {
-  if (productStore.products.length > 0 || productStore.loading) return
-  await productStore.fetchProducts()
+async function retryEditOptions() {
+  const current = optionsGate.begin()
+  optionsLoading.value = true; editOptionsReady.value = false; editError.value = ''; productHoldings.value = []
+  try {
+    const [accountRows, productRows] = await Promise.all([accountApi.getAccounts(), isProductEdit.value ? productApi.getProducts() : Promise.resolve([])])
+    if (!current() || !editingDraft.value) return
+    accounts.value = accountRows; products.value = productRows
+    if (isSellRedeemEdit.value) await ensureHoldingsLoaded()
+    if (current() && editingDraft.value && !editError.value) editOptionsReady.value = true
+  } catch (error: any) { if (current()) editError.value = getErrorMessage(error, '无法读取可用账户或产品，请重试。') }
+  finally { if (current()) optionsLoading.value = false }
 }
 
-/** 只读加载所选产品在各账户的真实持仓；PC 绝不用账户名称或历史订单猜测持仓来源。 */
 async function ensureHoldingsLoaded() {
-  const productId = Number(draftEditForm.value.productId)
-  if (!Number.isInteger(productId) || productId <= 0) {
-    productHoldings.value = []
-    return
-  }
+  const current = holdingsGate.begin(), productId = Number(draftEditForm.value.productId)
+  productHoldings.value = []; holdingsLoading.value = false
+  if (!Number.isInteger(productId) || productId <= 0) return
   try {
     holdingsLoading.value = true
-    productHoldings.value = await holdingApi.getProductHoldingsByAccount(productId)
-  } catch (error: any) {
-    productHoldings.value = []
-    ElNotification.error({
-      title: '持仓加载失败',
-      message: getErrorMessage(error, '无法加载该产品的持仓来源'),
-      position: 'bottom-right',
-    })
-  } finally {
-    holdingsLoading.value = false
-  }
+    const rows = await holdingApi.getProductHoldingsByAccount(productId)
+    if (current() && draftEditForm.value.productId === productId && isSellRedeemEdit.value && editingDraft.value) productHoldings.value = rows
+  } catch (error: any) { if (current()) editError.value = getErrorMessage(error, '无法读取该产品的持仓来源，请重试。') }
+  finally { if (current()) holdingsLoading.value = false }
 }
 
-/** 产品切换后重新加载卖出 / 赎回的持仓来源，并清掉不属于新产品来源的选择。 */
 async function handleProductChange() {
-  draftEditForm.value.sourceAccountId = undefined
-  productHoldings.value = []
+  draftEditForm.value.sourceAccountId = undefined; productHoldings.value = []; clearPreview()
   if (isSellRedeemEdit.value) {
+    editOptionsReady.value = false; editError.value = ''
     await ensureHoldingsLoaded()
+    if (editingDraft.value && !editError.value) editOptionsReady.value = true
   }
 }
 
 function formatPlainAmount(amount?: number | null): string {
-  if (amount === null || amount === undefined || Number.isNaN(amount)) return '-'
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) return '-'
   return Number(amount).toFixed(2)
 }
 
 async function loadDrafts() {
-  const currentSelectedId = selectedDraft.value?.id
+  const current = listGate.begin(), currentSelectedId = selectedDraft.value?.id
+  clearPreview(); detailGate.invalidate(); historyGate.invalidate()
+  loadingDrafts.value = true; listError.value = ''; drafts.value = []
   try {
-    loadingDrafts.value = true
     const rows = await draftApi.listDrafts(draftQueryParams.value)
+    if (!current()) return
     drafts.value = rows
-
-    if (!currentSelectedId && trySelectRouteDraft(rows)) {
-      return
-    }
-
-    if (currentSelectedId) {
-      const latestSelectedDraft = rows.find((item) => item.id === currentSelectedId) || null
-      selectedDraft.value = latestSelectedDraft
-
-      if (!latestSelectedDraft || preview.value?.draftId !== latestSelectedDraft.id) {
-        preview.value = null
-      }
-
-      if (!latestSelectedDraft || latestSelectedDraft.status !== 'DRAFT') {
-        editingDraft.value = false
-      }
+    if (!currentSelectedId && trySelectRouteDraft(rows)) return
+    if (currentSelectedId && selectedDraft.value?.id === currentSelectedId) {
+      const latest = rows.find(d => d.id === currentSelectedId)
+      if (latest) { selectedDraft.value = latest; if (latest.status !== 'DRAFT') editingDraft.value = false }
+      else if (selectedDraft.value?.status === 'DRAFT') { selectedDraft.value = null; detailVisible.value = false; editingDraft.value = false }
     }
   } catch (error: any) {
-    ElNotification.error({
-      title: '草稿加载失败',
-      message: getErrorMessage(error, '无法读取草稿列表'),
-      position: 'bottom-right',
-    })
-  } finally {
-    loadingDrafts.value = false
-  }
+    if (!current()) return
+    selectedDraft.value = null; detailVisible.value = false; editingDraft.value = false
+    listError.value = getErrorMessage(error, '草稿读取失败，请检查网络或登录权限。这不表示没有草稿。')
+  } finally { if (current()) { loadingDrafts.value = false; detailLoading.value = false; historyLoading.value = false } }
 }
 
 function trySelectRouteDraft(rows: DraftLedgerEntry[]): boolean {
@@ -1051,76 +1018,50 @@ function trySelectRouteDraft(rows: DraftLedgerEntry[]): boolean {
   return false
 }
 
-async function ensureAccountsLoaded() {
-  if (accountStore.accounts.length === 0 && !accountStore.loading) {
-    await accountStore.fetchAccounts()
-  }
-}
-
 async function handleParseText() {
   const text = textInput.value.trim()
-  if (!text) return
-
+  if (!text || parsing.value || creatingDraft.value) return
+  const current = textGate.begin()
+  parsedIntent.value = null; parsing.value = true; textError.value = ''
   try {
-    parsing.value = true
-    parsedIntent.value = await aiAccountingApi.parseText({
-      text,
-      sourceRef: `pc-text-entry-${Date.now()}`,
-    })
-    ElNotification.success({
-      title: '解析完成',
-      message: '已生成候选记账意图，请确认后再创建草稿',
-      position: 'bottom-right',
-    })
-  } catch (error: any) {
-    ElNotification.error({
-      title: '解析失败',
-      message: getErrorMessage(error, '文本解析接口调用失败'),
-      position: 'bottom-right',
-    })
-  } finally {
-    parsing.value = false
-  }
+    const intent = await aiAccountingApi.parseText({ text, sourceRef: `pc-text-entry-${Date.now()}` })
+    if (current() && textInput.value.trim() === text) parsedIntent.value = intent
+  } catch (error: any) { if (current()) textError.value = getErrorMessage(error, '文本解析失败，请手动重试。') }
+  finally { if (current()) parsing.value = false }
 }
 
 async function handleCreateDraft() {
-  if (!parsedIntent.value) return
-
+  if (!parsedIntent.value || parsing.value || creatingDraft.value) return
+  const current = textGate.begin(), intent = parsedIntent.value
+  creatingDraft.value = true; textError.value = ''
   try {
-    creatingDraft.value = true
-    const result = await aiAccountingApi.draftFromIntent({ intent: parsedIntent.value })
-    selectedDraft.value = result.draft
-    preview.value = null
-    editingDraft.value = false
-    statusFilter.value = 'DRAFT'
+    const result = await aiAccountingApi.draftFromIntent({ intent })
+    if (!current()) return
+    // Duplicate source may return an existing final-state draft; never relabel it DRAFT.
+    statusFilter.value = result.draft.status; page.value = 1
     await loadDrafts()
-    ElNotification.success({
-      title: '草稿已创建',
-      message: `草稿 #${result.draft.id} 已进入待确认列表，尚未正式入账`,
-      position: 'bottom-right',
-    })
+    if (!current()) return
+    textEntryVisible.value = false; parsedIntent.value = null; textInput.value = ''
+    await selectDraft(result.draft)
+    ElNotification.success({ title: '草稿返回', message: `草稿 #${result.draft.id}：${formatStatus(result.draft.status)}。请核对来源；未执行确认。` })
+  } catch (error: any) { if (current()) textError.value = getErrorMessage(error, '创建草稿失败，请检查来源或网络。') }
+  finally { if (current()) creatingDraft.value = false }
+}
+
+function resetTextEntry() { textGate.invalidate(); textInput.value = ''; parsedIntent.value = null; textError.value = ''; parsing.value = false }
+watch(textInput, () => { if (!parsing.value && !creatingDraft.value) parsedIntent.value = null }, { flush: 'sync' })
+
+async function selectDraft(draft: DraftLedgerEntry) {
+  const current = detailGate.begin()
+  clearPreview(); historyGate.invalidate(); optionsGate.invalidate(); holdingsGate.invalidate()
+  selectedDraft.value = draft; detailVisible.value = true; detailLoading.value = true; detailError.value = ''; actionError.value = ''
+  historyVisible.value = false; history.value = []; historyLoading.value = false; editingDraft.value = false
+  try {
+    const latest = await draftApi.getDraft(draft.id)
+    if (current() && detailVisible.value) selectedDraft.value = latest
   } catch (error: any) {
-    ElNotification.error({
-      title: '创建草稿失败',
-      message: getErrorMessage(error, 'draft-from-intent 接口调用失败'),
-      position: 'bottom-right',
-    })
-  } finally {
-    creatingDraft.value = false
-  }
-}
-
-function resetTextEntry() {
-  textInput.value = ''
-  parsedIntent.value = null
-}
-
-function selectDraft(draft: DraftLedgerEntry) {
-  selectedDraft.value = draft
-  historyVisible.value = false
-  history.value = []
-  preview.value = null
-  editingDraft.value = false
+    if (current()) { selectedDraft.value = null; detailError.value = getErrorMessage(error, '无法读取最新草稿，请关闭后重新打开。') }
+  } finally { if (current()) detailLoading.value = false }
 }
 
 function eventLabel(type: string): string {
@@ -1133,252 +1074,114 @@ function historyStatus(status?: string | null): string {
 }
 
 async function loadHistory(draftId: number) {
-  historyVisible.value = true
-  historyLoading.value = true
-  historyError.value = ''
-  try {
-    const rows = await draftApi.history(draftId)
-    if (selectedDraft.value?.id === draftId) history.value = rows
-  } catch (error: any) {
-    historyError.value = getErrorMessage(error, '无法读取草稿历史')
-  } finally {
-    historyLoading.value = false
-  }
+  const current = historyGate.begin()
+  historyVisible.value = true; historyLoading.value = true; historyError.value = ''; history.value = []
+  try { const rows = await draftApi.history(draftId); if (current() && selectedDraft.value?.id === draftId) history.value = rows }
+  catch (error: any) { if (current()) historyError.value = getErrorMessage(error, '无法读取草稿历史') }
+  finally { if (current()) historyLoading.value = false }
 }
 
-async function handleReopen(draft: DraftLedgerEntry) {
-  try {
-    await ElMessageBox.confirm('恢复后仍需重新预览和二次确认，是否恢复？', '恢复草稿', {
-      confirmButtonText: '确认恢复', cancelButtonText: '取消', type: 'warning',
-    })
-    selectedDraft.value = await draftApi.reopen(draft.id)
-    preview.value = null
-    await loadDrafts()
-    await loadHistory(draft.id)
-  } catch (error: any) {
-    if (error !== 'cancel' && error !== 'close') ElNotification.error({ title: '恢复失败', message: getErrorMessage(error, '无法恢复草稿') })
-  }
-}
+async function handleReopen(draft: DraftLedgerEntry) { await changeLifecycle(draft, 'reopen') }
+async function handleCopy(draft: DraftLedgerEntry) { await changeLifecycle(draft, 'copy') }
+async function handleIgnore(draft: DraftLedgerEntry) { await changeLifecycle(draft, 'ignore') }
 
-async function handleCopy(draft: DraftLedgerEntry) {
+async function changeLifecycle(draft: DraftLedgerEntry, action: 'reopen' | 'copy' | 'ignore') {
+  if (operationBusy.value || (action === 'ignore' ? draft.status !== 'DRAFT' : action === 'reopen' ? draft.status !== 'IGNORED' : draft.status !== 'CONFIRMED')) return
+  const owner = identity(), snapshot = selectedDraft.value
+  lifecycleBusy.value = true; clearPreview(); actionError.value = ''
   try {
-    await ElMessageBox.confirm('将生成新的草稿和来源标识，仍需预览和二次确认。', '复制为新草稿', {
-      confirmButtonText: '确认复制', cancelButtonText: '取消', type: 'warning',
-    })
-    const created = await draftApi.copyConfirmed(draft.id)
-    statusFilter.value = 'DRAFT'
+    let reason = ''
+    if (action === 'ignore') {
+      const result = await ElMessageBox.prompt('请输入忽略原因（可选）', '忽略草稿', { confirmButtonText: '忽略', cancelButtonText: '取消', inputPlaceholder: '例如：重复录入、信息不足' })
+      reason = typeof result === 'object' && result !== null && 'value' in result ? String(result.value || '') : ''
+    } else await ElMessageBox.confirm(action === 'reopen' ? '恢复后仍需重新预览和二次确认。是否恢复？' : '生成新的草稿和来源标识，仍需预览和二次确认。', action === 'reopen' ? '恢复草稿' : '复制为新草稿', { confirmButtonText: '确认', cancelButtonText: '取消', type: 'warning' })
+    if (!validSelection(draft.id, owner) || selectedDraft.value !== snapshot) return
+    const result = action === 'reopen' ? await draftApi.reopen(draft.id) : action === 'copy' ? await draftApi.copyConfirmed(draft.id) : await draftApi.ignoreDraft(draft.id, { ignoreReason: reason || undefined })
+    if (!validSelection(draft.id, owner)) return
+    selectedDraft.value = result; statusFilter.value = result.status; page.value = 1; editingDraft.value = false
     await loadDrafts()
-    selectDraft(created)
-  } catch (error: any) {
-    if (error !== 'cancel' && error !== 'close') ElNotification.error({ title: '复制失败', message: getErrorMessage(error, '无法复制草稿') })
-  }
+    if (identity() === owner && detailGate.active) await selectDraft(result)
+  } catch (error: any) { if (error !== 'cancel' && error !== 'close' && identity() === owner) actionError.value = getErrorMessage(error, '草稿操作失败，请刷新后核对状态。') }
+  finally { lifecycleBusy.value = false }
 }
 
 async function openEditDraft(draft: DraftLedgerEntry) {
-  if (draft.status !== 'DRAFT') {
-    ElNotification.warning({
-      title: '不可编辑',
-      message: '只有 DRAFT 状态草稿允许编辑。',
-      position: 'bottom-right',
-    })
-    return
-  }
-
-  selectedDraft.value = draft
-  preview.value = null
-  draftEditForm.value = buildEditForm(draft)
-  editingDraft.value = true
-
-  try {
-    await ensureAccountsLoaded()
-  } catch (error: any) {
-    ElNotification.error({
-      title: '账户加载失败',
-      message: getErrorMessage(error, '无法加载账户列表'),
-      position: 'bottom-right',
-    })
-  }
-
-  // 投资 / 卖出 / 赎回草稿需要主人明确选择真实产品，这里只做只读加载，不会自动匹配或下单。
-  if (isProductEdit.value) {
-    try {
-      await ensureProductsLoaded()
-    } catch (error: any) {
-      ElNotification.error({
-        title: '产品加载失败',
-        message: getErrorMessage(error, '无法加载产品列表'),
-        position: 'bottom-right',
-      })
-    }
-  }
-
-  // 卖出 / 赎回还需要只读加载该产品的真实持仓来源，绝不猜测来源账户。
-  if (isSellRedeemEdit.value) {
-    await ensureHoldingsLoaded()
-  }
+  if (operationBusy.value || draft.status !== 'DRAFT') return
+  await selectDraft(draft)
+  if (!selectedDraft.value || selectedDraft.value.id !== draft.id || selectedDraft.value.status !== 'DRAFT' || detailLoading.value) return
+  draftEditForm.value = buildEditForm(selectedDraft.value); editingDraft.value = true; clearPreview()
+  await retryEditOptions()
 }
-
-function cancelEditDraft() {
-  editingDraft.value = false
-}
+function cancelEditDraft() { if (savingDraft.value) return; editingDraft.value = false; optionsGate.invalidate(); holdingsGate.invalidate(); editOptionsReady.value = false }
 
 async function handleSaveDraftEdit(previewAfterSave = false) {
-  if (!selectedDraft.value || selectedDraft.value.status !== 'DRAFT') return
-  if (savingDraft.value) return
-
-  const validationMessage = validateDraftEditForm()
-  if (validationMessage) {
-    ElNotification.warning({
-      title: '请先补齐草稿字段',
-      message: validationMessage,
-      position: 'bottom-right',
-    })
-    return
-  }
-
-  const draftId = selectedDraft.value.id
-  const amount = Number(draftEditForm.value.amount)
-  const payload = buildUpdatedPayload(selectedDraft.value, amount)
-  const missingFields = calculateMissingFields(payload)
-
+  if (!selectedDraft.value || selectedDraft.value.status !== 'DRAFT' || operationBusy.value) return
+  const message = validateDraftEditForm()
+  if (message) { editError.value = message; ElNotification.warning({ title: '请先补齐字段', message }); return }
+  const owner = identity(), draft = selectedDraft.value
+  const payload = buildUpdatedPayload(draft, Number(draftEditForm.value.amount))
+  savingDraft.value = true; editError.value = ''; clearPreview()
   try {
-    savingDraft.value = true
-    preview.value = null
-    const updated = await draftApi.updateDraft(draftId, {
-      sourceType: selectedDraft.value.sourceType,
-      sourceRef: selectedDraft.value.sourceRef || undefined,
-      rawInput: selectedDraft.value.rawInput || undefined,
-      parsedPayloadJson: JSON.stringify(payload),
-      confidence: selectedDraft.value.confidence ?? undefined,
-      missingFieldsJson: JSON.stringify(missingFields),
-    })
-
-    selectedDraft.value = updated
-    preview.value = null
-    statusFilter.value = 'DRAFT'
+    const updated = await draftApi.updateDraft(draft.id, { sourceType: draft.sourceType, sourceRef: draft.sourceRef || undefined, rawInput: draft.rawInput || undefined, parsedPayloadJson: JSON.stringify(payload), confidence: draft.confidence ?? undefined, missingFieldsJson: JSON.stringify(calculateMissingFields(payload)) })
+    if (!validSelection(draft.id, owner)) return
+    selectedDraft.value = updated; editingDraft.value = false
     await loadDrafts()
-    const latestDraftForPreview = selectedDraft.value || updated
-    editingDraft.value = false
+    if (validSelection(draft.id, owner) && previewAfterSave) await requestPreview(updated)
+  } catch (error: any) { if (identity() === owner && detailGate.active) editError.value = getErrorMessage(error, '草稿保存失败，请核对来源或字段。') }
+  finally { savingDraft.value = false }
+}
 
-    ElNotification.success({
-      title: '草稿已保存',
-      message: '字段已保存到草稿。请重新生成预览后再确认记账。',
-      position: 'bottom-right',
-    })
-
-    if (previewAfterSave) {
-      await handlePreview(latestDraftForPreview)
-    }
+async function requestPreview(draft: DraftLedgerEntry): Promise<DraftPreview | null> {
+  const current = previewGate.begin(), owner = identity()
+  preview.value = null; actionError.value = ''; previewing.value = true
+  try {
+    const fresh = await draftApi.previewDraft(draft.id)
+    if (!current() || !validSelection(draft.id, owner) || selectedDraft.value?.status !== 'DRAFT') return null
+    if (fresh.draftId !== draft.id) throw new Error('服务器预览与当前草稿不一致，请重新预览。')
+    preview.value = fresh
+    return preview.value
   } catch (error: any) {
-    ElNotification.error({
-      title: '保存草稿失败',
-      message: getErrorMessage(error, '草稿编辑保存失败'),
-      position: 'bottom-right',
-    })
-  } finally {
-    savingDraft.value = false
-  }
+    if (current()) { preview.value = null; actionError.value = getErrorMessage(error, '预览失败，旧预览已清除，请检查网络或字段。') }
+    return null
+  } finally { if (current()) previewing.value = false }
 }
 
 async function handlePreview(draft: DraftLedgerEntry) {
-  const draftId = draft.id
-  try {
-    selectedDraft.value = draft
-    editingDraft.value = false
-    preview.value = null
-    previewing.value = true
-    const latestPreview = await draftApi.previewDraft(draftId)
-
-    if (selectedDraft.value?.id === draftId) {
-      preview.value = latestPreview
-    }
-  } catch (error: any) {
-    ElNotification.error({
-      title: '预览失败',
-      message: getErrorMessage(error, '草稿预览接口调用失败'),
-      position: 'bottom-right',
-    })
-  } finally {
-    previewing.value = false
-  }
-}
-
-async function handleIgnore(draft: DraftLedgerEntry) {
-  try {
-    const result = await ElMessageBox.prompt('请输入忽略原因（可选）', '忽略草稿', {
-      confirmButtonText: '忽略',
-      cancelButtonText: '取消',
-      inputPlaceholder: '例如：重复录入、信息不足、不是记账内容',
-    })
-
-    const ignoreReason =
-      typeof result === 'object' && result !== null && 'value' in result
-        ? String((result as { value?: unknown }).value || '')
-        : ''
-
-    await draftApi.ignoreDraft(draft.id, { ignoreReason: ignoreReason || undefined })
-    preview.value = null
-    editingDraft.value = false
-    await loadDrafts()
-    ElNotification.success({
-      title: '已忽略',
-      message: `草稿 #${draft.id} 已标记为忽略`,
-      position: 'bottom-right',
-    })
-  } catch (error: any) {
-    if (error === 'cancel' || error === 'close') return
-    ElNotification.error({
-      title: '忽略失败',
-      message: getErrorMessage(error, '草稿忽略接口调用失败'),
-      position: 'bottom-right',
-    })
-  }
+  if (operationBusy.value || draft.status !== 'DRAFT') return
+  if (selectedDraft.value?.id !== draft.id || !detailVisible.value) await selectDraft(draft)
+  if (selectedDraft.value?.id !== draft.id || selectedDraft.value.status !== 'DRAFT' || detailLoading.value) return
+  editingDraft.value = false
+  await requestPreview(selectedDraft.value)
 }
 
 async function handleConfirm(draft: DraftLedgerEntry) {
-  if (
-    draft.status !== 'DRAFT' ||
-    !preview.value ||
-    preview.value.draftId !== draft.id ||
-    !preview.value.confirmSupported
-  ) {
-    ElNotification.warning({
-      title: '请先生成可确认预览',
-      message: '只有当前草稿的预览返回 confirmSupported=true 后，才能正式确认记账。',
-      position: 'bottom-right',
-    })
-    return
-  }
-
+  if (!canConfirmSelectedDraft.value || draft.id !== selectedDraft.value?.id) return
+  // Lock before preview/dialog awaits. The existing confirm API accepts only the draft ID;
+  // backend confirm recalculates fresh preview and owns the idempotency/permission checks.
+  confirming.value = true
+  const owner = identity()
+  let submitted = false
   try {
-    await ElMessageBox.confirm(confirmDialogMessage.value, confirmDialogTitle.value, {
-      confirmButtonText: '确认记账',
-      cancelButtonText: '取消',
-      type: 'warning',
-    })
-
-    confirming.value = true
+    const fresh = await requestPreview(draft)
+    if (!fresh?.confirmSupported) {
+      if (fresh) actionError.value = [fresh.message || '当前字段或状态不支持确认，请补齐后重新预览。', ...(fresh.warnings || [])].join(' ')
+      return
+    }
+    await ElMessageBox.confirm(confirmDialogMessage.value, confirmDialogTitle.value, { confirmButtonText: isProductPreview.value ? '确认内部订单' : '确认记账', cancelButtonText: '取消', type: 'warning' })
+    if (!validSelection(draft.id, owner) || selectedDraft.value?.status !== 'DRAFT' || preview.value !== fresh || editingDraft.value) return
+    submitted = true
     const confirmed = await draftApi.confirmDraft(draft.id)
-    selectedDraft.value = confirmed
-    preview.value = null
-    editingDraft.value = false
+    if (confirmed.id !== draft.id || confirmed.status !== 'CONFIRMED') throw new Error('服务器未返回已确认结果，请刷新核对，禁止重复提交。')
+    if (!validSelection(draft.id, owner)) return
+    selectedDraft.value = confirmed; clearPreview(); editingDraft.value = false
     await loadDrafts()
+    if (identity() !== owner || !detailGate.active) return
     window.dispatchEvent(new CustomEvent('data-refresh'))
-    ElNotification.success({
-      title: '确认完成',
-      message: `草稿 #${draft.id} 已正式记账`,
-      position: 'bottom-right',
-    })
+    ElNotification.success({ title: '确认完成', message: confirmed.confirmOrderId ? `已关联内部订单 ${confirmed.confirmOrderId}，仍需后续人工结算。` : `已关联流水 ${confirmed.confirmTxnId || ''}，请核对记录。` })
   } catch (error: any) {
-    if (error === 'cancel' || error === 'close') return
-    ElNotification.error({
-      title: '确认失败',
-      message: getErrorMessage(error, '草稿确认接口调用失败'),
-      position: 'bottom-right',
-    })
-  } finally {
-    confirming.value = false
-  }
+    if (submitted && (error?.response?.status == null || error.response.status >= 500 || error.response.status === 408)) uncertainConfirmIds.value = new Set([...uncertainConfirmIds.value, draft.id])
+    if (error !== 'cancel' && error !== 'close' && identity() === owner && detailGate.active) actionError.value = getErrorMessage(error, '确认失败，请刷新草稿核对状态。')
+  } finally { clearPreview(); confirming.value = false }
 }
 
 function emptyDraftEditForm(): DraftEditForm {
@@ -1435,6 +1238,7 @@ function buildEditForm(draft: DraftLedgerEntry): DraftEditForm {
 }
 
 function validateDraftEditForm(): string | null {
+  if (!editOptionsReady.value || optionsLoading.value || holdingsLoading.value) return '选项尚未读取完成，请重试选项。'
   if (!draftEditForm.value.txnType) return '请选择交易类型。'
 
   if (isSellRedeemEdit.value) {
@@ -1454,6 +1258,9 @@ function validateDraftEditForm(): string | null {
       return '卖出 / 赎回必须选择到账账户。'
     }
 
+    if (!selectedProduct.value) return '所选产品不可用，请重新选择。'
+    if (!sellRedeemSourceOptions.value.some(h => h.accountId === sourceAccountId)) return '所选账户不是该产品的真实持仓来源。'
+    if (!sellRedeemTargetAccountOptions.value.some(a => a.id === targetAccountId)) return '到账账户必须是同币种的启用 REAL 叶子账户。'
     return null
   }
 
@@ -1463,11 +1270,15 @@ function validateDraftEditForm(): string | null {
   const accountId = Number(draftEditForm.value.accountId)
   if (!Number.isInteger(accountId) || accountId <= 0) return '请选择有效的现金或活钱账户。'
 
+  if (!accountOptionsForEdit.value.some(a => a.id === accountId)) return '所选资金账户不可用或不满足用途要求。'
+
   if (draftEditForm.value.txnType === 'TRANSFER') {
     const targetAccountId = Number(draftEditForm.value.targetAccountId)
     if (!Number.isInteger(targetAccountId) || targetAccountId <= 0) {
       return '转账必须选择转入账户。'
     }
+    if (!transferTargetAccountOptions.value.some(a => a.id === targetAccountId)) return '所选转入账户不可用。'
+    if (accounts.value.find(a => a.id === accountId)?.currency !== accounts.value.find(a => a.id === targetAccountId)?.currency) return '转出与转入账户币种必须一致。'
     if (targetAccountId === accountId) {
       return '转出账户与转入账户不能相同，请重新选择转入账户。'
     }
@@ -1475,9 +1286,8 @@ function validateDraftEditForm(): string | null {
 
   if (isInvestmentEdit.value) {
     const productId = Number(draftEditForm.value.productId)
-    if (!Number.isInteger(productId) || productId <= 0) {
-      return '投资买入 / 申购必须选择真实产品。'
-    }
+    if (!Number.isInteger(productId) || productId <= 0 || !selectedProduct.value) return '投资买入 / 申购必须选择真实产品。'
+    if (accounts.value.find(a => a.id === accountId)?.currency !== selectedProduct.value.currency) return '产品与付款账户币种必须一致。'
   }
 
   return null
@@ -1592,13 +1402,13 @@ function summarizeDraft(draft: DraftLedgerEntry): string {
   const amount = sellRedeem
     ? formatShares(asNumber(payload?.shares))
     : formatAmount(asNumber(payload?.amount))
-  const account = formatPreviewAccount(asNumber(payload?.accountId))
+  const account = formatPreviewAccount(asNumber(sellRedeem ? payload?.sourceAccountId : payload?.accountId))
   const targetAccountId = asNumber(payload?.targetAccountId)
   const accountLabel =
-    targetAccountId === null ? account : `${account} → ${formatPreviewAccount(targetAccountId)}`
+    targetAccountId === null || (!sellRedeem && rawTxnType !== 'TRANSFER') ? account : `${account} → ${formatPreviewAccount(targetAccountId)}`
   const note = asString(payload?.note) || draft.rawInput || '-'
   const productId = asNumber(payload?.productId)
-  const productLabel = productId === null ? '' : ` / 产品 #${productId}`
+  const productLabel = productId === null || !['BUY', 'SUBSCRIPTION', 'SELL', 'REDEMPTION'].includes(rawTxnType || '') ? '' : ` / 产品 #${productId}`
   return `${txnType} / ${amount} / ${accountLabel}${productLabel} / ${note}`
 }
 
@@ -1651,7 +1461,7 @@ function asString(value: unknown): string | null {
 }
 
 function asNumber(value: unknown): number | null {
-  if (typeof value === 'number') return value
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value)
     return Number.isFinite(parsed) ? parsed : null
@@ -1728,14 +1538,14 @@ function statusTagClass(status: DraftLedgerStatus): string {
 }
 
 function formatAmount(amount?: number | null): string {
-  if (amount === null || amount === undefined || Number.isNaN(amount)) {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) {
     return '-'
   }
   return `￥ ${Number(amount).toFixed(2)}`
 }
 
 function formatConfidence(confidence?: number | null): string {
-  if (confidence === null || confidence === undefined || Number.isNaN(confidence)) {
+  if (confidence === null || confidence === undefined || !Number.isFinite(confidence)) {
     return '-'
   }
   return `${Math.round(confidence * 100)}%`
@@ -1756,7 +1566,7 @@ function formatDateTime(value?: string | null): string {
 function formatPreviewAccount(accountId?: number | null, accountName?: string | null): string {
   if (!accountId) return '-'
   if (accountName) return `${accountName} #${accountId}`
-  const account = accountStore.getAccountById(accountId)
+  const account = accounts.value.find(a => a.id === accountId)
   return account ? `${account.accountName} #${account.id}` : `账户 ID ${accountId}`
 }
 
@@ -1770,7 +1580,7 @@ function formatImpactDirection(direction?: string | null): string {
 }
 
 function formatSignedAmount(amount?: number | null): string {
-  if (amount === null || amount === undefined || Number.isNaN(amount)) {
+  if (amount === null || amount === undefined || !Number.isFinite(amount)) {
     return '预计变动：-'
   }
   const numericAmount = Number(amount)
@@ -1779,7 +1589,7 @@ function formatSignedAmount(amount?: number | null): string {
 }
 
 function formatBooleanImpact(value?: boolean | null): string {
-  return value ? '会生成' : '不会生成'
+  return value == null ? '未知' : value ? '会生成' : '不会生成'
 }
 
 function formatProductOption(product: ProductMaster): string {
@@ -1793,12 +1603,12 @@ function formatProductMeta(product?: ProductMaster): string {
 
 /** 份额展示：去掉无意义尾随零，空值按 0 处理。 */
 function formatShares(shares?: number | null): string {
-  if (shares === null || shares === undefined || Number.isNaN(shares)) return '-'
+  if (shares === null || shares === undefined || !Number.isFinite(shares)) return '-'
   return `${formatSharesPlain(shares)} 份`
 }
 
 function formatSharesPlain(shares?: number | null): string {
-  if (shares === null || shares === undefined || Number.isNaN(shares)) return '-'
+  if (shares === null || shares === undefined || !Number.isFinite(shares)) return '-'
   return String(Number(shares))
 }
 
@@ -1837,45 +1647,76 @@ function accountHintScore(account: Account, hint: string): number {
   return score
 }
 
-function refreshDraftInbox() {
-  loadDrafts()
+function clearPage() {
+  gates.forEach(g => g.invalidate()); drafts.value = []; selectedDraft.value = null; preview.value = null
+  history.value = []; productHoldings.value = []; accounts.value = []; products.value = []; parsedIntent.value = null; textInput.value = ''
+  detailVisible.value = false; editingDraft.value = false; textEntryVisible.value = false
+  editOptionsReady.value = false; optionsLoading.value = false; loadingDrafts.value = false; previewing.value = false; parsing.value = false; historyLoading.value = false; detailLoading.value = false; holdingsLoading.value = false
+  listError.value = ''; detailError.value = ''; actionError.value = ''; textError.value = ''; editError.value = ''
 }
+watch(identity, (current, previous) => {
+  const before = JSON.parse(previous), after = JSON.parse(current)
+  clearPage()
+  // Initial user hydration can arrive after this view mounts. Retry this read with
+  // the now-known identity; subsequent account/family switches require manual refresh.
+  if (!before[1] && after[1] && before[0] === after[0] && listGate.active) void loadDrafts()
+  else listError.value = '登录身份或家庭已变化，请刷新读取当前可见草稿。'
+}, { flush: 'sync' })
+function refreshDraftInbox() { if (!operationBusy.value) void loadDrafts() }
+onMounted(() => { void loadDrafts(); window.addEventListener('data-refresh', refreshDraftInbox) })
+onActivated(() => { gates.forEach(g => g.activate()) })
+onDeactivated(() => { clearPage(); gates.forEach(g => g.suspend()) })
+onBeforeUnmount(() => { clearPage(); gates.forEach(g => g.suspend()); window.removeEventListener('data-refresh', refreshDraftInbox) })
 
-onMounted(() => {
-  loadDrafts()
-  ensureAccountsLoaded()
-  window.addEventListener('data-refresh', refreshDraftInbox)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('data-refresh', refreshDraftInbox)
-})
 </script>
 
 <style scoped>
+.draft-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 12px 0 24px; }
+.draft-hero h1 { font: 600 clamp(24px, 2.4vw, 34px)/1.35 'Songti SC', SimSun, serif; margin: 10px 0; letter-spacing: .02em; }
+.draft-hero p, .draft-review-heading p { color: var(--muted); line-height: 1.7; margin: 0; }
+.draft-eyebrow { font-size: 11px; letter-spacing: .15em; color: var(--primary); font-weight: 700; }
+.draft-safety { display: flex; gap: 20px; padding: 16px 20px; margin-bottom: 20px; border: 1px solid var(--line); border-left: 4px solid var(--primary); background: var(--primarySoft); border-radius: 0 14px 14px 0; font-size: 13px; line-height: 1.8; }
+.draft-safety strong { white-space: nowrap; }
+.draft-toolbar, .draft-pagination { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+.draft-status-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.draft-status-tabs button { padding: 10px 16px; border: 1px solid var(--line); border-radius: 24px; background: var(--card); color: var(--muted); cursor: pointer; font: inherit; font-size: 13px; }
+.draft-status-tabs button.active { background: var(--text); color: var(--card); border-color: var(--text); }
+.draft-filters { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 14px; margin-top: 22px; }
+.draft-filters label { min-width: 0; }
+.draft-filters label > span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.draft-filters .el-select { width: 100%; }
+.draft-scope { color: var(--muted); font-size: 12px; line-height: 1.8; }
+.draft-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 22px 0; }
+.draft-item { display: flex; flex-direction: column; gap: 12px; border: 1px solid var(--line); border-radius: 18px; padding: 20px; background: var(--card); transition: border-color .2s; min-width: 0; }
+.draft-item.active, .draft-item:focus-within { border-color: var(--primary); }
+.draft-item-top, .draft-meta { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.draft-number { font: 12px Georgia, serif; color: var(--muted); }
+.draft-item h3 { margin: 0; font: 600 21px/1.5 'Songti SC', SimSun, serif; }
+.draft-item p { margin: 0; line-height: 1.8; }
+.draft-item .draft-raw { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.draft-summary, .draft-ref { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.draft-meta { margin-top: auto; padding-top: 12px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); flex-wrap: wrap; }
+.draft-item-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.draft-item-actions .btn { min-height: 40px; padding: 8px 12px; font-size: 12px; }
+.draft-state { padding: 40px 20px; margin: 22px 0; border: 1px dashed var(--border); border-radius: 18px; color: var(--muted); text-align: center; line-height: 1.8; }
+.draft-error { border: 1px solid var(--wh-danger, #b52c33); color: var(--wh-danger, #b52c33); padding: 12px; margin: 12px 0; border-radius: 12px; line-height: 1.8; overflow-wrap: anywhere; }
+.draft-pagination { border-top: 1px solid var(--line); padding-top: 18px; color: var(--muted); font-size: 12px; }
+.draft-review-heading { margin-bottom: 20px; }
+.draft-review-heading h2 { font: 600 28px/1.5 'Songti SC', SimSun, serif; margin: 8px 0; }
+.draft-result { margin-top: 20px; color: var(--muted); font-size: 12px; line-height: 1.8; }
+.draft-inbox-page :deep(.el-select) { width: 100%; }
+.draft-inbox-page :deep(.el-dialog), .draft-inbox-page :deep(.el-drawer) { color: var(--text); background: var(--card); }
+.draft-inbox-page .intent-panel, .draft-inbox-page .preview-panel, .draft-inbox-page .edit-panel { background: var(--primarySoft); border-color: var(--line); }
+.draft-inbox-page .intent-grid > div, .draft-inbox-page .detail-row, .draft-inbox-page .impact-card, .draft-inbox-page .warning-list { background: var(--card); border-color: var(--line); }
+.draft-inbox-page .edit-hint { background: var(--card); }
+.draft-inbox-page .detail-row { align-items: flex-start; overflow-wrap: anywhere; }
+@media (max-width: 1250px) { .draft-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 850px) { .draft-cards { grid-template-columns: 1fr; } .draft-filters { grid-template-columns: 1fr 1fr; } .draft-hero { align-items: flex-start; flex-direction: column; gap: 16px; } .draft-safety { flex-direction: column; gap: 4px; } }
+@media (prefers-reduced-motion: reduce) { .draft-item { transition: none; } }
 .draft-inbox-page {
   padding-bottom: 24px;
 }
 
-.safety-banner {
-  margin: 4px 0 14px;
-  padding: 12px 14px;
-  border: 1px solid rgba(245, 158, 11, 0.28);
-  border-radius: 16px;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(255, 255, 255, 0.84));
-  color: #92400e;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-.draft-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: var(--gap);
-}
-
-.text-entry-card,
-.detail-card,
 .draft-list-card {
   min-width: 0;
 }
@@ -1895,14 +1736,9 @@ onBeforeUnmount(() => {
 .edit-panel {
   margin-top: 14px;
   padding: 14px;
-  border: 1px solid rgba(78, 164, 255, 0.16);
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(78, 164, 255, 0.06);
-}
-
-.edit-panel {
-  border-color: rgba(34, 197, 94, 0.22);
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08), rgba(78, 164, 255, 0.06));
+  background: var(--primarySoft);
 }
 
 .edit-hint,
@@ -1910,7 +1746,7 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
   padding: 10px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--card);
   color: var(--muted);
   font-size: 12px;
   line-height: 1.65;
@@ -1918,8 +1754,8 @@ onBeforeUnmount(() => {
 
 .edit-disabled-tip {
   margin-top: 12px;
-  color: #92400e;
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--wh-warning, #86570e);
+  background: var(--primarySoft);
 }
 
 .intent-title {
@@ -1951,9 +1787,9 @@ onBeforeUnmount(() => {
 .impact-card,
 .warning-list {
   padding: 10px;
-  border: 1px solid rgba(230, 238, 247, 0.95);
+  border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.86);
+  background: var(--card);
 }
 
 .preview-impact-grid {
@@ -1973,7 +1809,7 @@ onBeforeUnmount(() => {
 .impact-card em {
   display: inline-block;
   margin-top: 6px;
-  color: #0f766e;
+  color: var(--primary);
   font-style: normal;
   font-weight: 700;
 }
@@ -2008,17 +1844,6 @@ onBeforeUnmount(() => {
 
 .missing-list {
   margin-top: 12px;
-}
-
-.empty-detail {
-  min-height: 220px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  text-align: center;
-  border: 1px dashed rgba(100, 116, 139, 0.24);
-  border-radius: 14px;
-  background: rgba(100, 116, 139, 0.04);
 }
 
 .detail-section {
@@ -2066,62 +1891,9 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
-.draft-list-card {
-  margin-top: var(--gap);
-}
-
-.draft-table-container {
-  overflow: auto;
-  max-height: calc(100vh - 520px);
-  min-height: 280px;
-}
-
-.draft-table {
-  min-width: 1100px;
-}
-
-.draft-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: linear-gradient(135deg, rgba(78, 164, 255, 0.12), rgba(124, 199, 255, 0.08));
-  color: var(--text);
-  font-weight: 600;
-}
-
-.draft-table tbody tr {
-  cursor: pointer;
-}
-
-.draft-table tbody tr.active td {
-  background: rgba(78, 164, 255, 0.12);
-}
-
 .draft-raw {
   color: var(--text);
   word-break: break-word;
-}
-
-.table-actions {
-  display: inline-flex;
-  justify-content: flex-end;
-  gap: 6px;
-  flex-wrap: nowrap;
-}
-
-.table-empty {
-  padding: 28px;
-  text-align: center;
-}
-
-@media (max-width: 1180px) {
-  .draft-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .draft-table-container {
-    max-height: none;
-  }
 }
 
 @media (max-width: 720px) {
