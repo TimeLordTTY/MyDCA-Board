@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/components/AssetStructureGlance.vue", "../src/components/RecentLedgerGlance.vue", "../src/components/recentLedgerModel.ts", "../src/components/dashboardHomeModel.ts", "../src/components/FinanceRadar.vue", "../src/components/financeRadarModel.ts", "../src/components/MonthlyBudgetGlance.vue", "../src/components/GoalProgressGlance.vue", "../src/env.d.ts"],
+  "exclude": []
+}

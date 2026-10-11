@@ -35,8 +35,8 @@ test('token/family/role/route change, reset, unmount/deactivation discard old re
 })
 test('Dashboard independent GET survives upstream failure; wiring preserves original manual chain and todo isolation', async () => {
   const dashboard=(await readFile(new URL('../src/views/Dashboard.vue',import.meta.url),'utf8')).replaceAll('\r\n','\n')
-  const baseline=execFileSync('git',['show','HEAD:web/pc-app/src/views/Dashboard.vue'],{encoding:'utf8'}).replaceAll('\r\n','\n')
-  const handlers=s=>s.slice(s.indexOf('// ---------- 今日建议 - 订单结算相关逻辑'),s.indexOf('function handleTodoItemClick'))
+  const baseline=execFileSync('git',['show','e88c3cd43833fd0dadc87224550925f0e8ae1d0f:web/pc-app/src/views/Dashboard.vue'],{encoding:'utf8'}).replaceAll('\r\n','\n')
+  const handlers=s=>s.slice(s.indexOf('// ---------- 今日建议 - 订单结算相关逻辑'),s.indexOf('function updateAllocationChart') >= 0 ? s.indexOf('function updateAllocationChart') : s.indexOf('function handleTodayActionClick')) + s.slice(s.indexOf('function handleTodayActionClick'),s.indexOf('function handleTodoItemClick'))
   assert.equal(handlers(dashboard),handlers(baseline))
   assert.match(dashboard,/onBeforeUnmount\(pendingSettlementLoader.suspend\)/);assert.match(dashboard,/onDeactivated\(pendingSettlementLoader.suspend\)/)
   assert.match(dashboard,/router.currentRoute.value.fullPath/);assert.match(dashboard,/pendingSettlementState.status === 'success' && pendingSettlements.length === 0/)

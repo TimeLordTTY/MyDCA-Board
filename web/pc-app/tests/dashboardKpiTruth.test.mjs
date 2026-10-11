@@ -54,7 +54,7 @@ test('identity changes, unmount and deactivation reject old responses; activatio
  for(const action of ['identity','suspend','reset']) {const d=deferred();let state,owner='a',calls=0;const l=m.createKpiLoader(()=>{calls++;return d.promise},()=>owner,s=>state=s);const p=l.load();if(action==='identity'){owner='b';l.reset()}else l[action]();d.resolve(zero());await p;assert.equal(state.snapshot,null);l.activate();assert.equal(calls,1)}
 })
 test('Dashboard top cards use truth model and preserve financial action handlers',async()=>{
- const s=await readFile(new URL('../src/views/Dashboard.vue',import.meta.url),'utf8');const top=s.slice(s.indexOf('<!-- 资产概览KPI -->'),s.indexOf('<div class="card today-todo-card">'))
+ const s=await readFile(new URL('../src/views/Dashboard.vue',import.meta.url),'utf8');const top=s.slice(s.indexOf('<!-- 资产概览KPI -->'),s.indexOf('    <FinanceRadar />'))
  assert.doesNotMatch(top,/formatCurrency\(|good|bad|%/); assert.match(top,/手动重试资产 KPI/); assert.match(top,/口径未完全核实/)
  assert.doesNotMatch(source,/settlementApi|orderApi|localStorage|console\./)
  assert.match(s,/onDeactivated\(kpiLoader.suspend\)/); assert.match(s,/watch\(\[\(\) => userStore.token, \(\) => userStore.user\], kpiLoader.reset/)

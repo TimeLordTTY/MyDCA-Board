@@ -13,9 +13,26 @@ export const statusLabel: Record<RadarStatus, string> = {
   OK: '正常', WARNING: '提醒', BROKEN: '异常', UNKNOWN: '未知',
 }
 
+// This counts displayed checks, not orders or transactions; urgent evidence is never capped.
+export function radarOverview(items: RadarItem[], limit = 3) {
+  const urgent = items.filter(item => item.status === 'BROKEN')
+  const attention = items.filter(item => item.status !== 'OK')
+  return {
+    attentionCount: attention.length,
+    urgentCount: urgent.length,
+    priorityItems: [...urgent, ...attention.filter(item => item.status !== 'BROKEN').slice(0, Math.max(0, limit - urgent.length))],
+  }
+}
+
+export function radarDateStale(date: string, now = new Date()) {
+  const localDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  return date !== localDate
+}
+
 export function radarErrorText(cause: unknown): string {
   const message = cause instanceof Error ? cause.message : ''
-  return /401|403|权限|未授权|登录/.test(message)
+  const status = (cause as { response?: { status?: number } } | null)?.response?.status
+  return status === 401 || status === 403 || /401|403|权限|未授权|登录/.test(message)
     ? '当前账号无权查看雷达，或登录已失效。请重新登录后重试。'
     : '雷达读取失败，请检查网络或稍后重试。'
 }
@@ -39,16 +56,17 @@ export function radarItems(radar: FinanceRadar): RadarItem[] {
     { id: 'drafts', title: '待处理草稿', detail: `${countText(counts.drafts)} 项`, status: countStatus(counts.drafts), route: 'DraftInbox' },
     { id: 'orders', title: '待处理订单', detail: `${countText(counts.pendingOrders)} 项`, status: countStatus(counts.pendingOrders), route: 'Orders' },
     { id: 'settlements', title: '待结算', detail: `${countText(counts.awaitingSettlement)} 项`, status: countStatus(counts.awaitingSettlement), route: 'Settlements' },
-    { id: 'reconciliation', title: '结算对账', detail: `异常 ${countText(counts.reconciliationBroken)} · 提醒 ${countText(counts.reconciliationWarning)}`, status: counts.reconciliationBroken === null || counts.reconciliationWarning === null ? 'UNKNOWN' : counts.reconciliationBroken > 0 ? 'BROKEN' : countStatus(counts.reconciliationWarning), route: 'Settlements' },
+    { id: 'reconciliation', title: '结算对账', detail: `异常 ${countText(counts.reconciliationBroken)} · 提醒 ${countText(counts.reconciliationWarning)}`, status: counts.reconciliationBroken !== null && counts.reconciliationBroken > 0 ? 'BROKEN' : counts.reconciliationBroken === null || counts.reconciliationWarning === null ? 'UNKNOWN' : countStatus(counts.reconciliationWarning), route: 'Settlements' },
     { id: 'outbox', title: '设备 Outbox', detail: `${countText(counts.outbox)} 项 · 仅设备本地可查`, status: countStatus(counts.outbox), route: 'DraftInbox' },
   ]
   for (const market of radar.markets) {
-    const status = market.status === 'WARNING' || market.status === 'BROKEN' ? market.status : market.indicatorStatus !== 'OK' ? market.indicatorStatus : market.status
+    const rank: Record<RadarStatus, number> = { BROKEN: 0, WARNING: 1, UNKNOWN: 2, OK: 3 }
+    const status = rank[market.status] <= rank[market.indicatorStatus] ? market.status : market.indicatorStatus
     items.push({ id: `market-${market.productId}`, title: `产品 ${market.productId} · 数据时效`, detail: `行情 ${market.priceDate ?? '未知'} · 净值 ${market.valuationDate ?? '未知'} · 指标 ${market.indicatorDate ?? '未知'}`, status, route: 'Products' })
   }
   for (const [index, warning] of radar.warnings.entries()) {
     // Market and Outbox facts already have dedicated cards; retain other owner-facing warnings.
-    if (warning.code === 'OUTBOX_UNKNOWN' || warning.code.startsWith('MARKET_') || warning.code.startsWith('INDICATOR_')) continue
+    if (warning.status !== 'BROKEN' && (warning.code === 'OUTBOX_UNKNOWN' || warning.code.startsWith('MARKET_') || warning.code.startsWith('INDICATOR_'))) continue
     items.push({ id: `warning-${index}`, title: '需要关注', detail: warning.message, status: warning.status, route: warningRoute(warning.code) })
   }
   const priority: Record<RadarStatus, number> = { BROKEN: 0, WARNING: 1, UNKNOWN: 2, OK: 3 }

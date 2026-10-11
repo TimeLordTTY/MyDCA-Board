@@ -125,7 +125,7 @@ html[data-wh-theme]:not([data-wh-theme='legacy']) .btn-danger { color: var(--wh-
 html[data-wh-theme]:not([data-wh-theme='legacy']) .field :is(input, select, textarea) { background: var(--wh-surface); color: var(--wh-ink); border-color: var(--wh-border); }
 /* Old scoped business blocks keep their paper appearance until page migration.
    Supply a readable foreground where those blocks otherwise inherit dark ink. */
-html[data-wh-theme='dark'] :is(.lab, .radar) { background: #f9fcfd; color: #193b49; color-scheme: light; }
+html[data-wh-theme='dark'] .lab { background: #f9fcfd; color: #193b49; color-scheme: light; }
 html[data-wh-theme='dark'] :is(.platform-item, .todo-metric, .todo-item) { color: #232521; }
 html[data-wh-theme='dark'] .detail-label { color: var(--wh-muted); }
 html[data-wh-theme='dark'] .detail-value { color: var(--wh-ink); }

@@ -52,5 +52,7 @@ onBeforeUnmount(reset)
 onDeactivated(reset)
 </script>
 <style scoped>
+.goal-glance{background:var(--card);color:var(--text);border-color:var(--line);border-radius:var(--r20)}
 .goal-glance{margin-bottom:24px;padding:22px;border:1px solid #82958c66;border-top:3px solid #568979;border-radius:14px}header,.filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap}header{justify-content:space-between}h2{margin:8px 0 18px}small,footer,dt{color:var(--text-secondary,#64756d)}.filters label{display:grid;gap:6px}select{padding:8px;color:inherit;background:var(--bg,#fff);border:1px solid #82958c66;border-radius:6px}.goals{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px}.goal{margin-top:18px;padding:16px;background:#5689790a;border-left:3px solid #568979;min-width:0;overflow-wrap:anywhere}.goal h3{margin:0 0 8px}dl{display:flex;flex-wrap:wrap;gap:20px}dt{font-size:13px}dd{margin:6px 0;font-weight:600;font-variant-numeric:tabular-nums}.rate{font-size:26px;font-variant-numeric:tabular-nums}.rate small{font-size:13px}progress{width:100%;accent-color:#568979}footer{margin-top:18px;font-size:12px;line-height:1.7}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #568979;outline-offset:3px}
+.goal-glance{border-color:var(--line);border-top-color:var(--primary);border-radius:var(--r20)}.goal{background:var(--bg);border-left-color:var(--primary)}progress{accent-color:var(--primary)}
 </style>

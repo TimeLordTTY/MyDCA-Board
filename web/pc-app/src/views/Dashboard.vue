@@ -1,8 +1,71 @@
 <template>
-  <div>
+  <div class="wealth-home">
+    <header class="home-heading">
+      <div><p>YOUR WEALTH, AT A GLANCE</p><h2>财富总览<span aria-hidden="true">✳</span></h2><div class="sub">先看财富，再安排今天。</div></div>
+      <nav aria-label="常用操作">
+        <router-link :to="{ name: 'DraftInbox' }">复核草稿 ↗</router-link>
+        <router-link :to="{ name: 'Orders' }">订单与结算 ↗</router-link>
+        <router-link :to="{ name: 'Ledger' }">查看流水 ↗</router-link>
+      </nav>
+    </header>
+    <!-- 资产概览KPI -->
+    <div class="mini" role="status" aria-live="polite">
+      {{ kpiState.loading ? "资产来源读取中" : "本次读取 · 非实时快照" }}
+      <span v-if="kpiState.readAt"> · 读取时间 {{ kpiState.readAt }}</span>
+      <button class="btn" type="button" :disabled="kpiState.loading" @click="kpiLoader.load()">手动重试资产 KPI</button>
+    </div>
+    <details class="mini kpi-explanation"><summary>这些金额怎么算？</summary><p>金额根据本次读取的数据计算。标有“还有数据缺失”的金额只包含已读到的部分，不能作为完整余额；暂无法确认时不按0元计算。各来源分别读取，口径未完全核实；不代表实时原子快照。</p></details>
+    <p v-if="!kpiState.loading && Object.values(kpis).some(amount => amount.status !== 'complete')" class="home-quality" role="status">还有来源未读全。下方仅展示可确认的金额，未知金额不能按0元计算。</p>
+    <div class="kpis" :aria-busy="kpiState.loading">
+      <div class="kpi primary">
+        <div class="label">净资产</div>
+        <div class="value">{{ kpiText(kpis.netWorth) }}</div>
+        <div class="mini">= 现金 + 持仓市值 - 负债</div>
+        <div class="row">
+          <span class="chip">
+            今日 {{ kpiText(kpis.todayPnl) }}
+          </span>
+          <span class="chip">
+            本月净流入 {{ kpiText(kpis.monthInflow) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="kpi">
+        <div class="label">可用资金</div>
+        <div class="value">{{ kpiText(kpis.available) }}</div>
+        <div class="mini">现金账户余额扣除已占用资金</div>
+        <div class="row">
+          <span class="chip warn">占用 {{ kpiText(kpis.reserved) }}</span>
+          <span class="chip">生活费可支出 {{ kpiText(kpis.spendable) }}</span>
+        </div>
+      </div>
+
+      <div class="kpi">
+        <div class="label">持仓市值</div>
+        <div class="value">{{ kpiText(kpis.position) }}</div>
+        <div class="mini">持仓份额按已读取行情估值</div>
+        <div class="row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+          <span class="chip">
+            总盈亏 {{ kpiText(kpis.totalPnl) }}
+          </span>
+          <span class="chip" style="font-size: 11px;">
+            场内盈亏 {{ kpiText(kpis.exchangePnl) }}
+          </span>
+          <span class="chip" style="font-size: 11px;">
+            场外盈亏 {{ kpiText(kpis.otcPnl) }}
+          </span>
+        </div>
+      </div>
+
+      <div class="kpi">
+        <div class="label">负债</div>
+        <div class="value">{{ kpiText(kpis.liability) }}</div>
+        <div class="mini">信贷账户余额</div>
+      </div>
+    </div>
+
     <FinanceRadar />
-    <MonthlyBudgetGlance />
-    <GoalProgressGlance />
     <!-- 今日建议 - 订单详情弹窗（直接在总览里操作，与订单管理界面完全一致） -->
     <el-dialog v-model="settlementVisible" title="订单详情" width="700px" class="order-detail-dialog">
       <div v-if="settlementOrder" class="order-detail-content">
@@ -192,62 +255,6 @@
       </template>
     </el-dialog>
 
-    <!-- 资产概览KPI -->
-    <div class="mini" role="status" aria-live="polite">
-      {{ kpiState.loading ? "资产来源读取中" : "跨接口读取，口径未完全核实；不代表实时原子快照" }}
-      <span v-if="kpiState.readAt"> · 读取时间 {{ kpiState.readAt }}</span>
-      <button type="button" @click="kpiLoader.load()">手动重试资产 KPI</button>
-    </div>
-    <details class="mini kpi-explanation"><summary>这些金额怎么算？</summary><p>金额根据本次读取的数据计算。标有“还有数据缺失”的金额只包含已读到的部分，不能作为完整余额；暂无法确认时不按0元计算。各来源分别读取，口径未完全核实；不代表实时原子快照。</p></details>
-    <div class="kpis" :aria-busy="kpiState.loading">
-      <div class="kpi primary">
-        <div class="label">✨ 净资产（Net Worth）</div>
-        <div class="value">{{ kpiText(kpis.netWorth) }}</div>
-        <div class="mini">= 现金 + 持仓市值 - 负债</div>
-        <div class="row">
-          <span class="chip">
-            今日 {{ kpiText(kpis.todayPnl) }}
-          </span>
-          <span class="chip">
-            本月净流入 {{ kpiText(kpis.monthInflow) }}
-          </span>
-        </div>
-      </div>
-
-      <div class="kpi">
-        <div class="label">💧 可用资金</div>
-        <div class="value">{{ kpiText(kpis.available) }}</div>
-        <div class="mini">= Σ(现金叶子余额) - Σ(占用)</div>
-        <div class="row">
-          <span class="chip warn">占用 {{ kpiText(kpis.reserved) }}</span>
-          <span class="chip">生活费可支出 {{ kpiText(kpis.spendable) }}</span>
-        </div>
-      </div>
-
-      <div class="kpi">
-        <div class="label">📈 持仓市值</div>
-        <div class="value">{{ kpiText(kpis.position) }}</div>
-        <div class="mini">= Σ(持仓 shares × 价格)</div>
-        <div class="row" style="flex-direction: column; align-items: flex-start; gap: 4px;">
-          <span class="chip">
-            总盈亏 {{ kpiText(kpis.totalPnl) }}
-          </span>
-          <span class="chip" style="font-size: 11px;">
-            场内盈亏 {{ kpiText(kpis.exchangePnl) }}
-          </span>
-          <span class="chip" style="font-size: 11px;">
-            场外盈亏 {{ kpiText(kpis.otcPnl) }}
-          </span>
-        </div>
-      </div>
-
-      <div class="kpi">
-        <div class="label">💳 负债</div>
-        <div class="value">{{ kpiText(kpis.liability) }}</div>
-        <div class="mini">= Σ(信贷账户余额：花呗/信用卡/白条/贷款)</div>
-      </div>
-    </div>
-
     <div class="card today-todo-card">
       <div class="today-todo-head">
         <div>
@@ -266,10 +273,10 @@
         </button>
       </div>
       <div class="today-todo-metrics">
-        <div class="todo-metric" @click="router.push({ name: 'DraftInbox' })">
+        <button type="button" class="todo-metric" @click="router.push({ name: 'DraftInbox' })">
           <span>待确认草稿</span>
           <strong>{{ todayTodo ? todayTodo.draftCount : '未知' }}</strong>
-        </div>
+        </button>
         <div class="todo-metric muted">
           <span>待结算</span>
           <strong>未接入 / 未统计</strong>
@@ -302,18 +309,9 @@
       </div>
     </div>
 
-    <div class="grid">
-      <!-- 资产配比图表 -->
-      <div class="card">
-        <h3>
-          资产配比（Allocation）
-          <span class="row-gap">
-            <span class="tag gray tiny">实时</span>
-          </span>
-        </h3>
-        <div id="allocationChart" style="width: 100%; height: 300px"></div>
-      </div>
-
+    <div class="home-plans"><MonthlyBudgetGlance /><GoalProgressGlance /></div>
+    <div class="grid home-detail-grid">
+      <div class="card"><AssetStructureGlance :snapshot="kpiState.snapshot" :loading="kpiState.loading" /></div>
       <!-- 今日建议和核心持仓 -->
       <div class="card">
         <h3>
@@ -324,11 +322,15 @@
 
         <div class="divider"></div>
 
-        <div v-if="todayActions.length === 0" class="td-muted" style="padding: 20px; text-align: center">
-          暂无待办事项
+        <div v-if="actionStatus !== 'success'" class="td-muted" role="status" style="padding: 20px; text-align: center">
+          {{ actionStatus === 'loading' ? '正在读取今日建议…' : actionStatus === 'error' ? '今日建议读取失败，当前结果未知。' : '今日建议尚未读取。' }}
+          <button class="btn" type="button" :disabled="actionStatus === 'loading'" @click="loadTodayActions">手动重试建议</button>
+        </div>
+        <div v-else-if="todayActions.length === 0" class="td-muted" style="padding: 20px; text-align: center">
+          本次返回没有建议事项
         </div>
         <div v-else class="row-gap" style="flex-direction: column; align-items: stretch">
-          <div
+          <button type="button"
             v-for="action in todayActions"
             :key="action.id"
             class="card today-action-card"
@@ -339,7 +341,7 @@
             <div v-if="action.description" class="td-muted" style="font-size: 12px; margin-top: 4px">
               {{ action.description }}
             </div>
-          </div>
+          </button>
         </div>
 
         <div class="divider"></div>
@@ -353,7 +355,7 @@
             </button>
           </span>
         </h3>
-        <div class="sub">来自持仓数据的实时计算</div>
+        <div class="sub">按本次读取的盈亏绝对值排列，缺行情项优先核查；最多5项。</div>
         <div style="margin-top: 10px; overflow: auto">
             <table>
               <thead>
@@ -381,7 +383,7 @@
               </thead>
               <tbody>
                 <tr v-if="topHoldings.length === 0">
-                  <td colspan="4" class="td-muted">暂无持仓，去"订单&结算"买一笔试试。</td>
+                  <td colspan="4" class="td-muted">{{ kpiState.loading ? '正在读取持仓…' : kpiState.snapshot?.holdings === null || !kpiState.snapshot ? '持仓来源未读全，暂无法确认。' : '本次返回没有持仓记录。' }}</td>
                 </tr>
                 <tr v-for="holding in topHoldings" :key="holding.productId">
                   <td>
@@ -394,26 +396,26 @@
                   </td>
                   <td class="right">
                     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                      <div class="mono">{{ formatNumber(holding.sharesCalc || 0, 2) }}</div>
-                      <div class="mono td-muted">{{ formatCurrency(holding.marketValue || 0) }}</div>
+                      <div class="mono">{{ holding.sharesCalc === null ? '未知' : formatNumber(holding.sharesCalc, 2) }}</div>
+                      <div class="mono td-muted">{{ holding.marketValue === null ? '估值未知' : formatCurrency(holding.marketValue) }}</div>
                     </div>
                   </td>
                   <td class="right">
                     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                      <div class="mono" style="color: #0f172a;">{{ formatNumber(holding.avgCostCalc || 0, 4) }}</div>
-                      <div class="mono" :style="{ color: priceColor(holding.currentPrice || 0, holding.avgCostCalc || 0) }">
-                        <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
+                      <div class="mono" >{{ holding.avgCostCalc === null ? '未知' : formatNumber(holding.avgCostCalc, 4) }}</div>
+                      <div class="mono" :style="{ color: priceColor(holding.currentPrice, holding.avgCostCalc) }">
+                        <span v-if="holding.currentPrice !== null">{{ formatNumber(holding.currentPrice, 4) }}</span>
                         <span v-else class="td-muted">—</span>
                       </div>
                     </div>
                   </td>
                   <td class="right">
                     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl || 0) }">
-                        {{ pnlRateText(holding.unrealizedPnl || 0, holding.totalCostCalc || 0) }}
+                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl) }">
+                        {{ pnlRateText(holding.unrealizedPnl, holding.totalCostCalc) }}
                       </div>
-                      <div :style="{ color: pnlColor(holding.unrealizedPnl || 0), fontWeight: 600 }">
-                        {{ formatSignedCurrency(holding.unrealizedPnl || 0) }}
+                      <div :style="{ color: pnlColor(holding.unrealizedPnl), fontWeight: 600 }">
+                        {{ holding.unrealizedPnl === null ? '盈亏未知' : formatSignedCurrency(holding.unrealizedPnl) }}
                       </div>
                     </div>
                   </td>
@@ -423,6 +425,8 @@
         </div>
       </div>
     </div>
+
+    <RecentLedgerGlance />
 
     <!-- 待结算清单 -->
     <div class="card" style="margin-top: var(--gap)">
@@ -481,14 +485,16 @@ import type { KpiState, Amount, Snapshot } from '../components/dashboardKpiTruth
 import FinanceRadar from '../components/FinanceRadar.vue'
 import MonthlyBudgetGlance from '../components/MonthlyBudgetGlance.vue'
 import GoalProgressGlance from '../components/GoalProgressGlance.vue'
+import AssetStructureGlance from '../components/AssetStructureGlance.vue'
+import RecentLedgerGlance from '../components/RecentLedgerGlance.vue'
+import { homeHoldings } from '../components/dashboardHomeModel'
 import { createPendingSettlementLoader } from '../components/pendingSettlementListModel'
 import type { PendingSettlementState } from '../components/pendingSettlementListModel'
 import { useRouter } from 'vue-router'
 import { ElMessageBox, ElNotification } from 'element-plus'
-import * as echarts from 'echarts'
 import { dashboardApi, holdingApi, marketApi, navApi, orderApi, settlementApi, todoApi, useUserStore, useAccountStore, useProductStore, getOrderStatusLabel } from '@wealth-hub/shared'
 import { formatCurrency, formatNumber, formatDate, formatDateTime, getOrderTypeLabel, buildSettlementPreviewText, buildSettlementBlockingText, buildSettlementConfirmTitle } from '@wealth-hub/shared'
-import type { MarketQuoteRealtime, Nav, AssetOverview, Account, TodoItem, SettlementPreviewRequest } from '@wealth-hub/shared'
+import type { TodoItem, SettlementPreviewRequest } from '@wealth-hub/shared'
 
 import { createTodayTodoLoader, draftDestination } from '../components/todayTodoModel'
 import type { TodoState } from '../components/todayTodoModel'
@@ -497,20 +503,29 @@ const router = useRouter()
 const accountStore = useAccountStore()
 const productStore = useProductStore()
 
-const overview = ref<AssetOverview>({
-  totalAssets: 0,
-  netWorth: 0,
-  cashBalance: 0,
-  positionValue: 0,
-  liability: 0,
-  todayPnl: 0,
-  monthInflow: 0,
-})
-
 const todayActions = ref<any[]>([])
+const actionStatus = ref<'idle' | 'loading' | 'success' | 'error'>('idle')
+let actionGeneration = 0, actionsActive = true
+function resetActions() { actionGeneration++; todayActions.value = []; actionStatus.value = 'idle' }
 const todoState = ref<TodoState>({ status: 'idle', data: null })
 const todayTodo = computed(() => todoState.value.data)
 const userStore = useUserStore()
+watch([() => userStore.token, () => userStore.user, () => router.currentRoute.value.fullPath], resetActions, { deep: true, flush: 'sync' })
+onBeforeUnmount(() => { actionsActive = false; resetActions() })
+onDeactivated(() => { actionsActive = false; resetActions() })
+onActivated(() => { actionsActive = true })
+async function loadTodayActions() {
+  if (!actionsActive) return
+  const version = ++actionGeneration, owner = JSON.stringify([userStore.token, userStore.user, router.currentRoute.value.fullPath])
+  const valid = () => actionsActive && version === actionGeneration && owner === JSON.stringify([userStore.token, userStore.user, router.currentRoute.value.fullPath])
+  todayActions.value = []; actionStatus.value = 'loading'
+  try {
+    const result = await dashboardApi.getTodayActions()
+    if (!Array.isArray(result)) throw new Error('Invalid actions')
+    if (valid()) { todayActions.value = result; actionStatus.value = 'success' }
+  } catch { if (valid()) actionStatus.value = 'error' }
+  finally { if (actionsActive && version === actionGeneration && !valid()) resetActions() }
+}
 let todoExpiry: ReturnType<typeof setTimeout> | undefined
 function publishTodoState(state: TodoState) {
   clearTimeout(todoExpiry)
@@ -537,10 +552,6 @@ watch([() => userStore.token, () => userStore.user, () => router.currentRoute.va
 onBeforeUnmount(pendingSettlementLoader.suspend)
 onDeactivated(pendingSettlementLoader.suspend)
 onActivated(pendingSettlementLoader.activate)
-const holdings = ref<any[]>([])
-const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
-const navs = ref<Map<number, Nav>>(new Map())
-
 // KPI uses request-local copies, never the mutable shared store as its display source.
 const kpiState = ref<KpiState>({ loading: false, snapshot: null, readAt: null })
 const kpis = computed(() => kpiTruth(kpiState.value.snapshot, kpiState.value.loading))
@@ -575,23 +586,14 @@ const kpiLoader = createKpiLoader(async valid => {
   const rows = snapshot.holdings ?? []
   const exchangeIds = [...new Set(rows.filter(h => h.channel === 'EXCHANGE').map(h => h.productId))]
   const otcIds = [...new Set(rows.filter(h => h.channel === 'OTC').map(h => h.productId))]
-  const localQuotes = new Map<number, MarketQuoteRealtime>()
-  const localNavs = new Map<number, Nav>()
   await Promise.all([
     exchangeIds.length ? marketApi.getRealtimeQuotes(exchangeIds).then(data => {
-      for (const q of data) { localQuotes.set(q.productId, q); snapshot.prices.set(q.productId, q.price) }
+      for (const q of data) { snapshot.prices.set(q.productId, q.price) }
     }).catch(() => {}) : Promise.resolve(),
     ...otcIds.map(id => navApi.getLatestNav(id).then(n => {
-      if (n && n.productId === id) { localNavs.set(id, n); snapshot.prices.set(id, n.nav) }
+      if (n && n.productId === id) { snapshot.prices.set(id, n.nav) }
     }).catch(() => {})),
   ])
-  if (valid()) {
-    if (snapshot.overview) overview.value = snapshot.overview as AssetOverview
-    holdings.value = rows
-    quotes.value = localQuotes
-    navs.value = localNavs
-    updateAllocationChart()
-  }
   return snapshot
 }, () => JSON.stringify([userStore.token, userStore.user, localStorage.getItem('token')]), state => { kpiState.value = state })
 watch([() => userStore.token, () => userStore.user], kpiLoader.reset, { deep: true, flush: 'sync' })
@@ -605,7 +607,8 @@ onActivated(kpiLoader.activate)
 // 今日建议 - 订单结算弹窗状态
 const settlementVisible = ref(false)
 const settlementOrder = ref<any | null>(null)
-const settlementForm = ref({
+// Optional editor fields already populated by the original order-detail handler.
+const settlementForm = ref<{ amount?: number; shares?: number; confirmDate: string; navDate: string; confirmNav?: number; confirmShares?: number; confirmAmount?: number; confirmFee: number; note: string }>({
   confirmDate: '',
   navDate: '',
   confirmNav: undefined as number | undefined,
@@ -615,85 +618,26 @@ const settlementForm = ref({
   note: '',
 })
 
+// The pending-list button opens the existing editor; settlement still requires preview and confirmation.
+const handleConfirmSettlement = (orderId: string) => openOrderSettlement(orderId)
+
 const isBuyType = computed(() => {
   if (!settlementOrder.value) return false
   return settlementOrder.value.orderType === 'BUY' || settlementOrder.value.orderType === 'SUBSCRIPTION'
 })
 
-// 合并持仓和行情数据
-const holdingsWithQuote = computed(() => {
-  if (!holdings.value || !Array.isArray(holdings.value)) {
-    return []
-  }
-  
-  return holdings.value.map(holding => {
-    const quote = quotes.value.get(holding.productId)
-    const nav = navs.value.get(holding.productId)
-    
-    // 优先使用实时行情价格，其次使用净值
-    let currentPrice = 0
-    if (quote && quote.price > 0) {
-      currentPrice = quote.price
-    } else if (nav && nav.nav > 0) {
-      currentPrice = nav.nav
-    }
-    
-    // 使用后端返回的份额和成本（更准确）
-    const shares = Number(holding.totalShares || holding.shares || 0)
-    const avgCost = Number(holding.averageCost || holding.avgCost || 0)
-    const totalCost = shares * avgCost
-    const marketValue = currentPrice > 0 ? shares * currentPrice : 0
-    const unrealizedPnl = marketValue - totalCost
-    
-    return {
-      ...holding,
-      currentPrice,
-      marketValue,
-      unrealizedPnl,
-      quote,
-      nav,
-      // 确保这些字段是数字类型
-      totalShares: shares,
-      averageCost: avgCost,
-      // 保留 assetType 用于资产配比分类
-      assetType: holding.assetType,
-    }
-  })
-})
-
-// 按盈亏排序，取绝对值最大的前5个
-const topHoldings = computed(() => {
-  return holdingsWithQuote.value
-    .map(h => {
-      const shares = h.totalShares || h.shares || 0
-      const avgCost = h.averageCost || h.avgCost || 0
-      const totalCost = shares * avgCost
-      const marketValue = h.marketValue || 0
-      const unrealizedPnl = marketValue - totalCost
-      return {
-        ...h,
-        sharesCalc: shares,
-        avgCostCalc: avgCost,
-        totalCostCalc: totalCost,
-        unrealizedPnl,
-      }
-    })
-    .sort((a, b) => Math.abs(b.unrealizedPnl || 0) - Math.abs(a.unrealizedPnl || 0))
-    .slice(0, 5)
-})
-
-let allocationChart: echarts.ECharts | null = null
+const topHoldings = computed(() => homeHoldings(kpiState.value.snapshot, kpiState.value.loading))
 
 async function loadData() {
   void pendingSettlementLoader.load()
+  // Start independent read-only suggestions immediately; never retain a prior identity's cards.
+  void loadTodayActions()
   try {
     await kpiLoader.load()
     await loadTodayTodos()
     // 今日建议独立于资产来源质量。
-    todayActions.value = await dashboardApi.getTodayActions()
+    // Suggestions are read independently above so KPI failure cannot suppress their retry.
 
-    // 更新图表
-    updateAllocationChart()
   } catch (error: any) {
     ElNotification.error({ title: '错误', message: error.message || '加载数据失败', position: 'bottom-right' })
   }
@@ -704,20 +648,22 @@ async function loadTodayTodos() {
 }
 
 // 辅助函数：盈亏颜色
-function pnlColor(pnl: number) {
-  return (pnl || 0) >= 0 ? 'var(--good)' : 'var(--bad)'
+function pnlColor(pnl: number | null) {
+  if (pnl === null) return 'var(--muted)'
+  return pnl >= 0 ? 'var(--good)' : 'var(--bad)'
 }
 
 // 辅助函数：价格颜色
-function priceColor(currentPrice: number, costPrice: number) {
+function priceColor(currentPrice: number | null, costPrice: number | null) {
   if (!currentPrice || currentPrice <= 0) return 'var(--muted)'
-  if (!costPrice || costPrice <= 0) return '#0f172a'
+  if (!costPrice || costPrice <= 0) return 'var(--text)'
   return currentPrice >= costPrice ? 'var(--good)' : 'var(--bad)'
 }
 
 // 辅助函数：盈亏率文本
-function pnlRateText(pnl: number, totalCost: number) {
-  const cost = totalCost || 0
+function pnlRateText(pnl: number | null, totalCost: number | null) {
+  if (pnl === null || totalCost === null) return '未知'
+  const cost = totalCost
   if (!cost || cost <= 0) return '—'
   const rate = (pnl || 0) / cost
   return `${rate >= 0 ? '+' : ''}${formatNumber(rate * 100, 2)}%`
@@ -981,102 +927,6 @@ async function handleConfirmSettlementFromDashboard() {
   }
 }
 
-function updateAllocationChart() {
-  if (!allocationChart) return
-
-  const round2 = (v: number) => Number((Number(v) || 0).toFixed(2))
-
-  // 计算现金：包括CASH、PAYMENT、MMF账户余额，以及BROKER账户余额
-  // 注意：MMF账户余额是通过份额*净值计算的，已经包含在账户余额中
-  // 从账户树中获取所有叶子账户
-  let cashValue = 0
-  
-  function traverseAccounts(accounts: Account[]) {
-    accounts.forEach(acc => {
-      // 如果是叶子账户（没有子账户）
-      if (!acc.children || acc.children.length === 0) {
-        // 只统计REAL账户
-        if (acc.accountKind === 'REAL') {
-          // 现金类账户：CASH、PAYMENT、MMF、BROKER（余额）
-          if (acc.accountType === 'CASH' || 
-              acc.accountType === 'PAYMENT' || 
-              acc.accountType === 'MMF' ||
-              acc.accountType === 'BROKER') {
-            cashValue += (acc.balance || 0)
-          }
-        }
-      } else {
-        // 递归处理子账户
-        traverseAccounts(acc.children)
-      }
-    })
-  }
-  
-  traverseAccounts(accountStore.accountTree)
-  cashValue = round2(cashValue)
-  
-  // 计算持仓市值，按产品类型分类
-  // 注意：持仓市值只包括通过持仓表（holdings）计算的产品持仓
-  let bankWmValue = 0  // 银行理财产品（BANK_WM_NAV/BANK_WM_BOX）
-  let fundValue = 0    // 基金（ETF/LOF/FUND等，不包括MMF和银行理财）
-  let stockValue = 0   // 股票
-  
-  holdingsWithQuote.value.forEach(h => {
-    const marketValue = h.marketValue || 0
-    const assetType = h.assetType || ''
-    
-    // 银行理财产品
-    if (assetType === 'BANK_WM_NAV' || assetType === 'BANK_WM_BOX') {
-      bankWmValue += marketValue
-    } 
-    // 股票
-    else if (assetType === 'STOCK') {
-      stockValue += marketValue
-    }
-    // 基金类：ETF/LOF/FUND等（不包括MMF，MMF已通过账户余额计入现金）
-    else if (assetType === 'ETF' || assetType === 'LOF' || assetType === 'FUND') {
-      fundValue += marketValue
-    }
-    // MMF 不计入持仓市值，因为MMF账户余额已经通过份额*净值计算并包含在现金中
-  })
-  bankWmValue = round2(bankWmValue)
-  fundValue = round2(fundValue)
-  stockValue = round2(stockValue)
-
-  const option = {
-    tooltip: {
-      trigger: 'item',
-      formatter: (params: any) => {
-        const name = params?.name ?? ''
-        const value = round2(Number(params?.value ?? 0))
-        const percent = Number(params?.percent ?? 0)
-        return `${name}: ${formatCurrency(value)}（${formatNumber(percent, 2)}%）`
-      },
-    },
-    series: [
-      {
-        type: 'pie',
-        radius: ['40%', '70%'],
-        data: [
-          { value: cashValue, name: '现金' },
-          { value: fundValue, name: '基金' },
-          { value: bankWmValue, name: '银行理财' },
-          { value: stockValue, name: '股票' },
-        ].filter(item => item.value > 0), // 只显示有值的项
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)',
-          },
-        },
-      },
-    ],
-  }
-
-  allocationChart.setOption(option)
-}
-
 function handleTodayActionClick(action: any) {
   console.log('handleTodayActionClick called:', action)
   // 预留多类型扩展，这里先支持订单结算
@@ -1268,22 +1118,33 @@ onMounted(() => {
   // 确保产品数据已加载
   productStore.fetchProducts()
   loadData()
-
-  // 初始化图表
-  const chartDom = document.getElementById('allocationChart')
-  if (chartDom) {
-    allocationChart = echarts.init(chartDom)
-    updateAllocationChart()
-  }
-
-  // 监听窗口大小变化
-  window.addEventListener('resize', () => {
-    allocationChart?.resize()
-  })
 })
 </script>
 
 <style scoped>
+.wealth-home { min-width: 0; }
+.home-heading { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 20px; margin: 8px 0 28px; }
+.home-heading p { margin: 0 0 10px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+.home-heading h2 { margin: 0 0 8px; font-size: clamp(28px, 3vw, 38px); letter-spacing: -.04em; }
+.home-heading h2 span { display: inline-block; margin-left: 16px; color: var(--primary); }
+.home-heading nav { display: flex; flex-wrap: wrap; gap: 10px; }
+.home-heading nav a { padding: 10px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); font-size: 13px; }
+.home-quality { padding: 12px 16px; border: 1px solid var(--warn); border-radius: 12px; color: var(--text); font-size: 13px; }
+.kpi-explanation { margin: 12px 0; line-height: 1.7; }
+.wealth-home .kpis { grid-template-columns: 1.45fr repeat(3, minmax(0, 1fr)); gap: 16px; margin: 18px 0 24px; }
+.wealth-home .kpi { min-width: 0; padding: 24px; border-radius: var(--r20); box-shadow: none; }
+.wealth-home .kpi .value { font-size: clamp(24px, 2.1vw, 36px); overflow-wrap: anywhere; margin: 16px 0 10px; line-height: 1.35; }
+.wealth-home .kpi .label { font-size: 15px; color: var(--text); }
+.home-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.home-plans > * { min-width: 0; }
+.wealth-home .home-detail-grid { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); align-items: start; margin-bottom: 24px; }
+.wealth-home .today-todo-card { background: var(--card); border-color: var(--line); }
+.wealth-home :is(.todo-metric, .todo-item) { background: var(--bg); color: var(--text); border-color: var(--line); font: inherit; }
+.wealth-home :is(.todo-metric strong, .todo-item-main strong) { color: var(--text); }
+.wealth-home :is(.todo-metric.muted, .todo-item-main em) { color: var(--muted); }
+.wealth-home .todo-action { color: var(--primary); }
+@media (max-width: 1200px) { .wealth-home .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-plans { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .wealth-home .kpis, .wealth-home .home-detail-grid { grid-template-columns: 1fr; } }
 .kpi-explanation summary { cursor: pointer; }
 .kpi-explanation summary:focus-visible { outline: 2px solid var(--primary, #568979); outline-offset: 3px; }
 .today-todo-card {

@@ -14,7 +14,7 @@
       <p>{{ budgetQualityText(e.comparison) }} · {{ completeActual(e.comparison) ? e.comparison.overspent ? '已超支' : '未超支（本预算口径）' : '超支状态未知' }}</p>
       <p v-for="w in e.comparison.warnings" :key="w">{{ w }}</p><small>来源：既有预算对比 GET · 客户端读取 {{ e.readAt }}</small>
     </section>
-    <footer>各份预算单独展示，不求和为整月或家庭总额。家庭数据仅代表后端授权口径；预留是计划，不是实际转账。读取时间不是财务统一快照。最多5页 / 100份列表、20份对比、并发3个、30秒超时。</footer>
+    <footer>各份预算独立展示；预留是计划，不是实际转账。<details><summary>查看读取口径与限制</summary><p>不求和为整月或家庭总额。家庭数据仅代表后端授权口径。读取时间不是财务统一快照。最多5页 / 100份列表、20份对比、并发3个、30秒超时。</p></details></footer>
   </article>
 </template>
 <script setup lang="ts">
@@ -46,5 +46,7 @@ onBeforeUnmount(reset)
 onDeactivated(reset)
 </script>
 <style scoped>
+.month-glance{background:var(--card);color:var(--text);border-color:var(--line);border-radius:var(--r20)}summary{cursor:pointer;margin-top:8px}
 .month-glance{margin-bottom:24px;padding:22px;border:1px solid #82958c66;border-top:3px solid #568979;border-radius:14px}header,.filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap}header{justify-content:space-between}h2{margin:8px 0 18px}h2 span{font-size:16px;font-weight:400}small,footer{color:var(--text-secondary,#64756d)}.filters label{display:grid;gap:6px}select{padding:8px;color:inherit;background:var(--bg,#fff);border:1px solid #82958c66;border-radius:6px}.plan{margin:18px 0;padding:16px;background:#5689790a;border-left:3px solid #568979}.plan h3{margin:0 0 14px}.plan h3 small{display:block;font-weight:400;margin-top:6px}dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px}dt{font-size:13px}dd{margin:6px 0;font-variant-numeric:tabular-nums;font-weight:600}footer{margin-top:18px;font-size:12px;line-height:1.7}button:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #568979;outline-offset:3px}
+.month-glance{border-color:var(--line);border-top-color:var(--primary);border-radius:var(--r20)}.plan{background:var(--bg);border-left-color:var(--primary)}
 </style>
