@@ -1,100 +1,104 @@
 <template>
-  <div style="display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
-    <!-- 统一记账对话框 -->
-    <UnifiedEntryModal v-model="unifiedEntryVisible" @success="handleEntrySuccess" />
-    
-    <!-- 快速支出对话框 -->
-    <QuickEntryModal
-      v-model="quickExpenseVisible"
-      type="EXPENSE"
-      @success="handleEntrySuccess"
-    />
-    
-    <!-- 快速收入对话框 -->
-    <QuickEntryModal
-      v-model="quickIncomeVisible"
-      type="INCOME"
-      @success="handleEntrySuccess"
-    />
-
-    <!-- Sticky Topbar -->
-    <div class="topbar" style="flex-shrink: 0;">
-      <div class="topbar-inner">
-        <div class="brand">
-          <div class="logo">W</div>
-          <div class="brand-title">
-            <b>WealthHub</b>
-            <span>财富中枢系统</span>
+  <div class="wealth-shell" :class="{ 'nav-pinned': navExpanded }">
+    <a class="wealth-skip" href="#wealth-content">跳到主内容</a>
+    <aside class="wealth-rail" aria-label="主导航">
+      <div class="wealth-brand"><span class="wealth-monogram" aria-hidden="true">W</span><b class="wealth-nav-label">财富中枢</b></div>
+      <button class="wealth-rail-toggle" type="button" :aria-expanded="navExpanded" aria-controls="desktop-navigation" @click="navExpanded = !navExpanded">
+        <span aria-hidden="true">{{ navExpanded ? '‹' : '›' }}</span><span class="wealth-nav-label">{{ navExpanded ? '收起导航' : '展开导航' }}</span>
+        <span class="wealth-sr-only">{{ navExpanded ? '收起完整导航' : '展开完整导航' }}</span>
+      </button>
+      <WealthNavigation id="desktop-navigation" />
+      <router-link to="/portal" class="wealth-directory" title="站点目录" aria-label="站点目录"><span aria-hidden="true">↗</span><span class="wealth-nav-label">站点目录</span></router-link>
+    </aside>
+    <section class="wealth-main">
+      <header class="wealth-header">
+        <div class="wealth-heading">
+          <button ref="menuButton" class="wealth-mobile-menu wh-button" type="button" aria-controls="mobile-navigation" :aria-expanded="mobileMenuOpen" @click="mobileMenuOpen = true">目录</button>
+          <div>
+            <nav class="wealth-breadcrumb" aria-label="面包屑"><router-link to="/dashboard">财富中枢</router-link><span aria-hidden="true"> / </span><span>{{ currentNav?.group || '业务页面' }}</span></nav>
+            <h1>{{ currentNav?.label || '财富中枢' }}</h1>
           </div>
         </div>
-
-        <div class="nav">
-          <router-link
-            v-for="item in navItems"
-            :key="item.name"
-            :to="item.path"
-            class="pill"
-            :class="{ active: route.name === item.name }"
-          >
-            <span class="dot"></span>
-            {{ item.label }}
-          </router-link>
+        <div class="wealth-identity" aria-live="polite">
+          <router-link to="/settings" aria-label="账号设置">{{ identity.account }}</router-link>
+          <span>{{ identity.scope }}</span>
+          <button class="wh-button" type="button" :disabled="loggingOut" @click="handleLogout">{{ loggingOut ? '退出中…' : '安全退出' }}</button>
         </div>
-
-        <div class="actions">
-          <button v-if="!['GoalBudgetCenter', 'DataReadiness'].includes(String(route.name))" class="btn ghost" @click="handleRefresh">⟳ 刷新数据</button>
-          <button v-if="!['GoalBudgetCenter', 'DataReadiness'].includes(String(route.name))" class="btn ghost" @click="handleRefreshMarketData" :disabled="refreshingMarket">
-            {{ refreshingMarket ? '⏳ 采集中...' : '📈 刷新行情' }}
-          </button>
-          <button v-if="!['GoalBudgetCenter', 'DataReadiness'].includes(String(route.name))" class="btn primary" @click="handleUnifiedEntry">📝 记一笔</button>
-          <div class="avatar" @click="handleProfile">👤</div>
+        <div v-if="showBusinessActions" class="wealth-actions" aria-label="页面操作">
+          <button class="wh-button" type="button" :disabled="refreshingData" title="仅主动点击后重算历史余额并刷新页面" @click="handleRefresh">{{ refreshingData ? '重算中…' : '刷新数据（重算历史余额）' }}</button>
+          <button class="wh-button" type="button" :disabled="refreshingMarket" @click="handleRefreshMarketData">{{ refreshingMarket ? '采集中…' : '刷新行情' }}</button>
+          <button class="wh-button wh-button--primary" type="button" @click="handleUnifiedEntry">记一笔</button>
         </div>
-      </div>
-    </div>
-
-    <div class="wrap" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;">
-      <!-- Page Content -->
-      <!--
-        关键：页面滚动应该发生在 router-view 内部（而不是 body）。
-        否则 MainLayout/body 的 overflow:hidden 会导致 Dashboard 等页面无法上下滚动。
-      -->
-      <router-view style="flex: 1; min-height: 0; overflow: auto;" />
-    </div>
+      </header>
+      <main id="wealth-content" ref="content" class="wealth-content" tabindex="-1">
+        <router-view />
+      </main>
+    </section>
+    <el-drawer v-model="mobileMenuOpen" title="财富中枢 · 目录" direction="ltr" size="min(300px, 88vw)" class="wealth-mobile-drawer" @closed="menuButton?.focus()">
+      <WealthNavigation id="mobile-navigation" @navigate="mobileMenuOpen = false" />
+      <router-link to="/portal" class="wealth-directory" @click="mobileMenuOpen = false">站点目录 ↗</router-link>
+    </el-drawer>
+    <UnifiedEntryModal v-model="unifiedEntryVisible" @success="handleEntrySuccess" />
+    <QuickEntryModal v-model="quickExpenseVisible" type="EXPENSE" @success="handleEntrySuccess" />
+    <QuickEntryModal v-model="quickIncomeVisible" type="INCOME" @success="handleEntrySuccess" />
   </div>
 </template>
-
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElNotification } from 'element-plus'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
 import QuickEntryModal from '../components/QuickEntryModal.vue'
-import { productApi, apiClient, ledgerApi } from '@wealth-hub/shared'
+import { productApi, apiClient, ledgerApi, useUserStore } from '@wealth-hub/shared'
+import WealthNavigation from '../components/WealthNavigation.vue'
+import { identityContext, navItems } from './navigation'
+import '../styles/navigation-shell.css'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
+const currentNav = computed(() => navItems.find(item => item.name === route.name))
+const identity = computed(() => identityContext(userStore.user))
+const showBusinessActions = computed(() => !['GoalBudgetCenter', 'DataReadiness'].includes(String(route.name)))
+const navExpanded = ref(false)
+const mobileMenuOpen = ref(false)
+const menuButton = ref<HTMLButtonElement>()
+const content = ref<HTMLElement>()
+const loggingOut = ref(false)
+const wideScreen = window.matchMedia('(min-width: 769px)')
+const closeOnWideScreen = () => { if (wideScreen.matches) mobileMenuOpen.value = false }
+
+watch(() => route.fullPath, () => {
+  mobileMenuOpen.value = false
+  content.value?.scrollTo({ top: 0 })
+})
+onMounted(async () => {
+  wideScreen.addEventListener('change', closeOnWideScreen)
+  if (!userStore.user) {
+    try { await userStore.fetchCurrentUser() }
+    catch { /* The shared client handles expired sessions; never invent an identity. */ }
+  }
+})
+onUnmounted(() => wideScreen.removeEventListener('change', closeOnWideScreen))
+
+async function handleLogout() {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try { await userStore.logout() }
+  catch { /* Local logout must also complete when the server is unavailable. */ }
+  finally {
+    localStorage.removeItem('token')
+    userStore.$patch({ token: null, user: null })
+    await router.replace({ name: 'Login' })
+    loggingOut.value = false
+  }
+}
 
 const unifiedEntryVisible = ref(false)
 const quickExpenseVisible = ref(false)
 const quickIncomeVisible = ref(false)
 const refreshingMarket = ref(false)
 const refreshingData = ref(false)
-
-const navItems = [
-  { name: 'DataReadiness', path: '/data-readiness', label: '数据就绪检查' },
-  { name: 'GoalBudgetCenter', path: '/goal-budget-center', label: '目标与预算' },
-  { name: 'Dashboard', path: '/dashboard', label: '总览' },
-  { name: 'Ledger', path: '/ledger', label: '流水' },
-  { name: 'DraftInbox', path: '/drafts', label: '草稿箱' },
-  { name: 'Orders', path: '/orders', label: '订单&结算' },
-  { name: 'Products', path: '/products', label: '产品' },
-  { name: 'Accounts', path: '/accounts', label: '账户' },
-  { name: 'Holdings', path: '/holdings', label: '持仓管理' },
-  { name: 'StrategyLab', path: '/strategy-lab', label: '策略实验室' },
-  { name: 'RiskCenter', path: '/risk-center', label: '风险观察' },
-  { name: 'RebalanceCenter', path: '/rebalance-center', label: '配置观察' },
-  { name: 'Settings', path: '/settings', label: '设置' },
-]
 
 async function handleRefresh() {
   if (refreshingData.value) return
@@ -109,7 +113,9 @@ async function handleRefresh() {
       duration: 2500,
     })
 
-    ledgerApi.recalculateAllBalanceHistory()
+    // 立即刷新可读数据；历史余额重算仍只由本按钮主动触发。
+    window.dispatchEvent(new CustomEvent('data-refresh'))
+    await ledgerApi.recalculateAllBalanceHistory()
       .then((res) => {
         ElNotification.success({
           title: '刷新完成',
@@ -126,9 +132,6 @@ async function handleRefresh() {
           position: 'bottom-right',
         })
       })
-
-    // 先触发一次页面数据刷新（不等待后台重算完成）
-    window.dispatchEvent(new CustomEvent('data-refresh'))
   } catch (error: any) {
     ElNotification.error({
       title: '错误',
@@ -177,21 +180,10 @@ function handleUnifiedEntry() {
   unifiedEntryVisible.value = true
 }
 
-function handleQuickExpense() {
-  quickExpenseVisible.value = true
-}
-
-function handleQuickIncome() {
-  quickIncomeVisible.value = true
-}
-
 function handleEntrySuccess() {
   // 记账成功后，触发当前页面的数据刷新
   // 通过全局事件通知各个页面刷新数据
   window.dispatchEvent(new CustomEvent('data-refresh'))
 }
 
-function handleProfile() {
-  router.push({ name: 'Settings' })
-}
 </script>

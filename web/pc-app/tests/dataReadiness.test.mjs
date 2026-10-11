@@ -68,8 +68,9 @@ test('shared API uses only authorized GET with scope/month; navigation excludes 
   try { await dataReadinessApi.diagnose('FAMILY', '2026-10') } finally { apiClient.get = saved }
   assert.deepEqual(calls, [['/data-readiness', { params: { scope: 'FAMILY', month: '2026-10' } }]])
   const layout = await readFile(new URL('src/layouts/MainLayout.vue', root), 'utf8')
-  assert.equal((layout.match(/\['GoalBudgetCenter', 'DataReadiness'\]/g) || []).length, 3)
-  assert.match(layout, /label: '数据就绪检查'/)
+  assert.match(layout, /v-if="showBusinessActions"/)
+  assert.match(layout, /showBusinessActions = computed\(\(\) => !\['GoalBudgetCenter', 'DataReadiness'\]/)
+  assert.match(await readFile(new URL('src/layouts/navigation.ts', root), 'utf8'), /label: '数据就绪检查'/)
   assert.match(await readFile(new URL('src/router/index.ts', root), 'utf8'), /import\('\.\.\/views\/DataReadiness.vue'\)/)
   assert.doesNotMatch(view, /orderApi|settlementApi|ledgerApi|apiClient\.post|v-html/)
   assert.match(view, /role="alert"/); assert.match(view, /role="status"/); assert.match(view, /focus-visible/)

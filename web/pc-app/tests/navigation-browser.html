@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Navigation shell isolated acceptance</title></head>
+<body><div id="app"></div><script type="module">
+import { createApp, h } from 'vue'
+import { createPinia } from 'pinia'
+import { RouterView } from 'vue-router'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+import 'element-plus/theme-chalk/dark/css-vars.css'
+import '../src/styles/main.css'
+import '../src/styles/foundation.css'
+import { initializeAppearance } from '../src/styles/appearance.ts'
+import router from '../src/router/index.ts'
+import MainLayout from '../src/layouts/MainLayout.vue'
+import AppearanceSettings from '../src/components/AppearanceSettings.vue'
+import { useUserStore } from '@wealth-hub/shared'
+// Real history and guard; no business pages or financial API requests in this fixture.
+const page = { render: () => h('section', { class: 'wh-card' }, [h(AppearanceSettings), h('input', { id: 'retained-input', value: '未提交输入' }), h('div', { style: 'height:1600px' }, '页面滚动验证'), h('button', { id: 'page-bottom' }, '末项')]) }
+for (const route of router.getRoutes()) if (route.name) route.components.default = page
+const pinia = createPinia()
+initializeAppearance()
+router.getRoutes().find(route => route.path === '/').components.default = MainLayout
+const app = createApp({ render: () => h(RouterView) }).use(pinia).use(router).use(ElementPlus)
+await router.isReady()
+// Harness pathname isn't a business route: select a real protected route with query.
+await router.replace({ name: 'Holdings', query: { productId: '42' } })
+app.mount('#app')
+window.navigationFixture = { router, store: useUserStore(pinia) }
+</script></body></html>
