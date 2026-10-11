@@ -1,0 +1,39 @@
+{
+  "task_id": "task-aiw-r2-11-holdings-experience-20261010",
+  "repository": "TimeLordTTY/MyDCA-Board",
+  "target_branch": "v2",
+  "baseline_commit": "a01a4b64112c866030bed711180594cfbcd9caa1",
+  "source_commit_resolution": "git log -1 --format=%H -- web/pc-app/delivery/task-aiw-r2-11-holdings-experience-20261010.json",
+  "engineering_delivery": "LOCAL_VERIFIED",
+  "owner_approved_scope": "PC holdings/list/detail/investment PNL presentation only",
+  "validation": {
+    "pc_node_baseline": "158/158 PASS",
+    "pc_node_final": "168/168 PASS",
+    "holdings_node": "9/9 PASS",
+    "local_types": "PASS",
+    "full_pc_types": "BASELINE_FAILED_63_FINAL_FAILED_62_NO_NEW_DIAGNOSTICS",
+    "browser_fixture": "PASS_1440_1100_760_ZERO_PAGEERRORS_GET_ONLY",
+    "compile_hook": "PASS_MaxFixRounds_0_BACKEND_SHARED_PC_H5",
+    "git_diff_check": "PASS"
+  },
+  "artifacts": [
+    "web/pc-app/src/views/Holdings.vue",
+    "web/pc-app/src/views/holdingsViewModel.ts",
+    "web/pc-app/src/views/Products.vue",
+    "web/pc-app/src/components/HoldingDetailModal.vue",
+    "web/pc-app/src/components/InitialHoldingImportModal.vue",
+    "web/pc-app/tests/holdingsExperience.test.mjs",
+    "web/pc-app/tests/holdingsExperience.browser.js",
+    "web/pc-app/tests/accountsProducts.test.mjs",
+    "web/pc-app/tests/tsconfig.holdings.json",
+    "docs/wealthhub_pc_holdings_experience_20261010.md"
+  ],
+  "production_database_and_financial_writes": "NOT_RUN",
+  "production_deployment": "NOT_RUN",
+  "push": "NOT_RUN",
+  "real_role_and_financial_e2e": "NOT_RUN",
+  "aicore_external_delivery_manifest": "PENDING_EXTERNAL_CHAIN",
+  "hermes_wecom_receipt": "NOT_VERIFIED",
+  "external_delivery_blocker": "No callable AiCore/Hermes delivery tool; external paths outside allowed_paths",
+  "owner_notification_policy": "goal_only"
+}

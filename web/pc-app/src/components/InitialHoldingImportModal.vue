@@ -44,7 +44,7 @@
               size="small"
               style="width: 100%"
               filterable
-              :filter-method="(query) => handleLocalFilterProduct(query, $index)"
+              :filter-method="(query: string) => handleLocalFilterProduct(query, $index)"
               placeholder="请选择产品"
               @change="handleProductChange($index)"
             >

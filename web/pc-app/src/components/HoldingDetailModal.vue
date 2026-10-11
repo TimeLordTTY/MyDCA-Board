@@ -1,35 +1,40 @@
 <template>
-  <el-dialog v-model="visible" :title="`持仓详情 - ${holding?.productName || `产品${holding?.productId}`}`" width="1200px" @close="handleClose">
+  <el-dialog v-model="visible" :title="`持仓详情 - ${holding?.productName || `产品${holding?.productId}`}`" class="holdings-detail" width="min(1200px, 94vw)" @close="handleClose">
     <div v-if="holding" style="max-height: 70vh; overflow-y: auto">
       <!-- 持仓基本信息 -->
       <div class="card" style="margin-bottom: 16px">
-        <h4>持仓信息</h4>
+        <h4>持仓信息 · {{ holding.brokerAccountName || "来源账户未提供" }}</h4>
+        <p class="td-muted">{{ holding.valuationNote }} 净值证据日期：{{ holding.navDate || "未知" }}；价格时间：{{ holding.priceTime || "未知" }}。</p>
         <div class="row" style="gap: 24px; margin-top: 12px">
           <div>
             <div class="td-muted" style="font-size: 12px">持仓份额</div>
-            <div style="font-size: 18px; font-weight: 600">{{ formatNumber(holding.totalShares || holding.shares || 0, 2) }}</div>
+            <div style="font-size: 18px; font-weight: 600">{{ displayNumber(holding.sharesCalc, 2) }}</div>
           </div>
           <div>
             <div class="td-muted" style="font-size: 12px">平均成本</div>
-            <div style="font-size: 18px; font-weight: 600">{{ formatNumber(holding.averageCost || holding.avgCost || 0, 4) }}</div>
+            <div style="font-size: 18px; font-weight: 600">{{ displayNumber(holding.avgCostCalc, 4) }}</div>
           </div>
           <div>
-            <div class="td-muted" style="font-size: 12px">当前价格</div>
-            <div style="font-size: 18px; font-weight: 600">{{ formatNumber(holding.currentPrice || 0, 4) }}</div>
+            <div class="td-muted" style="font-size: 12px">{{ isExchange ? "实时报价" : "单位净值" }}</div>
+            <div style="font-size: 18px; font-weight: 600">{{ displayNumber(holding.currentPrice, 4) }}</div>
           </div>
           <div>
             <div class="td-muted" style="font-size: 12px">持仓市值</div>
-            <div style="font-size: 18px; font-weight: 600">{{ formatCurrency(holding.marketValue || 0) }}</div>
+            <div style="font-size: 18px; font-weight: 600">{{ displayMoney(holding.marketValue) }}</div>
           </div>
           <div>
             <div class="td-muted" style="font-size: 12px">浮动盈亏</div>
-            <div style="font-size: 18px; font-weight: 600" :class="(holding.unrealizedPnl || 0) >= 0 ? 'text-red' : 'text-green'">
-              {{ (holding.unrealizedPnl || 0) >= 0 ? '+' : '' }}{{ formatCurrency(holding.unrealizedPnl || 0) }}
+            <div style="font-size: 18px; font-weight: 600" :class="`pnl-${pnlTone(holding.unrealizedPnl)}`">
+              {{ holding.unrealizedPnl !== null && holding.unrealizedPnl > 0 ? '+' : '' }}{{ displayMoney(holding.unrealizedPnl) }}
             </div>
           </div>
         </div>
       </div>
 
+      <div class="detail-cost"><span>剩余成本：{{ displayMoney(holding.totalCostCalc) }}</span><span>已实现盈亏：暂未提供（当前接口未返回）</span></div>
+      <p class="td-muted">浮盈来自服务器持仓口径，不代表累计投资收益。</p>
+      <p v-if="detailError" role="alert" class="detail-error">{{ detailError }} <el-button @click="loadActiveTab">重试</el-button></p>
+      <p v-if="detailLoading" role="status">正在读取详情证据…</p>
       <!-- 图表标签页（按场内/场外差异化展示） -->
       <el-tabs v-model="activeTab">
         <!-- 场外：净值曲线 -->
@@ -42,7 +47,7 @@
           <div v-if="isBondRepo" class="bond-quote-summary">
             <div>
               <span class="td-muted">最新价/年化收益率</span>
-              <strong>{{ formatNumber(latestQuote?.price || 0, 4) }}</strong>
+              <strong>{{ displayNumber(latestQuote?.price, 4) }}</strong>
             </div>
             <div>
               <span class="td-muted">涨跌幅</span>
@@ -75,7 +80,7 @@
         <el-tab-pane label="技术指标" name="indicator">
           <div style="margin-bottom: 16px">
             <label style="margin-right: 8px">窗口天数：</label>
-            <el-select v-model="windowDays" style="width: 120px" @change="loadIndicators">
+            <el-select v-model="windowDays" style="width: 120px" @change="loadActiveTab">
               <el-option label="20日" :value="20" />
               <el-option label="60日" :value="60" />
             </el-select>
@@ -129,13 +134,14 @@
 
         <!-- 交易记录：显示该产品的持仓变化历史 -->
         <el-tab-pane label="交易记录" name="transactions">
+          <p class="td-muted">当前访问范围该产品最近100条交易，未按来源账户拆分；不作为已实现盈亏。</p>
           <div v-if="transactionLoading" style="text-align: center; padding: 40px">
             <span class="td-muted">加载中...</span>
           </div>
-          <div v-else-if="transactionHistory.length === 0" style="text-align: center; padding: 40px">
+          <div v-else-if="!detailError && transactionHistory.length === 0" style="text-align: center; padding: 40px">
             <span class="td-muted">暂无交易记录</span>
           </div>
-          <table v-else class="txn-table">
+          <table v-else-if="transactionHistory.length > 0" class="txn-table">
             <thead>
               <tr>
                 <th>交易时间</th>
@@ -154,9 +160,9 @@
                   </span>
                 </td>
                 <td style="text-align: right" class="mono">
-                  {{ formatAmountWithSign(txn.txnType, (txn as any).summaryAmount || 0) }}
+                  {{ (txn as any).summaryAmount == null ? '未知' : formatAmountWithSign(txn.txnType, (txn as any).summaryAmount) }}
                 </td>
-                <td style="text-align: right" class="mono">{{ formatNumber((txn as any).summaryShares || 0, 2) }}</td>
+                <td style="text-align: right" class="mono">{{ displayNumber((txn as any).summaryShares, 2) }}</td>
                 <td class="note-cell">{{ txn.note || '-' }}</td>
               </tr>
             </tbody>
@@ -171,26 +177,16 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
-import { navApi, marketApi, indicatorApi, ledgerApi, formatCurrency, formatNumber } from '@wealth-hub/shared'
+import { navApi, marketApi, indicatorApi, ledgerApi, useUserStore, formatCurrency, formatNumber } from '@wealth-hub/shared'
 import type { Nav, MarketBarDaily, IndicatorDaily, LedgerTxn } from '@wealth-hub/shared'
 
-interface HoldingWithQuote {
-  productId: number
-  productName?: string
-  channel?: 'EXCHANGE' | 'OTC'
-  assetType?: string
-  totalShares?: number
-  shares?: number
-  averageCost?: number
-  avgCost?: number
-  currentPrice?: number
-  marketValue?: number
-  unrealizedPnl?: number
-}
+import type { HoldingView } from '../views/holdingsViewModel'
+import { numberOrNull, pnlTone } from '../views/holdingsViewModel'
+import { createReadGate, readError } from '../views/managementViewModel'
 
 const props = defineProps<{
   modelValue: boolean
-  holding: HoldingWithQuote | null
+  holding: HoldingView | null
 }>()
 
 const emit = defineEmits<{
@@ -223,110 +219,70 @@ const isBondRepo = computed(() => props.holding?.assetType === 'BOND_REPO')
 const latestIndicator = computed(() => indicatorData.value.length > 0 ? indicatorData.value[indicatorData.value.length - 1] : null)
 const latestQuote = computed(() => quoteHistory.value.length > 0 ? quoteHistory.value[quoteHistory.value.length - 1] : null)
 
-watch([visible, activeTab], async ([newVisible, newTab]) => {
-  if (newVisible && props.holding) {
-    await nextTick()
-    if (newTab === 'nav') {
-      await loadNavData()
-      renderNavChart()
-    } else if (newTab === 'iopv') {
-      await loadIopvData()
-      renderIopvChart()
-    } else if (newTab === 'kline') {
-      await loadKlineData()
-      renderKlineChart()
-    } else if (newTab === 'indicator') {
-      await loadIndicators()
-      renderIndicatorChart()
-    } else if (newTab === 'transactions') {
-      await loadTransactionHistory()
-    }
-  }
-}, { immediate: true })
+const user = useUserStore()
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId, props.holding?.productId, props.holding?.brokerAccountId, visible.value, activeTab.value, windowDays.value])
+const gate = createReadGate(identity)
+const detailError = ref(''), detailLoading = ref(false)
+const displayNumber = (value: unknown, digits: number) => numberOrNull(value) === null ? '未知' : formatNumber(value as number, digits)
+const displayMoney = (value: number | null) => value === null ? '未知' : formatCurrency(value)
 
-watch(visible, (v) => {
-  if (v && props.holding) {
-    activeTab.value = props.holding.channel === 'EXCHANGE' ? 'iopv' : 'nav'
-  }
-})
-
-async function loadNavData() {
-  if (!props.holding) return
+watch(() => [visible.value, props.holding?.productId, props.holding?.brokerAccountId], () => {
+  handleClose()
+  activeTab.value = props.holding?.channel === 'EXCHANGE' ? 'iopv' : 'nav'
+}, { flush: 'sync' })
+watch(identity, () => { void loadActiveTab() }, { immediate: true, flush: 'sync' })
+async function loadActiveTab() {
+  handleClose()
+  navData.value = []; klineData.value = []; indicatorData.value = []; quoteHistory.value = []; transactionHistory.value = []
+  detailError.value = ''; detailLoading.value = false; transactionLoading.value = false
+  if (!visible.value || !props.holding || !gate.active) return
+  const current = gate.begin()
+  detailLoading.value = true
+  await nextTick()
+  if (!current()) return
+  // The request and its chart render belong to the same identity/product/tab.
   try {
-    const endDate = new Date().toISOString().split('T')[0]
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    navData.value = await navApi.getHistoryNav(props.holding.productId, startDate, endDate)
-    navData.value.reverse() // 按时间正序
-  } catch (error: any) {
-    console.error('加载净值数据失败:', error)
-    navData.value = []
-  }
+    if (activeTab.value === 'nav') { await loadNavData(current); if (current()) renderNavChart() }
+    else if (activeTab.value === 'iopv') { await loadIopvData(current); if (current()) renderIopvChart() }
+    else if (activeTab.value === 'kline') { await loadKlineData(current); if (current()) renderKlineChart() }
+    else if (activeTab.value === 'indicator') { await loadIndicators(current); if (current()) renderIndicatorChart() }
+    else if (activeTab.value === 'transactions') await loadTransactionHistory(current)
+    if (current() && ![navData.value, klineData.value, indicatorData.value, quoteHistory.value, transactionHistory.value].some(data => data.length)) detailError.value = '当前范围暂无详情证据；不表示行情或收益为零。'
+  } catch (error) { if (current()) detailError.value = readError(error, '详情证据') }
+  finally { if (current()) { detailLoading.value = false; transactionLoading.value = false } }
 }
 
-async function loadKlineData() {
+async function loadNavData(current: () => boolean) {
   if (!props.holding) return
-  try {
-    const endDate = new Date().toISOString().split('T')[0]
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    klineData.value = await marketApi.getHistoryBars(props.holding.productId, startDate, endDate)
-    klineData.value.reverse() // 按时间正序
-  } catch (error: any) {
-    console.error('加载K线数据失败:', error)
-    klineData.value = []
-  }
+  const endDate = new Date().toISOString().split('T')[0]
+  const startDate = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0]
+  const data = await navApi.getHistoryNav(props.holding.productId, startDate, endDate)
+  if (current()) navData.value = data.slice().reverse()
 }
-
-async function loadIopvData() {
+async function loadKlineData(current: () => boolean) {
   if (!props.holding) return
-  try {
-    const end = new Date()
-    const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    quoteHistory.value = await marketApi.getQuoteHistory(
-      props.holding.productId,
-      start.toISOString(),
-      end.toISOString()
-    )
-  } catch (error: any) {
-    console.error('加载IOPV/估值数据失败:', error)
-    quoteHistory.value = []
-  }
+  const endDate = new Date().toISOString().split('T')[0]
+  const startDate = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0]
+  const data = await marketApi.getHistoryBars(props.holding.productId, startDate, endDate)
+  if (current()) klineData.value = data.slice().reverse()
 }
-
-async function loadIndicators() {
+async function loadIopvData(current: () => boolean) {
   if (!props.holding) return
-  try {
-    const endDate = new Date().toISOString().split('T')[0]
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    indicatorData.value = await indicatorApi.getHistoryIndicators(
-      props.holding.productId,
-      startDate,
-      endDate,
-      windowDays.value
-    )
-    indicatorData.value.reverse() // 按时间正序
-    await nextTick()
-    renderIndicatorChart()
-  } catch (error: any) {
-    console.error('加载指标数据失败:', error)
-    indicatorData.value = []
-  }
+  const data = await marketApi.getQuoteHistory(props.holding.productId, new Date(Date.now() - 7 * 86400000).toISOString(), new Date().toISOString())
+  if (current()) quoteHistory.value = data
 }
-
-async function loadTransactionHistory() {
+async function loadIndicators(current: () => boolean) {
+  if (!props.holding) return
+  const endDate = new Date().toISOString().split('T')[0]
+  const startDate = new Date(Date.now() - 90 * 86400000).toISOString().split('T')[0]
+  const data = await indicatorApi.getHistoryIndicators(props.holding.productId, startDate, endDate, windowDays.value)
+  if (current()) indicatorData.value = data.slice().reverse()
+}
+async function loadTransactionHistory(current: () => boolean) {
   if (!props.holding) return
   transactionLoading.value = true
-  try {
-    const response = await ledgerApi.getTransactions({
-      productId: props.holding.productId,
-      pageSize: 100,
-    })
-    transactionHistory.value = response.list || []
-  } catch (error: any) {
-    console.error('加载交易记录失败:', error)
-    transactionHistory.value = []
-  } finally {
-    transactionLoading.value = false
-  }
+  const response = await ledgerApi.getTransactions({ productId: props.holding.productId, pageSize: 100 })
+  if (current()) transactionHistory.value = response.list || []
 }
 
 function formatDate(dateStr: string | null | undefined): string {
@@ -561,15 +517,15 @@ function renderIndicatorChart() {
   }
 
   const dates = indicatorData.value.map(i => i.tradeDate)
-  const ma20 = indicatorData.value.map(i => i.ma20 || null)
-  const ma60 = indicatorData.value.map(i => i.ma60 || null)
-  const bollMiddle = indicatorData.value.map(i => i.bollMiddle || null)
-  const bollUpper = indicatorData.value.map(i => i.bollUpper || null)
-  const bollLower = indicatorData.value.map(i => i.bollLower || null)
+  const ma20 = indicatorData.value.map(i => i.ma20 ?? null)
+  const ma60 = indicatorData.value.map(i => i.ma60 ?? null)
+  const bollMiddle = indicatorData.value.map(i => i.bollMiddle ?? null)
+  const bollUpper = indicatorData.value.map(i => i.bollUpper ?? null)
+  const bollLower = indicatorData.value.map(i => i.bollLower ?? null)
   const pctRank = indicatorData.value.map(i => i.pctRank != null ? i.pctRank * 100 : null)
-  const kdjK = indicatorData.value.map(i => i.kdjK || null)
-  const kdjD = indicatorData.value.map(i => i.kdjD || null)
-  const kdjJ = indicatorData.value.map(i => i.kdjJ || null)
+  const kdjK = indicatorData.value.map(i => i.kdjK ?? null)
+  const kdjD = indicatorData.value.map(i => i.kdjD ?? null)
+  const kdjJ = indicatorData.value.map(i => i.kdjJ ?? null)
 
   indicatorChart.setOption({
     tooltip: {
@@ -678,6 +634,9 @@ function renderIndicatorChart() {
 }
 
 function handleClose() {
+  gate.invalidate()
+  navData.value = []; klineData.value = []; indicatorData.value = []; quoteHistory.value = []; transactionHistory.value = []
+  detailError.value = ''; detailLoading.value = false; transactionLoading.value = false
   navChart?.dispose()
   klineChart?.dispose()
   indicatorChart?.dispose()
@@ -688,22 +647,21 @@ function handleClose() {
   iopvChart = null
 }
 
-onUnmounted(() => {
-  handleClose()
-})
-
-// 监听窗口大小变化
-if (typeof window !== 'undefined') {
-  window.addEventListener('resize', () => {
-    navChart?.resize()
-    klineChart?.resize()
-    indicatorChart?.resize()
-    iopvChart?.resize()
-  })
-}
+function resizeCharts() { navChart?.resize(); klineChart?.resize(); indicatorChart?.resize(); iopvChart?.resize() }
+window.addEventListener('resize', resizeCharts)
+onUnmounted(() => { handleClose(); gate.suspend(); window.removeEventListener('resize', resizeCharts) })
 </script>
 
 <style scoped>
+.holdings-detail .card { border-radius: var(--wh-card-radius, 20px); }
+.holdings-detail .row { flex-wrap: wrap; }
+.detail-cost { display: flex; flex-wrap: wrap; gap: 24px; padding: 16px; background: var(--primarySoft); border-radius: 12px; }
+.detail-error { color: var(--bad); }
+.holdings-detail .pnl-profit { color: var(--good); }
+.holdings-detail .pnl-loss { color: var(--bad); }
+.holdings-detail .pnl-neutral { color: var(--muted); }
+.holdings-detail .indicator-summary-title, .holdings-detail .indicator-summary-grid strong { color: var(--text); }
+
 /* 交易记录表格样式 */
 .txn-table {
   width: 100%;

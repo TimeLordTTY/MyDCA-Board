@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/views/Holdings.vue", "../src/views/Products.vue", "../src/views/holdingsViewModel.ts", "../src/components/HoldingDetailModal.vue", "../src/env.d.ts"],
+  "exclude": []
+}

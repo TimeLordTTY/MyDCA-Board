@@ -18,12 +18,12 @@ async function setup(file, overrides = {}) {
   const user = vue.reactive({ token: 'fixture', user: { id: 1, familyId: 1 } })
   const accounts = vue.reactive({ accounts: [], updateAccount: async () => {}, createAccount: async () => ({ id: 2 }) })
   const lifecycle = { mounted: [], unmounted: [], activated: [], deactivated: [] }
-  const events = [], notices = []
+  const events = [], notices = [], route = vue.ref({ query: {} })
   globalThis.window = { dispatchEvent() {}, addEventListener() {}, removeEventListener() {}, setInterval: () => 1, clearInterval() {} }
   globalThis.CustomEvent = class {}
   const mocks = {
     vue: { ...vue, onMounted: f => lifecycle.mounted.push(f), onUnmounted: f => lifecycle.unmounted.push(f), onBeforeUnmount: f => lifecycle.unmounted.push(f), onActivated: f => lifecycle.activated.push(f), onDeactivated: f => lifecycle.deactivated.push(f) },
-    'vue-router': { useRouter: () => ({ push: path => events.push(path) }) },
+    'vue-router': { useRouter: () => ({ push: path => events.push(path), currentRoute: route }) },
     'element-plus': { ElNotification: Object.fromEntries(['error', 'warning', 'success'].map(key => [key, v => notices.push(v)])), ElMessageBox: { confirm: async () => events.push('confirm') }, ...overrides.element },
     '@wealth-hub/shared': { ...shared, useUserStore: () => user, useAccountStore: () => accounts, useProductStore: () => ({ createProduct: async () => product(), updateProduct: async () => product() }), accountApi: { getAccounts: async () => [] }, productApi: { getProducts: async () => [] }, holdingApi: { getHoldings: async () => [] }, ...overrides.shared },
     './managementViewModel': model,
@@ -33,7 +33,7 @@ async function setup(file, overrides = {}) {
   code = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.ESNext } }).outputText
   code = code.replace(/import \{([^}]+)\} from ['"]([^'"]+)['"]/g, (_, names, path) => `const {${names.replace(/ as /g, ': ')}} = globalThis.__managementMocks[${JSON.stringify(path)}]`)
   const state = (await importScript(code + `\n// fixture ${Math.random()}\n//# sourceURL=management-fixture.js`)).default.setup({}, { expose() {} })
-  return { state, user, accounts, events, notices, lifecycle, close() { lifecycle.unmounted.forEach(f => f()) } }
+  return { state, user, accounts, events, notices, lifecycle, route, close() { lifecycle.unmounted.forEach(f => f()) } }
 }
 
 test('account search keeps complete parents, siblings and signed balances without mutating the tree', () => {
@@ -155,4 +155,15 @@ test('templates compile; account financial handlers and original product save be
       assert.ok(current.includes("name: 'Holdings'")); assert.ok(current.includes('@dragstart="handleDragStart'))
     }
   }
+})
+
+
+test('holding product archive deep link opens the actual product including inactive records', async () => {
+  const s = await setup('Products.vue', { shared: { productApi: { getProducts: async () => [product(7, { isActive: false })] } } })
+  s.route.value = { query: { productId: '7' } }
+  await s.state.loadAllProducts(); await vue.nextTick()
+  assert.equal(s.state.productDetail.value.id, 7); assert.equal(s.state.productDetail.value.isActive, false)
+  s.route.value = { query: { productId: '999' } }; await vue.nextTick()
+  assert.equal(s.state.productDetail.value, null)
+  s.close()
 })

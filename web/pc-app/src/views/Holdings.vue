@@ -1,415 +1,145 @@
 <template>
-  <div class="products-page-container">
-    <!-- 持仓详情模态框 -->
+  <div class="products-page-container management-page holdings-page">
     <HoldingDetailModal v-model="detailVisible" :holding="selectedHolding" />
-
-    <!-- 初始持仓导入对话框 -->
-    <InitialHoldingImportModal v-model="importDialogVisible" @success="handleImportSuccess" />
-
-    <div class="card" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
-      <div class="row-between">
-        <div>
-          <h3>
-            持仓管理
-            <span class="tag blue tiny">实时计算</span>
-          </h3>
-          <div class="sub">买入/卖出来自"订单&结算"。持仓数据基于流水实时计算。</div>
-        </div>
-        <div style="display: flex; align-items: center; gap: 16px;">
-          <el-select v-model="brokerFilter" size="small" style="width: 200px" clearable placeholder="全部券商">
-            <el-option label="全部券商" value="" />
-            <el-option
-              v-for="b in brokerOptions"
-              :key="String(b.id)"
-              :label="b.name"
-              :value="String(b.id)"
-            />
-          </el-select>
-          <el-checkbox v-model="showCleared" size="small">显示已清仓</el-checkbox>
-          <el-button type="primary" @click="handleOpenImport">导入初始持仓</el-button>
-        </div>
-      </div>
-      <div class="divider"></div>
-
-      <!-- 左右分栏：左=场内，右=场外（结构/风格对齐“产品管理”页面） -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; min-height: 0; overflow: hidden;">
-        <!-- 左侧：场内产品 -->
-        <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
-          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
-            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">场内产品</h3>
-          </div>
-          <div class="hide-scrollbar holdings-scroll" style="flex: 1; overflow: auto; min-height: 0;">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 160px;">名称</th>
-                  <th class="right" style="width: 100px;">份额 / 市值</th>
-                  <th class="right" style="width: 100px;">成本价 / 最新价</th>
-                  <th class="right" style="width: 90px;">盈亏率 / 浮盈亏</th>
-                  <th class="right" style="width: 60px;">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="loading">
-                  <td colspan="5" class="td-muted" style="text-align: center">加载中...</td>
-                </tr>
-                <tr v-else-if="exchangeHoldings.length === 0">
-                  <td colspan="5" class="td-muted" style="text-align: center">暂无场内持仓</td>
-                </tr>
-                <tr
-                  v-for="holding in exchangeHoldings"
-                  :key="`${String((holding as any).brokerAccountId ?? 'NULL')}:${String(holding.productId)}`"
-                >
-                  <!-- 名称 + 代码（灰显） -->
-                  <td>
-                    <div class="holding-name-cell">
-                      <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
-                      <div v-if="(holding as any).brokerAccountName" style="font-size: 12px; color: #64748b; margin-top: 2px;">
-                        {{ (holding as any).brokerAccountName }}
-                      </div>
-                      <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
-                        {{ holding.productCode || '—' }}
-                      </div>
-                    </div>
-                  </td>
-
-                  <!-- 份额 + 市值（上下） -->
-                  <td class="right">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                      <div class="mono">{{ formatNumber(holding.sharesCalc, 2) }}</div>
-                      <div class="mono td-muted">{{ formatCurrency(holding.marketValue) }}</div>
-                    </div>
-                  </td>
-
-                  <!-- 成本价（黑）+ 最新价（红/绿） -->
-                  <td class="right">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                      <div class="mono" style="color: #0f172a;">{{ formatNumber(holding.avgCostCalc, 4) }}</div>
-                      <div class="mono" :style="{ color: priceColor(holding.currentPrice, holding.avgCostCalc) }">
-                        <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
-                        <span v-else class="td-muted">—</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <!-- 盈亏率（红/绿）+ 浮盈亏（红/绿） -->
-                  <td class="right">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl) }">
-                        {{ pnlRateText(holding.unrealizedPnl, holding.totalCostCalc) }}
-                      </div>
-                      <div :style="{ color: pnlColor(holding.unrealizedPnl), fontWeight: 600 }">
-                        {{ formatSignedCurrency(holding.unrealizedPnl) }}
-                      </div>
-                    </div>
-                  </td>
-
-                  <td class="right" style="white-space: nowrap;">
-                    <button class="btn-small" @click="handleViewDetail(holding)">详情</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- 右侧：场外产品 -->
-        <div class="card" style="padding: 12px; display: flex; flex-direction: column; min-height: 0;">
-          <div class="row-gap" style="margin-bottom: 8px; flex-shrink: 0;">
-            <h3 style="margin: 0; font-size: 14px; font-weight: 600;">场外产品</h3>
-          </div>
-          <div class="hide-scrollbar holdings-scroll" style="flex: 1; overflow: auto; min-height: 0;">
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 160px;">名称</th>
-                  <th class="right" style="width: 100px;">份额 / 市值</th>
-                  <th class="right" style="width: 100px;">成本价 / 最新价</th>
-                  <th class="right" style="width: 90px;">盈亏率 / 浮盈亏</th>
-                  <th class="right" style="width: 60px;">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="loading">
-                  <td colspan="5" class="td-muted" style="text-align: center">加载中...</td>
-                </tr>
-                <tr v-else-if="otcHoldings.length === 0">
-                  <td colspan="5" class="td-muted" style="text-align: center">暂无场外持仓</td>
-                </tr>
-                <tr
-                  v-for="holding in otcHoldings"
-                  :key="`${String((holding as any).brokerAccountId ?? 'NULL')}:${String(holding.productId)}`"
-                >
-                  <td>
-                    <div class="holding-name-cell">
-                      <b class="holding-name">{{ holding.productName || `产品${holding.productId}` }}</b>
-                      <div v-if="(holding as any).brokerAccountName" style="font-size: 12px; color: #64748b; margin-top: 2px;">
-                        {{ (holding as any).brokerAccountName }}
-                      </div>
-                      <div style="font-size: 12px; color: #999; font-style: italic; margin-top: 4px;" class="mono">
-                        {{ holding.productCode || '—' }}
-                      </div>
-                    </div>
-                  </td>
-
-                  <td class="right">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                      <div class="mono">{{ formatNumber(holding.sharesCalc, 2) }}</div>
-                      <div class="mono td-muted">{{ formatCurrency(holding.marketValue) }}</div>
-                    </div>
-                  </td>
-
-                  <td class="right">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                      <div class="mono" style="color: #0f172a;">{{ formatNumber(holding.avgCostCalc, 4) }}</div>
-                      <div class="mono" :style="{ color: priceColor(holding.currentPrice, holding.avgCostCalc) }">
-                        <span v-if="holding.currentPrice > 0">{{ formatNumber(holding.currentPrice, 4) }}</span>
-                        <span v-else class="td-muted">—</span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td class="right">
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-                      <div class="mono" :style="{ color: pnlColor(holding.unrealizedPnl) }">
-                        {{ pnlRateText(holding.unrealizedPnl, holding.totalCostCalc) }}
-                      </div>
-                      <div :style="{ color: pnlColor(holding.unrealizedPnl), fontWeight: 600 }">
-                        {{ formatSignedCurrency(holding.unrealizedPnl) }}
-                      </div>
-                    </div>
-                  </td>
-
-                  <td class="right" style="white-space: nowrap;">
-                    <button class="btn-small" @click="handleViewDetail(holding)">详情</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+    <InitialHoldingImportModal v-if="importDialogVisible" v-model="importDialogVisible" @success="loadHoldings" />
+    <header class="management-hero">
+      <div><span class="management-eyebrow">HOLDINGS / 投资观察</span><h1>看清持仓，也看清收益的来处。</h1><p>来源账户、持仓成本与净值证据放在一起。买入 / 卖出仍通过原有订单与人工结算流程完成。</p></div>
+      <div class="row-gap"><el-button :loading="loading" @click="loadHoldings">重新读取</el-button><el-button type="primary" @click="importDialogVisible = true">导入初始持仓</el-button></div>
+    </header>
+    <div class="holdings-glance" aria-live="polite">
+      <article><span>筛选后持仓</span><strong>{{ ready ? visibleHoldings.length : '—' }}</strong><small>按来源账户分别展示</small></article>
+      <article><span>估值待补全</span><strong>{{ ready ? visibleHoldings.filter(h => h.marketValue === null).length : '—' }}</strong><small>未知金额不纳入资产判断</small></article>
+      <article><span>已实现盈亏</span><strong class="holdings-label">暂未提供</strong><small>当前接口未返回，不从买卖记录推算</small></article>
     </div>
+    <div class="management-guide"><span><b>浮动盈亏</b> · 服务器市值与剩余成本的差额，不等于已实现收益</span><span><b>价格时间 ≠ 估值时间</b> · 实时报价与净值分别标注，历史日期不代表今日行情</span><span><b>读取时间</b> · {{ loadedAt || '尚未读取' }}；金额币种沿用原接口口径</span></div>
+    <section class="card holdings-content" aria-label="持仓明细" :aria-busy="loading">
+      <div class="management-filter">
+        <el-input v-model="filters.keyword" aria-label="搜索持仓名称或代码" placeholder="搜索名称 / 代码" clearable />
+        <el-select v-model="filters.broker" aria-label="筛选来源账户" placeholder="全部来源账户" clearable><el-option v-for="b in brokerOptions" :key="b.id" :label="b.name" :value="b.id" /></el-select>
+        <el-select v-model="filters.channel" aria-label="筛选交易渠道" placeholder="全部渠道" clearable><el-option label="场内" value="EXCHANGE" /><el-option label="场外" value="OTC" /></el-select>
+        <el-select v-model="filters.assetType" aria-label="筛选产品类型" placeholder="全部类型" clearable><el-option v-for="type in assetTypes" :key="type" :label="type" :value="type" /></el-select>
+        <el-checkbox v-model="filters.showCleared">显示已清仓</el-checkbox>
+        <el-button @click="resetFilters">重置筛选</el-button>
+      </div>
+      <p v-if="filters.productId" class="td-muted">仅查看产品 #{{ filters.productId }} 的来源持仓。<button class="management-link" @click="clearProductFilter">查看全部产品</button></p>
+      <div v-if="loadError" class="management-state" role="alert">{{ loadError }} <el-button @click="loadHoldings">重试</el-button></div>
+      <div v-else-if="loading" class="management-state" role="status">正在读取持仓与价格证据…</div>
+      <div v-else-if="!ready" class="management-state">访问身份已变化，请重新读取当前持仓。</div>
+      <template v-else>
+        <p v-if="evidenceError" role="alert" class="holdings-warning">{{ evidenceError }} <el-button @click="loadHoldings">重新读取</el-button></p>
+        <div v-if="!visibleHoldings.length" class="management-state" role="status">{{ holdings.length ? '没有符合筛选条件的持仓，可重置筛选或显示已清仓。' : '当前访问范围暂无持仓。初始持仓可通过原导入流程录入。' }}</div>
+        <div v-else class="holdings-table-wrap">
+          <table class="holdings-table"><caption class="td-muted">持仓金额由服务器提供；未知与真实零分开展示，盈亏保留正负号。</caption>
+            <thead><tr><th>产品 / 来源</th><th class="right">份额 / 市值</th><th class="right">剩余成本 / 平均成本</th><th>报价或净值 / 时间</th><th class="right">浮动盈亏</th><th>查看</th></tr></thead>
+            <tbody><tr v-for="holding in visibleHoldings" :key="`${holding.brokerAccountId ?? 'unknown'}:${holding.productId}`">
+              <td><b>{{ holding.productName || `产品${holding.productId}` }}</b><small>{{ holding.productCode || '代码未提供' }} · {{ holding.channel === 'EXCHANGE' ? '场内' : holding.channel === 'OTC' ? '场外' : '渠道未知' }} · {{ holding.assetType || '类型未知' }}</small><small>{{ holding.brokerAccountName || (holding.brokerAccountId == null ? '来源账户未提供' : `账户${holding.brokerAccountId}`) }}</small></td>
+              <td class="right mono">{{ numeric(holding.sharesCalc, 2) }}<small>{{ money(holding.marketValue) }}</small><small class="holdings-quality">{{ holding.quality }}</small></td>
+              <td class="right mono">{{ money(holding.totalCostCalc) }}<small>{{ numeric(holding.avgCostCalc, 4) }}</small></td>
+              <td class="mono">{{ numeric(holding.currentPrice, 4) }}<small>{{ holding.channel === 'EXCHANGE' ? '报价时间' : '净值日期' }}：{{ holding.priceTime || '未知' }}</small><small>估值净值证据：{{ holding.navDate || '缺失' }}</small><small>{{ holding.priceSource || '价格来源未提供' }}</small></td>
+              <td class="right mono" :class="`pnl-${pnlTone(holding.unrealizedPnl)}`">{{ signedMoney(holding.unrealizedPnl) }}<small>{{ pnlRateText(holding) }}</small><small>已实现：暂未提供</small></td>
+              <td><button class="management-link" @click="handleViewDetail(holding)" :aria-label="`查看${holding.productName || holding.productId}的持仓详情`">详情</button><br /><button class="management-link" @click="viewProduct(holding)" :aria-label="`查看${holding.productName || holding.productId}的产品档案`">产品档案 ↗</button></td>
+            </tr></tbody>
+          </table>
+        </div>
+      </template>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { ElNotification } from 'element-plus'
-import { holdingApi, marketApi, navApi, formatCurrency, formatNumber } from '@wealth-hub/shared'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { holdingApi, marketApi, navApi, useUserStore, formatCurrency, formatNumber } from '@wealth-hub/shared'
 import type { HoldingInfo, MarketQuoteRealtime, Nav } from '@wealth-hub/shared'
 import HoldingDetailModal from '../components/HoldingDetailModal.vue'
 import InitialHoldingImportModal from '../components/InitialHoldingImportModal.vue'
+import { holdingView, normalizeHoldings, filterHoldings, pnlTone } from './holdingsViewModel'
+import type { HoldingView } from './holdingsViewModel'
+import { createReadGate, readError } from './managementViewModel'
 
-const loading = ref(false)
+const router = useRouter(), route = useRoute(), user = useUserStore()
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId])
+const gate = createReadGate(identity)
+const loading = ref(false), ready = ref(false), loadError = ref(''), evidenceError = ref(''), loadedAt = ref('')
 const holdings = ref<HoldingInfo[]>([])
-const quotes = ref<Map<number, MarketQuoteRealtime>>(new Map())
-const navs = ref<Map<number, Nav>>(new Map())
-const detailVisible = ref(false)
-const selectedHolding = ref<any>(null)
-const importDialogVisible = ref(false)
-const showCleared = ref(false) // 是否显示已清仓产品（份额为0）
-const brokerFilter = ref('') // ''=全部；否则 brokerAccountId
-
-// 合并持仓和行情数据
-const holdingsWithQuote = computed(() => {
-  return holdings.value.map(holding => {
-    const quote = quotes.value.get(holding.productId)
-    const nav = navs.value.get(holding.productId)
-    
-    // 优先使用实时行情价格，其次使用净值
-    let currentPrice = 0
-    if (quote) {
-      currentPrice = quote.price
-    } else if (nav) {
-      currentPrice = nav.nav
-    }
-    
-    const shares = holding.totalShares || holding.shares || 0
-    const avgCost = holding.averageCost || holding.avgCost || 0
-    const totalCost = shares * avgCost
-    const marketValue = shares * currentPrice
-    const unrealizedPnl = marketValue - totalCost
-    const pctChg = quote?.pctChg
-    
-    return {
-      ...holding,
-      sharesCalc: shares,
-      avgCostCalc: avgCost,
-      totalCostCalc: totalCost,
-      currentPrice,
-      marketValue,
-      unrealizedPnl,
-      pctChg,
-      quote,
-      nav,
-    }
-  })
-})
-
-const brokerOptions = computed(() => {
-  const m = new Map<number, string>()
-  for (const h of holdings.value) {
-    const id = (h as any).brokerAccountId
-    if (id == null) continue
-    const name = (h as any).brokerAccountName || `券商${id}`
-    m.set(Number(id), String(name))
-  }
-  return Array.from(m.entries())
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
-})
-
-const filteredHoldingsWithQuote = computed(() => {
-  if (!brokerFilter.value) return holdingsWithQuote.value
-  const bid = Number(brokerFilter.value)
-  return holdingsWithQuote.value.filter(h => Number((h as any).brokerAccountId) === bid)
-})
-
-const exchangeHoldings = computed(() =>
-  filteredHoldingsWithQuote.value
-    .filter(h => h.channel === 'EXCHANGE')
-    .filter(h => showCleared.value || (h.sharesCalc && h.sharesCalc > 0)) // 不勾选时过滤已清仓
-    .slice()
-    .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
-)
-const otcHoldings = computed(() =>
-  filteredHoldingsWithQuote.value
-    .filter(h => h.channel !== 'EXCHANGE')
-    .filter(h => showCleared.value || (h.sharesCalc && h.sharesCalc > 0)) // 不勾选时过滤已清仓
-    .slice()
-    .sort((a, b) => (Number(b.unrealizedPnl) || 0) - (Number(a.unrealizedPnl) || 0))
-)
-
-function pnlColor(pnl: number) {
-  // 中国股市习惯：红涨绿跌（盈利红色、亏损绿色）
-  return (pnl || 0) >= 0 ? 'var(--good)' : 'var(--bad)'
+const quotes = ref(new Map<number, MarketQuoteRealtime>()), navs = ref(new Map<number, Nav>())
+const detailVisible = ref(false), selectedHolding = ref<HoldingView | null>(null), importDialogVisible = ref(false)
+const filters = reactive({ keyword: '', broker: '', assetType: '', channel: '', productId: '', showCleared: false })
+watch(() => route.query.productId, value => { filters.productId = typeof value === 'string' ? value : '' }, { immediate: true })
+const rows = computed(() => holdings.value.map(h => holdingView(h, quotes.value.get(h.productId), navs.value.get(h.productId))))
+const visibleHoldings = computed(() => filterHoldings(rows.value, filters).sort((a, b) =>
+  a.unrealizedPnl === null ? b.unrealizedPnl === null ? 0 : 1 : b.unrealizedPnl === null ? -1 : b.unrealizedPnl - a.unrealizedPnl))
+const brokerOptions = computed(() => [...new Map(holdings.value.filter(h => h.brokerAccountId != null).map(h => [String(h.brokerAccountId), h.brokerAccountName || `账户${h.brokerAccountId}`])).entries()].map(([id, name]) => ({ id, name })))
+const assetTypes = computed(() => [...new Set(holdings.value.map(h => h.assetType).filter((v): v is string => !!v))])
+const numeric = (value: number | null, digits: number) => value === null ? '未知' : formatNumber(value, digits)
+const money = (value: number | null) => value === null ? '未知' : formatCurrency(value)
+const signedMoney = (value: number | null) => value === null ? '未知' : `${value > 0 ? '+' : value < 0 ? '-' : ''}${formatCurrency(Math.abs(value))}`
+function pnlRateText(holding: HoldingView) {
+  if (holding.unrealizedPnl === null || holding.totalCostCalc === null || holding.totalCostCalc <= 0) return '盈亏率：未知'
+  const rate = holding.unrealizedPnl / holding.totalCostCalc * 100
+  return `盈亏率：${rate > 0 ? '+' : ''}${formatNumber(rate, 2)}%`
 }
-
-function priceColor(currentPrice: number, costPrice: number) {
-  if (!currentPrice || currentPrice <= 0) return 'var(--muted)'
-  if (!costPrice || costPrice <= 0) return '#0f172a'
-  // 中国股市习惯：红涨绿跌
-  return currentPrice >= costPrice ? 'var(--good)' : 'var(--bad)'
+function clearData() {
+  gate.invalidate(); holdings.value = []; quotes.value = new Map(); navs.value = new Map()
+  ready.value = false; loading.value = false; loadedAt.value = ''; loadError.value = ''; evidenceError.value = ''
+  detailVisible.value = false; selectedHolding.value = null; importDialogVisible.value = false
 }
-
-function pnlRateText(pnl: number, totalCost: number) {
-  const cost = totalCost || 0
-  if (!cost || cost <= 0) return '—'
-  const rate = (pnl || 0) / cost
-  return `${rate >= 0 ? '+' : ''}${formatNumber(rate * 100, 2)}%`
-}
-
-function formatSignedCurrency(amount: number) {
-  const v = Number(amount) || 0
-  const sign = v >= 0 ? '+' : '-'
-  return `${sign}${formatCurrency(Math.abs(v))}`
-}
-
 async function loadHoldings() {
+  if (!gate.active) return
+  clearData()
+  const current = gate.begin()
   loading.value = true
   try {
-    const holdingsData = await holdingApi.getHoldings()
-    
-    // 处理返回的数据（可能是Map或数组）
-    if (holdingsData instanceof Map) {
-      holdings.value = Array.from(holdingsData.values())
-    } else if (Array.isArray(holdingsData)) {
-      holdings.value = holdingsData
-    } else if (typeof holdingsData === 'object' && holdingsData !== null) {
-      // 后端可能返回 { [productId]: HoldingInfo } 的对象结构，Object.values 会丢失 key
-      holdings.value = Object.entries(holdingsData as Record<string, any>).map(([productId, v]) => ({
-        ...v,
-        productId: v?.productId ?? Number(productId),
-      }))
-    } else {
-      holdings.value = []
-    }
-    
-    // 加载实时行情和净值（场内优先实时行情；场外使用净值）
-    if (holdings.value.length > 0) {
-      const exchangeIds = holdings.value
-        .filter(h => h.channel === 'EXCHANGE')
-        .map(h => Number(h.productId))
-        .filter(id => Number.isFinite(id) && id > 0)
-      const otcIds = holdings.value
-        .filter(h => h.channel !== 'EXCHANGE')
-        .map(h => Number(h.productId))
-        .filter(id => Number.isFinite(id) && id > 0)
-      
-      if (exchangeIds.length === 0 && otcIds.length === 0) {
-        console.warn('持仓数据缺少productId，跳过行情/净值加载', holdings.value)
-        return
-      }
-      
-      // 场内：批量获取实时行情
-      if (exchangeIds.length > 0) {
-        try {
-          const quotesData = await marketApi.getRealtimeQuotes(exchangeIds)
-          quotes.value = new Map(quotesData.map(q => [q.productId, q]))
-        } catch (error: any) {
-          console.warn('加载实时行情失败:', error)
-        }
-      }
-      
-      // 场外：批量获取最新净值（场内去调 nav/latest 会 404，避免无意义请求）
-      if (otcIds.length > 0) {
-        try {
-          const navPromises = otcIds.map(id => navApi.getLatestNav(id))
-          const navsData = await Promise.all(navPromises)
-          navs.value = new Map(
-            navsData.filter(n => n !== null).map(n => [n!.productId, n!])
-          )
-        } catch (error: any) {
-          console.warn('加载净值失败:', error)
-        }
-      }
-    }
-  } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
-  } finally {
-    loading.value = false
-  }
+    const data = normalizeHoldings(await holdingApi.getHoldings())
+    if (!current()) return
+    const ids = [...new Set(data.map(h => h.productId))]
+    const exchangeIds = [...new Set(data.filter(h => h.channel === 'EXCHANGE').map(h => h.productId))]
+    // NAV is the actual server valuation source, including exchange holdings. A 404 is missing evidence.
+    const [quoteResult, ...navResults] = await Promise.allSettled([
+      exchangeIds.length ? marketApi.getRealtimeQuotes(exchangeIds) : Promise.resolve([]),
+      ...ids.map(id => navApi.getLatestNav(id)),
+    ])
+    if (!current()) return
+    if (quoteResult.status === 'fulfilled') quotes.value = new Map((quoteResult.value as MarketQuoteRealtime[]).map(q => [q.productId, q]))
+    navResults.forEach((result, i) => { if (result.status === 'fulfilled' && result.value) navs.value.set(ids[i], result.value as Nav) })
+    if (quoteResult.status === 'rejected' || navResults.some(r => r.status === 'rejected')) evidenceError.value = '部分报价或净值读取失败；受影响的价格或估值标为未知，请重试。'
+    holdings.value = data; ready.value = true; loadedAt.value = new Date().toLocaleString('zh-CN')
+  } catch (error) { if (current()) loadError.value = readError(error, '持仓') }
+  finally { if (current()) loading.value = false }
 }
-
-function handleViewDetail(holding: any) {
-  selectedHolding.value = holding
-  detailVisible.value = true
-}
-
-function handleOpenImport() {
-  importDialogVisible.value = true
-}
-
-function handleImportSuccess() {
-  // 导入成功后重新加载持仓
-  loadHoldings()
-}
-
-onMounted(() => {
-  loadHoldings()
-  
-  // 监听全局数据刷新事件
-  window.addEventListener('data-refresh', loadHoldings)
-})
+function handleViewDetail(holding: HoldingView) { selectedHolding.value = holding; detailVisible.value = true }
+function viewProduct(holding: HoldingView) { router.push({ name: 'Products', query: { productId: holding.productId } }) }
+function clearProductFilter() { filters.productId = ''; router.replace({ query: { ...route.query, productId: undefined } }) }
+function resetFilters() { Object.assign(filters, { keyword: '', broker: '', assetType: '', channel: '', showCleared: false }); clearProductFilter() }
+watch(identity, (_, previous) => {
+  clearData()
+  if (JSON.parse(previous)[1] == null && user.user?.id && user.token) void loadHoldings()
+}, { flush: 'sync' })
+onMounted(() => { void loadHoldings(); window.addEventListener('data-refresh', loadHoldings) })
+onActivated(() => gate.activate())
+onDeactivated(() => { clearData(); gate.suspend() })
+onBeforeUnmount(() => { clearData(); gate.suspend(); window.removeEventListener('data-refresh', loadHoldings) })
 </script>
 
+<style scoped src="../styles/management-pages.css"></style>
 <style scoped>
-.holdings-scroll table {
-  /* 避免被压缩得太窄导致内容“奇怪换行/截断” */
-  min-width: 520px;
-}
-
-.holding-name-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-.holding-name {
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.3;
-}
+.holdings-page { gap: 0; }
+.holdings-glance { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 20px; flex-shrink: 0; }
+.holdings-glance article { padding: 22px; border: 1px solid var(--line); border-radius: var(--wh-card-radius, 20px); background: var(--card); }
+.holdings-glance span, .holdings-glance small { display: block; color: var(--muted); }
+.holdings-glance strong { display: block; font-size: 36px; margin: 10px 0; font-variant-numeric: tabular-nums; }
+.holdings-glance .holdings-label { font-size: 24px; line-height: 1.5; }
+.holdings-content { flex-shrink: 0; }
+.management-filter .el-input, .management-filter .el-select { width: 180px; }
+.holdings-table-wrap { overflow: auto; }
+.holdings-table { width: 100%; min-width: 1000px; }
+.holdings-table caption { text-align: left; padding: 0 0 16px; }
+.holdings-table td { vertical-align: top; padding: 18px 12px; }
+.holdings-table small { display: block; margin-top: 6px; color: var(--muted); line-height: 1.5; }
+.holdings-table .holdings-quality { display: inline-block; padding: 2px 8px; background: var(--primarySoft); border-radius: 6px; }
+.holdings-warning { color: var(--bad); }
+.holdings-page .holdings-table .pnl-profit { color: var(--good) !important; }
+.holdings-page .holdings-table .pnl-loss { color: var(--bad) !important; }
+.holdings-page .holdings-table .pnl-neutral { color: var(--muted) !important; }
+@media (max-width: 760px) { .holdings-glance { grid-template-columns: 1fr; } }
 </style>

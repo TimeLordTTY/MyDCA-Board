@@ -493,6 +493,10 @@ const allProducts = ref<ProductMaster[]>([])
 const exchangeProducts = ref<ProductMaster[]>([])
 const otcProducts = ref<ProductMaster[]>([])
 const loading = ref(false)
+// A holding links to the existing read-only product archive, including inactive products.
+watch(() => [router.currentRoute?.value.query.productId, productsReady.value], ([id, ready]) => {
+  if (ready && typeof id === 'string') productDetail.value = allProducts.value.find(p => String(p.id) === id) || null
+})
 
 // 左侧场内产品筛选条件
 const exchangeFilters = reactive({
