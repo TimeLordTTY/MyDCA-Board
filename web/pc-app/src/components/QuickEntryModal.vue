@@ -2,11 +2,14 @@
   <el-dialog
     v-model="visible"
     :title="type === 'EXPENSE' ? '快速录入 - 支出' : '快速录入 - 收入'"
-    width="500px"
+    width="min(500px, 94vw)"
     :close-on-click-modal="false"
+    :show-close="!submitting"
+    :close-on-press-escape="!submitting"
     @close="handleClose"
   >
-    <el-form :model="form" label-width="120px">
+    <p v-if="serverError" role="alert">{{ serverError }}</p><p v-if="entryWriteState.uncertain" role="alert">{{ uncertainWriteMessage }}</p>
+    <el-form :disabled="submitting" :model="form" label-width="120px">
       <el-form-item label="发生时间" required>
         <el-date-picker
           v-model="form.occurredAt"
@@ -46,17 +49,22 @@
     </el-form>
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" @click="handleSubmit" :loading="submitting">提交</el-button>
+      <el-button type="primary" @click="handleSubmit" :loading="submitting" :disabled="entryWriteState.pending || entryWriteState.uncertain">提交</el-button>
     </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElNotification } from 'element-plus'
-import { useAccountStore } from '@wealth-hub/shared'
-import { ledgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, getCategoryDisplayName } from '@wealth-hub/shared'
+import { ElNotification, ElMessageBox } from 'element-plus'
+import { useAccountStore, useUserStore } from '@wealth-hub/shared'
+import { ledgerApi as rawLedgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, getCategoryDisplayName } from '@wealth-hub/shared'
 import type { Account, Category } from '@wealth-hub/shared'
+
+import { guardWrites, entryWriteState, uncertainWriteMessage } from './entrySafety'
+import { localDateTime } from '../views/ledgerViewModel'
+const ledgerApi = guardWrites(rawLedgerApi, ['quickEntry'])
+const serverError = ref('')
 
 const props = defineProps<{
   modelValue: boolean
@@ -68,7 +76,9 @@ const emit = defineEmits<{
   success: []
 }>()
 
-const accountStore = useAccountStore()
+const accountStore = useAccountStore(), user = useUserStore()
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId])
+watch(identity, () => { visible.value = false }, { flush: 'sync' })
 
 const visible = computed({
   get: () => props.modelValue,
@@ -78,7 +88,7 @@ const visible = computed({
 const submitting = ref(false)
 
 const form = ref({
-  occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+  occurredAt: localDateTime(),
   category: [] as number[],
   accountId: undefined as number | undefined,
   amount: undefined as number | undefined,
@@ -122,8 +132,9 @@ const cascaderProps = {
 
 watch(visible, (val) => {
   if (val) {
+    serverError.value = ''
     form.value = {
-      occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      occurredAt: localDateTime(),
       category: [],
       accountId: undefined,
       amount: undefined,
@@ -138,10 +149,14 @@ function getAccountDisplayName(acc: Account): string {
 }
 
 function handleClose() {
+  if (submitting.value) return
   visible.value = false
 }
 
 async function handleSubmit() {
+  const owner = identity(), snapshot = JSON.stringify([form.value, props])
+  if (submitting.value || entryWriteState.pending || entryWriteState.uncertain) return
+  serverError.value = ""
   if (!form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
     ElNotification({ type: 'error', title: '错误', message: '请填写完整信息', position: 'bottom-right', duration: 3000 })
     return
@@ -149,6 +164,8 @@ async function handleSubmit() {
 
   try {
     submitting.value = true
+    await ElMessageBox.confirm(`请核对金额 ${form.value.amount} 元、账户 ${form.value.accountId} 及时间 ${form.value.occurredAt}。确认后提交正式接口。`, '确认这一笔', { confirmButtonText: '确认提交', cancelButtonText: '返回修改', type: 'warning' })
+    if (owner !== identity() || !visible.value || snapshot !== JSON.stringify([form.value, props])) { serverError.value = '身份或填写内容已变化，请重新核对。'; return }
     // 处理分类ID：如果是数组，取最后一个；如果是单个值，直接使用
     const categoryId = Array.isArray(form.value.category) 
       ? (form.value.category[form.value.category.length - 1] as number)
@@ -167,8 +184,10 @@ async function handleSubmit() {
       : '提交成功'
     ElNotification.success({ title: '成功', message: quickMessage, position: 'bottom-right', duration: 3000 })
     emit('success')
-    handleClose()
+    visible.value = false
   } catch (error: any) {
+    if (error === 'cancel' || error === 'close') return
+    serverError.value = error.message || '提交失败'
     ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right', duration: 3000 })
   } finally {
     submitting.value = false

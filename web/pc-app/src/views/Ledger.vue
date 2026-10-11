@@ -1,5 +1,9 @@
 <template>
-  <div>
+  <div class="ledger-page">
+    <header class="ledger-hero">
+      <div><span class="ledger-eyebrow">MONEY JOURNAL / 收支日记</span><h1>每一笔，都有迹可循。</h1><p>查找收支、追溯分录，也给今天留下一笔记录。</p></div>
+      <button class="btn primary ledger-add" @click="unifiedEntryVisible = true">＋ 记一笔</button>
+    </header>
     <!-- 记一笔模态框 -->
     <UnifiedEntryModal
       v-model="unifiedEntryVisible"
@@ -24,15 +28,18 @@
     <ReimburseModal
       v-model="reimburseVisible"
       :expense-txn="selectedExpenseTxn"
-      @success="loadTransactions"
+      @success="handleEntrySuccess"
     />
 
     <!-- 流水详情模态框 -->
-    <el-dialog v-model="detailVisible" title="流水详情" width="800px">
-      <div v-if="selectedTxn">
+    <el-dialog v-model="detailVisible" title="流水详情" width="min(800px, 94vw)" @close="detailGate.invalidate()">
+      <p v-if="detailLoading" role="status">正在读取原始分录…</p>
+      <div v-else-if="detailError" role="alert" class="ledger-state"><p>{{ detailError }}</p><button class="btn" @click="retryDetail">重试详情</button></div>
+      <div v-if="selectedTxn && !detailLoading && !detailError">
         <div style="margin-bottom: 16px">
           <div><strong>交易ID：</strong>{{ selectedTxn.txnId }}</div>
           <div><strong>类型：</strong>{{ getTxnTypeLabel(selectedTxn.txnType) }}</div>
+          <div><strong>状态：</strong>{{ selectedTxn.status }} · {{ editReason(selectedTxn, user.user?.id) || "可申请编辑，最终由服务器校验" }}</div>
           <div><strong>时间：</strong>{{ formatDateTime(selectedTxn.requestedAt) }}</div>
           <div v-if="selectedTxn.note"><strong>备注：</strong>{{ selectedTxn.note }}</div>
         </div>
@@ -54,6 +61,7 @@
               </tr>
             </thead>
             <tbody>
+              <tr v-if="postings.length === 0"><td colspan="5" class="ledger-state">服务器未提供分录明细；请核对原记录，不据此补记。</td></tr>
               <tr v-for="(posting, index) in postings" :key="posting.id" :class="{ 'row-even': index % 2 === 0 }">
                 <td>
                   <span class="tag" :class="posting.postingType === 'DEBIT' ? 'blue' : 'green'">
@@ -95,7 +103,8 @@
       <div class="divider"></div>
 
       <!-- 筛选 -->
-      <div class="row-gap" style="margin-bottom: 16px">
+      <div class="ledger-filters">
+        <label class="ledger-field">月份<el-date-picker v-model="selectedMonth" type="month" value-format="YYYY-MM" placeholder="全部月份" clearable @change="handleMonthChange" /></label>
         <el-date-picker
           v-model="filters.dateRange"
           type="daterange"
@@ -108,7 +117,7 @@
         />
         <el-select 
           v-model="filters.parentAccountId" 
-          placeholder="父账户" 
+          placeholder="父账户" aria-label="父账户"
           style="width: 140px" 
           size="small"
           clearable 
@@ -123,7 +132,7 @@
         </el-select>
         <el-select 
           v-model="filters.accountId" 
-          placeholder="子账户" 
+          placeholder="子账户" aria-label="子账户"
           style="width: 140px" 
           size="small"
           clearable 
@@ -139,15 +148,20 @@
         </el-select>
         <el-input
           v-model="filters.note"
-          placeholder="备注查询"
-          style="width: 150px"
+          placeholder="搜索备注，按 Enter 查询" aria-label="搜索备注"
+          style="width: 230px"
           size="small"
           clearable
           @keyup.enter="handleFilterChange"
         />
-        <el-button size="small" @click="handleFilterChange">搜索</el-button>
+        <el-select v-model="filters.txnType" placeholder="所有交易类型" aria-label="交易类型" clearable @change="handleFilterChange"><el-option v-for="option in txnTypeOptions" :key="option.value" :label="option.label" :value="option.value" /></el-select>
+        <el-select v-model="pageCategory" placeholder="分类 · 仅当前页" aria-label="当前页分类" clearable><el-option label="未分类" value="missing" /><el-option label="未知分类" value="unknown" /><el-option v-for="option in categoryOptions" :key="option.value" :label="option.label" :value="String(option.value)" /></el-select>
+        <el-button @click="handleFilterChange">搜索</el-button><el-button @click="resetFilters">重置</el-button>
       </div>
 
+      <p v-if="accountError" role="alert">{{ accountError }} <button class="btn-small" @click="loadAccounts">重试账户</button></p>
+      <p class="sub">服务器共 {{ pagination.total }} 条 · 当前页显示 {{ visibleTransactions.length }} 条。分类仅筛选当前页；全期间分类查询请使用下方统计。</p>
+      <p v-if="loadError" role="alert" class="ledger-state">{{ loadError }} <button class="btn" @click="loadTransactions">重试查询</button></p>
       <!-- 流水列表 -->
       <div class="ledger-table-container hide-scrollbar">
         <table class="ledger-table">
@@ -160,31 +174,32 @@
               <th class="right" style="width: 110px;">叶子账户余额</th>
               <th class="right" style="width: 110px;">父账户余额</th>
               <th style="width: 250px;">备注</th>
-              <th class="right" style="width: 220px; position: sticky; right: 0; background: white; z-index: 10;">操作</th>
+              <th class="right" style="width: 220px;">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="loading">
               <td colspan="8" class="td-muted" style="text-align: center; padding: 24px">加载中...</td>
             </tr>
-            <tr v-else-if="transactions.length === 0">
-              <td colspan="8" class="td-muted" style="text-align: center; padding: 24px">暂无流水记录</td>
+            <tr v-else-if="!loadError && transactions.length === 0">
+              <td colspan="8" class="td-muted" style="text-align: center; padding: 24px">当前查询没有流水记录。可调整条件或点击「记一笔」。</td>
             </tr>
-            <tr v-for="(txn, index) in transactions" :key="txn.txnId" :class="{ 'row-even': index % 2 === 0 }">
+            <tr v-if="!loading && !loadError && transactions.length > 0 && visibleTransactions.length === 0"><td colspan="8" class="ledger-state">本页没有所选分类；可翻页查找，或查看下方分类统计。</td></tr>
+            <tr v-for="(txn, index) in visibleTransactions" :key="txn.txnId" :class="{ 'row-even': index % 2 === 0 }">
               <td class="mono time-cell">
                 <div class="time-date">{{ formatDate(txn.requestedAt) }}</div>
-                <div class="time-time">{{ formatTime(txn.requestedAt) }}</div>
+                <div class="time-time">{{ formatTime(txn.requestedAt) }}</div><small>{{ getTxnTypeLabel(txn.txnType) }}</small>
               </td>
               <td class="right mono" :class="getAmountClass(txn.txnType)">
-                {{ formatAmountWithSign(txn.txnType, (txn as any).summaryAmount || 0) }}
+                {{ rowAmount(txn) }}
               </td>
               <td class="category-cell">
                 <div class="category-parent">{{ getCategoryParent(txn) }}</div>
                 <div class="category-child">{{ getCategoryChild(txn) }}</div>
               </td>
               <td>{{ (txn as any).leafAccountName || '—' }}</td>
-              <td class="right mono">{{ formatCurrency((txn as any).leafAccountBalance || 0) }}</td>
-              <td class="right mono">{{ formatCurrency((txn as any).parentAccountBalance || 0) }}</td>
+              <td class="right mono">{{ knownMoney(txn.leafAccountBalance) }}</td>
+              <td class="right mono">{{ knownMoney(txn.parentAccountBalance) }}</td>
               <td class="td-muted note-cell">{{ txn.note || '' }}</td>
               <td class="right operation-cell">
                 <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: nowrap;">
@@ -205,6 +220,8 @@
                   <button
                     v-if="!txn.orderId"
                     class="btn-small"
+                    :disabled="!!editReason(txn, user.user?.id)"
+                    :title="editReason(txn, user.user?.id)"
                     @click="handleEdit(txn)"
                   >
                     编辑
@@ -243,9 +260,10 @@
         <div>
           <h3>
             流水统计
-            <span class="tag gray tiny">Phase2</span>
+            <span class="tag gray tiny">服务器统计</span>
           </h3>
-          <div class="sub">只统计已确认、未冲销流水；默认不把转账混入生活收支。</div>
+          <div class="sub">只统计已确认、未冲销流水；默认不把转账混入生活收支。统计沿用服务器金额口径，不按列表当前页相加。</div>
+          <p class="sub">日期与账户跟随查询；下方类型、分类独立生效。备注搜索及当前页分类不影响统计。跨币种不在前端折算。</p>
         </div>
         <el-button size="small" :loading="statsLoading" @click="loadStats">刷新统计</el-button>
       </div>
@@ -288,31 +306,32 @@
       </div>
 
       <div v-if="statsLoading" class="td-muted" style="padding: 24px; text-align: center">统计加载中...</div>
-      <template v-else>
+      <p v-else-if="statsError" role="alert" class="ledger-state">{{ statsError }} <button class="btn" @click="loadStats">重试统计</button></p>
+      <template v-else-if="statsSummary">
         <div class="stats-summary-grid">
           <div class="stats-card">
             <div class="stats-label">生活收入</div>
-            <div class="stats-value amount-income">{{ formatCurrency(statsSummary?.totalIncome || 0) }}</div>
+            <div class="stats-value amount-income">{{ knownMoney(statsSummary?.totalIncome) }}</div>
           </div>
           <div class="stats-card">
             <div class="stats-label">生活支出</div>
-            <div class="stats-value amount-expense">{{ formatCurrency(statsSummary?.totalExpense || 0) }}</div>
+            <div class="stats-value amount-expense">{{ knownMoney(statsSummary?.totalExpense) }}</div>
           </div>
           <div class="stats-card">
             <div class="stats-label">生活净流入</div>
-            <div class="stats-value">{{ formatCurrency(statsSummary?.netCashflow || 0) }}</div>
+            <div class="stats-value">{{ knownMoney(statsSummary?.netCashflow) }}</div>
           </div>
           <div class="stats-card">
             <div class="stats-label">投资流入 / 流出</div>
-            <div class="stats-value">{{ formatCurrency(statsSummary?.investmentInflow || 0) }} / {{ formatCurrency(statsSummary?.investmentOutflow || 0) }}</div>
+            <div class="stats-value">{{ knownMoney(statsSummary?.investmentInflow) }} / {{ knownMoney(statsSummary?.investmentOutflow) }}</div>
           </div>
           <div class="stats-card">
             <div class="stats-label">日均支出</div>
-            <div class="stats-value">{{ formatCurrency(statsSummary?.avgDailyExpense || 0) }}</div>
+            <div class="stats-value">{{ knownMoney(statsSummary?.avgDailyExpense) }}</div>
           </div>
           <div class="stats-card">
             <div class="stats-label">交易笔数</div>
-            <div class="stats-value">{{ statsSummary?.txnCount || 0 }}</div>
+            <div class="stats-value">{{ statsSummary?.txnCount ?? "未知" }}</div>
           </div>
         </div>
 
@@ -396,21 +415,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from 'vue'
 import { ElNotification, ElPagination, ElMessageBox } from 'element-plus'
-import { ledgerApi, ledgerStatsApi, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
+import { ledgerApi, ledgerStatsApi, accountApi, buildAccountTree, formatDateTime, formatCurrency, getTxnTypeLabel, txnTypeMap, useAccountStore, useUserStore, expenseCategories, incomeCategories, findCategoryById } from '@wealth-hub/shared'
 import type { LedgerTxn, LedgerTxnDetail, LedgerPosting, LedgerStatsBreakdown, LedgerStatsGroupBy, LedgerStatsPeriod, LedgerStatsSummary, LedgerStatsTop, LedgerStatsTrend } from '@wealth-hub/shared'
 import UnifiedEntryModal from '../components/UnifiedEntryModal.vue'
 import RefundModal from '../components/RefundModal.vue'
 import ReimburseModal from '../components/ReimburseModal.vue'
 
-const accountStore = useAccountStore()
+import { createReadGate, readError, knownNumber } from './managementViewModel'
+import { localDate, monthRange, editReason } from './ledgerViewModel'
+import type { LedgerRow } from './ledgerViewModel'
+import { financialWrite } from '../components/entrySafety'
+
+const accountStore = useAccountStore(), user = useUserStore()
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId])
+const listGate = createReadGate(identity), statsGate = createReadGate(identity), detailGate = createReadGate(identity), accountGate = createReadGate(identity)
+const loadError = ref(''), statsError = ref(''), detailError = ref(''), accountError = ref(''), detailLoading = ref(false)
+const selectedMonth = ref(''), pageCategory = ref('')
+let detailTarget: LedgerTxn | null = null
+const visibleTransactions = computed(() => transactions.value.filter(txn => {
+  if (!pageCategory.value) return true
+  if (pageCategory.value === 'missing') return txn.categoryId == null
+  if (pageCategory.value === 'unknown') return txn.categoryId != null && !findCategoryById([...expenseCategories, ...incomeCategories], Number(txn.categoryId))
+  return String(txn.categoryId) === pageCategory.value
+}))
+const knownMoney = (value: unknown) => knownNumber(value) ? formatCurrency(value) : '未知'
+function rowAmount(txn: LedgerRow) {
+  return knownNumber(txn.summaryAmount) ? `${formatAmountWithSign(txn.txnType, txn.summaryAmount)}${txn.currency ? ` · ${txn.currency}` : ''}` : '未知'
+}
+
 
 // 本地账户数据（确保响应式）
 const localAccounts = ref<any[]>([])
 
 const loading = ref(false)
-const transactions = ref<LedgerTxn[]>([])
+const transactions = ref<LedgerRow[]>([])
 const detailVisible = ref(false)
 const selectedTxn = ref<LedgerTxnDetail | null>(null)
 const postings = ref<LedgerPosting[]>([])
@@ -437,27 +477,32 @@ const pagination = reactive({
   total: 0,
 })
 
+const deletePending = ref(false)
 const filters = reactive({
   dateRange: [] as Date[],
   parentAccountId: undefined as number | undefined,
   accountId: undefined as number | undefined,
   note: '',
+  txnType: undefined as string | undefined,
   startDate: '',
   endDate: '',
 })
 
-// 避免使用 toISOString 触发时区转换（导致日期被减一天），这里按本地时间格式化日期
-function formatLocalDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function handleMonthChange() {
+  const range = monthRange(selectedMonth.value || '')
+  filters.dateRange = []
+  filters.startDate = range?.[0] || ''; filters.endDate = range?.[1] || ''
+  handleFilterChange()
+}
+function resetFilters() {
+  Object.assign(filters, { dateRange: [], parentAccountId: undefined, accountId: undefined, txnType: undefined, note: '', startDate: '', endDate: '' })
+  selectedMonth.value = ''; pageCategory.value = ''; handleFilterChange()
 }
 
 // 父账户列表（有子账户的账户）- 从本地 accounts 计算
 const parentAccounts = computed(() => {
   // API 返回的是树形结构，父账户 = 有 children 的账户
-  const allAccounts = localAccounts.value
+  const allAccounts = buildAccountTree(localAccounts.value)
   if (!allAccounts || allAccounts.length === 0) return []
   
   // 返回有 children 且是 REAL 类型的账户
@@ -484,7 +529,7 @@ const availableChildAccounts = computed(() => {
     return null
   }
   
-  const parentAccount = findAccountById(accountStore.accountTree, filters.parentAccountId)
+  const parentAccount = findAccountById(buildAccountTree(localAccounts.value), filters.parentAccountId)
   if (!parentAccount || !parentAccount.children) return []
   
   // 返回父账户的所有REAL类型的子账户
@@ -507,9 +552,10 @@ function handleParentAccountChange() {
 }
 
 function handleDateRangeChange() {
+  selectedMonth.value = ""
   if (filters.dateRange && filters.dateRange.length === 2) {
-    filters.startDate = formatLocalDate(filters.dateRange[0])
-    filters.endDate = formatLocalDate(filters.dateRange[1])
+    filters.startDate = localDate(filters.dateRange[0])
+    filters.endDate = localDate(filters.dateRange[1])
   } else {
     filters.startDate = ''
     filters.endDate = ''
@@ -524,9 +570,13 @@ function handleFilterChange() {
 }
 
 async function loadTransactions() {
+  if (!listGate.active) return
+  const current = listGate.begin()
+  transactions.value = []; pagination.total = 0; loadError.value = ""
   loading.value = true
   try {
     const response = await ledgerApi.getTransactions({
+      txnType: filters.txnType || undefined,
       startDate: filters.startDate || undefined,
       endDate: filters.endDate || undefined,
       parentAccountId: filters.parentAccountId || undefined,
@@ -535,16 +585,18 @@ async function loadTransactions() {
       page: pagination.page,
       pageSize: pagination.pageSize,
     })
+    if (!current()) return
+    if (!Array.isArray(response.list) || !knownNumber(response.total)) throw new Error("流水响应格式不正确")
     // 确保 categoryId 等字段被正确解析
     transactions.value = response.list.map(txn => ({
       ...txn,
-      categoryId: txn.categoryId ? Number(txn.categoryId) : undefined,
-    })) as LedgerTxn[]
+      categoryId: txn.categoryId != null ? Number(txn.categoryId) : undefined,
+    })) as LedgerRow[]
     pagination.total = response.total
   } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '加载失败', position: 'bottom-right' })
+    if (current()) loadError.value = `${readError(error, '流水')} ${error.message || ''}`
   } finally {
-    loading.value = false
+    if (current()) loading.value = false
   }
 }
 
@@ -564,6 +616,9 @@ function buildStatsQuery() {
 }
 
 async function loadStats() {
+  if (!statsGate.active) return
+  const current = statsGate.begin()
+  statsSummary.value = null; statsTrend.value = []; statsBreakdown.value = []; statsTop.value = []; statsError.value = ""
   statsLoading.value = true
   try {
     const query = buildStatsQuery()
@@ -573,14 +628,15 @@ async function loadStats() {
       ledgerStatsApi.getBreakdown(query),
       ledgerStatsApi.getTop(query),
     ])
+    if (!current()) return
     statsSummary.value = summary
     statsTrend.value = trend
     statsBreakdown.value = breakdown
     statsTop.value = top
   } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '统计加载失败', position: 'bottom-right' })
+    if (current()) statsError.value = `${readError(error, '统计')} ${error.message || ''}`
   } finally {
-    statsLoading.value = false
+    if (current()) statsLoading.value = false
   }
 }
 
@@ -597,17 +653,16 @@ function handlePageSizeChange(pageSize: number) {
 
 
 async function handleViewDetail(txn: LedgerTxn) {
+  detailTarget = txn; detailVisible.value = true; selectedTxn.value = null; postings.value = []; detailError.value = ''
+  const current = detailGate.begin(); detailLoading.value = true
   try {
-    // 对于转账交易，使用 originalTxnId（如果存在）
-    const txnId = (txn as any).originalTxnId || txn.txnId
-    const detail = await ledgerApi.getTransactionDetail(txnId)
-    selectedTxn.value = detail
-    postings.value = detail.postings || []
-    detailVisible.value = true
-  } catch (error: any) {
-    ElNotification.error({ title: '错误', message: error.message || '加载详情失败', position: 'bottom-right' })
-  }
+    const detail = await ledgerApi.getTransactionDetail((txn as LedgerRow).originalTxnId || txn.txnId)
+    if (!current() || !detailVisible.value) return
+    selectedTxn.value = detail; postings.value = detail.postings || []
+  } catch (error: any) { if (current()) detailError.value = `${readError(error, '流水详情')} ${error.message || ''}` }
+  finally { if (current()) detailLoading.value = false }
 }
+function retryDetail() { if (detailTarget) void handleViewDetail(detailTarget) }
 
 function getLeafAccountName(accountId: number): string {
   // 显示规则：父账户名称-叶子账户名称
@@ -724,14 +779,14 @@ function formatTime(dateTimeStr: string): string {
 function getCategoryParent(txn: LedgerTxn): string {
   const categoryId = txn.categoryId ? Number(txn.categoryId) : undefined
   if (!categoryId) {
-    return '—'
+    return '未分类'
   }
   
   const categories = txn.txnType === 'EXPENSE' ? expenseCategories : incomeCategories
   const category = findCategoryById(categories, categoryId)
   
   if (!category) {
-    return '—'
+    return `未知分类（${categoryId}）`
   }
   
   return category.categoryL1
@@ -872,9 +927,11 @@ function formatAmountWithSign(txnType: string, amount: number): string {
 }
 
 async function handleRefund(txn: LedgerTxn) {
+  const current = detailGate.begin()
   try {
     // 获取完整的交易详情（包含postings）
     const detail = await ledgerApi.getTransactionDetail(txn.txnId)
+    if (!current()) return
     selectedExpenseTxn.value = detail as any
     refundVisible.value = true
   } catch (error: any) {
@@ -883,9 +940,11 @@ async function handleRefund(txn: LedgerTxn) {
 }
 
 async function handleReimburse(txn: LedgerTxn) {
+  const current = detailGate.begin()
   try {
     // 获取完整的交易详情（包含postings）
     const detail = await ledgerApi.getTransactionDetail(txn.txnId)
+    if (!current()) return
     selectedExpenseTxn.value = detail as any
     reimburseVisible.value = true
   } catch (error: any) {
@@ -893,22 +952,28 @@ async function handleReimburse(txn: LedgerTxn) {
   }
 }
 
-async function handleRefundSuccess() {
-  // 退款成功后自动刷新账户数据和流水列表
-  await accountStore.fetchAccounts()
-  loadTransactions()
+async function loadAccounts() {
+  const current = accountGate.begin(); accountError.value = ''
+  try { const accounts = await accountApi.getAccounts(); if (current()) { localAccounts.value = accounts; accountStore.accounts = accounts } }
+  catch (error: any) { if (current()) accountError.value = `${readError(error, '账户')} ${error.message || ''}` }
 }
-
 async function handleEntrySuccess() {
-  // 记账成功后自动刷新账户数据和流水列表
-  await accountStore.fetchAccounts()
-  loadTransactions()
+  await loadAccounts()
+  // Refresh all existing views from backend state, even if the account read fails.
+  window.dispatchEvent(new Event('data-refresh'))
 }
+const handleRefundSuccess = handleEntrySuccess
 
 async function handleEdit(txn: LedgerTxn) {
+  const reason = editReason(txn, user.user?.id)
+  if (reason) { ElNotification.warning({ title: "只读流水", message: reason }); return }
+  const current = detailGate.begin()
   try {
     const txnId = (txn as any).originalTxnId || txn.txnId
     const detail = await ledgerApi.getTransactionDetail(txnId)
+    if (!current()) return
+    const reason = editReason(detail, user.user?.id)
+    if (reason) { ElNotification.warning({ title: "只读流水", message: reason }); return }
     editingTxn.value = detail
     editVisible.value = true
   } catch (error: any) {
@@ -919,11 +984,13 @@ async function handleEdit(txn: LedgerTxn) {
 async function handleEditSuccess() {
   editVisible.value = false
   editingTxn.value = null
-  await accountStore.fetchAccounts()
-  loadTransactions()
+  await handleEntrySuccess()
 }
 
 async function handleDelete(txn: LedgerTxn) {
+  if (deletePending.value) return
+  const owner = identity()
+  deletePending.value = true
   try {
     await ElMessageBox.confirm(
       `确定要删除这条流水吗？删除后无法恢复，且会影响后续流水的余额计算。`,
@@ -935,31 +1002,34 @@ async function handleDelete(txn: LedgerTxn) {
       }
     )
     
+    if (owner !== identity()) return
     const txnId = (txn as any).originalTxnId || txn.txnId
-    await ledgerApi.deleteTransaction(txnId)
+    await financialWrite(() => ledgerApi.deleteTransaction(txnId))
     
     ElNotification.success({ title: '成功', message: '流水已删除', position: 'bottom-right' })
-    await accountStore.fetchAccounts()
-    loadTransactions()
+    await handleEntrySuccess()
   } catch (error: any) {
-    if (error !== 'cancel') {
+    if (error !== 'cancel' && error !== 'close') {
       ElNotification.error({ title: '错误', message: error.message || '删除失败', position: 'bottom-right' })
     }
-  }
+  } finally { deletePending.value = false }
 }
 
-onMounted(async () => {
-  // 先加载账户数据，确保父账户下拉框有数据
-  await accountStore.fetchAccounts()
-  // 手动赋值到本地 ref（确保响应式）
-  localAccounts.value = accountStore.accounts || []
-  
-  loadTransactions()
-  loadStats()
-  
-  // 监听全局数据刷新事件
-  window.addEventListener('data-refresh', refreshLedgerPage)
-})
+function clearData() {
+  for (const gate of [listGate, statsGate, detailGate, accountGate]) gate.invalidate()
+  transactions.value = []; pagination.total = 0; statsSummary.value = null; statsTrend.value = []; statsBreakdown.value = []; statsTop.value = []
+  selectedTxn.value = null; postings.value = []; editingTxn.value = null; selectedExpenseTxn.value = null
+  detailVisible.value = false; editVisible.value = false; unifiedEntryVisible.value = false; refundVisible.value = false; reimburseVisible.value = false
+  localAccounts.value = []; detailTarget = null; loading.value = false; statsLoading.value = false
+}
+watch(identity, (_, previous) => {
+  clearData()
+  if (JSON.parse(previous)[1] == null && user.user?.id && user.token) { void loadAccounts(); refreshLedgerPage() }
+}, { flush: 'sync' })
+onMounted(() => { void loadAccounts(); refreshLedgerPage(); window.addEventListener('data-refresh', refreshLedgerPage) })
+onActivated(() => { for (const gate of [listGate, statsGate, detailGate, accountGate]) gate.activate() })
+onDeactivated(() => { clearData(); for (const gate of [listGate, statsGate, detailGate, accountGate]) gate.suspend() })
+onBeforeUnmount(() => { clearData(); window.removeEventListener('data-refresh', refreshLedgerPage); for (const gate of [listGate, statsGate, detailGate, accountGate]) gate.suspend() })
 </script>
 
 <style scoped>
@@ -1126,7 +1196,7 @@ onMounted(async () => {
   white-space: nowrap;
   position: sticky;
   right: 0;
-  background: white;
+  background: var(--card);
   z-index: 5;
   box-shadow: -2px 0 4px rgba(0, 0, 0, 0.05);
 }
@@ -1262,4 +1332,25 @@ onMounted(async () => {
   color: #06b6d4; /* 青色 - 逆回购 */
   font-weight: 500;
 }
+</style>
+
+<style scoped>
+.ledger-page { display: grid; gap: 24px; min-width: 0; }
+.ledger-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 4px 0; }
+.ledger-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--muted); }
+.ledger-hero h1 { margin: 10px 0; font-size: clamp(24px, 2.6vw, 36px); letter-spacing: -.035em; }
+.ledger-hero p { color: var(--muted); margin: 0; }
+.ledger-add { white-space: nowrap; padding: 14px 22px; font-weight: 700; }
+.ledger-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 16px; }
+.ledger-field { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+.ledger-filters :deep(.el-select) { width: 170px; }
+.ledger-state { padding: 24px; color: var(--muted); background: var(--card); border-radius: 12px; }
+.ledger-table th, .ledger-table td { background: var(--card); border-color: var(--line); }
+.ledger-table th { color: var(--muted); }
+.stats-card { background: var(--card); border-color: var(--line); }
+.stats-label { color: var(--muted); }
+.stats-value { font-variant-numeric: tabular-nums; }
+.btn-small:disabled { opacity: .55; cursor: not-allowed; }
+.ledger-table .operation-cell { background: var(--card); }
+@media (max-width: 760px) { .ledger-hero { align-items: start; flex-direction: column; gap: 16px; } .ledger-filters { align-items: start; } }
 </style>

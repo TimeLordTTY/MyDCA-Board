@@ -2,11 +2,14 @@
   <el-dialog
     v-model="visible"
     title="退款"
-    width="600px"
+    width="min(600px, 94vw)"
     :close-on-click-modal="false"
+    :show-close="!submitting"
+    :close-on-press-escape="!submitting"
     @close="handleClose"
   >
-    <el-form :model="form" label-width="120px">
+    <p v-if="serverError" role="alert">{{ serverError }}</p><p v-if="entryWriteState.uncertain" role="alert">{{ uncertainWriteMessage }}</p>
+    <el-form :disabled="submitting" :model="form" label-width="120px">
       <el-form-item label="退款时间" required>
         <el-date-picker
           v-model="form.occurredAt"
@@ -53,10 +56,15 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { ElNotification } from 'element-plus'
-import { useAccountStore } from '@wealth-hub/shared'
-import { ledgerApi, getFundUsageLabel, formatCurrency } from '@wealth-hub/shared'
+import { ElNotification, ElMessageBox } from 'element-plus'
+import { useAccountStore, useUserStore } from '@wealth-hub/shared'
+import { ledgerApi as rawLedgerApi, getFundUsageLabel, formatCurrency } from '@wealth-hub/shared'
 import type { Account, LedgerTxn } from '@wealth-hub/shared'
+
+import { guardWrites, entryWriteState, uncertainWriteMessage } from './entrySafety'
+import { localDateTime } from '../views/ledgerViewModel'
+const ledgerApi = guardWrites(rawLedgerApi, ['refund'])
+const serverError = ref('')
 
 const props = defineProps<{
   modelValue: boolean
@@ -68,7 +76,9 @@ const emit = defineEmits<{
   success: []
 }>()
 
-const accountStore = useAccountStore()
+const accountStore = useAccountStore(), user = useUserStore()
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId])
+watch(identity, () => { visible.value = false }, { flush: 'sync' })
 
 const visible = computed({
   get: () => props.modelValue,
@@ -78,7 +88,7 @@ const visible = computed({
 const submitting = ref(false)
 
 const form = ref({
-  occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+  occurredAt: localDateTime(),
   accountId: undefined as number | undefined,
   amount: undefined as number | undefined,
   note: '',
@@ -131,7 +141,7 @@ watch(visible, (val) => {
     const txnAny = expense as any
     
     // 默认使用原流水的发生时间
-    const defaultOccurredAt = expense.occurredAt || new Date().toISOString().slice(0, 19).replace('T', ' ')
+    const defaultOccurredAt = expense.requestedAt || localDateTime()
     
     form.value = {
       occurredAt: defaultOccurredAt,
@@ -149,8 +159,9 @@ watch(visible, (val) => {
       }
     }
   } else if (val) {
+    serverError.value = ''
     form.value = {
-      occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      occurredAt: localDateTime(),
       accountId: undefined,
       amount: undefined,
       note: '',
@@ -164,10 +175,14 @@ function getAccountDisplayName(acc: Account): string {
 }
 
 function handleClose() {
+  if (submitting.value) return
   visible.value = false
 }
 
 async function handleSubmit() {
+  const owner = identity(), snapshot = JSON.stringify([form.value, props])
+  if (submitting.value || entryWriteState.pending || entryWriteState.uncertain) return
+  serverError.value = ""
   if (!props.expenseTxn) {
     ElNotification.error({ title: '错误', message: '缺少原支出信息', position: 'bottom-right' })
     return
@@ -190,6 +205,8 @@ async function handleSubmit() {
 
   try {
     submitting.value = true
+    await ElMessageBox.confirm(`请核对金额 ${form.value.amount} 元、账户 ${form.value.accountId} 及时间 ${form.value.occurredAt}。确认后提交正式接口。`, '确认这一笔', { confirmButtonText: '确认提交', cancelButtonText: '返回修改', type: 'warning' })
+    if (owner !== identity() || !visible.value || snapshot !== JSON.stringify([form.value, props])) { serverError.value = '身份或填写内容已变化，请重新核对。'; return }
     await ledgerApi.refund(props.expenseTxn.txnId, {
       refundAmount: form.value.amount,
       accountId: form.value.accountId,
@@ -198,8 +215,10 @@ async function handleSubmit() {
     })
     ElNotification.success({ title: '成功', message: '退款成功', position: 'bottom-right' })
     emit('success')
-    handleClose()
+    visible.value = false
   } catch (error: any) {
+    if (error === 'cancel' || error === 'close') return
+    serverError.value = error.message || '提交失败'
     ElNotification.error({ title: '错误', message: error.message || '退款失败', position: 'bottom-right' })
   } finally {
     submitting.value = false

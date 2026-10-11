@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noUnusedLocals": false, "noUnusedParameters": false },
+  "include": ["../src/views/Ledger.vue", "../src/views/ledgerViewModel.ts", "../src/components/UnifiedEntryModal.vue", "../src/components/QuickEntryModal.vue", "../src/components/RefundModal.vue", "../src/components/ReimburseModal.vue", "../src/components/entrySafety.ts", "../src/env.d.ts"],
+  "exclude": []
+}

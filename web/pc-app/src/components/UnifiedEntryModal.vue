@@ -2,34 +2,41 @@
   <el-dialog
     v-model="visible"
     :title="props.editingTxn ? '编辑流水' : '记一笔'"
-    width="800px"
+    width="min(760px, 94vw)"
+    class="entry-dialog"
+    :show-close="!submitting"
+    :close-on-press-escape="!submitting"
     :close-on-click-modal="false"
     @close="handleClose"
   >
+    <ol class="entry-steps" aria-label="记一笔步骤"><li :class="{ active: step === 1 }">01 选类型</li><li :class="{ active: step === 2 }">02 填详情</li><li :class="{ active: step === 3 }">03 人工确认</li></ol>
+    <p v-if="initializationError" role="alert">{{ initializationError }} <el-button @click="loadEntryOptions">重试选项</el-button></p>
+    <p v-if="serverError" role="alert" class="entry-feedback">{{ serverError }}</p>
+    <p v-if="entryWriteState.uncertain" role="alert" class="entry-feedback">{{ uncertainWriteMessage }}</p>
     <!-- 第一步：选择业务类型 -->
     <div v-if="step === 1">
       <div class="sub" style="margin-bottom: 16px">第一步：选择业务类型</div>
       <div class="divider"></div>
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px">
+      <div class="entry-type-grid">
         <button
           v-for="(label, type) in txnTypeOptions"
           :key="type"
-          class="btn"
-          style="flex-direction: column; padding: 16px; text-align: center"
+          class="btn entry-type"
+          :disabled="type === 'ADJUST' || type === 'BOND_REPO'"
           @click="selectType(type)"
         >
           <div style="font-size: 20px; margin-bottom: 4px">{{ label.icon }}</div>
           <div style="font-weight: 600">{{ label.name }}</div>
-          <div class="tiny muted" style="margin-top: 4px">{{ type }}</div>
+          <div class="tiny muted" style="margin-top: 4px">{{ type === 'ADJUST' ? '请到账户管理调整' : type === 'BOND_REPO' ? '当前表单未提供完整闭环' : type === 'BUY' || type === 'SELL' ? '保留原交易与人工结算流程' : '选择并填写' }}</div>
         </button>
       </div>
     </div>
 
     <!-- 第二步：填写详情 -->
-    <div v-else>
+    <div v-else-if="step === 2">
       <div class="sub" style="margin-bottom: 16px">第二步：填写{{ txnTypeOptions[selectedType]?.name }}详情</div>
       <div class="divider"></div>
-      <el-form :model="form" label-width="120px">
+      <el-form :model="form" label-width="120px" :disabled="submitting">
         <!-- 支出/收入 -->
         <template v-if="selectedType === 'EXPENSE' || selectedType === 'INCOME'">
           <el-form-item label="发生时间" required>
@@ -1199,20 +1206,87 @@
         </template>
       </el-form>
       <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px">
-        <el-button @click="step = 1">← 返回</el-button>
+        <el-button :disabled="submitting || !!props.editingTxn" @click="step = 1">← 返回类型</el-button>
         <el-button @click="handleClose">取消</el-button>
-        <el-button type="primary" @click="handleSubmit" :loading="submitting">提交</el-button>
+        <el-button type="primary" @click="reviewEntry" :disabled="!optionsReady || entryWriteState.pending || entryWriteState.uncertain">核对这一笔 →</el-button>
       </div>
     </div>
+    <section v-else class="entry-review">
+      <h3>核对后，再确认。</h3>
+      <p>{{ props.editingTxn ? '更新已有流水，不创建副本。' : '确认后将使用当前类型的正式接口。' }}此处核对的是填写内容，最终金额和权限由服务器校验；场外订单仍需到订单与结算人工预览、确认。</p>
+      <dl><template v-for="row in reviewRows" :key="row.label"><dt>{{ row.label }}</dt><dd>{{ row.value }}</dd></template></dl>
+      <div class="entry-review-actions"><el-button :disabled="submitting" @click="step = 2">返回修改</el-button><el-button :disabled="submitting" @click="handleClose">取消</el-button><el-button type="primary" :loading="submitting" :disabled="writeCommitted || entryWriteState.uncertain || entryWriteState.pending" @click="handleSubmit">{{ props.editingTxn ? '确认更新' : '确认提交' }}</el-button></div>
+    </section>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElNotification } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
-import { ledgerApi, accountApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi, holdingApi } from '@wealth-hub/shared'
-import type { Account, LedgerTxnDetail } from '@wealth-hub/shared'
+import { ledgerApi as rawLedgerApi, accountApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi as rawOrderApi, holdingApi } from '@wealth-hub/shared'
+import type { Account, LedgerTxnDetail, CreateOrderRequest } from '@wealth-hub/shared'
+import { guardWrites, entryWriteState, uncertainWriteMessage } from './entrySafety'
+import { localDateTime, editReason } from '../views/ledgerViewModel'
+import { useUserStore } from '@wealth-hub/shared'
+const user = useUserStore()
+const writeCommitted = ref(false)
+let submissionOwner = ''
+const checkSubmissionOwner = (method: string | symbol) => {
+  if (submissionOwner !== identity() || !visible.value) throw new Error('身份或页面已变化，请重新打开表单核对。')
+  if (reviewedSnapshot !== entrySnapshot()) throw new Error('填写内容已变化，请返回修改并重新核对。')
+  if (props.editingTxn && method !== 'updateTransaction') throw new Error('此业务无法通过当前表单更新，请到原业务页面处理；不会新建副本。')
+}
+const ledgerApi = guardWrites(rawLedgerApi, ['createTransaction', 'updateTransaction', 'quickBuyMoneyMarketFund', 'refund', 'createCustodyTransfer'], () => { writeCommitted.value = true }, checkSubmissionOwner)
+const orderApi = guardWrites(rawOrderApi, ['createOrder'], () => { writeCommitted.value = true }, checkSubmissionOwner)
+// The backend already accepts these fields; keep the existing wire payload while
+// representing the PC entry extension locally instead of editing shared DTOs.
+function createEntryOrder(data: CreateOrderRequest & { requestedAt?: string; expectedConfirmDate?: string; feeEstimate?: number }) { return orderApi.createOrder(data) }
+
+const serverError = ref(''), initializationError = ref(''), optionsReady = ref(false)
+let openSequence = 0
+const identity = () => JSON.stringify([user.token, user.user?.id, user.user?.familyId])
+const entrySnapshot = () => JSON.stringify([form.value, buyFundingLines.value, sellFundingLines.value, expenseFundingLines.value, shareTransfer.value, transferType.value, useComboPayment.value, selectedType.value])
+let reviewedSnapshot = ''
+const reviewRows = computed(() => {
+  const rows = [{ label: '类型', value: txnTypeOptions[selectedType.value]?.name || selectedType.value }]
+  if (props.editingTxn) rows.push({ label: '原交易', value: props.editingTxn.txnId })
+  const labels: Record<string, string> = { amount: '金额（元）', shares: '份额', fee: '费用（元）', occurredAt: '发生时间', requestedAt: '发起时间', navDate: '净值日期', confirmDate: '预计确认日期', nav: '价格 / 净值', transferDate: '转托管日期', transferInPrice: '转入价格', note: '备注', channel: '渠道' }
+  const investment = ['BUY', 'SUBSCRIPTION', 'SELL', 'REDEMPTION'].includes(selectedType.value)
+  const custody = selectedType.value === 'CUSTODY_TRANSFER'
+  const fields = investment ? ['amount', 'shares', 'fee', 'requestedAt', 'navDate', 'confirmDate', 'nav', 'channel', 'note'] : custody ? ['shares', 'transferDate', 'transferInPrice', 'note'] : ['amount', 'occurredAt', 'note']
+  for (const [key, label] of Object.entries(labels)) {
+    if (!fields.includes(key)) continue
+    const value = (form.value as Record<string, unknown>)[key]
+    if (value != null && value !== '') rows.push({ label, value: String(value) })
+    else if (key === 'amount' || key.endsWith('At')) rows.push({ label, value: '未填写' })
+  }
+  if (form.value.productId) rows.push({ label: '产品', value: productStore.products.find(p => p.id === form.value.productId)?.productName || `产品${form.value.productId}` })
+  const accountLabels: Record<string, string> = { accountId: '账户', creditAccountId: '还款账户', fromAccountId: '转出账户', toAccountId: '转入账户' }
+  for (const [key, label] of Object.entries(accountLabels)) { const id = (form.value as Record<string, unknown>)[key] as number | undefined; if (id) rows.push({ label, value: getAccountName(id) || `账户${id}` }) }
+  const categoryId = form.value.category[form.value.category.length - 1]
+  if (categoryId) { const category = findCategoryById([...expenseCategories, ...incomeCategories], Number(categoryId)); rows.push({ label: '分类', value: category ? getCategoryDisplayName(category) : `未知分类（${categoryId}）` }) }
+  for (const [label, lines] of [['付款分配', expenseFundingLines.value], ['买入来源', buyFundingLines.value], ['卖出来源', sellFundingLines.value]] as const) {
+    if (lines.length) rows.push({ label, value: lines.map(line => `${getAccountName(line.accountId) || '未选择账户'}：${'shares' in line ? line.shares : 'amount' in line ? line.amount : ''}`).join('；') })
+  }
+  if (transferType.value === 'SHARE') rows.push({ label: '份额转移', value: `${getAccountName(shareTransfer.value.fromAccountId)} → ${getAccountName(shareTransfer.value.toAccountId)}：${shareTransfer.value.shares ?? '未填'}份` })
+  return rows
+})
+function reviewEntry() {
+  if (!optionsReady.value || submitting.value || entryWriteState.pending || entryWriteState.uncertain) return
+  reviewedSnapshot = entrySnapshot(); serverError.value = ''; step.value = 3
+}
+async function loadEntryOptions() {
+  optionsReady.value = false; initializationError.value = ''
+  const sequence = ++openSequence, owner = identity()
+  try {
+    await Promise.all([accountStore.fetchAccounts(), productStore.fetchProducts(), preloadAllHoldings()])
+    if (sequence !== openSequence || owner !== identity() || !visible.value) return
+    optionsReady.value = true
+  } catch (error: any) { if (sequence === openSequence && owner === identity()) initializationError.value = `账户或产品读取失败，请重试。${error.message || ''}` }
+}
+watch(identity, () => { openSequence++; optionsReady.value = false; visible.value = false }, { flush: 'sync' })
+
 
 // 账户持仓信息类型
 interface AccountHoldingInfo {
@@ -1246,8 +1320,8 @@ const selectedType = ref('')
 const submitting = ref(false)
 
 const form = ref({
-  occurredAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
-  category: [] as number[],
+  occurredAt: localDateTime(),
+  category: [] as Array<string | number>,
   parentAccountId: undefined as number | undefined,
   accountId: undefined as number | undefined,
   creditAccountId: undefined as number | undefined,
@@ -1260,7 +1334,7 @@ const form = ref({
   amount: undefined as number | undefined,
   shares: undefined as number | undefined,
   fee: 0,
-  requestedAt: new Date().toISOString().slice(0, 19).replace('T', ' '),
+  requestedAt: localDateTime(),
   confirmDate: undefined as string | undefined,
   navDate: undefined as string | undefined,
   nav: undefined as number | undefined,  // 净值（用于计算份额）
@@ -2156,20 +2230,12 @@ function getSelectedAccountBalance(parentId: number | undefined, childId: number
   }
 }
 
-onMounted(() => {
-  productStore.fetchProducts()
-  accountStore.fetchAccounts()
-})
-
 watch(visible, async (val) => {
   if (val) {
-    // 打开对话框时，刷新账户和产品数据，并预加载持仓数据
-    await Promise.all([
-      accountStore.fetchAccounts(),
-      productStore.fetchProducts(),
-      preloadAllHoldings()
-    ])
-    
+    serverError.value = ''; reviewedSnapshot = ''; writeCommitted.value = false
+    const owner = identity(), opening = openSequence + 1
+    await loadEntryOptions()
+    if (!visible.value || owner !== identity() || opening !== openSequence) return
     // 编辑模式：回填数据
     if (props.editingTxn) {
       // 先重置表单，确保没有缓存数据
@@ -3219,10 +3285,21 @@ function findAccountInTree(accounts: Account[] | null | undefined, accountId: nu
 // 未使用，已注释
 
 function handleClose() {
+  if (submitting.value) return
+  openSequence++
   visible.value = false
 }
 
 async function handleSubmit() {
+  if (submitting.value || writeCommitted.value || entryWriteState.pending || entryWriteState.uncertain) return
+  if (step.value !== 3 || reviewedSnapshot !== entrySnapshot()) { serverError.value = '填写内容已变化，请重新核对。'; step.value = 2; return }
+  if (!optionsReady.value) return
+  if (props.editingTxn) {
+    const reason = editReason(props.editingTxn, user.user?.id)
+    if (reason) { serverError.value = reason; return }
+  }
+  if (selectedType.value === 'ADJUST' || selectedType.value === 'BOND_REPO') { serverError.value = '当前类型未提供完整表单，请使用对应业务页面。'; return }
+  serverError.value = ''
   if (!selectedType.value) {
     ElNotification.error({ title: '错误', message: '请选择业务类型', position: 'bottom-right', duration: 3000 })
     return
@@ -3230,6 +3307,7 @@ async function handleSubmit() {
 
   try {
     submitting.value = true
+    submissionOwner = identity()
 
     // 根据不同的业务类型构建postings
     const postings: any[] = []
@@ -3352,7 +3430,7 @@ async function handleSubmit() {
         })
       }
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'INCOME') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.category || (Array.isArray(form.value.category) && form.value.category.length === 0)) {
@@ -3424,7 +3502,7 @@ async function handleSubmit() {
         })
       }
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'REPAYMENT') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.creditAccountId || !form.value.amount || !form.value.occurredAt) {
@@ -3482,7 +3560,7 @@ async function handleSubmit() {
         duration: 3000,
       })
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'TRANSFER_OUT' || selectedType.value === 'TRANSFER_IN') {
       // 根据转账类型处理
@@ -3557,7 +3635,7 @@ async function handleSubmit() {
           ElNotification.success({ title: '成功', message: transferMessage, position: 'bottom-right', duration: 3000 })
         }
         emit('success')
-        handleClose()
+        visible.value = false
         return
       } else if (transferType.value === 'SHARE') {
         // 份额转移
@@ -3644,7 +3722,7 @@ async function handleSubmit() {
           : '份额转移成功'
         ElNotification.success({ title: '成功', message: shareTransferMessage, position: 'bottom-right', duration: 3000 })
         emit('success')
-        handleClose()
+        visible.value = false
         return
       }
     } else if (selectedType.value === 'BUY' || selectedType.value === 'SUBSCRIPTION') {
@@ -3876,7 +3954,7 @@ async function handleSubmit() {
           try {
             // 创建订单（占用资金），不立即记账
             // 场外产品需要等待结算确认，份额以结算确认为准
-            await orderApi.createOrder({
+            await createEntryOrder({
               productId: form.value.productId,
               orderType: form.value.orderType,
               amount: totalAmount,
@@ -3934,7 +4012,7 @@ async function handleSubmit() {
       }
       
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'SELL' || selectedType.value === 'REDEMPTION') {
       // 场内卖出：需要数量和价格；场外赎回：需要份额
@@ -4062,12 +4140,12 @@ async function handleSubmit() {
         if (!form.value.accountId) {
           ElNotification.error({
         title: '错误',
-        message: form.value.channel === 'EXCHANGE' ? '请选择券商资金账户' : '请选择到账账户', position: 'bottom-right', duration: 3000 })
+        message: '请选择到账账户', position: 'bottom-right', duration: 3000 })
           return
         }
 
         // 构建 fundingLines：SOURCE（出金账户）+ TARGET（到账账户）
-        const allFundingLines: Array<{ accountId: number; shares?: number; amount?: number; lineType: string }> = []
+        const allFundingLines: Array<{ accountId: number; shares?: number; amount?: number; lineType: 'SOURCE' | 'TARGET' }> = []
         
         // 出金账户（SOURCE）- 从哪些账户赎回份额
         for (const fl of finalFundingLines) {
@@ -4099,8 +4177,8 @@ async function handleSubmit() {
           note: `赎回场外${product.productName}`,
           fundingLines: allFundingLines,
         }
-        console.log('创建赎回订单 payload:', JSON.stringify(orderPayload, null, 2))
-        await orderApi.createOrder(orderPayload)
+        // Financial payloads stay out of console logs.
+        await createEntryOrder(orderPayload)
         ElNotification.success({
           title: '成功',
           message: '赎回订单已创建，请在"订单&结算"中确认结算',
@@ -4108,7 +4186,7 @@ async function handleSubmit() {
           duration: 3000
         })
         emit('success')
-        handleClose()
+        visible.value = false
         return
       }
 
@@ -4183,7 +4261,7 @@ async function handleSubmit() {
         ElNotification.success({ title: '成功', message: sellMessage, position: 'bottom-right', duration: 3000 })
       }
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'BOND_REPO') {
       if (!form.value.parentAccountId || !form.value.accountId || !form.value.amount || !form.value.occurredAt || !form.value.repoDays) {
@@ -4220,7 +4298,7 @@ async function handleSubmit() {
         : '逆回购记录成功'
       ElNotification.success({ title: '成功', message: repoMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'CUSTODY_TRANSFER') {
       if (!form.value.productId || !form.value.shares || !form.value.transferDate || form.value.transferInPrice === undefined) {
@@ -4274,7 +4352,7 @@ async function handleSubmit() {
         : '转托管成功'
       ElNotification.success({ title: '成功', message: custodyMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'REFUND') {
       if (!form.value.relatedTxnId || !form.value.parentAccountId || !form.value.accountId || !form.value.amount) {
@@ -4296,7 +4374,7 @@ async function handleSubmit() {
         : '退款成功'
       ElNotification.success({ title: '成功', message: refundMessage, position: 'bottom-right', duration: 3000 })
       emit('success')
-      handleClose()
+      visible.value = false
       return
     } else if (selectedType.value === 'ADJUST') {
       // 余额调整
@@ -4315,6 +4393,7 @@ async function handleSubmit() {
     ElNotification.error({ title: '错误', message: '不支持的业务类型', position: 'bottom-right', duration: 3000 })
     return
   } catch (error: any) {
+    serverError.value = writeCommitted.value ? '流水已提交，但后续刷新或配套更新失败。请关闭并刷新核对，勿重复记账。' : error.message || '提交失败'
     ElNotification.error({ title: '错误', message: error.message || '提交失败', position: 'bottom-right', duration: 3000 })
   } finally {
     submitting.value = false
@@ -4354,4 +4433,20 @@ async function handleSubmit() {
   background: var(--primary2);
   border-color: var(--primary2);
 }
+</style>
+
+<style scoped>
+.entry-steps { display: flex; list-style: none; padding: 0; gap: 12px; margin: 0 0 24px; color: var(--muted); font-size: 12px; }
+.entry-steps li { border-top: 2px solid var(--line); padding: 10px 0; flex: 1; }
+.entry-steps .active { color: var(--text); border-color: var(--primary); font-weight: 700; }
+.entry-type-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.entry-type { flex-direction: column; min-height: 116px; padding: 18px 12px; text-align: center; background: var(--card); border-color: var(--line); }
+.entry-type:disabled { opacity: .55; cursor: not-allowed; }
+.entry-review h3 { font-size: 26px; margin: 0 0 12px; }
+.entry-review p { color: var(--muted); line-height: 1.7; }
+.entry-review dl { display: grid; grid-template-columns: 120px 1fr; gap: 12px; padding: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+.entry-review dt { color: var(--muted); }.entry-review dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.entry-review-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 12px; }
+.entry-feedback { color: var(--text); padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+@media (max-width: 600px) { .entry-type-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
