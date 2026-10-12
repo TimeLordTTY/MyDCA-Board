@@ -1,0 +1,60 @@
+.lab, .workbench { min-width: 0; color: var(--text); }
+.lab { max-width: 1380px; margin: auto; padding: 12px 0; }
+.lab-header, .heading, .workbench header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px; }
+h1, h2 { font-family: 'Songti SC', 'STSong', 'SimSun', serif; letter-spacing: -.03em; font-weight: 600; }
+h1 { font-size: clamp(30px, 3.5vw, 46px); margin: 16px 0; }
+h2 { font-size: 27px; margin: 12px 0; scroll-margin-top: 24px; }
+h3 { font-size: 19px; line-height: 1.5; }
+p { font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+small { color: var(--muted); font-size: 11px; line-height: 1.7; }
+header small, .heading small, .panel > small { font-weight: 700; letter-spacing: .12em; }
+.lab-stamp { border: 1px solid var(--border); border-radius: 50%; width: 96px; height: 96px; display: grid; place-content: center; text-align: center; font-size: 13px; line-height: 1.7; transform: rotate(-8deg); background: var(--wh-decoration, var(--primarySoft)); }
+.lab-boundary { border-left: 4px solid var(--primary); padding: 18px 22px; background: var(--wh-decoration, var(--primarySoft)); border-radius: 4px 18px 18px 4px; margin: 24px 0; }
+.lab-boundary strong { margin-right: 16px; }
+.lab-nav { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0; }
+.lab-nav a { color: var(--text); background: var(--card); border: 1px solid var(--line); padding: 12px 18px; border-radius: 999px; font-size: 13px; text-decoration: none; }
+.lab-nav a:hover { background: var(--wh-decoration, var(--primarySoft)); }
+.panel, .workbench { background: var(--card); border: 1px solid var(--line); border-radius: 23px; padding: 28px; margin: 24px 0; }
+.workbench { border-top: 4px solid var(--primary); }
+.columns { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 28px; margin-top: 24px; }
+.columns nav { min-width: 0; }
+.columns nav button { display: block; width: 100%; text-align: left; margin: 0 0 10px; border-radius: 16px; padding: 18px; background: var(--bg); color: var(--text); border: 1px solid var(--line); overflow-wrap: anywhere; }
+.columns nav button[aria-pressed='true'] { border-color: var(--primary); background: var(--wh-decoration, var(--primarySoft)); }
+.columns nav span { display: block; font-size: 12px; margin-top: 8px; }
+article { min-width: 0; overflow-wrap: anywhere; }
+label { display: grid; gap: 8px; margin: 16px 0; font-size: 13px; }
+input, select, textarea { width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; box-sizing: border-box; }
+textarea { resize: vertical; min-height: 96px; }
+input[type='checkbox'] { width: 18px; height: 18px; padding: 0; flex-shrink: 0; accent-color: var(--primary); }
+button { min-height: 44px; background: var(--primary); color: var(--wh-on-accent, #fff); border: 1px solid var(--primary); border-radius: 999px; padding: 11px 18px; font: inherit; font-size: 13px; margin: 4px; cursor: pointer; white-space: normal; }
+button:disabled { color: var(--muted); background: var(--bg); border-color: var(--line); cursor: not-allowed; }
+fieldset { border: 1px solid var(--line); border-radius: 16px; padding: 20px; margin: 24px 0; min-width: 0; }
+.run-form, .research-gates { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 20px; align-items: end; }
+.run-form button { margin: 16px 0; }
+.notice, .empty { color: var(--muted); }
+.empty { padding: 18px 0; }
+.error { color: var(--wh-danger, #b52c33); }
+.warning, .compare-warning { padding: 14px 18px; border: 1px solid var(--wh-warning, #86570e); border-radius: 12px; color: var(--wh-warning, #86570e); background: var(--bg); line-height: 1.8; overflow-wrap: anywhere; }
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 24px 0; }
+.metrics div { background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.metrics span { display: block; font-size: 12px; color: var(--muted); }
+.metrics strong { display: block; font-size: 21px; margin-top: 10px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.history-row, .run { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.history-row label, .run { display: flex; align-items: flex-start; gap: 12px; overflow-wrap: anywhere; }
+.history-row small, .run small { display: block; margin-top: 6px; }
+.status { font-size: 12px; color: var(--wh-warning, #86570e); }
+.status[data-status='SUCCESS'] { color: var(--wh-positive, #28704f); }
+.status[data-status='FAILED'], .status[data-status='INVALID'] { color: var(--wh-danger, #b52c33); }
+.compare-scroll { overflow: auto; max-width: 100%; margin: 24px 0; }
+table { width: 100%; min-width: 640px; border-collapse: collapse; text-align: left; font-size: 13px; }
+th, td { min-width: 140px; padding: 14px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+th { background: var(--bg); }
+.candidate { padding: 24px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.candidate ul { padding-left: 22px; font-size: 13px; line-height: 1.8; }
+.evidence, pre { background: var(--bg); padding: 16px; border-radius: 12px; margin: 12px 0; font-size: 12px; line-height: 1.8; }
+.evidence span { display: block; margin-top: 6px; }
+summary { cursor: pointer; padding: 12px 0; font-size: 13px; font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 1100px) { .run-form, .research-gates { grid-template-columns: repeat(2, minmax(0, 1fr)); } .columns { grid-template-columns: 230px minmax(0, 1fr); gap: 18px; } }
+@media (max-width: 760px) { .columns, .run-form, .research-gates { grid-template-columns: 1fr; } .panel, .workbench { padding: 18px; border-radius: 18px; } fieldset { padding: 14px; } .lab-stamp { width: 76px; height: 76px; } .heading, .workbench header { align-items: flex-start; } }

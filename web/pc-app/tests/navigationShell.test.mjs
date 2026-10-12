@@ -65,6 +65,7 @@ test('mount, navigation and layout controls never trigger historical writes; ref
   assert.equal(f.state.mobileMenuOpen.value, false)
   assert.equal(f.state.showBusinessActions.value, false)
   f.route.name = 'DataReadiness'; await vue.nextTick(); assert.equal(f.state.showBusinessActions.value, false)
+  f.route.name = 'StrategyLab'; await vue.nextTick(); assert.equal(f.state.showBusinessActions.value, false)
   f.route.name = 'Ledger'; await vue.nextTick(); assert.equal(f.state.showBusinessActions.value, true)
   assert.deepEqual(f.calls, ['identity'])
   await f.state.handleRefresh()

@@ -13,7 +13,8 @@ script = script.replace(/import \{([^}]+)\} from '@wealth-hub\/shared'/g, (_, na
 const code = ts.transpileModule(script, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText
 const fixture = (overrides = {}) => ({ id: 'plan-1', name: '研究', status: 'DRAFT', description: '', paramsDraft: { interval_days: 30 }, sourceRunIds: ['source'], warnings: [], ...overrides })
 async function setup(overrides = {}) {
-  const calls = [], events = []
+  const calls = [], events = [], unmounts = []
+  const user = vue.reactive({ token: 'test-session', user: { id: 1, familyId: 10 } })
   const api = {
     list: async () => [fixture()], detail: async () => fixture(),
     create: async request => { calls.push(['create', request]); return fixture() },
@@ -21,12 +22,51 @@ async function setup(overrides = {}) {
     run: async (id, dataset) => { calls.push(['run', id, dataset]); return { history_run_id: 'new-run' } },
     ...overrides,
   }
-  globalThis.__researchMocks = { vue: { ...vue, onMounted() {} }, researchPlanApi: api, backtestApi: { history: async () => [{ historyRunId: 'new-run', researchPlanId: 'plan-1', status: 'SUCCESS' }, { historyRunId: 'other', researchPlanId: 'other-plan', status: 'SUCCESS' }] } }
+  globalThis.__researchMocks = { vue: { ...vue, onMounted() {}, onBeforeUnmount(fn) { unmounts.push(fn) } }, useUserStore: () => user, researchPlanApi: api, backtestApi: { history: async () => [{ historyRunId: 'new-run', researchPlanId: 'plan-1', status: 'SUCCESS' }, { historyRunId: 'other', researchPlanId: 'other-plan', status: 'SUCCESS' }] } }
   const module = await import(`data:text/javascript,${encodeURIComponent(code)}#${Math.random()}`)
   const props = { candidate: { candidate_id: 'candidate-hash', run_ids: ['source'], strategy: 'pure_sip', strategy_version: '1' }, thresholds: { minSampleDays: 180 }, datasets: ['nav.csv'] }
   const state = module.default.setup(props, { expose() {}, emit: (...args) => events.push(args) })
-  return { state, calls, events }
+  return { state, calls, events, user, unmount: () => unmounts.forEach(fn => fn()), props }
 }
+
+test('unsaved changes and datasets outside the server list cannot run; saving enables run', async () => {
+  const { state: s, calls } = await setup()
+  await s.open('plan-1'); s.dataset.value = 'nav.csv'; s.params.value = '{"interval_days":15}'
+  assert.equal(s.dirty.value, true)
+  await s.run(); assert.equal(calls.length, 0)
+  s.status.value = 'ACTIVE'
+  await s.save(); assert.equal(s.dirty.value, false); assert.equal(s.plan.value.status, 'ACTIVE')
+  s.dataset.value = 'arbitrary.csv'; await s.run(); assert.equal(calls.length, 1)
+  s.dataset.value = 'nav.csv'; await s.run(); assert.equal(calls.at(-1)[0], 'run')
+})
+
+test('late detail and mutations cannot repopulate an unmounted or changed owner workbench', async () => {
+  let resolve
+  const { state: s, user, calls } = await setup({ detail: () => new Promise(r => { resolve = r }) })
+  const pending = s.open('plan-1')
+  user.user.familyId = 20
+  resolve(fixture()); await pending
+  assert.equal(s.plan.value, null)
+  s.newName.value = '研究'; await s.create(); assert.equal(calls.length, 0)
+  const another = await setup({ detail: () => new Promise(r => { resolve = r }) })
+  const detail = another.state.open('plan-1'); another.unmount(); resolve(fixture()); await detail
+  assert.equal(another.state.plan.value, null)
+})
+
+test('plan pagination retains page on error, retry appends; timeout and invalid runs stay unselectable', async () => {
+  let requests = 0
+  const { state: s } = await setup({ list: async page => {
+    requests++
+    if (requests === 2) throw new Error('Network Error')
+    return page === 0 ? Array.from({ length: 20 }, (_, id) => fixture({ id: String(id) })) : [fixture({ id: 'last' })]
+  } })
+  await s.loadMore(); assert.equal(s.more.value, true)
+  await s.loadMore(); assert.equal(s.page.value, 1); assert.equal(s.plans.value.length, 20)
+  await s.loadMore(); assert.equal(s.plans.value.length, 21); assert.equal(s.more.value, false)
+  s.runs.value = [{ historyRunId: 'timeout', status: 'TIMEOUT' }, { historyRunId: 'invalid', status: 'INVALID' }]
+  s.toggle('timeout'); s.toggle('invalid'); assert.deepEqual(s.chosen.value, [])
+  assert.equal(s.runStatus('TIMEOUT'), '超时'); assert.equal(s.runStatus('INVALID'), '无效')
+})
 
 test('create copies candidate references, edits bounded draft and archives explicitly', async () => {
   const { state: s, calls } = await setup()
