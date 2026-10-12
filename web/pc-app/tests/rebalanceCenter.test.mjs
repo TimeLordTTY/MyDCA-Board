@@ -30,10 +30,19 @@ test('UNKNOWN never becomes zero, stale dates explicit and after weights use rou
   assert.match(model.percent(null), /UNKNOWN/); assert.match(model.amount(null), /UNKNOWN/)
   assert.equal(model.percent(0), '0.00%')
   const p = { status: 'OK', currentWeight: 0.4, totalAssets: 1000, dataDate: '2026-10-02', prices: [] }
-  assert.equal(model.afterWeight(p, { selectedAdjustment: 100 }), 0.5)
+  assert.equal(model.afterWeight(p, { selectedAdjustment: 100, remainderAdjustment: -100 }), 0.5)
   assert.equal(model.afterWeight({ ...p, status: 'UNKNOWN' }, { selectedAdjustment: 100 }), null)
   assert.match(model.dataState(p, '2026-10-03'), /陈旧/)
   assert.match(model.dataState({ ...p, status: 'UNKNOWN' }, '2026-10-02'), /UNKNOWN/)
+})
+
+test('inconsistent or nonfinite scenario inputs cannot produce a plausible adjusted weight', () => {
+  const p = { status: 'OK', currentWeight: 0.4, totalAssets: 1000 }
+  for (const s of [null, { selectedAdjustment: 100, remainderAdjustment: -90 }, { selectedAdjustment: NaN, remainderAdjustment: 0 }, { selectedAdjustment: 100, remainderAdjustment: Infinity }]) assert.equal(model.afterWeight(p, s), null)
+  const s = { selectedAdjustment: 0, remainderAdjustment: 0 }
+  assert.equal(model.afterWeight(p, s), 0.4)
+  for (const status of ['IN_RANGE', 'BELOW_BAND', 'ABOVE_BAND']) assert.equal(model.afterWeight({ ...p, status }, s), 0.4)
+  for (const extra of [{ status: 'STALE' }, { currentWeight: null }, { totalAssets: 0 }, { totalAssets: Infinity }]) assert.equal(model.afterWeight({ ...p, ...extra }, s), null)
 })
 test('preview is explicit, permission errors clear evidence, retry recovers', async () => {
   let previews = 0, fail = false

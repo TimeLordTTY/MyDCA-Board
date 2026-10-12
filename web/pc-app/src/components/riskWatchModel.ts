@@ -15,6 +15,7 @@ export function validateRisk(c: RiskConfig): string {
 }
 export function evidenceState(s: RiskSnapshot, today = new Date().toLocaleDateString('en-CA')): string {
   if (s.status === 'UNKNOWN' || (s.observedValue === null && s.threshold !== null)) return 'UNKNOWN / 数据未知'
+  if (s.status === 'STALE') return '陈旧快照 / 请重新评估'
   if (!s.sourceDataTimestamp || s.sourceDataTimestamp.slice(0, 10) !== today) return '陈旧快照 / 请重新评估'
   return s.matched ? '当前命中' : '未命中'
 }

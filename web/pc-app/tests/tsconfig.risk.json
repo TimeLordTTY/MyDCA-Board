@@ -1,0 +1,5 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/views/RiskCenter.vue", "../src/components/riskWatchModel.ts", "../src/env.d.ts"],
+  "exclude": []
+}

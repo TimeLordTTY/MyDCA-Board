@@ -1,0 +1,48 @@
+.risk-center, .allocation-center { max-width: 1380px; margin: auto; padding: 12px 0; color: var(--text); min-width: 0; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+header > div { flex: 1; min-width: 230px; }
+h1, h2 { font-family: 'Songti SC', 'STSong', 'SimSun', serif; font-weight: 600; letter-spacing: -.03em; }
+h1 { font-size: clamp(30px, 3.5vw, 46px); margin: 16px 0; }
+h2 { font-size: 26px; margin: 12px 0; scroll-margin-top: 24px; }
+h3 { font-size: 17px; line-height: 1.6; margin: 0 0 12px; }
+small { font-size: 11px; letter-spacing: .12em; color: var(--muted); }
+p, li { font-size: 13px; line-height: 1.85; color: var(--muted); overflow-wrap: anywhere; }
+.watch-stamp { width: 92px; height: 92px; display: grid; place-content: center; border-radius: 50%; border: 1px solid var(--border); background: var(--wh-decoration, var(--primarySoft)); transform: rotate(-8deg); text-align: center; font-size: 13px; line-height: 1.8; }
+.boundary { padding: 20px 24px; background: var(--wh-decoration, var(--primarySoft)); border-left: 4px solid var(--primary); border-radius: 4px 20px 20px 4px; margin: 24px 0; color: var(--text); }
+.boundary strong { margin-right: 16px; }
+.section-nav, .links { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.section-nav a { padding: 12px 18px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); color: var(--text); text-decoration: none; font-size: 13px; }
+a { color: var(--primary); font-size: 13px; line-height: 1.8; }
+.workspace { display: grid; grid-template-columns: 310px minmax(0, 1fr); gap: 28px; margin-top: 30px; }
+aside, .evidence-workspace, article { min-width: 0; }
+article, form { border: 1px solid var(--line); background: var(--card); border-radius: 23px; padding: 24px; margin-bottom: 18px; overflow-wrap: anywhere; }
+aside article { background: var(--bg); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 16px; }
+.cards article { border-top: 4px solid var(--primary); }
+.cards .warning { border-top-color: var(--wh-warning, #86570e); }
+.cards .critical { border-top-color: var(--wh-danger, #b52c33); }
+.scenario, .source-note { border-top: 4px solid var(--border); }
+.source-note { background: var(--wh-decoration, var(--primarySoft)); }
+.filters, .bands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+label { display: flex; flex-direction: column; gap: 8px; margin: 14px 0; font-size: 13px; }
+input, select, textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; }
+textarea { min-height: 96px; resize: vertical; }
+input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--primary); }
+.check { flex-direction: row; align-items: center; }
+fieldset { border: 0; padding: 0; min-width: 0; }
+button { border: 1px solid var(--primary); border-radius: 999px; padding: 10px 16px; min-height: 44px; color: var(--wh-on-accent, #fff); background: var(--primary); font: inherit; font-size: 13px; cursor: pointer; margin: 4px; white-space: normal; }
+button:disabled { background: var(--bg); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
+.error { color: var(--wh-danger, #b52c33); }
+.identifier { font: 11px ui-monospace, monospace; }
+dt { color: var(--muted); font-size: 12px; }
+dd { margin: 6px 0 16px; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+details { border-top: 1px solid var(--line); padding-top: 12px; }
+summary { cursor: pointer; font-size: 13px; }
+.table-scroll { overflow: auto; }
+table { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { padding: 14px; border-bottom: 1px solid var(--line); text-align: left; }
+caption { text-align: left; padding: 12px; color: var(--muted); }
+:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; }
+@media (max-width: 1100px) { .workspace { grid-template-columns: 270px minmax(0, 1fr); gap: 20px; } article, form { padding: 20px; } }
+@media (max-width: 760px) { .workspace { grid-template-columns: 1fr; } .bands, .filters { grid-template-columns: 1fr; gap: 0; } .watch-stamp { display: none; } header { gap: 8px; } .boundary { padding: 18px; } }

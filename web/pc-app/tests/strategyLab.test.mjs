@@ -115,5 +115,5 @@ test('same-page keyboard anchors, narrow-screen styles and backend-only research
   const css = await readFile(new URL('../src/styles/strategy-lab.css', import.meta.url), 'utf8')
   assert.match(css, /max-width: 760px/); assert.match(css, /focus-visible/); assert.match(css, /var\(--wh-decoration/)
   const layout = await readFile(new URL('../src/layouts/MainLayout.vue', import.meta.url), 'utf8')
-  assert.match(layout, /showBusinessActions = computed\(\(\) => !\['GoalBudgetCenter', 'DataReadiness', 'StrategyLab'\]/)
+  assert.match(layout, /showBusinessActions = computed\(\(\) => !\['GoalBudgetCenter', 'DataReadiness', 'StrategyLab'[,\]]/)
 })

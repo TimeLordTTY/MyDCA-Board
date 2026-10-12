@@ -15,11 +15,12 @@ export function validateAllocation(c: AllocationConfig): string {
 export const percent = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? 'UNKNOWN / 未知' : `${(n * 100).toFixed(2)}%`
 export const amount = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? 'UNKNOWN / 未知' : `¥${n.toFixed(2)}`
 export function afterWeight(p: RebalancePreview, s: RebalanceScenario | null): number | null {
-  if (p.status === 'UNKNOWN' || !s || p.currentWeight === null || !p.totalAssets || p.totalAssets <= 0) return null
+  if (!['OK', 'IN_RANGE', 'BELOW_BAND', 'ABOVE_BAND'].includes(p.status) || !s || p.currentWeight === null || !Number.isFinite(p.currentWeight) || !p.totalAssets || !Number.isFinite(p.totalAssets) || p.totalAssets <= 0 || !Number.isFinite(s.selectedAdjustment) || !Number.isFinite(s.remainderAdjustment) || Math.abs(s.selectedAdjustment + s.remainderAdjustment) > 0.005) return null
   return p.currentWeight + s.selectedAdjustment / p.totalAssets
 }
 export function dataState(p: RebalancePreview, today = new Date().toLocaleDateString('en-CA')): string {
   if (p.status === 'UNKNOWN') return 'UNKNOWN / 行情或组合数据不足'
+  if (!['OK', 'IN_RANGE', 'BELOW_BAND', 'ABOVE_BAND'].includes(p.status)) return '行情或快照陈旧，请核对数据日期'
   if (!p.dataDate || p.dataDate !== today || p.prices.some(r => r.status !== 'OK' || !r.priceDate || !r.valuationDate || r.priceDate < today || r.valuationDate < today)) return '行情或快照陈旧，请核对数据日期'
   return '请核对下方数据时间与价格来源'
 }

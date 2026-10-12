@@ -58,6 +58,7 @@ test('unknown is never displayed as zero or recovery; stale evidence stays expli
   assert.match(evidenceState({ ...s, observedValue: null }, '2026-10-02'), /UNKNOWN/)
   assert.match(evidenceState({ ...s, status: 'UNKNOWN' }, '2026-10-02'), /UNKNOWN/)
   assert.match(evidenceState(s, '2026-10-03'), /陈旧/)
+  assert.match(evidenceState({ ...s, status: 'STALE' }, '2026-10-02'), /陈旧/)
 })
 test('history deduplication preserves server ack/mute/resolved states', () => {
   const event = { fingerprint: 'hash', evidence: { ruleId: 'r' }, state: 'OPEN' }
@@ -68,6 +69,23 @@ test('history deduplication preserves server ack/mute/resolved states', () => {
   assert.equal(dedupeEvents([event, { ...event, evidence: { ruleId: 'other' } }]).length, 2)
   assert.match(riskError({ response: { status: 403 } }), /权限/)
   assert.match(riskError({ response: { status: 401 } }), /登录/)
+})
+
+test('history filters keep acknowledged and muted evidence distinct from resolved evidence', async () => {
+  const state = await setup({})
+  state.rules.value = [{ id: 'r', config: config() }]
+  state.events.value = ['OPEN', 'ACKNOWLEDGED', 'MUTED', 'RESOLVED'].map((status, i) => ({ state: status, fingerprint: String(i), evidence: { ruleId: 'r', severity: 'WARNING', status: 'UNKNOWN' } }))
+  for (const status of ['OPEN', 'ACKNOWLEDGED', 'MUTED', 'RESOLVED']) {
+    state.stateFilter.value = status
+    assert.deepEqual(state.filteredEvents.value.map(e => e.state), [status])
+    assert.equal(state.filteredEvents.value[0].evidence.status, 'UNKNOWN')
+  }
+  state.stateFilter.value = 'UNRESOLVED'
+  assert.equal(state.filteredEvents.value.length, 3)
+  state.productFilter.value = '2'
+  assert.equal(state.filteredEvents.value.length, 0)
+  state.productFilter.value = '1'; state.severityFilter.value = 'CRITICAL'
+  assert.equal(state.filteredEvents.value.length, 0)
 })
 test('API routes and payloads only write observation metadata', async () => {
   const { apiClient, riskWatchApi } = await import('../../shared/dist/index.js')
