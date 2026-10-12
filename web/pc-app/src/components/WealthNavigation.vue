@@ -1,9 +1,10 @@
 <template>
   <nav class="wealth-navigation" aria-label="财富中枢业务导航">
-    <router-link v-for="item in navItems" :key="item.name" :to="item.path"
+    <router-link v-for="(item, index) in navItems" :key="item.name" :to="item.path"
       class="wealth-nav-link" :class="{ 'is-current': route.name === item.name }"
       :aria-label="item.label" :aria-current="route.name === item.name ? 'page' : undefined"
-      :title="item.label" @click="emit('navigate')">
+      :aria-keyshortcuts="index < 9 ? `Alt+${index + 1}` : undefined"
+      :title="index < 9 ? `${item.label}（Alt+${index + 1}）` : item.label" @click="emit('navigate')">
       <component :is="icons[item.icon as keyof typeof icons]" class="wealth-nav-icon" aria-hidden="true" />
       <span class="wealth-nav-label">{{ item.label }}</span>
     </router-link>

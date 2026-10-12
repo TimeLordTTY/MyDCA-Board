@@ -25,6 +25,7 @@
 .wealth-identity a { color: var(--text); overflow-wrap: anywhere; }
 .wealth-identity > span { grid-row: 2; color: var(--muted); overflow-wrap: anywhere; }
 .wealth-identity button { grid-column: 2; grid-row: 1 / 3; }
+.wealth-identity .wealth-identity-error { grid-column: 1 / -1; grid-row: 3; margin: 8px 0 0; color: var(--wh-danger); }
 .wealth-actions { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
 .wealth-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 24px 32px; scroll-padding: 24px; }
 .wealth-content > * { min-height: 100%; }

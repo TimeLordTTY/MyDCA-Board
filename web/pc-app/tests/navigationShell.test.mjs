@@ -35,14 +35,14 @@ async function setup({ logoutError = false } = {}) {
   const calls = [], mounted = [], disposed = []
   const route = vue.reactive({ name: 'Dashboard', fullPath: '/dashboard' })
   const store = { user: null, token: 'test-only', async fetchCurrentUser() { calls.push('identity') }, async logout() { calls.push('logout'); if (logoutError) throw Error('offline') }, $patch(v) { Object.assign(this, v) } }
-  globalThis.window = { matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), dispatchEvent: e => calls.push(e.type) }
+  globalThis.window = { addEventListener() {}, removeEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }), dispatchEvent: e => calls.push(e.type) }
   globalThis.localStorage = { removeItem: key => calls.push(`remove:${key}`) }
   globalThis.__shell = {
     vue: { ...vue, onMounted: cb => mounted.push(cb), onUnmounted: cb => disposed.push(cb) },
-    useRoute: () => route, useRouter: () => ({ replace: async target => calls.push(target.name) }),
+    useRoute: () => route, useRouter: () => ({ replace: async target => calls.push(target.name), push: async target => calls.push(target) }),
     ElNotification: { info() {}, success() {}, error() {} },
     productApi: {}, apiClient: {}, ledgerApi: { recalculateAllBalanceHistory: async () => { calls.push('recalculate'); return { message: 'mock', durationMs: 0 } } },
-    useUserStore: () => store, ...navigation,
+    useUserStore: () => store, readSessionIdentity: user => user.fetchCurrentUser(), ...navigation,
   }
   let script = compileScript(parse(layout).descriptor, { id: 'shell' }).content
   script = script.replace(/import \{([^}]+)\} from ['"]vue['"]/g, (_, names) => `const {${names.replace(/ as /g, ': ')}} = globalThis.__shell.vue`)
@@ -83,6 +83,22 @@ test('logout clears credentials and store, and replaces protected history even o
     assert.equal(f.state.loggingOut.value, false)
     f.dispose()
   }
+})
+
+test('Alt shortcuts switch real routes but respect text entry and modal focus boundaries', async () => {
+  const f = await setup()
+  globalThis.document = { querySelectorAll: () => [] }
+  let prevented = 0
+  const event = { key: '8', altKey: true, preventDefault: () => prevented++ }
+  f.state.navigateByKeyboard(event)
+  assert.deepEqual(f.calls, ['/accounts']); assert.equal(prevented, 1)
+  f.state.navigateByKeyboard({ ...event, target: { closest: () => ({}) } })
+  globalThis.document = { querySelectorAll: () => [{ getClientRects: () => [1] }] }
+  f.state.navigateByKeyboard(event)
+  f.state.navigateByKeyboard({ ...event, isComposing: true })
+  f.state.navigateByKeyboard({ ...event, repeat: true })
+  assert.deepEqual(f.calls, ['/accounts']); assert.equal(prevented, 1)
+  f.dispose()
 })
 
 test('Vue templates compile; accessible navigation, drawer, theme tokens and scrolling boundaries', async () => {

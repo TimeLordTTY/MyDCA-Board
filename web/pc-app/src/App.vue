@@ -1,7 +1,7 @@
 <template>
-  <router-view />
+  <router-view :key="sessionRevision" />
 </template>
 
 <script setup lang="ts">
-// App根组件
+import { sessionRevision } from './auth/session'
 </script>

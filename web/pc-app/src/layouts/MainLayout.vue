@@ -23,6 +23,7 @@
           <router-link to="/settings" aria-label="账号设置">{{ identity.account }}</router-link>
           <span>{{ identity.scope }}</span>
           <button class="wh-button" type="button" :disabled="loggingOut" @click="handleLogout">{{ loggingOut ? '退出中…' : '安全退出' }}</button>
+          <p v-if="identityError" class="wealth-identity-error" role="alert">{{ identityError }} <button class="wh-button" :disabled="identityLoading" @click="loadIdentity">重试读取账号</button></p>
         </div>
         <div v-if="showBusinessActions" class="wealth-actions" aria-label="页面操作">
           <button class="wh-button" type="button" :disabled="refreshingData" title="仅主动点击后重算历史余额并刷新页面" @click="handleRefresh">{{ refreshingData ? '重算中…' : '刷新数据（重算历史余额）' }}</button>
@@ -52,6 +53,7 @@ import QuickEntryModal from '../components/QuickEntryModal.vue'
 import { productApi, apiClient, ledgerApi, useUserStore } from '@wealth-hub/shared'
 import WealthNavigation from '../components/WealthNavigation.vue'
 import { identityContext, navItems } from './navigation'
+import { readSessionIdentity } from '../auth/session'
 import '../styles/navigation-shell.css'
 
 const router = useRouter()
@@ -65,6 +67,7 @@ const mobileMenuOpen = ref(false)
 const menuButton = ref<HTMLButtonElement>()
 const content = ref<HTMLElement>()
 const loggingOut = ref(false)
+const identityLoading = ref(false), identityError = ref('')
 const wideScreen = window.matchMedia('(min-width: 769px)')
 const closeOnWideScreen = () => { if (wideScreen.matches) mobileMenuOpen.value = false }
 
@@ -74,12 +77,30 @@ watch(() => route.fullPath, () => {
 })
 onMounted(async () => {
   wideScreen.addEventListener('change', closeOnWideScreen)
-  if (!userStore.user) {
-    try { await userStore.fetchCurrentUser() }
-    catch { /* The shared client handles expired sessions; never invent an identity. */ }
-  }
+  window.addEventListener('keydown', navigateByKeyboard)
+  if (!userStore.user) await loadIdentity()
 })
-onUnmounted(() => wideScreen.removeEventListener('change', closeOnWideScreen))
+onUnmounted(() => {
+  wideScreen.removeEventListener('change', closeOnWideScreen)
+  window.removeEventListener('keydown', navigateByKeyboard)
+})
+
+function navigateByKeyboard(event: KeyboardEvent) {
+  if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || event.repeat || event.isComposing || !/^[1-9]$/.test(event.key)) return
+  if ((event.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable="true"]')) return
+  if ([...document.querySelectorAll<HTMLElement>('[role="dialog"]')].some(node => node.getClientRects().length)) return
+  event.preventDefault()
+  void router.push(navItems[Number(event.key) - 1].path)
+}
+
+async function loadIdentity() {
+  if (identityLoading.value) return
+  identityLoading.value = true
+  identityError.value = ''
+  try { await readSessionIdentity(userStore) }
+  catch (error: unknown) { identityError.value = `${error instanceof Error ? error.message : '账号读取失败'}。请检查网络后手动重试。` }
+  finally { identityLoading.value = false }
+}
 
 async function handleLogout() {
   if (loggingOut.value) return
@@ -169,10 +190,7 @@ async function handleRefreshMarketData() {
       position: 'bottom-right'
     })
   } finally {
-    // 3秒后恢复按钮状态（实际采集在后台执行）
-    setTimeout(() => {
-      refreshingMarket.value = false
-    }, 3000)
+    refreshingMarket.value = false
   }
 }
 

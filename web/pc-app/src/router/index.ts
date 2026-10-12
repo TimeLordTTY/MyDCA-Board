@@ -92,7 +92,7 @@ const router = createRouter({
 })
 
 // 路由守卫：检查认证（只依赖本地 token，避免在 Pinia 激活前调用 useUserStore）
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const token = localStorage.getItem('token')
 
   if (to.meta.requiresAuth && !token) {

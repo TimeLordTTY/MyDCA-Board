@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/auth/session.ts", "../src/components/AuthEntry.vue", "../src/views/Login.vue", "../src/views/PortalLogin.vue", "../src/views/Portal.vue", "../src/env.d.ts"]
+}

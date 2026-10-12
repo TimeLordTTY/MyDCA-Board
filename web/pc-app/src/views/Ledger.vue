@@ -163,7 +163,7 @@
       <p class="sub">服务器共 {{ pagination.total }} 条 · 当前页显示 {{ visibleTransactions.length }} 条。分类仅筛选当前页；全期间分类查询请使用下方统计。</p>
       <p v-if="loadError" role="alert" class="ledger-state">{{ loadError }} <button class="btn" @click="loadTransactions">重试查询</button></p>
       <!-- 流水列表 -->
-      <div class="ledger-table-container hide-scrollbar">
+      <div class="ledger-table-container" tabindex="0" role="region" aria-label="交易流水表，可横向滚动查看所有操作">
         <table class="ledger-table">
           <thead>
             <tr>
@@ -1335,7 +1335,8 @@ onBeforeUnmount(() => { clearData(); window.removeEventListener('data-refresh', 
 </style>
 
 <style scoped>
-.ledger-page { display: grid; gap: 24px; min-width: 0; }
+.ledger-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; min-width: 0; }
+.ledger-page > * { min-width: 0; }
 .ledger-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 4px 0; }
 .ledger-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .16em; color: var(--muted); }
 .ledger-hero h1 { margin: 10px 0; font-size: clamp(24px, 2.6vw, 36px); letter-spacing: -.035em; }
