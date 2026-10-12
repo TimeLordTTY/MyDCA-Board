@@ -1,12 +1,13 @@
 <template>
   <section class="goal-center" :aria-busy="busy">
-    <header><div><small>WEALTH PLANNING · 财富规划</small><h1>目标与预算中心</h1><p>管理目标与月度计划，基于已有资产和流水只读观察进度。</p></div><button class="btn" :disabled="busy" @click="refresh">刷新本页</button></header>
+    <header><div><small>PLAN YOUR NEXT CHAPTER · 财富规划</small><h1>给未来，留一份计划。</h1><p>目标与预算中心 · 把想实现的事，拆成可核对的月度刻度。</p></div><button class="btn" :disabled="busy" @click="refresh">刷新本页</button></header>
+    <div class="planning-boundary"><strong>计划是方向，实际是证据。</strong><span>保存仅创建或编辑规划元数据；不占用资金、不记账、不转账。进度和实际支出由后台只读计算。</span></div>
     <nav aria-label="规划类型"><button class="btn" :aria-pressed="tab === 'goals'" :disabled="busy" @click="switchTab('goals')">资产目标</button><button class="btn" :aria-pressed="tab === 'budgets'" :disabled="busy" @click="switchTab('budgets')">月度预算</button><button class="btn primary" :disabled="busy" @click="edit()">{{ tab === 'goals' ? '创建目标' : '创建预算' }}</button></nav>
     <p v-if="busy" role="status">正在加载 / 保存…</p><p v-if="error" role="alert" class="warning">{{ error }} <button class="btn" :disabled="busy" @click="refresh">重试加载</button></p><p v-if="notice" role="status">{{ notice }}</p>
     <BudgetSixMonthReview v-if="tab === 'budgets'" :disabled="busy" :revision="reviewRevision" @select="observe" />
     <div class="workspace">
-      <aside><h2>{{ tab === 'goals' ? '目标列表' : '预算列表' }}</h2><p v-if="!busy && !error && !rows.length">暂无{{ tab === 'goals' ? '目标' : '预算' }}，可先创建一项规划。</p>
-        <article v-for="row in rows" :key="row.id" :class="{ selected: selected?.id === row.id }"><h3>{{ row.config.name }}</h3><p>{{ labels[row.config.scope] }} · {{ row.config.currency }} · {{ 'state' in row.config ? labels[row.config.state] : row.config.month }}</p><p v-if="'targetValue' in row.config">目标 {{ amount(row.config.targetValue) }} · {{ row.config.targetDate }}</p><button class="btn" :disabled="busy" @click="observe(row)">详情与{{ tab === 'goals' ? '进度' : '对比' }}</button><button class="btn" :disabled="busy" @click="edit(row)">编辑</button><button v-if="tab === 'budgets' && 'items' in row.config" class="btn" :disabled="busy" @click="copyNextMonth(row)">复制为下月预算</button></article>
+      <aside><small class="planning-kicker">YOUR PLANS · 独立规划</small><h2>{{ tab === 'goals' ? '目标列表' : '预算列表' }}</h2><p v-if="!busy && !error && !rows.length">暂无{{ tab === 'goals' ? '目标' : '预算' }}，可先创建一项规划。</p>
+        <p class="planning-muted">已加载 {{ rows.length }} 份规划{{ more ? '，还有更多' : '' }}。金额按各计划与币种独立查看，不汇总。</p><article v-for="row in rows" :key="row.id" :class="{ selected: selected?.id === row.id }"><small class="planning-kicker">{{ 'state' in row.config ? 'ASSET GOAL' : 'MONTHLY BUDGET' }}</small><h3>{{ row.config.name }}</h3><p>{{ labels[row.config.scope] }} · {{ row.config.currency }} · {{ 'state' in row.config ? labels[row.config.state] : row.config.month }}</p><p v-if="'targetValue' in row.config">目标 {{ amount(row.config.targetValue) }} · {{ row.config.targetDate }}</p><button class="btn" :disabled="busy" @click="observe(row)">详情与{{ tab === 'goals' ? '进度' : '对比' }}</button><button class="btn" :disabled="busy" @click="edit(row)">编辑</button><button v-if="tab === 'budgets' && 'items' in row.config" class="btn" :disabled="busy" @click="copyNextMonth(row)">复制为下月预算</button></article>
         <button v-if="more" class="btn" :disabled="busy" @click="loadMore">加载更多</button>
       </aside>
       <main>
@@ -26,8 +27,8 @@
           <template v-if="'state' in selected.config"><p>{{ labels[selected.config.measure] }} · {{ labels[selected.config.state] }} · 目标日期 {{ selected.config.targetDate }}</p><p>{{ selected.config.note || '无备注' }}</p><button v-if="selected.config.state !== 'ARCHIVED'" class="btn" :disabled="busy" @click="changeState(selected.config.state === 'ACTIVE' ? 'PAUSED' : 'ACTIVE')">{{ selected.config.state === 'ACTIVE' ? '暂停目标' : '恢复目标' }}</button><button v-if="selected.config.state !== 'ARCHIVED'" class="btn" :disabled="busy" @click="archivePrompt = true">归档目标</button><div v-if="archivePrompt" role="alert"><p>归档后保留历史目标和只读进度，确认归档？</p><button class="btn" :disabled="busy" @click="changeState('ARCHIVED')">确认归档</button><button class="btn" :disabled="busy" @click="archivePrompt = false">取消</button></div></template>
           <button v-if="tab === 'budgets' && 'items' in selected.config" class="btn" :disabled="busy" @click="copyNextMonth(selected)">复制为下月预算</button>
           <button class="btn" :disabled="busy" @click="observe(selected)">重新读取详情</button>
-          <template v-if="progress"><h3>完成率 {{ percent(progress.completionRate) }}</h3><progress v-if="progress.completionRate != null" :value="Math.max(0, Math.min(1, progress.completionRate))" max="1" aria-label="目标完成率"></progress><p>{{ labels[progress.quality] }} · {{ progress.reason }}</p><p>当前金额 {{ amount(progress.currentValue) }} · 已知部分 {{ amount(progress.knownValue) }}</p><p>完成状态：{{ progress.completed == null ? '未知 / UNKNOWN' : progress.completed ? '已达目标' : '尚未达目标' }}</p><p>数据日期 {{ progress.asOfDate }} · {{ progress.overdue ? '已逾期' : '距离目标' }} {{ Math.abs(progress.daysRemaining) }} 天</p></template>
-          <template v-if="comparison"><h3>月度计划 / 实际 · {{ labels[comparison.quality] }}</h3><dl><dt>收入</dt><dd>{{ amount(comparison.plannedIncome) }} / {{ amount(comparison.actualIncome) }}</dd><dt>支出</dt><dd>{{ amount(comparison.plannedExpenses) }} / {{ amount(comparison.actualExpenses) }}</dd><dt>计划预留</dt><dd>{{ amount(comparison.plannedReserve) }}</dd><dt>结余（计划已扣预留）</dt><dd>{{ amount(comparison.plannedSurplus) }} / {{ amount(comparison.actualSurplus) }}</dd><dt>剩余支出预算</dt><dd>{{ amount(comparison.remainingBudget) }}</dd></dl><p class="warning">{{ comparison.overspent == null ? '超支状态未知 / UNKNOWN' : comparison.overspent ? '已超支，请审视计划' : '未超支' }}</p><p>未匹配流水 {{ comparison.unmatchedPostings }} 条</p><p v-for="w in comparison.warnings" :key="w" class="warning">{{ w }}</p><div class="table-scroll"><table><caption>预算项目对比（{{ selected.config.currency }}）</caption><thead><tr><th>项目 / 类型</th><th>计划</th><th>实际</th><th>已知部分</th><th>剩余</th><th>状态</th></tr></thead><tbody><tr v-for="(i, n) in comparison.items" :key="n"><th>{{ i.item.name }} / {{ labels[i.item.kind] }}</th><td>{{ amount(i.item.planned) }}</td><td>{{ amount(i.actual) }}</td><td>{{ amount(i.knownActual) }}</td><td>{{ amount(i.remaining) }}</td><td>{{ i.item.kind === 'RESERVE' ? '仅计划' : labels[i.quality] }} {{ i.overspent === true ? '· 已超支' : '' }}</td></tr></tbody></table></div></template>
+          <template v-if="progress"><h3>完成率 {{ percent(progress.completionRate) }}</h3><progress v-if="progress.completionRate != null" :value="Math.max(0, Math.min(1, progress.completionRate))" max="1" aria-label="目标完成率"></progress><p>{{ labels[progress.quality] }} · {{ progress.reason }}</p><p>实际资产读数（{{ selected.config.currency }}）{{ amount(progress.currentValue) }} · 已知部分 {{ amount(progress.knownValue) }}</p><p>完成状态：{{ progress.completed == null ? '未知 / UNKNOWN' : progress.completed ? '已达目标' : '尚未达目标' }}</p><p>统计截至日 {{ progress.asOfDate }} · {{ progress.overdue ? '已逾期' : '距离目标' }} {{ Math.abs(progress.daysRemaining) }} 天</p><p class="planning-muted">完成率超过100%仍只是所选资产口径的读数，不代表可提现或可投入资金；目标日期是计划日期。</p></template>
+          <template v-if="comparison"><h3>月度计划 / 实际 · {{ labels[comparison.quality] }}</h3><p>{{ 'month' in selected.config ? selected.config.month : '' }} · {{ selected.config.currency }} · 客户端读取时间 {{ comparisonReadAt }}（非账务快照）</p><p class="planning-muted">计划金额来自本份预算；实际支出来自已配置分类的流水。剩余预算由后台比较计划与实际，不是账户余额。没有流水不等于已花0，部分与未知数据保留质量及已知部分。</p><dl><dt>收入</dt><dd>{{ amount(comparison.plannedIncome) }} / {{ actualAmount(comparison.actualIncome) }}</dd><dt>支出</dt><dd>{{ amount(comparison.plannedExpenses) }} / {{ actualAmount(comparison.actualExpenses) }}</dd><dt>计划预留</dt><dd>{{ amount(comparison.plannedReserve) }}</dd><dt>结余（计划已扣预留）</dt><dd>{{ amount(comparison.plannedSurplus) }} / {{ actualAmount(comparison.actualSurplus) }}</dd><dt>剩余支出预算</dt><dd>{{ actualAmount(comparison.remainingBudget) }}</dd></dl><p class="warning">{{ comparison.quality !== 'OK' || comparison.overspent == null ? '超支状态未知 / UNKNOWN' : comparison.overspent ? '已超支，请审视计划' : '未超支' }}</p><p>未匹配流水 {{ comparison.unmatchedPostings }} 条</p><p v-for="w in comparison.warnings" :key="w" class="warning">{{ w }}</p><div class="table-scroll" tabindex="0" role="region" aria-label="预算项目对比，可横向滚动"><table><caption>预算项目对比（{{ selected.config.currency }}）</caption><thead><tr><th>项目 / 类型</th><th>计划</th><th>实际</th><th>已知部分</th><th>剩余</th><th>状态</th></tr></thead><tbody><tr v-for="(i, n) in comparison.items" :key="n"><th>{{ i.item.name }} / {{ labels[i.item.kind] }}</th><td>{{ amount(i.item.planned) }}</td><td>{{ i.item.kind === 'RESERVE' ? '仅计划' : i.quality === 'OK' ? amount(i.actual) : labels[i.quality] }}</td><td>{{ amount(i.knownActual) }}</td><td>{{ i.item.kind === 'RESERVE' ? '仅计划' : i.quality === 'OK' ? amount(i.remaining) : labels[i.quality] }}</td><td>{{ i.item.kind === 'RESERVE' ? '仅计划' : labels[i.quality] }} {{ i.overspent === true ? '· 已超支' : '' }}</td></tr></tbody></table></div></template>
         </article><article v-else><h2>让计划拥有清晰的刻度</h2><p>选择一项目标查看完成率，或选择月度预算比较计划与实际。部分数据与未知金额保留原始状态。</p></article>
       </main>
     </div>
@@ -45,7 +46,8 @@ const tab = ref<'goals' | 'budgets'>('goals'), rows = ref<(Goal | Budget)[]>([])
 const busy = ref(false), error = ref(''), notice = ref(''), more = ref(false), archivePrompt = ref(false)
 const form = ref<GoalConfig | BudgetConfig | null>(null), editing = ref(''), formError = ref('')
 const progress = ref<GoalProgress | null>(null), comparison = ref<BudgetComparison | null>(null)
-const reviewRevision = ref(0)
+const reviewRevision = ref(0), comparisonReadAt = ref('')
+const actualAmount = (value: number | null) => comparison.value?.quality === 'OK' ? amount(value) : labels[comparison.value?.quality ?? 'UNKNOWN']
 const copied = ref(false), user = useUserStore()
 let page = 0, generation = 0
 const identity = () => `${user.token || ''}:${JSON.stringify(user.user)}:${localStorage.getItem('token') || ''}`
@@ -60,7 +62,10 @@ function invalidateIdentity() {
   generation++; busy.value = false; rows.value = []; more.value = false; page = 0
   cancelForm(); clearDetail(); notice.value = ''; error.value = '身份或权限已变化，请重新加载当前用户的预算。'
 }
-watch([() => user.token, () => user.user], invalidateIdentity, { deep: true, flush: 'sync' })
+watch([() => user.token, () => user.user], ([token, profile], [priorToken, priorProfile]) => {
+  invalidateIdentity()
+  if (token && token === priorToken && !priorProfile && profile) void refresh()
+}, { deep: true, flush: 'sync' })
 onBeforeUnmount(() => { generation++ })
 async function copyNextMonth(row: Goal | Budget) {
   if (busy.value || tab.value !== 'budgets' || !('items' in row.config) ||
@@ -78,7 +83,7 @@ async function copyNextMonth(row: Goal | Budget) {
   } catch (e) { if (version === generation) error.value = `复制预算失败：${failure(e)}` }
   finally { if (version === generation) busy.value = false }
 }
-function clearDetail() { reviewRevision.value++; selected.value = null; progress.value = null; comparison.value = null; archivePrompt.value = false }
+function clearDetail() { reviewRevision.value++; selected.value = null; progress.value = null; comparison.value = null; comparisonReadAt.value = ''; archivePrompt.value = false }
 async function refresh() {
   if (busy.value) return
   if (visibleOwner !== identity()) invalidateIdentity()
@@ -122,12 +127,13 @@ async function observe(row: Goal | Budget) {
   const version = generation, owner = identity()
   busy.value = true; error.value = ''; form.value = null; clearDetail()
   try {
-    if (tab.value === 'goals') { const detail = await goalApi.detail(row.id); const p = await goalApi.progress(row.id); if (!current(version, owner)) return; selected.value = detail; progress.value = p }
-    else { const detail = await budgetApi.detail(row.id); const c = await budgetApi.comparison(row.id); if (!current(version, owner)) return; selected.value = detail; comparison.value = c }
+    if (tab.value === 'goals') { const detail = await goalApi.detail(row.id); if (!current(version, owner)) return; const p = await goalApi.progress(row.id); if (!current(version, owner)) return; selected.value = detail; progress.value = p }
+    else { const detail = await budgetApi.detail(row.id); if (!current(version, owner)) return; const c = await budgetApi.comparison(row.id); if (!current(version, owner)) return; selected.value = detail; comparison.value = c; comparisonReadAt.value = new Date().toLocaleString('zh-CN', { hour12: false }) }
   } catch (e) { if (version === generation) error.value = failure(e) } finally { if (version === generation) busy.value = false }
 }
 async function changeState(state: GoalConfig['state']) {
   if (busy.value || !selected.value || !('state' in selected.value.config)) return
+  if (visibleOwner !== identity()) { invalidateIdentity(); return }
   const row = selected.value as Goal
   const version = generation, owner = identity()
   busy.value = true; error.value = ''
@@ -135,6 +141,4 @@ async function changeState(state: GoalConfig['state']) {
 }
 onMounted(refresh)
 </script>
-<style scoped>
-.goal-center{padding:28px;color:var(--text,#243343)}header{display:flex;justify-content:space-between;align-items:center;gap:20px}small{letter-spacing:.16em;color:#568979}h1{font-size:30px;margin:10px 0}h2{font-size:20px}nav{display:flex;gap:12px;margin:24px 0}.workspace{display:grid;grid-template-columns:320px minmax(0,1fr);gap:24px}article,form{padding:22px;border:1px solid #b4c6c533;border-radius:14px;margin-bottom:16px;background:var(--card,#ffffff08)}article.selected{border-color:#568979}label{display:grid;gap:6px;margin:14px 0}input,select,textarea{width:100%;padding:10px;border:1px solid #82958c66;border-radius:6px;color:inherit;background:var(--bg,#ffffff0d);box-sizing:border-box}option{color:#243343;background:#fff}fieldset{border:1px solid #82958c66;margin:18px 0;border-radius:8px}.btn{margin:4px}.warning{color:#c37c35}progress{width:100%;accent-color:#568979}dl{display:grid;grid-template-columns:1fr 2fr;gap:14px}dd{margin:0;font-variant-numeric:tabular-nums}.table-scroll{overflow:auto}table{width:100%;border-collapse:collapse;text-align:left}th,td{padding:12px;border-bottom:1px solid #82958c33}caption{text-align:left;padding:16px 0}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #568979;outline-offset:3px}@media(max-width:900px){.workspace{grid-template-columns:1fr}header{align-items:flex-start}.goal-center{padding:16px}}
-</style>
+<style scoped src="../styles/goals-planning.css"></style>

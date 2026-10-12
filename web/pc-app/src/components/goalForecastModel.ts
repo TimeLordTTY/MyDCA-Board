@@ -15,6 +15,7 @@ export function validateForecast(goals: Goal[], budgets: Budget[], request: Fore
   const months = monthRange(request.startMonth, request.months.length)
   if (months.length !== request.months.length || !months.length || months[months.length - 1] !== request.endMonth || request.months.some((m, i) => m.month !== months[i])) return '期间须为连续12至60个月'
   if (!['PLANNED', 'ACTUAL_PLUS_REMAINING'].includes(request.mode)) return '请选择预算模式'
+  if (request.annualRate != null && (!/^-?(?:0(?:\.\d{1,8})?|1(?:\.0{1,8})?)$/.test(request.annualRate))) return '年化收益假设须为 -1 至 1 的比例，最多8位小数；留空只计算零收益基线'
   if (!validMoney(request.monthlyExtraSavings ?? '') || allocations.some(a => !validMoney(a))) return '金额须非负，最多18位整数和2位小数；空值保留未知'
   for (const m of request.months) {
     if (!m.budgetId) continue

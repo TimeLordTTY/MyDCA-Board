@@ -62,6 +62,4 @@ async function load() {
 watch([scope, currency, () => props.disabled, () => props.revision, () => user.token, () => user.user], reset, { deep: true, flush: 'sync' })
 onBeforeUnmount(reset)
 </script>
-<style scoped>
-.budget-review{padding:22px;border:1px solid #82958c66;border-top:3px solid #568979;border-radius:14px;margin-bottom:24px}header,.filters{display:flex;align-items:center;gap:16px;flex-wrap:wrap}header{justify-content:space-between}small{color:#568979}h2{margin:8px 0}.filters label{display:grid;gap:6px}select{padding:8px;color:inherit;background:var(--bg,#fff);border:1px solid #82958c66;border-radius:6px}.table-scroll{overflow:auto}table{border-collapse:collapse;min-width:1100px;width:100%;text-align:left;font-variant-numeric:tabular-nums}th,td{padding:12px;border-bottom:1px solid #82958c33;vertical-align:top}thead{background:#56897915}caption{text-align:left;padding:16px 0}.warning{color:#c37c35}.btn{margin:4px}button:focus-visible,select:focus-visible,summary:focus-visible,.table-scroll:focus-visible{outline:2px solid #568979;outline-offset:3px}
-</style>
+<style scoped src="../styles/goals-planning.css"></style>

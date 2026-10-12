@@ -147,3 +147,19 @@ test('API paths are metadata-only; read-only evidence GET; encoded identifiers',
   assert.doesNotMatch(source, /orderApi|settlementApi|ledgerApi|confirmDraft|自动交易|立即买入/)
   assert.match(source, /role="alert"/); assert.match(source, /role="status"/); assert.match(source, /确认归档/)
 })
+
+test('actual zero stays distinct from partial and unknown; read time clears with detail', async () => {
+  const row = { id: 'b', config: budget() }; let quality = 'OK'
+  const state = await setup({}, { list: async () => [row], detail: async () => row, comparison: async () => ({ quality, actualExpenses: 0 }) })
+  await state.switchTab('budgets'); await state.observe(row); assert.equal(state.actualAmount(0), '0.00'); assert.ok(state.comparisonReadAt.value)
+  quality = 'PARTIAL'; await state.observe(row); assert.match(state.actualAmount(0), /PARTIAL/)
+  quality = 'UNKNOWN'; await state.observe(row); assert.match(state.actualAmount(0), /UNKNOWN/)
+  state.clearDetail(); assert.equal(state.comparisonReadAt.value, '')
+})
+test('identity change before detail returns never starts old-owner progress read or state write', async () => {
+  let resolve, progressReads = 0, writes = 0
+  const row = { id: 'g', config: goal() }, state = await setup({ list: async () => [row], detail: () => new Promise(r => { resolve = r }), progress: async () => { progressReads++ }, edit: async () => { writes++ } })
+  await state.refresh(); const pending = state.observe(row); state.user.user.familyId = 2; resolve(row); await pending
+  assert.equal(progressReads, 0); assert.equal(state.selected.value, null)
+  state.selected.value = row; await state.changeState('PAUSED'); assert.equal(writes, 0)
+})

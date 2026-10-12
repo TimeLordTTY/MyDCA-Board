@@ -1,0 +1,10 @@
+{
+  "task_id": "task-aiw-r2-15-goals-budgets-forecast-20261010",
+  "kind": "independent_content_provenance_only",
+  "base": "a9fdb126a2379e9215cf4f9606cbae69894d068b",
+  "original_source": "357b92b1d4a048b895082a622d8e39900af3ccb4",
+  "historical_receipts_inherited": false,
+  "formal_delivery_authority": "AiCore Runtime.integrate and original Finalizer",
+  "verification": "external_fresh_controller_run_required",
+  "owner_notification_policy": "goal_only"
+}
