@@ -1,0 +1,11 @@
+{
+  "extends": "../tsconfig.json",
+  "include": [
+    "../src/views/DataReadiness.vue",
+    "../src/views/Settings.vue",
+    "../src/components/dataReadinessModel.ts",
+    "../src/components/AppearanceSettings.vue",
+    "../src/styles/appearance.ts",
+    "../src/env.d.ts"
+  ]
+}
