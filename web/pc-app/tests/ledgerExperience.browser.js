@@ -1,6 +1,8 @@
 async page => {
   const check = (ok, message) => { if (!ok) throw Error(message) }
   const errors = [], requests = []
+  const unexpectedRequests = []
+  const origin = 'http://127.0.0.1:3110'
   let failList = false, empty = false
   page.on('pageerror', e => errors.push(e.message))
   const account = (id, name, parentAccountId) => ({ id, accountName: name, parentAccountId, accountKind: 'REAL', accountType: 'BANK', currency: 'CNY', balance: 1000, isActive: true })
@@ -10,10 +12,14 @@ async page => {
   ]
   await page.route('**/*', async route => {
     const url = new URL(route.request().url())
-    if (url.hostname !== '127.0.0.1') return route.abort()
-    if (!url.pathname.includes('/api/')) return route.continue()
+    if (url.origin !== origin) { unexpectedRequests.push(route.request().url()); return route.abort() }
+    if (!url.pathname.includes('/api/')) {
+      if (route.request().method() !== 'GET' || ['fetch', 'xhr'].includes(route.request().resourceType())) { unexpectedRequests.push(url.pathname); return route.abort() }
+      return route.continue()
+    }
     requests.push({ path: url.pathname, method: route.request().method(), query: url.search, body: route.request().postDataJSON() })
-    if (route.request().method() !== 'GET') return route.fulfill({ status: 500, json: { message: '隔离 fixture：提交结果未知' } })
+    if (route.request().method() === 'POST' && url.pathname.endsWith('/ledger/txns')) return route.fulfill({ status: 500, json: { message: '隔离 fixture：提交结果未知' } })
+    if (route.request().method() !== 'GET' || !/\/(users\/me|accounts|products|holdings|ledger\/txns(?:\/T\d)?|ledger\/stats\/(summary|trend|breakdown|top))$/.test(url.pathname)) { unexpectedRequests.push({ path: url.pathname, method: route.request().method() }); return route.abort() }
     let data = []
     if (url.pathname.endsWith('/users/me')) data = { id: 1, username: '隔离验收', familyId: 1 }
     if (url.pathname.endsWith('/accounts')) data = [account(10, '隔离银行'), account(11, '隔离生活账户', 10)]
@@ -77,5 +83,6 @@ async page => {
   await dialog.getByRole('button', { name: '取消', exact: true }).click()
   check(errors.length === 0, errors.join('\n'))
   check(requests.filter(r => r.method !== 'GET').every(r => r.path.endsWith('/ledger/txns') && r.method === 'POST'), 'unexpected write endpoint')
-  return { result: 'PASS', widths: [1440, 1100, 760], pageerrors: errors, requestCount: requests.length, fixtureWrites: 1 }
+  check(unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify(unexpectedRequests))
+  return { result: 'PASS', boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', widths: [1440, 1100, 760], pageerrors: errors, unexpectedRequests, interceptedRequests: requests.length, financialWrites: 0, fixtureWrites: 1 }
 }

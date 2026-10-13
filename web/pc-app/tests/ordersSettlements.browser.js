@@ -1,6 +1,8 @@
 async page => {
   const check = (value, reason) => { if (!value) throw Error(reason) }
   const errors = [], requests = []
+  const unexpectedRequests = []
+  const origin = 'http://127.0.0.1:3114'
   let failList = false, failConfirm = true
   const source = { id: 1, accountId: 11, lineType: 'SOURCE', amount: 100, currency: 'CNY' }, target = { id: 2, accountId: 21, lineType: 'TARGET', shares: 10, currency: 'CNY' }
   const row = (orderId, orderType, status = 'PENDING') => ({ id: 1, orderId, userId: 1, productId: 101, orderType, status, amount: ['BUY', 'SUBSCRIPTION'].includes(orderType) ? 100 : undefined, shares: ['SELL', 'REDEMPTION'].includes(orderType) ? 10 : undefined, expectedConfirmDate: '2026-10-11', expectedNavDate: '2026-10-10', requestedAt: '2026-10-10 12:00:00', feeEstimate: 0, fundingLines: [source, target] })
@@ -9,8 +11,14 @@ async page => {
   page.on('pageerror', e => errors.push(e.message))
   await page.route('**/*', async route => {
     const url = new URL(route.request().url()), method = route.request().method()
-    if (url.hostname !== '127.0.0.1') return route.abort()
-    if (!url.pathname.includes('/api/')) return route.continue()
+    if (url.origin !== origin) { unexpectedRequests.push(route.request().url()); return route.abort() }
+    if (!url.pathname.includes('/api/')) {
+      if (method !== 'GET' || ['fetch', 'xhr'].includes(route.request().resourceType())) { unexpectedRequests.push(url.pathname); return route.abort() }
+      return route.continue()
+    }
+    const read = method === 'GET' && /\/(users\/me|accounts|products|orders(?:\/O\d)?|settlements\/(pending|history(?:\/H1)?)|nav(?:\/.*)?)$/.test(url.pathname)
+    const action = method === 'POST' && /\/(settlements\/preview|orders\/O\d\/settle)$/.test(url.pathname)
+    if (!read && !action) { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }
     const body = route.request().postDataJSON()
     requests.push({ path: url.pathname, method, body })
     let data
@@ -108,5 +116,6 @@ async page => {
   await page.getByRole('button', { name: '重试读取', exact: true }).click()
   await page.locator('.settlement-ticket').first().waitFor()
   check(errors.length === 0, 'pageerrors: ' + errors.join(';'))
-  return { pageerrors: errors, interceptedRequests: requests.length, previews: requests.filter(r => r.path.endsWith('/preview')).length, confirms: requests.filter(r => r.path.endsWith('/settle')).length, boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', screenshots: 'output/playwright/orders-preview.png + settlements-{1440,1100,760,dark}.png' }
+  check(unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify(unexpectedRequests))
+  return { result: 'PASS', pageerrors: errors, unexpectedRequests, financialWrites: 0, interceptedRequests: requests.length, previews: requests.filter(r => r.path.endsWith('/preview')).length, confirms: requests.filter(r => r.path.endsWith('/settle')).length, boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', screenshots: 'output/playwright/orders-preview.png + settlements-{1440,1100,760,dark}.png' }
 }

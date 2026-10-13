@@ -125,17 +125,21 @@ async page => {
     await section.locator('.section-nav a').last().focus(); await page.keyboard.press('Enter')
     check(new URL(page.url()).hash.endsWith('-source'), 'keyboard chapter navigation failed')
     await page.evaluate(() => document.documentElement.setAttribute('data-wh-theme', 'dark'))
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.wealth-identity button')).backgroundColor === 'rgb(41, 44, 39)')
     check(await section.evaluate(n => getComputedStyle(n).color !== 'rgb(25, 59, 73)'), 'hardcoded legacy color')
     await page.screenshot({ path: `output/playwright/${name}-dark-narrow.png`, fullPage: true })
     denyFamily = true
+    const beforeDenied = requests.length
     await section.getByRole('button', { name: '新建规则', exact: true }).click()
     const editor = section.locator('form').first()
     await editor.getByRole('combobox', { name: '作用域', exact: true }).selectOption('FAMILY')
     if (name === 'risk-center') { await editor.getByRole('combobox', { name: '类型', exact: true }).selectOption('NOTE') }
     else { await editor.getByLabel('资产类别', { exact: true }).fill('FUND') }
     await editor.getByRole('button', { name: name === 'risk-center' ? '保存规则' : '保存配置', exact: true }).click()
-    await page.waitForURL('**/wealth-hub/login')
-    check((await requests.at(-1)).body.scope === 'FAMILY', 'family scope replaced')
+    await page.waitForURL(url => url.pathname === '/wealth-hub/login' && url.searchParams.get('reason') === 'session')
+    const deniedRequest = requests.slice(beforeDenied).find(r => r.method === 'POST' && r.path === (name === 'risk-center' ? '/risk-watch-rules' : '/allocation-policies'))
+    check(deniedRequest?.body?.scope === 'FAMILY', 'family scope replaced')
+    check(await page.evaluate(() => localStorage.getItem('token')) === null, 'family denial retained token')
     denyFamily = false
   }
   check(pageerrors.length === 0, pageerrors.join(';'))

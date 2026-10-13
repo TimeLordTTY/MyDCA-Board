@@ -2,21 +2,25 @@ async page => {
   const check = (ok, message) => { if (!ok) throw Error(message) }
   const requests = []
   const errors = []
+  const unexpectedRequests = []
+  const origin = 'http://127.0.0.1:3110'
   page.on('pageerror', error => errors.push(error.message))
   const account = (id, extra = {}) => ({ id, accountCode: `fixture-${id}`, accountName: `测试账户${id}`, accountKind: 'REAL', accountType: 'BANK', currency: 'CNY', balance: 0, reservedAmount: 0, isActive: true, ...extra })
   const product = (id, extra = {}) => ({ id, productCode: `fixture-${id}`, productName: `隔离产品${id}`, assetType: 'ETF', channel: 'EXCHANGE', market: 'CN', currency: 'CNY', isActive: true, buyFeeRate: 0, buyConfirmOffset: 1, sellConfirmOffset: 1, ...extra })
   await page.route('**/*', async route => {
     const url = new URL(route.request().url())
-    if (url.hostname !== '127.0.0.1') return route.abort()
+    if (url.origin !== origin) { unexpectedRequests.push(route.request().url()); return route.abort() }
     if (url.pathname.includes('/api/')) {
       requests.push({ path: url.pathname, method: route.request().method() })
-      if (route.request().method() !== 'GET') return route.fulfill({ json: {} })
+      if (route.request().method() === 'POST' && url.pathname.endsWith('/products/sort-order')) return route.fulfill({ json: {} })
+      if (route.request().method() !== 'GET' || !/\/(users\/me|accounts|products|holdings|market\/quotes|nav\/latest)$/.test(url.pathname)) { unexpectedRequests.push({ path: url.pathname, method: route.request().method() }); return route.abort() }
       let data = []
       if (url.pathname.endsWith('/users/me')) data = { id: 1, username: 'offline-fixture', familyId: 1 }
       if (url.pathname.endsWith('/accounts')) data = [account(1, { accountName: '隔离银行' }), account(2, { parentAccountId: 1, accountName: '旅行信封', balance: -12 }), account(3, { parentAccountId: 1, accountName: '日常信封' })]
       if (url.pathname.endsWith('/products')) data = [product(1), product(2), product(3, { channel: 'OTC', assetType: 'MMF' })]
       return route.fulfill({ json: data })
     }
+    if (route.request().method() !== 'GET' || ['fetch', 'xhr'].includes(route.request().resourceType())) { unexpectedRequests.push(url.pathname); return route.abort() }
     return route.continue()
   })
   await page.addInitScript(() => localStorage.setItem('token', 'offline-fixture-only'))
@@ -48,13 +52,11 @@ async page => {
     check(await page.locator('.management-page').evaluate(n => n.scrollWidth <= n.clientWidth + 1), `page overflows at ${width}`)
   }
   const beforeTheme = requests.length
-  await page.evaluate(async () => {
-    const { getAppearanceController } = await import('/wealth-hub/src/styles/appearance.ts')
-    getAppearanceController().set({ version: 1, mode: 'dark', palette: 'cream' })
-  })
+  await page.evaluate(() => document.documentElement.setAttribute('data-wh-theme', 'dark'))
   await page.screenshot({ path: 'output/playwright/products-dark-narrow.png', fullPage: true })
   check(errors.length === 0, errors.join('; '))
   check(requests.length === beforeTheme, 'appearance caused a business request')
   check(requests.every(r => r.method === 'GET' || r.path.endsWith('/products/sort-order')), 'unexpected mutation')
-  console.log(JSON.stringify({ result: 'PASS', requests: requests.length, pageErrors: errors.length, widths: [1440, 1100, 760], mockedWrites: 1 }))
+  check(unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify(unexpectedRequests))
+  return { result: 'PASS', boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', pageerrors: errors, unexpectedRequests, interceptedRequests: requests.length, financialWrites: 0, widths: [1440, 1100, 760], mockedWrites: 1 }
 }

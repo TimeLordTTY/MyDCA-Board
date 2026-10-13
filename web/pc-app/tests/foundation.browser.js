@@ -1,9 +1,17 @@
 // Pass this function to playwright-cli run-code on the isolated test page.
 async (page) => {
   const check = (value, message) => { if (!value) throw new Error(message) }
+  const origin = 'http://127.0.0.1:3107', requests = [], pageerrors = [], unexpectedRequests = []
+  page.on('pageerror', error => pageerrors.push(error.message))
   await page.route('**/*', route => {
-    const url = new URL(route.request().url())
-    if (url.hostname !== '127.0.0.1' || url.pathname.includes('/api/')) return route.abort()
+    const request = route.request(), url = new URL(request.url()), method = request.method()
+    if (url.origin !== origin) { unexpectedRequests.push({ origin: url.origin, method }); return route.abort() }
+    if (url.pathname.includes('/api/')) {
+      if (method !== 'GET' || !/\/(users\/me|accounts|products|holdings|market\/quotes|nav\/latest)$/.test(url.pathname)) { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }
+      requests.push({ path: url.pathname, method })
+      return route.fulfill({ json: url.pathname.endsWith('/users/me') ? { id: 1, username: 'offline-foundation-fixture', familyId: 1 } : [] })
+    }
+    if (method !== 'GET' || ['fetch', 'xhr'].includes(request.resourceType())) { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }
     return route.continue()
   })
   await page.goto('http://127.0.0.1:3107/wealth-hub/tests/foundation-browser.html')
@@ -59,5 +67,12 @@ async (page) => {
   check(await page.locator('html').getAttribute('data-wh-theme') === 'legacy', 'preference not restored')
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('wealthhub.appearance.v1')))
   check(Object.keys(stored).sort().join(',') === 'mode,palette,version', 'non-appearance data persisted')
-  return { cases: results.length, pass: true, results }
+  // Also check the restored appearance on a real empty business page. These are
+  // actual page reads, intercepted above, rather than an invented request count.
+  await page.addInitScript(() => localStorage.setItem('token', 'offline-foundation-only'))
+  await page.goto(`${origin}/wealth-hub/holdings`)
+  await page.locator('.holdings-page').waitFor()
+  await page.getByRole('status').filter({ hasText: '当前访问范围暂无持仓' }).waitFor()
+  check(pageerrors.length === 0 && unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify({ pageerrors, unexpectedRequests }))
+  return { result: 'PASS', boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', pageerrors, unexpectedRequests, interceptedRequests: requests.length, financialWrites: 0, cases: results.length, results }
 }

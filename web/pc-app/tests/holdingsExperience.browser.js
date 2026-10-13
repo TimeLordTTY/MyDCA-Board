@@ -1,15 +1,17 @@
 async page => {
   const check = (ok, message) => { if (!ok) throw Error(message) }
   const errors = [], requests = []
+  const unexpectedRequests = []
+  const origin = 'http://127.0.0.1:3110'
   let fail = false, failNav = false
   page.on('pageerror', e => errors.push(e.message))
   const h = (id, extra = {}) => ({ productId: id, productName: `隔离持仓${id}`, productCode: `T${id}`, channel: id === 2 ? 'EXCHANGE' : 'OTC', assetType: id === 2 ? 'ETF' : 'FUND', brokerAccountId: 10, brokerAccountName: '隔离来源', totalShares: 10, totalCost: 100, avgCost: 10, marketValue: 90, unrealizedPnl: -10, ...extra })
   await page.route('**/*', async route => {
     const url = new URL(route.request().url())
-    if (url.hostname !== '127.0.0.1') return route.abort()
+    if (url.origin !== origin) { unexpectedRequests.push(route.request().url()); return route.abort() }
     if (url.pathname.includes('/api/')) {
       requests.push({ path: url.pathname, method: route.request().method() })
-      if (route.request().method() !== 'GET') throw Error('Unexpected financial mutation')
+      if (route.request().method() !== 'GET' || !/\/(users\/me|holdings|products|market\/quotes(?:\/history)?|nav\/latest|nav\/history|market\/bars|indicators\/history|ledger\/txns)$/.test(url.pathname)) { unexpectedRequests.push({ path: url.pathname, method: route.request().method() }); return route.abort() }
       if (url.pathname.endsWith('/holdings') && fail) return route.fulfill({ status: 500, json: { message: 'fixture failure' } })
       if (url.pathname.endsWith('/nav/latest') && (failNav || url.searchParams.get('productId') === '2')) return route.fulfill({ status: failNav ? 500 : 404, json: {} })
       let data = []
@@ -20,6 +22,7 @@ async page => {
       if (url.pathname.endsWith('/products')) data = [1, 2, 3].map(id => ({ id, productCode: `T${id}`, productName: `隔离持仓${id}`, assetType: 'FUND', channel: 'OTC', market: 'CN', currency: 'CNY', isActive: true }))
       return route.fulfill({ json: data })
     }
+    if (route.request().method() !== 'GET' || ['fetch', 'xhr'].includes(route.request().resourceType())) { unexpectedRequests.push(url.pathname); return route.abort() }
     return route.continue()
   })
   await page.addInitScript(() => localStorage.setItem('token', 'offline-fixture-only'))
@@ -60,9 +63,10 @@ async page => {
   check(await page.locator('.holdings-table').count() === 0, 'stale holdings survived failure')
   fail = false; failNav = false; await page.getByRole('button', { name: '重试', exact: true }).click()
   await page.getByRole('button', { name: '查看隔离持仓1的持仓详情' }).waitFor()
-  await page.evaluate(async () => { const { getAppearanceController } = await import('/wealth-hub/src/styles/appearance.ts'); getAppearanceController().set({ version: 1, mode: 'dark', palette: 'cream' }) })
+  await page.evaluate(() => document.documentElement.setAttribute('data-wh-theme', 'dark'))
   await page.screenshot({ path: 'output/playwright/holdings-dark-narrow.png', fullPage: true })
   check(errors.length === 0, errors.join('; '))
   check(requests.every(r => r.method === 'GET'), 'unexpected mutation')
-  return { result: 'PASS', requests: requests.length, pageErrors: errors.length, widths: [1440, 1100, 760], financialWrites: 0 }
+  check(unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify(unexpectedRequests))
+  return { result: 'PASS', boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', pageerrors: errors, unexpectedRequests, interceptedRequests: requests.length, widths: [1440, 1100, 760], financialWrites: 0 }
 }

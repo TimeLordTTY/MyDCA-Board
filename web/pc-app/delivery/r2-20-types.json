@@ -1,0 +1,8 @@
+{
+  "status": "content_provenance_only",
+  "task_id": "task-aiw-r2-20-ui-release-regression-20261010",
+  "original_source": "0ab91bde52262798feefec5415d2fe525b58ede9",
+  "original_run_id": "20261012-163549-32212-0",
+  "baseline": "33bdb3b916b8a344966742ebba280752a5dd0bfc",
+  "note": "旧类型摘要不作为新验收；完整44条诊断、局部配置与最终真实退出码由AiCore新run固定控制器记录。"
+}

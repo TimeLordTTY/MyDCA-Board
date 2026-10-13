@@ -1,0 +1,2168 @@
+{
+  "contractCommit": "e87d1044a8390b001af2e0db564531d14b61ae96",
+  "reviewedHead": "33bdb3b916b8a344966742ebba280752a5dd0bfc",
+  "comparison": "read-only Git diff and R2-06 contract; no old source materialized or executed",
+  "commits": [
+    {
+      "hash": "c7dcdfb236a8cc42a33f201ed705c704c51a17ae",
+      "subject": "docs: map young wealth hub UI to existing contracts",
+      "files": [
+        "docs/wealthhub_pc_young_style_contract_20261010.md"
+      ]
+    },
+    {
+      "hash": "12636c1e16770847fc2c40868a1307ba49a7618e",
+      "subject": "feat(pc): add young appearance tokens and accessible UI foundation",
+      "files": [
+        "docs/wealthhub_pc_ui_foundation_20261010.md",
+        "web/pc-app/.gitignore",
+        "web/pc-app/src/components/AppearanceSettings.vue",
+        "web/pc-app/src/components/FoundationState.vue",
+        "web/pc-app/src/main.ts",
+        "web/pc-app/src/styles/appearance.ts",
+        "web/pc-app/src/styles/foundation.css",
+        "web/pc-app/src/views/Settings.vue",
+        "web/pc-app/tests/foundation-browser.html",
+        "web/pc-app/tests/foundation.browser.js",
+        "web/pc-app/tests/foundation.test.mjs",
+        "web/pc-app/tests/tsconfig.foundation.json"
+      ]
+    },
+    {
+      "hash": "e88c3cd43833fd0dadc87224550925f0e8ae1d0f",
+      "subject": "feat(pc): add accessible wealth navigation shell",
+      "files": [
+        "docs/wealthhub_pc_navigation_shell_20261010.md",
+        "web/pc-app/src/components/WealthNavigation.vue",
+        "web/pc-app/src/layouts/MainLayout.vue",
+        "web/pc-app/src/layouts/navigation.ts",
+        "web/pc-app/src/styles/navigation-shell.css",
+        "web/pc-app/tests/dataReadiness.test.mjs",
+        "web/pc-app/tests/navigation-browser.html",
+        "web/pc-app/tests/navigation.browser.js",
+        "web/pc-app/tests/navigationShell.test.mjs",
+        "web/pc-app/tests/tsconfig.navigation.json"
+      ]
+    },
+    {
+      "hash": "83a3fb062edbdd01b96cc82a26ab2f63145bde11",
+      "subject": "feat(pc): rebuild wealth overview with factual radar summaries",
+      "files": [
+        "docs/wealthhub_pc_home_rebuild_20261010.md",
+        "web/pc-app/src/components/AssetStructureGlance.vue",
+        "web/pc-app/src/components/FinanceRadar.vue",
+        "web/pc-app/src/components/GoalProgressGlance.vue",
+        "web/pc-app/src/components/MonthlyBudgetGlance.vue",
+        "web/pc-app/src/components/RecentLedgerGlance.vue",
+        "web/pc-app/src/components/dashboardHomeModel.ts",
+        "web/pc-app/src/components/financeRadarModel.ts",
+        "web/pc-app/src/components/recentLedgerModel.ts",
+        "web/pc-app/src/styles/foundation.css",
+        "web/pc-app/src/views/Dashboard.vue",
+        "web/pc-app/tests/dashboardHome.test.mjs",
+        "web/pc-app/tests/dashboardKpiTruth.test.mjs",
+        "web/pc-app/tests/pendingSettlementList.test.mjs",
+        "web/pc-app/tests/todayTodo.test.mjs",
+        "web/pc-app/tests/tsconfig.dashboardHome.json"
+      ]
+    },
+    {
+      "hash": "a01a4b64112c866030bed711180594cfbcd9caa1",
+      "subject": "feat(pc): rebuild account and product management experience",
+      "files": [
+        "docs/wealthhub_pc_accounts_products_20261010.md",
+        "web/pc-app/.gitignore",
+        "web/pc-app/src/styles/management-pages.css",
+        "web/pc-app/src/views/Accounts.vue",
+        "web/pc-app/src/views/Products.vue",
+        "web/pc-app/src/views/managementViewModel.ts",
+        "web/pc-app/tests/accountsProducts.browser.js",
+        "web/pc-app/tests/accountsProducts.test.mjs",
+        "web/pc-app/tests/tsconfig.management.json"
+      ]
+    },
+    {
+      "hash": "32214f68dcc82ace10d845457cc1fccb7242d6e5",
+      "subject": "feat(pc): rebuild holdings valuation and returns experience",
+      "files": [
+        "docs/wealthhub_pc_holdings_experience_20261010.md",
+        "web/pc-app/delivery/task-aiw-r2-11-holdings-experience-20261010.json",
+        "web/pc-app/src/components/HoldingDetailModal.vue",
+        "web/pc-app/src/components/InitialHoldingImportModal.vue",
+        "web/pc-app/src/views/Holdings.vue",
+        "web/pc-app/src/views/Products.vue",
+        "web/pc-app/src/views/holdingsViewModel.ts",
+        "web/pc-app/tests/accountsProducts.test.mjs",
+        "web/pc-app/tests/holdingsExperience.browser.js",
+        "web/pc-app/tests/holdingsExperience.test.mjs",
+        "web/pc-app/tests/tsconfig.holdings.json"
+      ]
+    },
+    {
+      "hash": "8f18d6a726bab65db60dbafbbcbee7ecbacef623",
+      "subject": "feat(pc): rebuild ledger queries and confirmed entry experience",
+      "files": [
+        "docs/wealthhub_pc_ledger_entry_experience_20261010.md",
+        "web/pc-app/delivery/task-aiw-r2-12-ledger-entry-experience-20261010.json",
+        "web/pc-app/src/components/QuickEntryModal.vue",
+        "web/pc-app/src/components/RefundModal.vue",
+        "web/pc-app/src/components/ReimburseModal.vue",
+        "web/pc-app/src/components/UnifiedEntryModal.vue",
+        "web/pc-app/src/components/entrySafety.ts",
+        "web/pc-app/src/views/Ledger.vue",
+        "web/pc-app/src/views/ledgerViewModel.ts",
+        "web/pc-app/tests/ledgerExperience.browser.js",
+        "web/pc-app/tests/ledgerExperience.test.mjs",
+        "web/pc-app/tests/tsconfig.ledger.json"
+      ]
+    },
+    {
+      "hash": "b9d2d4453737e098d9162be44b3004e6f58cc65f",
+      "subject": "feat(pc): rebuild draft inbox and guarded review workflow",
+      "files": [
+        "docs/wealthhub_pc_draft_workflow_20261010.md",
+        "web/pc-app/delivery/task-aiw-r2-13-draft-workflow-20261010.json",
+        "web/pc-app/src/views/DraftInbox.vue",
+        "web/pc-app/tests/draftWorkflow.browser.js",
+        "web/pc-app/tests/draftWorkflow.test.mjs",
+        "web/pc-app/tests/tsconfig.draftWorkflow.json"
+      ]
+    },
+    {
+      "hash": "a9fdb126a2379e9215cf4f9606cbae69894d068b",
+      "subject": "feat(pc): rebuild orders and guarded manual settlements",
+      "files": [
+        "docs/wealthhub_pc_orders_settlements_20261010.md",
+        "web/pc-app/delivery/task-aiw-r2-14-orders-settlements-20261010.json",
+        "web/pc-app/src/components/SettlementConfirmModal.vue",
+        "web/pc-app/src/components/orderSettlementModel.ts",
+        "web/pc-app/src/styles/orders-settlements.css",
+        "web/pc-app/src/views/Orders.vue",
+        "web/pc-app/src/views/Settlements.vue",
+        "web/pc-app/tests/ordersSettlements.browser.js",
+        "web/pc-app/tests/ordersSettlements.test.mjs",
+        "web/pc-app/tests/tsconfig.ordersSettlements.json"
+      ]
+    },
+    {
+      "hash": "97bef8a477e353b9227dec75b9cfb0c2e6cfa9de",
+      "subject": "feat(pc): independently rebuild approved R2-15 planning UI",
+      "files": [
+        "docs/wealthhub_pc_goals_budget_forecast_20261010.md",
+        "web/pc-app/delivery/task-aiw-r2-15-goals-budgets-forecast-20261010.json",
+        "web/pc-app/src/components/BudgetSixMonthReview.vue",
+        "web/pc-app/src/components/GoalForecastWorkbench.vue",
+        "web/pc-app/src/components/goalForecastModel.ts",
+        "web/pc-app/src/styles/goals-planning.css",
+        "web/pc-app/src/views/GoalBudgetCenter.vue",
+        "web/pc-app/tests/goalBudgetCenter.test.mjs",
+        "web/pc-app/tests/goalForecast.test.mjs",
+        "web/pc-app/tests/goalsPlanning.browser.js"
+      ]
+    },
+    {
+      "hash": "b9fd98c5d9c1d817e1a2ec3858b88cb594185b3b",
+      "subject": "feat(pc): independently rebuild approved task-aiw-r2-16-strategy-lab-20261010",
+      "files": [
+        "docs/wealthhub_pc_strategy_lab_20261010.md",
+        "web/pc-app/src/components/ResearchWorkbench.vue",
+        "web/pc-app/src/layouts/MainLayout.vue",
+        "web/pc-app/src/styles/strategy-lab.css",
+        "web/pc-app/src/views/StrategyLab.vue",
+        "web/pc-app/tests/dataReadiness.test.mjs",
+        "web/pc-app/tests/evidenceExport.test.mjs",
+        "web/pc-app/tests/navigationShell.test.mjs",
+        "web/pc-app/tests/researchWorkbench.test.mjs",
+        "web/pc-app/tests/strategyLab.browser.js",
+        "web/pc-app/tests/strategyLab.test.mjs"
+      ]
+    },
+    {
+      "hash": "200feb0acb4c173f482c1daa66952315d3ee925b",
+      "subject": "feat(pc): independently rebuild approved task-aiw-r2-17-risk-rebalance-20261010",
+      "files": [
+        "docs/wealthhub_pc_risk_rebalance_20261010.md",
+        "web/pc-app/src/components/allocationPolicyModel.ts",
+        "web/pc-app/src/components/riskWatchModel.ts",
+        "web/pc-app/src/layouts/MainLayout.vue",
+        "web/pc-app/src/styles/risk-rebalance.css",
+        "web/pc-app/src/views/RebalanceCenter.vue",
+        "web/pc-app/src/views/RiskCenter.vue",
+        "web/pc-app/tests/dataReadiness.test.mjs",
+        "web/pc-app/tests/rebalanceCenter.test.mjs",
+        "web/pc-app/tests/riskCenter.test.mjs",
+        "web/pc-app/tests/riskRebalance.browser.js",
+        "web/pc-app/tests/strategyLab.test.mjs",
+        "web/pc-app/tests/tsconfig.risk.json"
+      ]
+    },
+    {
+      "hash": "948de37dfbe4489ad3e3c52bac1b8a7b95d0120b",
+      "subject": "feat(pc): independently rebuild approved task-aiw-r2-18-readiness-settings-20261010",
+      "files": [
+        "docs/wealthhub_pc_readiness_settings_20261010.md",
+        "web/pc-app/src/views/DataReadiness.vue",
+        "web/pc-app/src/views/Settings.vue",
+        "web/pc-app/tests/readinessSettings.browser.js",
+        "web/pc-app/tests/readinessSettings.test.mjs",
+        "web/pc-app/tests/tsconfig.readinessSettings.json"
+      ]
+    },
+    {
+      "hash": "33bdb3b916b8a344966742ebba280752a5dd0bfc",
+      "subject": "feat(pc): independently rebuild approved task-aiw-r2-19-portal-auth-a11y-20261010",
+      "files": [
+        "docs/wealthhub_pc_portal_auth_a11y_20261010.md",
+        "web/pc-app/src/App.vue",
+        "web/pc-app/src/auth/session.ts",
+        "web/pc-app/src/components/AuthEntry.vue",
+        "web/pc-app/src/components/WealthNavigation.vue",
+        "web/pc-app/src/layouts/MainLayout.vue",
+        "web/pc-app/src/main.ts",
+        "web/pc-app/src/router/index.ts",
+        "web/pc-app/src/styles/auth-portal.css",
+        "web/pc-app/src/styles/navigation-shell.css",
+        "web/pc-app/src/views/Ledger.vue",
+        "web/pc-app/src/views/Login.vue",
+        "web/pc-app/src/views/Portal.vue",
+        "web/pc-app/src/views/PortalLogin.vue",
+        "web/pc-app/tests/navigationShell.test.mjs",
+        "web/pc-app/tests/portalAuth.browser.js",
+        "web/pc-app/tests/portalAuth.test.mjs",
+        "web/pc-app/tests/tsconfig.portalAuth.json"
+      ]
+    }
+  ],
+  "commitCount": 14,
+  "changedFileCount": 128,
+  "changedFiles": [
+    "docs/wealthhub_pc_accounts_products_20261010.md",
+    "docs/wealthhub_pc_draft_workflow_20261010.md",
+    "docs/wealthhub_pc_goals_budget_forecast_20261010.md",
+    "docs/wealthhub_pc_holdings_experience_20261010.md",
+    "docs/wealthhub_pc_home_rebuild_20261010.md",
+    "docs/wealthhub_pc_ledger_entry_experience_20261010.md",
+    "docs/wealthhub_pc_navigation_shell_20261010.md",
+    "docs/wealthhub_pc_orders_settlements_20261010.md",
+    "docs/wealthhub_pc_portal_auth_a11y_20261010.md",
+    "docs/wealthhub_pc_readiness_settings_20261010.md",
+    "docs/wealthhub_pc_risk_rebalance_20261010.md",
+    "docs/wealthhub_pc_strategy_lab_20261010.md",
+    "docs/wealthhub_pc_ui_foundation_20261010.md",
+    "docs/wealthhub_pc_young_style_contract_20261010.md",
+    "web/pc-app/.gitignore",
+    "web/pc-app/delivery/task-aiw-r2-11-holdings-experience-20261010.json",
+    "web/pc-app/delivery/task-aiw-r2-12-ledger-entry-experience-20261010.json",
+    "web/pc-app/delivery/task-aiw-r2-13-draft-workflow-20261010.json",
+    "web/pc-app/delivery/task-aiw-r2-14-orders-settlements-20261010.json",
+    "web/pc-app/delivery/task-aiw-r2-15-goals-budgets-forecast-20261010.json",
+    "web/pc-app/src/App.vue",
+    "web/pc-app/src/auth/session.ts",
+    "web/pc-app/src/components/AppearanceSettings.vue",
+    "web/pc-app/src/components/AssetStructureGlance.vue",
+    "web/pc-app/src/components/AuthEntry.vue",
+    "web/pc-app/src/components/BudgetSixMonthReview.vue",
+    "web/pc-app/src/components/FinanceRadar.vue",
+    "web/pc-app/src/components/FoundationState.vue",
+    "web/pc-app/src/components/GoalForecastWorkbench.vue",
+    "web/pc-app/src/components/GoalProgressGlance.vue",
+    "web/pc-app/src/components/HoldingDetailModal.vue",
+    "web/pc-app/src/components/InitialHoldingImportModal.vue",
+    "web/pc-app/src/components/MonthlyBudgetGlance.vue",
+    "web/pc-app/src/components/QuickEntryModal.vue",
+    "web/pc-app/src/components/RecentLedgerGlance.vue",
+    "web/pc-app/src/components/RefundModal.vue",
+    "web/pc-app/src/components/ReimburseModal.vue",
+    "web/pc-app/src/components/ResearchWorkbench.vue",
+    "web/pc-app/src/components/SettlementConfirmModal.vue",
+    "web/pc-app/src/components/UnifiedEntryModal.vue",
+    "web/pc-app/src/components/WealthNavigation.vue",
+    "web/pc-app/src/components/allocationPolicyModel.ts",
+    "web/pc-app/src/components/dashboardHomeModel.ts",
+    "web/pc-app/src/components/entrySafety.ts",
+    "web/pc-app/src/components/financeRadarModel.ts",
+    "web/pc-app/src/components/goalForecastModel.ts",
+    "web/pc-app/src/components/orderSettlementModel.ts",
+    "web/pc-app/src/components/recentLedgerModel.ts",
+    "web/pc-app/src/components/riskWatchModel.ts",
+    "web/pc-app/src/layouts/MainLayout.vue",
+    "web/pc-app/src/layouts/navigation.ts",
+    "web/pc-app/src/main.ts",
+    "web/pc-app/src/router/index.ts",
+    "web/pc-app/src/styles/appearance.ts",
+    "web/pc-app/src/styles/auth-portal.css",
+    "web/pc-app/src/styles/foundation.css",
+    "web/pc-app/src/styles/goals-planning.css",
+    "web/pc-app/src/styles/management-pages.css",
+    "web/pc-app/src/styles/navigation-shell.css",
+    "web/pc-app/src/styles/orders-settlements.css",
+    "web/pc-app/src/styles/risk-rebalance.css",
+    "web/pc-app/src/styles/strategy-lab.css",
+    "web/pc-app/src/views/Accounts.vue",
+    "web/pc-app/src/views/Dashboard.vue",
+    "web/pc-app/src/views/DataReadiness.vue",
+    "web/pc-app/src/views/DraftInbox.vue",
+    "web/pc-app/src/views/GoalBudgetCenter.vue",
+    "web/pc-app/src/views/Holdings.vue",
+    "web/pc-app/src/views/Ledger.vue",
+    "web/pc-app/src/views/Login.vue",
+    "web/pc-app/src/views/Orders.vue",
+    "web/pc-app/src/views/Portal.vue",
+    "web/pc-app/src/views/PortalLogin.vue",
+    "web/pc-app/src/views/Products.vue",
+    "web/pc-app/src/views/RebalanceCenter.vue",
+    "web/pc-app/src/views/RiskCenter.vue",
+    "web/pc-app/src/views/Settings.vue",
+    "web/pc-app/src/views/Settlements.vue",
+    "web/pc-app/src/views/StrategyLab.vue",
+    "web/pc-app/src/views/holdingsViewModel.ts",
+    "web/pc-app/src/views/ledgerViewModel.ts",
+    "web/pc-app/src/views/managementViewModel.ts",
+    "web/pc-app/tests/accountsProducts.browser.js",
+    "web/pc-app/tests/accountsProducts.test.mjs",
+    "web/pc-app/tests/dashboardHome.test.mjs",
+    "web/pc-app/tests/dashboardKpiTruth.test.mjs",
+    "web/pc-app/tests/dataReadiness.test.mjs",
+    "web/pc-app/tests/draftWorkflow.browser.js",
+    "web/pc-app/tests/draftWorkflow.test.mjs",
+    "web/pc-app/tests/evidenceExport.test.mjs",
+    "web/pc-app/tests/foundation-browser.html",
+    "web/pc-app/tests/foundation.browser.js",
+    "web/pc-app/tests/foundation.test.mjs",
+    "web/pc-app/tests/goalBudgetCenter.test.mjs",
+    "web/pc-app/tests/goalForecast.test.mjs",
+    "web/pc-app/tests/goalsPlanning.browser.js",
+    "web/pc-app/tests/holdingsExperience.browser.js",
+    "web/pc-app/tests/holdingsExperience.test.mjs",
+    "web/pc-app/tests/ledgerExperience.browser.js",
+    "web/pc-app/tests/ledgerExperience.test.mjs",
+    "web/pc-app/tests/navigation-browser.html",
+    "web/pc-app/tests/navigation.browser.js",
+    "web/pc-app/tests/navigationShell.test.mjs",
+    "web/pc-app/tests/ordersSettlements.browser.js",
+    "web/pc-app/tests/ordersSettlements.test.mjs",
+    "web/pc-app/tests/pendingSettlementList.test.mjs",
+    "web/pc-app/tests/portalAuth.browser.js",
+    "web/pc-app/tests/portalAuth.test.mjs",
+    "web/pc-app/tests/readinessSettings.browser.js",
+    "web/pc-app/tests/readinessSettings.test.mjs",
+    "web/pc-app/tests/rebalanceCenter.test.mjs",
+    "web/pc-app/tests/researchWorkbench.test.mjs",
+    "web/pc-app/tests/riskCenter.test.mjs",
+    "web/pc-app/tests/riskRebalance.browser.js",
+    "web/pc-app/tests/strategyLab.browser.js",
+    "web/pc-app/tests/strategyLab.test.mjs",
+    "web/pc-app/tests/todayTodo.test.mjs",
+    "web/pc-app/tests/tsconfig.dashboardHome.json",
+    "web/pc-app/tests/tsconfig.draftWorkflow.json",
+    "web/pc-app/tests/tsconfig.foundation.json",
+    "web/pc-app/tests/tsconfig.holdings.json",
+    "web/pc-app/tests/tsconfig.ledger.json",
+    "web/pc-app/tests/tsconfig.management.json",
+    "web/pc-app/tests/tsconfig.navigation.json",
+    "web/pc-app/tests/tsconfig.ordersSettlements.json",
+    "web/pc-app/tests/tsconfig.portalAuth.json",
+    "web/pc-app/tests/tsconfig.readinessSettings.json",
+    "web/pc-app/tests/tsconfig.risk.json"
+  ],
+  "protectedChanges": [],
+  "sourceFileCount": 74,
+  "sourceFiles": [
+    "web/pc-app/src/App.vue",
+    "web/pc-app/src/auth/session.ts",
+    "web/pc-app/src/components/allocationPolicyModel.ts",
+    "web/pc-app/src/components/AppearanceSettings.vue",
+    "web/pc-app/src/components/AssetStructureGlance.vue",
+    "web/pc-app/src/components/AuthEntry.vue",
+    "web/pc-app/src/components/budgetReviewCsv.ts",
+    "web/pc-app/src/components/budgetReviewModel.ts",
+    "web/pc-app/src/components/BudgetSixMonthReview.vue",
+    "web/pc-app/src/components/dashboardHomeModel.ts",
+    "web/pc-app/src/components/dashboardKpiTruthModel.ts",
+    "web/pc-app/src/components/dataReadinessModel.ts",
+    "web/pc-app/src/components/entrySafety.ts",
+    "web/pc-app/src/components/FinanceRadar.vue",
+    "web/pc-app/src/components/financeRadarModel.ts",
+    "web/pc-app/src/components/FoundationState.vue",
+    "web/pc-app/src/components/goalBudgetModel.ts",
+    "web/pc-app/src/components/goalForecastModel.ts",
+    "web/pc-app/src/components/GoalForecastWorkbench.vue",
+    "web/pc-app/src/components/GoalProgressGlance.vue",
+    "web/pc-app/src/components/goalProgressGlanceModel.ts",
+    "web/pc-app/src/components/HoldingDetailModal.vue",
+    "web/pc-app/src/components/InitialHoldingImportModal.vue",
+    "web/pc-app/src/components/MonthlyBudgetGlance.vue",
+    "web/pc-app/src/components/monthlyBudgetGlanceModel.ts",
+    "web/pc-app/src/components/NewOrderModal.vue",
+    "web/pc-app/src/components/orderSettlementModel.ts",
+    "web/pc-app/src/components/pendingSettlementListModel.ts",
+    "web/pc-app/src/components/QuickEntryModal.vue",
+    "web/pc-app/src/components/RecentLedgerGlance.vue",
+    "web/pc-app/src/components/recentLedgerModel.ts",
+    "web/pc-app/src/components/RefundModal.vue",
+    "web/pc-app/src/components/ReimburseModal.vue",
+    "web/pc-app/src/components/ResearchWorkbench.vue",
+    "web/pc-app/src/components/riskWatchModel.ts",
+    "web/pc-app/src/components/SettlementConfirmModal.vue",
+    "web/pc-app/src/components/todayTodoModel.ts",
+    "web/pc-app/src/components/UnifiedEntryModal.vue",
+    "web/pc-app/src/components/WealthNavigation.vue",
+    "web/pc-app/src/env.d.ts",
+    "web/pc-app/src/layouts/MainLayout.vue",
+    "web/pc-app/src/layouts/navigation.ts",
+    "web/pc-app/src/main.ts",
+    "web/pc-app/src/router/index.ts",
+    "web/pc-app/src/styles/appearance.ts",
+    "web/pc-app/src/styles/auth-portal.css",
+    "web/pc-app/src/styles/foundation.css",
+    "web/pc-app/src/styles/goals-planning.css",
+    "web/pc-app/src/styles/main.css",
+    "web/pc-app/src/styles/management-pages.css",
+    "web/pc-app/src/styles/navigation-shell.css",
+    "web/pc-app/src/styles/orders-settlements.css",
+    "web/pc-app/src/styles/risk-rebalance.css",
+    "web/pc-app/src/styles/strategy-lab.css",
+    "web/pc-app/src/views/Accounts.vue",
+    "web/pc-app/src/views/Dashboard.vue",
+    "web/pc-app/src/views/DataReadiness.vue",
+    "web/pc-app/src/views/DraftInbox.vue",
+    "web/pc-app/src/views/GoalBudgetCenter.vue",
+    "web/pc-app/src/views/Holdings.vue",
+    "web/pc-app/src/views/holdingsViewModel.ts",
+    "web/pc-app/src/views/Ledger.vue",
+    "web/pc-app/src/views/ledgerViewModel.ts",
+    "web/pc-app/src/views/Login.vue",
+    "web/pc-app/src/views/managementViewModel.ts",
+    "web/pc-app/src/views/Orders.vue",
+    "web/pc-app/src/views/Portal.vue",
+    "web/pc-app/src/views/PortalLogin.vue",
+    "web/pc-app/src/views/Products.vue",
+    "web/pc-app/src/views/RebalanceCenter.vue",
+    "web/pc-app/src/views/RiskCenter.vue",
+    "web/pc-app/src/views/Settings.vue",
+    "web/pc-app/src/views/Settlements.vue",
+    "web/pc-app/src/views/StrategyLab.vue"
+  ],
+  "callsiteCount": 195,
+  "callsites": [
+    {
+      "file": "web/pc-app/src/auth/session.ts",
+      "line": 13,
+      "call": "userApi.getCurrentUser"
+    },
+    {
+      "file": "web/pc-app/src/components/AuthEntry.vue",
+      "line": 50,
+      "call": "userStore.register"
+    },
+    {
+      "file": "web/pc-app/src/components/AuthEntry.vue",
+      "line": 51,
+      "call": "userStore.login"
+    },
+    {
+      "file": "web/pc-app/src/components/FinanceRadar.vue",
+      "line": 84,
+      "call": "financeRadarApi.get"
+    },
+    {
+      "file": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "line": 91,
+      "call": "goalApi.list"
+    },
+    {
+      "file": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "line": 91,
+      "call": "budgetApi.list"
+    },
+    {
+      "file": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "line": 98,
+      "call": "goalApi.list"
+    },
+    {
+      "file": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "line": 98,
+      "call": "budgetApi.list"
+    },
+    {
+      "file": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "line": 112,
+      "call": "goalForecastApi.compare"
+    },
+    {
+      "file": "web/pc-app/src/components/GoalForecastWorkbench.vue",
+      "line": 114,
+      "call": "goalForecastApi.forecast"
+    },
+    {
+      "file": "web/pc-app/src/components/HoldingDetailModal.vue",
+      "line": 259,
+      "call": "navApi.getHistoryNav"
+    },
+    {
+      "file": "web/pc-app/src/components/HoldingDetailModal.vue",
+      "line": 266,
+      "call": "marketApi.getHistoryBars"
+    },
+    {
+      "file": "web/pc-app/src/components/HoldingDetailModal.vue",
+      "line": 271,
+      "call": "marketApi.getQuoteHistory"
+    },
+    {
+      "file": "web/pc-app/src/components/HoldingDetailModal.vue",
+      "line": 278,
+      "call": "indicatorApi.getHistoryIndicators"
+    },
+    {
+      "file": "web/pc-app/src/components/HoldingDetailModal.vue",
+      "line": 284,
+      "call": "ledgerApi.getTransactions"
+    },
+    {
+      "file": "web/pc-app/src/components/InitialHoldingImportModal.vue",
+      "line": 256,
+      "call": "productApi.getProducts"
+    },
+    {
+      "file": "web/pc-app/src/components/InitialHoldingImportModal.vue",
+      "line": 427,
+      "call": "holdingApi.importInitialHoldings"
+    },
+    {
+      "file": "web/pc-app/src/components/NewOrderModal.vue",
+      "line": 384,
+      "call": "orderApi.createOrder"
+    },
+    {
+      "file": "web/pc-app/src/components/QuickEntryModal.vue",
+      "line": 174,
+      "call": "ledgerApi.quickEntry"
+    },
+    {
+      "file": "web/pc-app/src/components/RecentLedgerGlance.vue",
+      "line": 21,
+      "call": "ledgerApi.getTransactions"
+    },
+    {
+      "file": "web/pc-app/src/components/RefundModal.vue",
+      "line": 210,
+      "call": "ledgerApi.refund"
+    },
+    {
+      "file": "web/pc-app/src/components/ReimburseModal.vue",
+      "line": 210,
+      "call": "ledgerApi.reimburse"
+    },
+    {
+      "file": "web/pc-app/src/components/ResearchWorkbench.vue",
+      "line": 96,
+      "call": "researchPlanApi.list"
+    },
+    {
+      "file": "web/pc-app/src/components/ResearchWorkbench.vue",
+      "line": 102,
+      "call": "researchPlanApi.detail"
+    },
+    {
+      "file": "web/pc-app/src/components/ResearchWorkbench.vue",
+      "line": 113,
+      "call": "researchPlanApi.create"
+    },
+    {
+      "file": "web/pc-app/src/components/ResearchWorkbench.vue",
+      "line": 120,
+      "call": "researchPlanApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/components/ResearchWorkbench.vue",
+      "line": 131,
+      "call": "backtestApi.history"
+    },
+    {
+      "file": "web/pc-app/src/components/ResearchWorkbench.vue",
+      "line": 141,
+      "call": "researchPlanApi.run"
+    },
+    {
+      "file": "web/pc-app/src/components/SettlementConfirmModal.vue",
+      "line": 96,
+      "call": "orderApi.getOrder"
+    },
+    {
+      "file": "web/pc-app/src/components/SettlementConfirmModal.vue",
+      "line": 113,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/components/SettlementConfirmModal.vue",
+      "line": 143,
+      "call": "settlementApi.previewSettlement"
+    },
+    {
+      "file": "web/pc-app/src/components/SettlementConfirmModal.vue",
+      "line": 165,
+      "call": "orderApi.confirmSettlement"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 1244,
+      "call": "orderApi.createOrder"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 1283,
+      "call": "accountStore.fetchAccounts"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 1283,
+      "call": "productStore.fetchProducts"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 1599,
+      "call": "holdingApi.getHoldings"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 1667,
+      "call": "holdingApi.getProductHoldingsByAccount"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 2691,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 2738,
+      "call": "accountApi.getAccount"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 2744,
+      "call": "accountApi.updateAccount"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3050,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3055,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3070,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3131,
+      "call": "orderApi.calculateFee"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3189,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3193,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3201,
+      "call": "productApi.getSellFeeTiers"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3398,
+      "call": "ledgerApi.updateTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3414,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3472,
+      "call": "ledgerApi.updateTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3487,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3547,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3612,
+      "call": "ledgerApi.updateTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3626,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3673,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3693,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3786,
+      "call": "productApi.getProduct"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3808,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3811,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3930,
+      "call": "ledgerApi.quickBuyMoneyMarketFund"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 3986,
+      "call": "ledgerApi.updateTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4000,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4075,
+      "call": "productApi.getProduct"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4097,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4100,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4237,
+      "call": "ledgerApi.updateTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4251,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4290,
+      "call": "ledgerApi.createTransaction"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4343,
+      "call": "ledgerApi.createCustodyTransfer"
+    },
+    {
+      "file": "web/pc-app/src/components/UnifiedEntryModal.vue",
+      "line": 4367,
+      "call": "ledgerApi.refund"
+    },
+    {
+      "file": "web/pc-app/src/layouts/MainLayout.vue",
+      "line": 108,
+      "call": "userStore.logout"
+    },
+    {
+      "file": "web/pc-app/src/layouts/MainLayout.vue",
+      "line": 139,
+      "call": "ledgerApi.recalculateAllBalanceHistory"
+    },
+    {
+      "file": "web/pc-app/src/layouts/MainLayout.vue",
+      "line": 178,
+      "call": "apiClient.post"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 949,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1114,
+      "call": "productApi.getProducts"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1162,
+      "call": "accountStore.updateAccount"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1166,
+      "call": "accountStore.createAccount"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1199,
+      "call": "accountStore.adjustBalance"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1222,
+      "call": "accountApi.getAccounts"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1242,
+      "call": "holdingApi.getHoldings"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1244,
+      "call": "holdingApi.getHoldings"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1267,
+      "call": "marketApi.getRealtimeQuotes"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1317,
+      "call": "brokerFeeApi.getFeeConfigs"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1363,
+      "call": "brokerFeeApi.deleteFeeConfig"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1411,
+      "call": "brokerFeeApi.updateFeeConfig"
+    },
+    {
+      "file": "web/pc-app/src/views/Accounts.vue",
+      "line": 1419,
+      "call": "brokerFeeApi.createFeeConfig"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 523,
+      "call": "dashboardApi.getTodayActions"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 539,
+      "call": "todoApi.getTodayTodos"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 547,
+      "call": "dashboardApi.getPendingSettlements"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 566,
+      "call": "accountStore.fetchAccounts"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 576,
+      "call": "dashboardApi.getAssetOverview"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 579,
+      "call": "holdingApi.getHoldings"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 590,
+      "call": "marketApi.getRealtimeQuotes"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 593,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 683,
+      "call": "orderApi.getOrder"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 710,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 720,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 734,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 812,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 849,
+      "call": "settlementApi.previewSettlement"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 871,
+      "call": "orderApi.confirmSettlement"
+    },
+    {
+      "file": "web/pc-app/src/views/Dashboard.vue",
+      "line": 1119,
+      "call": "productStore.fetchProducts"
+    },
+    {
+      "file": "web/pc-app/src/views/DataReadiness.vue",
+      "line": 50,
+      "call": "dataReadinessApi.diagnose"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 940,
+      "call": "accountApi.getAccounts"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 940,
+      "call": "productApi.getProducts"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 955,
+      "call": "holdingApi.getProductHoldingsByAccount"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 980,
+      "call": "draftApi.listDrafts"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1027,
+      "call": "aiAccountingApi.parseText"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1038,
+      "call": "aiAccountingApi.draftFromIntent"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1060,
+      "call": "draftApi.getDraft"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1079,
+      "call": "draftApi.history"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1099,
+      "call": "draftApi.reopen"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1099,
+      "call": "draftApi.copyConfirmed"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1099,
+      "call": "draftApi.ignoreDraft"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1125,
+      "call": "draftApi.updateDraft"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1138,
+      "call": "draftApi.previewDraft"
+    },
+    {
+      "file": "web/pc-app/src/views/DraftInbox.vue",
+      "line": 1173,
+      "call": "draftApi.confirmDraft"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 78,
+      "call": "budgetApi.detail"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 92,
+      "call": "goalApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 92,
+      "call": "budgetApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 99,
+      "call": "goalApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 99,
+      "call": "budgetApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 118,
+      "call": "goalApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 118,
+      "call": "goalApi.create"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 119,
+      "call": "budgetApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 119,
+      "call": "budgetApi.create"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 130,
+      "call": "goalApi.detail"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 130,
+      "call": "goalApi.progress"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 131,
+      "call": "budgetApi.detail"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 131,
+      "call": "budgetApi.comparison"
+    },
+    {
+      "file": "web/pc-app/src/views/GoalBudgetCenter.vue",
+      "line": 140,
+      "call": "goalApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/Holdings.vue",
+      "line": 93,
+      "call": "holdingApi.getHoldings"
+    },
+    {
+      "file": "web/pc-app/src/views/Holdings.vue",
+      "line": 99,
+      "call": "marketApi.getRealtimeQuotes"
+    },
+    {
+      "file": "web/pc-app/src/views/Holdings.vue",
+      "line": 100,
+      "call": "navApi.getLatestNav"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 578,
+      "call": "ledgerApi.getTransactions"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 626,
+      "call": "ledgerStatsApi.getSummary"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 627,
+      "call": "ledgerStatsApi.getTrend"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 628,
+      "call": "ledgerStatsApi.getBreakdown"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 629,
+      "call": "ledgerStatsApi.getTop"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 659,
+      "call": "ledgerApi.getTransactionDetail"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 933,
+      "call": "ledgerApi.getTransactionDetail"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 946,
+      "call": "ledgerApi.getTransactionDetail"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 957,
+      "call": "accountApi.getAccounts"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 973,
+      "call": "ledgerApi.getTransactionDetail"
+    },
+    {
+      "file": "web/pc-app/src/views/Ledger.vue",
+      "line": 1007,
+      "call": "ledgerApi.deleteTransaction"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 88,
+      "call": "orderApi.getOrders"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 88,
+      "call": "accountApi.getAccounts"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 88,
+      "call": "productApi.getProducts"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 93,
+      "call": "orderApi.getOrder"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 98,
+      "call": "navApi.getNavByDate"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 124,
+      "call": "orderApi.getOrder"
+    },
+    {
+      "file": "web/pc-app/src/views/Orders.vue",
+      "line": 146,
+      "call": "orderApi.cancelOrder"
+    },
+    {
+      "file": "web/pc-app/src/views/Portal.vue",
+      "line": 168,
+      "call": "userStore.logout"
+    },
+    {
+      "file": "web/pc-app/src/views/Products.vue",
+      "line": 585,
+      "call": "productApi.getProducts"
+    },
+    {
+      "file": "web/pc-app/src/views/Products.vue",
+      "line": 928,
+      "call": "productApi.getSellFeeTiers"
+    },
+    {
+      "file": "web/pc-app/src/views/Products.vue",
+      "line": 978,
+      "call": "productStore.updateProduct"
+    },
+    {
+      "file": "web/pc-app/src/views/Products.vue",
+      "line": 982,
+      "call": "productStore.createProduct"
+    },
+    {
+      "file": "web/pc-app/src/views/Products.vue",
+      "line": 1028,
+      "call": "productApi.saveSellFeeTiers"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 50,
+      "call": "allocationPolicyApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 52,
+      "call": "allocationPolicyApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 63,
+      "call": "allocationPolicyApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 63,
+      "call": "allocationPolicyApi.create"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 65,
+      "call": "allocationPolicyApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 66,
+      "call": "allocationPolicyApi.evaluate"
+    },
+    {
+      "file": "web/pc-app/src/views/RebalanceCenter.vue",
+      "line": 67,
+      "call": "allocationPolicyApi.preview"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 53,
+      "call": "riskWatchApi.snapshots"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 53,
+      "call": "riskWatchApi.events"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 58,
+      "call": "riskWatchApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 60,
+      "call": "riskWatchApi.list"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 61,
+      "call": "riskWatchApi.events"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 63,
+      "call": "riskWatchApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 63,
+      "call": "riskWatchApi.create"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 64,
+      "call": "riskWatchApi.edit"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 65,
+      "call": "riskWatchApi.evaluate"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 66,
+      "call": "riskWatchApi.acknowledge"
+    },
+    {
+      "file": "web/pc-app/src/views/RiskCenter.vue",
+      "line": 67,
+      "call": "riskWatchApi.mute"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 155,
+      "call": "userApi.updateProfile"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 160,
+      "call": "userStore.fetchCurrentUser"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 200,
+      "call": "userApi.changePassword"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 232,
+      "call": "familyApi.getMembers"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 248,
+      "call": "familyApi.addMember"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 266,
+      "call": "familyApi.removeMember"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 279,
+      "call": "familyApi.updateMemberRole"
+    },
+    {
+      "file": "web/pc-app/src/views/Settings.vue",
+      "line": 288,
+      "call": "userStore.fetchCurrentUser"
+    },
+    {
+      "file": "web/pc-app/src/views/Settlements.vue",
+      "line": 85,
+      "call": "settlementApi.getPendingSettlements"
+    },
+    {
+      "file": "web/pc-app/src/views/Settlements.vue",
+      "line": 85,
+      "call": "productApi.getProducts"
+    },
+    {
+      "file": "web/pc-app/src/views/Settlements.vue",
+      "line": 102,
+      "call": "settlementApi.getHistory"
+    },
+    {
+      "file": "web/pc-app/src/views/Settlements.vue",
+      "line": 118,
+      "call": "settlementApi.getAudit"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 169,
+      "call": "backtestApi.history"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 178,
+      "call": "apiClient.get"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 182,
+      "call": "apiClient.get"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 211,
+      "call": "apiClient.post"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 234,
+      "call": "backtestApi.evidence"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 256,
+      "call": "backtestApi.research"
+    },
+    {
+      "file": "web/pc-app/src/views/StrategyLab.vue",
+      "line": 268,
+      "call": "backtestApi.compare"
+    }
+  ],
+  "sharedEndpointCount": 115,
+  "endpoints": [
+    {
+      "file": "web/shared/src/api/account.ts",
+      "line": 39,
+      "method": "GET",
+      "path": "/accounts"
+    },
+    {
+      "file": "web/shared/src/api/account.ts",
+      "line": 47,
+      "method": "GET",
+      "path": "/accounts/${id}"
+    },
+    {
+      "file": "web/shared/src/api/account.ts",
+      "line": 55,
+      "method": "POST",
+      "path": "/accounts"
+    },
+    {
+      "file": "web/shared/src/api/account.ts",
+      "line": 63,
+      "method": "PUT",
+      "path": "/accounts/${id}"
+    },
+    {
+      "file": "web/shared/src/api/account.ts",
+      "line": 71,
+      "method": "PUT",
+      "path": "/accounts/${id}/balance"
+    },
+    {
+      "file": "web/shared/src/api/account.ts",
+      "line": 80,
+      "method": "GET",
+      "path": "/accounts/${platformId}/mmf-shares"
+    },
+    {
+      "file": "web/shared/src/api/aiAccounting.ts",
+      "line": 20,
+      "method": "POST",
+      "path": "/ai/accounting/parse-text"
+    },
+    {
+      "file": "web/shared/src/api/aiAccounting.ts",
+      "line": 28,
+      "method": "POST",
+      "path": "/ai/accounting/draft-from-intent"
+    },
+    {
+      "file": "web/shared/src/api/allocationPolicy.ts",
+      "line": 9,
+      "method": "POST",
+      "path": "${path(id)}/evaluate"
+    },
+    {
+      "file": "web/shared/src/api/allocationPolicy.ts",
+      "line": 10,
+      "method": "GET",
+      "path": "${path(id)}/preview"
+    },
+    {
+      "file": "web/shared/src/api/auth.ts",
+      "line": 13,
+      "method": "POST",
+      "path": "/auth/register"
+    },
+    {
+      "file": "web/shared/src/api/auth.ts",
+      "line": 24,
+      "method": "POST",
+      "path": "/auth/login"
+    },
+    {
+      "file": "web/shared/src/api/auth.ts",
+      "line": 36,
+      "method": "POST",
+      "path": "/auth/logout"
+    },
+    {
+      "file": "web/shared/src/api/backtest.ts",
+      "line": 6,
+      "method": "GET",
+      "path": "/backtest-lab/runs"
+    },
+    {
+      "file": "web/shared/src/api/backtest.ts",
+      "line": 8,
+      "method": "GET",
+      "path": "/backtest-lab/runs/${encodeURIComponent(historyRunId)}"
+    },
+    {
+      "file": "web/shared/src/api/backtest.ts",
+      "line": 10,
+      "method": "POST",
+      "path": "/backtest-lab/runs/compare"
+    },
+    {
+      "file": "web/shared/src/api/backtest.ts",
+      "line": 12,
+      "method": "POST",
+      "path": "/backtest-lab/runs/research"
+    },
+    {
+      "file": "web/shared/src/api/backtest.ts",
+      "line": 14,
+      "method": "POST",
+      "path": "/backtest-lab/runs/evidence"
+    },
+    {
+      "file": "web/shared/src/api/brokerFee.ts",
+      "line": 27,
+      "method": "GET",
+      "path": "/accounts/${accountId}/broker-fee-configs"
+    },
+    {
+      "file": "web/shared/src/api/brokerFee.ts",
+      "line": 35,
+      "method": "GET",
+      "path": "/accounts/${accountId}/broker-fee-configs/${id}"
+    },
+    {
+      "file": "web/shared/src/api/brokerFee.ts",
+      "line": 43,
+      "method": "POST",
+      "path": "/accounts/${accountId}/broker-fee-configs"
+    },
+    {
+      "file": "web/shared/src/api/brokerFee.ts",
+      "line": 51,
+      "method": "PUT",
+      "path": "/accounts/${accountId}/broker-fee-configs/${id}"
+    },
+    {
+      "file": "web/shared/src/api/brokerFee.ts",
+      "line": 59,
+      "method": "DELETE",
+      "path": "/accounts/${accountId}/broker-fee-configs/${id}"
+    },
+    {
+      "file": "web/shared/src/api/dashboard.ts",
+      "line": 13,
+      "method": "GET",
+      "path": "/dashboard/asset-overview"
+    },
+    {
+      "file": "web/shared/src/api/dashboard.ts",
+      "line": 23,
+      "method": "GET",
+      "path": "/dashboard/asset-allocation"
+    },
+    {
+      "file": "web/shared/src/api/dashboard.ts",
+      "line": 33,
+      "method": "GET",
+      "path": "/dashboard/pending-settlements"
+    },
+    {
+      "file": "web/shared/src/api/dashboard.ts",
+      "line": 41,
+      "method": "GET",
+      "path": "/dashboard/today-actions"
+    },
+    {
+      "file": "web/shared/src/api/dashboard.ts",
+      "line": 49,
+      "method": "GET",
+      "path": "/dashboard/performance"
+    },
+    {
+      "file": "web/shared/src/api/dataReadiness.ts",
+      "line": 6,
+      "method": "GET",
+      "path": "/data-readiness"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 20,
+      "method": "GET",
+      "path": "/drafts/${draftId}/history"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 24,
+      "method": "POST",
+      "path": "/drafts/${draftId}/reopen"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 28,
+      "method": "POST",
+      "path": "/drafts/${draftId}/copy"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 35,
+      "method": "POST",
+      "path": "/drafts"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 43,
+      "method": "GET",
+      "path": "/drafts"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 51,
+      "method": "GET",
+      "path": "/drafts/${draftId}"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 59,
+      "method": "PUT",
+      "path": "/drafts/${draftId}"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 67,
+      "method": "POST",
+      "path": "/drafts/${draftId}/preview"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 75,
+      "method": "POST",
+      "path": "/drafts/${draftId}/confirm"
+    },
+    {
+      "file": "web/shared/src/api/draft.ts",
+      "line": 83,
+      "method": "POST",
+      "path": "/drafts/${draftId}/ignore"
+    },
+    {
+      "file": "web/shared/src/api/family.ts",
+      "line": 13,
+      "method": "GET",
+      "path": "/families"
+    },
+    {
+      "file": "web/shared/src/api/family.ts",
+      "line": 21,
+      "method": "POST",
+      "path": "/families"
+    },
+    {
+      "file": "web/shared/src/api/family.ts",
+      "line": 29,
+      "method": "GET",
+      "path": "/families/members"
+    },
+    {
+      "file": "web/shared/src/api/family.ts",
+      "line": 37,
+      "method": "POST",
+      "path": "/families/members"
+    },
+    {
+      "file": "web/shared/src/api/family.ts",
+      "line": 44,
+      "method": "DELETE",
+      "path": "/families/members/${userId}"
+    },
+    {
+      "file": "web/shared/src/api/family.ts",
+      "line": 52,
+      "method": "PUT",
+      "path": "/families/members/${userId}/role"
+    },
+    {
+      "file": "web/shared/src/api/financeRadar.ts",
+      "line": 6,
+      "method": "GET",
+      "path": "/finance-radar"
+    },
+    {
+      "file": "web/shared/src/api/goalBudget.ts",
+      "line": 6,
+      "method": "GET",
+      "path": "/goals"
+    },
+    {
+      "file": "web/shared/src/api/goalBudget.ts",
+      "line": 8,
+      "method": "POST",
+      "path": "/goals"
+    },
+    {
+      "file": "web/shared/src/api/goalBudget.ts",
+      "line": 10,
+      "method": "GET",
+      "path": "${goalPath(id)}/progress"
+    },
+    {
+      "file": "web/shared/src/api/goalBudget.ts",
+      "line": 13,
+      "method": "GET",
+      "path": "/monthly-budgets"
+    },
+    {
+      "file": "web/shared/src/api/goalBudget.ts",
+      "line": 15,
+      "method": "POST",
+      "path": "/monthly-budgets"
+    },
+    {
+      "file": "web/shared/src/api/goalBudget.ts",
+      "line": 17,
+      "method": "GET",
+      "path": "${budgetPath(id)}/comparison"
+    },
+    {
+      "file": "web/shared/src/api/goalForecast.ts",
+      "line": 5,
+      "method": "POST",
+      "path": "/goals/${encodeURIComponent(id)}/forecast"
+    },
+    {
+      "file": "web/shared/src/api/goalForecast.ts",
+      "line": 6,
+      "method": "POST",
+      "path": "/goals/scenarios/compare"
+    },
+    {
+      "file": "web/shared/src/api/holding.ts",
+      "line": 30,
+      "method": "GET",
+      "path": "/holdings"
+    },
+    {
+      "file": "web/shared/src/api/holding.ts",
+      "line": 38,
+      "method": "GET",
+      "path": "/holdings/${productId}"
+    },
+    {
+      "file": "web/shared/src/api/holding.ts",
+      "line": 46,
+      "method": "POST",
+      "path": "/holdings/import-initial"
+    },
+    {
+      "file": "web/shared/src/api/holding.ts",
+      "line": 54,
+      "method": "GET",
+      "path": "/holdings/product/${productId}/by-account"
+    },
+    {
+      "file": "web/shared/src/api/indicator.ts",
+      "line": 23,
+      "method": "GET",
+      "path": "/indicators/history?${params.toString()}"
+    },
+    {
+      "file": "web/shared/src/api/indicator.ts",
+      "line": 32,
+      "method": "GET",
+      "path": "/indicators/latest?productId=${productId}&windowDays=${windowDays}"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 23,
+      "method": "GET",
+      "path": "/ledger/txns"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 33,
+      "method": "GET",
+      "path": "/ledger/txns/${txnId}"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 45,
+      "method": "POST",
+      "path": "/ledger/txns"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 53,
+      "method": "POST",
+      "path": "/ledger/quick-entry"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 61,
+      "method": "POST",
+      "path": "/ledger/txns/${txnId}/refund"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 69,
+      "method": "POST",
+      "path": "/ledger/txns/${txnId}/reimburse"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 77,
+      "method": "POST",
+      "path": "/ledger/txns/${txnId}/reverse"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 91,
+      "method": "POST",
+      "path": "/ledger/txns/custody-transfer"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 99,
+      "method": "PUT",
+      "path": "/ledger/txns/${txnId}"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 107,
+      "method": "DELETE",
+      "path": "/ledger/txns/${txnId}"
+    },
+    {
+      "file": "web/shared/src/api/ledger.ts",
+      "line": 115,
+      "method": "POST",
+      "path": "/ledger/quick-buy-mmf"
+    },
+    {
+      "file": "web/shared/src/api/ledgerStats.ts",
+      "line": 24,
+      "method": "GET",
+      "path": "/ledger/stats/summary"
+    },
+    {
+      "file": "web/shared/src/api/ledgerStats.ts",
+      "line": 29,
+      "method": "GET",
+      "path": "/ledger/stats/trend"
+    },
+    {
+      "file": "web/shared/src/api/ledgerStats.ts",
+      "line": 34,
+      "method": "GET",
+      "path": "/ledger/stats/breakdown"
+    },
+    {
+      "file": "web/shared/src/api/ledgerStats.ts",
+      "line": 39,
+      "method": "GET",
+      "path": "/ledger/stats/top"
+    },
+    {
+      "file": "web/shared/src/api/market.ts",
+      "line": 21,
+      "method": "GET",
+      "path": "/market/bars?${params.toString()}"
+    },
+    {
+      "file": "web/shared/src/api/market.ts",
+      "line": 30,
+      "method": "GET",
+      "path": "/market/bars/latest?productId=${productId}"
+    },
+    {
+      "file": "web/shared/src/api/market.ts",
+      "line": 45,
+      "method": "GET",
+      "path": "/market/quotes?${params}"
+    },
+    {
+      "file": "web/shared/src/api/market.ts",
+      "line": 54,
+      "method": "GET",
+      "path": "/market/quotes/latest?productId=${productId}"
+    },
+    {
+      "file": "web/shared/src/api/market.ts",
+      "line": 76,
+      "method": "GET",
+      "path": "/market/quotes/history?${params.toString()}"
+    },
+    {
+      "file": "web/shared/src/api/nav.ts",
+      "line": 21,
+      "method": "GET",
+      "path": "/nav/history?${params.toString()}"
+    },
+    {
+      "file": "web/shared/src/api/nav.ts",
+      "line": 30,
+      "method": "GET",
+      "path": "/nav/latest?productId=${productId}"
+    },
+    {
+      "file": "web/shared/src/api/nav.ts",
+      "line": 45,
+      "method": "GET",
+      "path": "/nav/by-date?productId=${productId}&navDate=${navDate}"
+    },
+    {
+      "file": "web/shared/src/api/order.ts",
+      "line": 13,
+      "method": "GET",
+      "path": "/orders"
+    },
+    {
+      "file": "web/shared/src/api/order.ts",
+      "line": 21,
+      "method": "GET",
+      "path": "/orders/${orderId}"
+    },
+    {
+      "file": "web/shared/src/api/order.ts",
+      "line": 29,
+      "method": "POST",
+      "path": "/orders"
+    },
+    {
+      "file": "web/shared/src/api/order.ts",
+      "line": 37,
+      "method": "POST",
+      "path": "/orders/${orderId}/cancel"
+    },
+    {
+      "file": "web/shared/src/api/order.ts",
+      "line": 44,
+      "method": "POST",
+      "path": "/orders/${data.orderId}/settle"
+    },
+    {
+      "file": "web/shared/src/api/order.ts",
+      "line": 56,
+      "method": "POST",
+      "path": "/orders/calculate-fee"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 24,
+      "method": "GET",
+      "path": "/products"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 32,
+      "method": "GET",
+      "path": "/products/${id}"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 40,
+      "method": "POST",
+      "path": "/products"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 48,
+      "method": "PUT",
+      "path": "/products/${id}"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 56,
+      "method": "POST",
+      "path": "/products/sort-order"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 63,
+      "method": "GET",
+      "path": "/products/${productId}/sell-fee-tiers"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 71,
+      "method": "POST",
+      "path": "/products/${productId}/sell-fee-tiers"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 78,
+      "method": "POST",
+      "path": "/products/${productId}/refresh-market-data"
+    },
+    {
+      "file": "web/shared/src/api/product.ts",
+      "line": 86,
+      "method": "POST",
+      "path": "/products/refresh-all-market-data"
+    },
+    {
+      "file": "web/shared/src/api/researchPlan.ts",
+      "line": 7,
+      "method": "GET",
+      "path": "/research-plans"
+    },
+    {
+      "file": "web/shared/src/api/researchPlan.ts",
+      "line": 11,
+      "method": "POST",
+      "path": "/research-plans"
+    },
+    {
+      "file": "web/shared/src/api/researchPlan.ts",
+      "line": 15,
+      "method": "POST",
+      "path": "${path(id)}/runs"
+    },
+    {
+      "file": "web/shared/src/api/riskWatch.ts",
+      "line": 9,
+      "method": "POST",
+      "path": "${path(id)}/evaluate"
+    },
+    {
+      "file": "web/shared/src/api/riskWatch.ts",
+      "line": 10,
+      "method": "GET",
+      "path": "${path(id)}/snapshots"
+    },
+    {
+      "file": "web/shared/src/api/riskWatch.ts",
+      "line": 11,
+      "method": "GET",
+      "path": "${path(id)}/events"
+    },
+    {
+      "file": "web/shared/src/api/riskWatch.ts",
+      "line": 12,
+      "method": "PATCH",
+      "path": "${path(id)}/events/${encodeURIComponent(fingerprint)}/acknowledge"
+    },
+    {
+      "file": "web/shared/src/api/riskWatch.ts",
+      "line": 13,
+      "method": "PATCH",
+      "path": "${path(id)}/mute"
+    },
+    {
+      "file": "web/shared/src/api/settlement.ts",
+      "line": 10,
+      "method": "GET",
+      "path": "/settlements/history"
+    },
+    {
+      "file": "web/shared/src/api/settlement.ts",
+      "line": 12,
+      "method": "GET",
+      "path": "/settlements/history/${encodeURIComponent(orderId)}"
+    },
+    {
+      "file": "web/shared/src/api/settlement.ts",
+      "line": 17,
+      "method": "GET",
+      "path": "/settlements/pending"
+    },
+    {
+      "file": "web/shared/src/api/settlement.ts",
+      "line": 28,
+      "method": "POST",
+      "path": "/settlements/preview"
+    },
+    {
+      "file": "web/shared/src/api/settlement.ts",
+      "line": 39,
+      "method": "POST",
+      "path": "/settlements/confirm"
+    },
+    {
+      "file": "web/shared/src/api/todo.ts",
+      "line": 13,
+      "method": "GET",
+      "path": "/todos/today"
+    },
+    {
+      "file": "web/shared/src/api/user.ts",
+      "line": 13,
+      "method": "GET",
+      "path": "/users/me"
+    },
+    {
+      "file": "web/shared/src/api/user.ts",
+      "line": 21,
+      "method": "PUT",
+      "path": "/users/me"
+    },
+    {
+      "file": "web/shared/src/api/user.ts",
+      "line": 29,
+      "method": "POST",
+      "path": "/users/change-password"
+    }
+  ],
+  "browserFixtures": [
+    {
+      "file": "web/pc-app/tests/accountsProducts.browser.js",
+      "sha256": "4d167271db862f3327dbfdba265b3169ed9caa5fb7e733e41902632de40fceb3"
+    },
+    {
+      "file": "web/pc-app/tests/draftWorkflow.browser.js",
+      "sha256": "d9dd9cf021499f5df0f5ae8f0797f1d04ec938de480fba3dc0b2363638032419"
+    },
+    {
+      "file": "web/pc-app/tests/foundation.browser.js",
+      "sha256": "a0abe52e8848d10c5ff2cdb3a3c53860442e1a88cf6aaab6aae983235ba961f8"
+    },
+    {
+      "file": "web/pc-app/tests/goalsPlanning.browser.js",
+      "sha256": "bd174ddace8dbff3a19266ee61624f10f50a1d6b8db17e105f3850ff30dfe4c7"
+    },
+    {
+      "file": "web/pc-app/tests/holdingsExperience.browser.js",
+      "sha256": "700f3e07b4507e549290a571f7746d22a9f534a4998e897a0349e60f7e5b43cc"
+    },
+    {
+      "file": "web/pc-app/tests/ledgerExperience.browser.js",
+      "sha256": "becab82be9ab85c8b691775630de0b51b1d3902a54b57480580d2e28f9ec7e6a"
+    },
+    {
+      "file": "web/pc-app/tests/navigation.browser.js",
+      "sha256": "f86ce2d061a3b849674eae1f84263224fa860b271989553326064b82279137b7"
+    },
+    {
+      "file": "web/pc-app/tests/ordersSettlements.browser.js",
+      "sha256": "714a61fff1eee8d1520ea203f18f68b0fe71a08aecb2c62a73659b42fd2d9420"
+    },
+    {
+      "file": "web/pc-app/tests/portalAuth.browser.js",
+      "sha256": "eadf621978ac31ecc099346a82bc06a3f3cd77e1f955bcabdb34c684a46e06ee"
+    },
+    {
+      "file": "web/pc-app/tests/readinessSettings.browser.js",
+      "sha256": "bda42502ac15dc2c34573a1a11a6b612951c35892c7fd6920738c4a4f027d479"
+    },
+    {
+      "file": "web/pc-app/tests/riskRebalance.browser.js",
+      "sha256": "bdf6ca43f32aae0f11ede3c2a48b8abb98da35107a796849922117fdd72b9f2e"
+    },
+    {
+      "file": "web/pc-app/tests/strategyLab.browser.js",
+      "sha256": "9f8eebf1e05ad3c12b76f60757204ef7ff7f1887509c1094dfa873b8c42c7968"
+    }
+  ],
+  "caveat": "Inventory counts are source evidence, not proof of backend authorization or production deployment. See release review for per-page semantic checks."
+}

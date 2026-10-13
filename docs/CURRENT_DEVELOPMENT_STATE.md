@@ -1,7 +1,7 @@
 # 财富中枢当前开发状态
 
 - **作者**：ChatGPT（依据 v2 代码、AiCore Delivery Manifest 与 GitHub Actions 证据同步）
-- **更新时间**：2026-10-11 +08:00（核对 2026-10-10 交付）
+- **更新时间**：2026-10-13 +08:00（R2-20 离线回归；2026-10-10 部署事实保持独立）
 - **工程仓库**：`TimeLordTTY/MyDCA-Board@v2`
 
 > 本文件是“当前实现状态”的首要事实源。长篇设计文档、版本专项报告和 Phase1/Phase2 历史总结保留设计/历史价值；若其中的“当前状态、下一步、尚未实现”与本文件冲突，以本文件和实际代码为准。
@@ -17,6 +17,10 @@
 最新证据矩阵、真实待办分类及本次验证/Delivery 边界见 [当前事实核对报告](mydca_current_truth_20261010.md)。以下版本描述记录工程演进；其中“本任务未部署/未推送”仅指当时工程任务，不覆盖上述指定生产环境的新证据。
 
 ## 当前阶段
+
+2026-10-13：第二轮 PC 年轻个性版 R2-06～R2-19 的14份正式交付已在输入HEAD `33bdb3b916b8a344966742ebba280752a5dd0bfc`。R2-20全站回归内容收口，包含17具名页面/14业务导航和原操作契约；本源码采用同任务受控独立重建，全部Node、21局部类型、全量TS对照、完整hook及12份隔离Edge fixture的最终实际结果以AiCore新run和正式Delivery为准。类型基线仍有44条历史诊断，不宣称全量类型通过。
+
+工程交付是否已completed请读AiCore `reports/delivery/task-aiw-r2-20-ui-release-regression-20261010.json`，Goal及企业微信汇总分别核验，不能靠本文候选内容宣布完成。R2-20仅改测试/内容证据与三份文档，无产品源码、backend/shared/SQL/Android/依赖/编译入口修改，未连接生产、改真实资金或部署。发布报告中订单owner授权、真实角色/设备、owner主观设计仍是上线门禁。完整操作矩阵、静态配套、未执行项及人工回滚方案见 [第二轮PC发布准备报告](wealthhub_pc_young_ui_release_review_20261010.md)；本节不改变2026-10-10指定环境的历史部署事实。
 
 v0.21 数据就绪发布硬化：Android 0.21.0 / 22。PC 展示个人/家庭管理员诊断，Android 目标/预算页展示个人只读诊断与来源详情。READY 仅表示可读，UNKNOWN/PARTIAL 不当零；行情三日窗口、预算月份与诊断时间分别标明。接口 SCHEMA 固定 UNKNOWN，不实时验证部署结构；工程读取不执行迁移或财务写入。详见 `docs/mydca_v021_release_hardening_20261008.md`。
 
@@ -87,7 +91,7 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 
 ## v0.8 强幂等（已完成）
 
-任务：`task-mydca-v08-draft-strong-idempotency-20260927`  
+任务：`task-mydca-v08-draft-strong-idempotency-20260927`
 结果提交：`ea8b3618e25c648127c62750c307ae8af976dd56`
 
 - 应用层 `sourceType + sourceRef` 幂等查询继续保留。

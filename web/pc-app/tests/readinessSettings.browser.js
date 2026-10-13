@@ -12,7 +12,7 @@ async page => {
       return route.continue()
     }
     const path = url.pathname.replace('/api/v2', ''), body = req.postDataJSON()
-    requests.push({ path, method, body })
+    requests.push({ path, method, body, scope: url.searchParams.get('scope') })
     let data
     if (path === '/users/me' && ['GET', 'PUT'].includes(method)) data = user()
     else if (path === '/users/change-password' && method === 'POST') {
@@ -55,10 +55,12 @@ async page => {
   check((await readiness.locator('.quality-grid').innerText()).includes('尚无可用诊断证据'), 'missing evidence not neutral')
   for (const scope of ['PERSONAL', 'FAMILY']) {
     mode = 'denied'
+    const beforeDenied = requests.length
     await readiness.getByRole('combobox', { name: '诊断作用域' }).selectOption(scope)
     await readiness.getByRole('button', { name: '刷新只读诊断' }).click()
-    await page.waitForURL('**/wealth-hub/login')
-    check(requests.at(-1).path === '/data-readiness', 'denial bypassed')
+    await page.waitForURL(url => url.pathname === '/wealth-hub/login' && url.searchParams.get('reason') === 'session')
+    check(requests.slice(beforeDenied).some(r => r.method === 'GET' && r.path === '/data-readiness' && r.scope === scope), 'denial bypassed')
+    check(await page.evaluate(() => localStorage.getItem('token')) === null, 'denial retained token')
     mode = 'normal'; await goto('data-readiness')
     await readiness.getByText('fixture-ASSETS', { exact: true }).first().waitFor()
   }
@@ -130,6 +132,7 @@ async page => {
       check(await section.evaluate(n => n.scrollWidth <= n.clientWidth + 1), `${name} overflow ${width}`)
     }
     await page.evaluate(() => document.documentElement.dataset.whTheme = 'dark')
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('.wealth-identity button')).backgroundColor === 'rgb(41, 44, 39)')
     check(await section.evaluate(n => getComputedStyle(n).color === 'rgb(255, 254, 250)'), 'dark theme text not applied')
     await page.screenshot({ path: `output/playwright/readinessSettings-${name}-dark.png`, fullPage: true })
     await section.locator('.section-nav a').last().focus(); await page.keyboard.press('Enter')

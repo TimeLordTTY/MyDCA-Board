@@ -13,7 +13,7 @@ async page => {
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method()
     if (url.origin !== 'http://127.0.0.1:3115') { blockedExternalRequests.push(url.origin); return route.abort() }
-    if (!url.pathname.includes('/api/')) { if (method !== 'GET') { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }; return route.continue() }
+    if (!url.pathname.includes('/api/')) { if (method !== 'GET' || ['fetch', 'xhr'].includes(request.resourceType())) { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }; return route.continue() }
     if (method !== 'GET' && !(method === 'POST' && /\/(forecast|compare)$/.test(url.pathname))) { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }
     const body = request.postDataJSON(); requests.push({ path: url.pathname, method, body })
     let data

@@ -1,6 +1,8 @@
 async (page) => {
   const check = (value, message) => { if (!value) throw Error(message) }
   const requests = []
+  const unexpectedRequests = [], pageerrors = []
+  page.on('pageerror', error => pageerrors.push(error.message))
   let touchActivations = 0
   const activate = async locator => {
     try { await locator.tap(); touchActivations++ }
@@ -11,13 +13,15 @@ async (page) => {
   }
   await page.route('**/*', async route => {
     const url = new URL(route.request().url())
-    if (url.hostname !== '127.0.0.1') return route.abort()
-    if (url.pathname.startsWith('/api/')) {
+    if (url.origin !== 'http://127.0.0.1:3108') { unexpectedRequests.push(url.origin); return route.abort() }
+    if (url.pathname.includes('/api/')) {
       requests.push({ path: url.pathname, method: route.request().method() })
-      if (url.pathname === '/api/v2/users/me') return route.fulfill({ json: { id: 1, username: 'test-only', nickname: '离线验收', familyId: 7 } })
-      if (url.pathname.endsWith('/auth/logout')) return route.abort()
+      if (route.request().method() === 'GET' && url.pathname === '/api/v2/users/me') return route.fulfill({ json: { id: 1, username: 'test-only', nickname: '离线验收', familyId: 7 } })
+      if (route.request().method() === 'POST' && url.pathname.endsWith('/auth/logout')) return route.abort()
+      if (route.request().method() !== 'GET' || !/\/(accounts|products|holdings|market\/quotes|nav\/latest)$/.test(url.pathname)) { unexpectedRequests.push(url.pathname); return route.abort() }
       return route.fulfill({ json: [] })
     }
+    if (route.request().method() !== 'GET' || ['fetch', 'xhr'].includes(route.request().resourceType())) { unexpectedRequests.push(url.pathname); return route.abort() }
     return route.continue()
   })
   await page.addInitScript(() => localStorage.setItem('token', 'offline-test-only'))
@@ -43,11 +47,22 @@ async (page) => {
     await link.click()
     check(await page.locator('.wealth-header h1').innerText() === label, `unreachable ${label}`)
     check(await link.getAttribute('aria-current') === 'page', `missing active state ${label}`)
-    check((await page.locator('.wealth-actions').count()) === (['目标与预算', '数据就绪检查'].includes(label) ? 0 : 1), `unsafe actions ${label}`)
+    check((await page.locator('.wealth-actions').count()) === (['目标与预算', '数据就绪检查', '策略实验室', '风险观察', '配置观察'].includes(label) ? 0 : 1), `unsafe actions ${label}`)
   }
   await page.locator('#retained-input').fill('主题切换保留输入')
   for (const mode of ['light', 'dark', 'legacy', 'system']) {
     await page.locator('#appearance-mode').selectOption(mode)
+    if (mode !== 'legacy') {
+      await page.waitForFunction(() => {
+        const dark = document.documentElement.dataset.whTheme === 'dark'
+        return getComputedStyle(document.querySelector('.wealth-identity button')).backgroundColor === (dark ? 'rgb(41, 44, 39)' : 'rgb(255, 254, 250)')
+      })
+      const ratios = await page.locator('.wealth-header .wh-button').evaluateAll(buttons => {
+        const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(Number).map(n => n / 255).map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4).reduce((sum, n, i) => sum + n * [.2126, .7152, .0722][i], 0)
+        return buttons.map(button => { const css = getComputedStyle(button), a = luminance(css.color), b = luminance(css.backgroundColor); return (Math.max(a, b) + .05) / (Math.min(a, b) + .05) })
+      })
+      check(ratios.every(ratio => ratio >= 4.5), `header contrast ${mode}: ${JSON.stringify(ratios)}`)
+    }
     check(await page.locator('#retained-input').inputValue() === '主题切换保留输入', 'theme reset form')
     check(!(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)), 'desktop overflow')
   }
@@ -95,5 +110,6 @@ async (page) => {
   await page.locator('.wealth-header h1').waitFor()
   check(await page.locator('.wealth-header h1').innerText() === '持仓管理', 'deep link refresh failed')
   check(requests.filter(r => r.method !== 'GET').every(r => r.path.endsWith('/auth/logout')), 'unexpected financial write')
-  return { pass: true, routes: 14, widths: [1440, 1080, 390], themes: 4, touchActivations, requests }
+  check(pageerrors.length === 0 && unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify({ pageerrors, unexpectedRequests }))
+  return { result: 'PASS', boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', pageerrors, unexpectedRequests, interceptedRequests: requests.length, financialWrites: 0, routes: 14, widths: [1440, 1080, 390], themes: 4, headerContrastAtLeast: 4.5, touchActivations, requests }
 }

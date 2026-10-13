@@ -12,7 +12,7 @@ async page => {
   await page.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url()), method = request.method()
     if (url.origin !== origin) { unexpected.push(url.origin); return route.abort() }
-    if (!url.pathname.includes('/api/')) { if (method !== 'GET') unexpected.push({ path: url.pathname, method }); return method === 'GET' ? route.continue() : route.abort() }
+    if (!url.pathname.includes('/api/')) { if (method !== 'GET' || ['fetch', 'xhr'].includes(request.resourceType())) { unexpected.push({ path: url.pathname, method }); return route.abort() }; return route.continue() }
     const path = url.pathname.replace('/api/v2', ''), body = request.postDataJSON()
     requests.push({ path, method, body })
     let data

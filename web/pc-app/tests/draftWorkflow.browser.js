@@ -1,6 +1,8 @@
 async page => {
   const check = (condition, reason) => { if (!condition) throw Error(reason) }
   const errors = [], requests = []
+  const unexpectedRequests = []
+  const origin = 'http://127.0.0.1:3113'
   let failList = false, failPreview = false
   const account = (id, name, extra = {}) => ({ id, accountName: name, accountType: 'BANK', accountKind: 'REAL', fundUsage: 'SPENDABLE', currency: 'CNY', isActive: true, ...extra })
   const accounts = [account(10, '隔离银行'), account(11, '隔离生活账户', { parentAccountId: 10 }), account(21, '隔离到账账户'), account(31, '隔离持仓来源', { fundUsage: 'INVESTABLE' })]
@@ -10,8 +12,15 @@ async page => {
   page.on('pageerror', e => errors.push(e.message))
   await page.route('**/*', async route => {
     const url = new URL(route.request().url()), method = route.request().method()
-    if (url.hostname !== '127.0.0.1') return route.abort()
-    if (!url.pathname.includes('/api/')) return route.continue()
+    if (url.origin !== origin) { unexpectedRequests.push(route.request().url()); return route.abort() }
+    if (!url.pathname.includes('/api/')) {
+      if (method !== 'GET' || ['fetch', 'xhr'].includes(route.request().resourceType())) { unexpectedRequests.push(url.pathname); return route.abort() }
+      return route.continue()
+    }
+    const read = method === 'GET' && /\/(users\/me|accounts|products|holdings\/product\/\d+\/by-account|drafts(?:\/\d+(?:\/history)?)?)$/.test(url.pathname)
+    const write = method === 'PUT' && /\/drafts\/\d+$/.test(url.pathname)
+    const action = method === 'POST' && /\/(drafts\/\d+\/(preview|confirm)|parse-text|draft-from-intent)$/.test(url.pathname)
+    if (!read && !write && !action) { unexpectedRequests.push({ path: url.pathname, method }); return route.abort() }
     const body = route.request().postDataJSON()
     requests.push({ path: url.pathname, method, body, query: url.search })
     let data = []
@@ -128,5 +137,6 @@ async page => {
   check(requests.filter(r => r.path.endsWith('/confirm')).length === 1, 'text creation confirmed automatically')
   check(errors.length === 0, errors.join('\n'))
   check(requests.filter(r => r.method !== 'GET').every(r => /\/drafts\/\d+\/(preview|confirm)$/.test(r.path) || /\/drafts\/\d+$/.test(r.path) || /\/(parse-text|draft-from-intent)$/.test(r.path)), 'unexpected write endpoint')
-  return { result: 'PASS', widths: [1440, 1100, 760], pageerrors: errors, requests: requests.length, fixtureConfirmWrites: 1, fixtureDraftSaves: requests.filter(r => r.method === 'PUT').length }
+  check(unexpectedRequests.length === 0 && requests.length > 0, JSON.stringify(unexpectedRequests))
+  return { result: 'PASS', boundary: 'ALL_BUSINESS_REQUESTS_INTERCEPTED_NO_SERVER_OR_PRODUCTION_CONNECTION', widths: [1440, 1100, 760], pageerrors: errors, unexpectedRequests, interceptedRequests: requests.length, financialWrites: 0, fixtureConfirmWrites: 1, fixtureDraftSaves: requests.filter(r => r.method === 'PUT').length }
 }
