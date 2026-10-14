@@ -1,8 +1,4 @@
-"""Offline transaction; live transport is fail-closed pending missing evidence.
-
-Real sandbox files, bounded byte streams and SHA chains. No subprocess, socket,
-SSH, SCP, systemctl, database or financial API implementation is present.
-"""
+"""Shared transaction core with filesystem sandbox and separate SSH transport."""
 import hashlib
 import json
 import os
@@ -86,6 +82,7 @@ class LocalBackup:
     def __init__(self, parent):
         self.path = Path(parent) / ('mydca-' + uuid.uuid4().hex)
         self.receipt = None
+        self.security_check = None
 
     def capture(self, adapter, inventory):
         self.path.mkdir(mode=0o700, parents=True)
@@ -107,6 +104,10 @@ class LocalBackup:
         return self.receipt
 
     def verify(self):
+        if self.security_check:
+            self.security_check(self.path)
+            for entry in self.path.rglob('*'):
+                self.security_check(entry)
         if not self.receipt or digest(self.path / 'manifest.json') != self.receipt:
             raise Blocked('missing or corrupt local manifest')
         inventory = json.loads((self.path / 'manifest.json').read_bytes())
@@ -153,6 +154,7 @@ def deploy(adapter, release, backup_parent, confirm):
     """
     result = {'exit_code': 1, 'status': 'BLOCKED_BEFORE_STOP'}
     backup = LocalBackup(backup_parent)
+    backup.security_check = getattr(adapter, 'security_check', None)
     result['backup_path'] = str(backup.path)
     changed, locked, was_running = False, False, False
     try:
@@ -182,12 +184,16 @@ def deploy(adapter, release, backup_parent, confirm):
         adapter.replace(release)
         adapter.start()
         accept(adapter)
+        if hasattr(adapter, 'finish'):
+            adapter.finish()
         result.update(exit_code=0, status='SUCCESS', backend='UP', upstream=401)
     except (OSError, Blocked, ValueError) as error:
         result['reason'] = str(error)
         if changed:
             try:
                 inventory = backup.verify()
+                if hasattr(adapter, 'reconnect_for_restore'):
+                    adapter.reconnect_for_restore()
                 adapter.stop()
                 adapter.restore(backup, inventory)
                 if was_running:
@@ -200,13 +206,22 @@ def deploy(adapter, release, backup_parent, confirm):
                     result['rollback_backend'] = 'ORIGINAL_INACTIVE'
                 if adapter.inventory() != inventory:
                     raise Blocked('restored bytes/mode/owner inventory mismatch')
+                if hasattr(adapter, 'finish'):
+                    adapter.finish()
                 result.update(exit_code=1, status='ROLLED_BACK')
             except (OSError, Blocked, ValueError) as recovery_error:
+                result.pop('rollback_backend', None)
                 result.update(exit_code=2, status='ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED',
                               recovery_reason=str(recovery_error))
     finally:
         if locked:
-            adapter.unlock()
+            try:
+                adapter.unlock()
+            except (OSError, Blocked, ValueError) as error:
+                result.pop('rollback_backend', None)
+                result.update(exit_code=2 if changed else 1,
+                              status='ROLLBACK_FAILED_MANUAL_RECOVERY_REQUIRED' if changed else 'BLOCKED_BEFORE_STOP',
+                              reason='session close unconfirmed: ' + str(error))
     return result
 
 

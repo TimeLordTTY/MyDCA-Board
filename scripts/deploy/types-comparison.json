@@ -1,14 +1,14 @@
 {
   "status": "NO_NEW_DIAGNOSTICS",
-  "baseline_base": "9008ec9e646b3804fd7d6a6fd6e0651be17338e1",
-  "baseline_report_sha256": "d863b19aae973010c353fd81cd69099048cbf35279e8f9311a3d9de0c7ddf823",
-  "baseline_log_sha256": "da3078b9267dc499733e483a4e702346229d891167fa4e019245010924adce32",
-  "baseline_exit_code": 2,
-  "candidate_exit_code": 2,
-  "baseline_count": 44,
-  "candidate_count": 44,
+  "baseline_base": "a288665624da368db5f9ee89dd04c40576840d22",
+  "baseline_report_sha256": "7ab6f4773349fcaa48a5455e21fc6b53fb397030744094207b0d26334737051f",
+  "baseline_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "baseline_exit_code": 0,
+  "candidate_exit_code": 0,
+  "baseline_count": 0,
+  "candidate_count": 0,
   "diagnostics_equal": true,
   "added": {},
   "removed": {},
-  "candidate_log_sha256": "da3078b9267dc499733e483a4e702346229d891167fa4e019245010924adce32"
+  "candidate_log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 }
