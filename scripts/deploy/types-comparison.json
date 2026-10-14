@@ -1,0 +1,14 @@
+{
+  "status": "NO_NEW_DIAGNOSTICS",
+  "baseline_base": "9008ec9e646b3804fd7d6a6fd6e0651be17338e1",
+  "baseline_report_sha256": "d863b19aae973010c353fd81cd69099048cbf35279e8f9311a3d9de0c7ddf823",
+  "baseline_log_sha256": "da3078b9267dc499733e483a4e702346229d891167fa4e019245010924adce32",
+  "baseline_exit_code": 2,
+  "candidate_exit_code": 2,
+  "baseline_count": 44,
+  "candidate_count": 44,
+  "diagnostics_equal": true,
+  "added": {},
+  "removed": {},
+  "candidate_log_sha256": "da3078b9267dc499733e483a4e702346229d891167fa4e019245010924adce32"
+}
