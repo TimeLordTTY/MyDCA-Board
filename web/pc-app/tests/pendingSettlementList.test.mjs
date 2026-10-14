@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 const source = await readFile(new URL('../src/components/pendingSettlementListModel.ts', import.meta.url), 'utf8')
 const model = await import(`data:text/javascript,${encodeURIComponent(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText)}`)
@@ -35,9 +34,10 @@ test('token/family/role/route change, reset, unmount/deactivation discard old re
 })
 test('Dashboard independent GET survives upstream failure; wiring preserves original manual chain and todo isolation', async () => {
   const dashboard=(await readFile(new URL('../src/views/Dashboard.vue',import.meta.url),'utf8')).replaceAll('\r\n','\n')
-  const baseline=execFileSync('git',['show','e88c3cd43833fd0dadc87224550925f0e8ae1d0f:web/pc-app/src/views/Dashboard.vue'],{encoding:'utf8'}).replaceAll('\r\n','\n')
-  const handlers=s=>s.slice(s.indexOf('// ---------- 今日建议 - 订单结算相关逻辑'),s.indexOf('function updateAllocationChart') >= 0 ? s.indexOf('function updateAllocationChart') : s.indexOf('function handleTodayActionClick')) + s.slice(s.indexOf('function handleTodayActionClick'),s.indexOf('function handleTodoItemClick'))
-  assert.equal(handlers(dashboard),handlers(baseline))
+  // Four-type preview/owner/token behavior is exercised in dashboardHome.test.mjs.
+  assert.match(dashboard,/const handleConfirmSettlement = \(orderId: string\) => openOrderSettlement\(orderId\)/)
+  assert.match(dashboard,/const confirmed = await previewAndConfirmSettlement\(input\)/)
+  assert.match(dashboard,/if \(!confirmed\) return/)
   assert.match(dashboard,/onBeforeUnmount\(pendingSettlementLoader.suspend\)/);assert.match(dashboard,/onDeactivated\(pendingSettlementLoader.suspend\)/)
   assert.match(dashboard,/router.currentRoute.value.fullPath/);assert.match(dashboard,/pendingSettlementState.status === 'success' && pendingSettlements.length === 0/)
   assert.match(dashboard,/@click="handleConfirmSettlement\(settlement.orderId\)"/)

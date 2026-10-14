@@ -102,8 +102,6 @@ const categories = computed(() => incomeCategories)
 const categoryOptions = computed(() => {
   if (categories.value.length === 0) return []
   const groups = getCategoryGroups(categories.value)
-  // 默认选择"报销"分类
-  const reimburseCategory = categories.value.find(cat => cat.categoryL1 === '报销')
   return groups.map((group: any) => {
     if (group.categories.length === 1 && !group.categories[0].categoryL2) {
       return {
@@ -203,9 +201,6 @@ async function handleSubmit() {
     submitting.value = true
     await ElMessageBox.confirm(`请核对金额 ${form.value.amount} 元、账户 ${form.value.accountId} 及时间 ${form.value.occurredAt}。确认后提交正式接口。`, '确认这一笔', { confirmButtonText: '确认提交', cancelButtonText: '返回修改', type: 'warning' })
     if (owner !== identity() || !visible.value || snapshot !== JSON.stringify([form.value, props])) { serverError.value = '身份或填写内容已变化，请重新核对。'; return }
-    const categoryId = Array.isArray(form.value.category) 
-      ? (form.value.category[form.value.category.length - 1] as number)
-      : (form.value.category as number)
     
     await ledgerApi.reimburse(props.expenseTxn.txnId, {
       reimburseAmount: form.value.amount,

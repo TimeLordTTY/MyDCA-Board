@@ -58,8 +58,8 @@
 import { ref, computed, watch } from 'vue'
 import { ElNotification, ElMessageBox } from 'element-plus'
 import { useAccountStore, useUserStore } from '@wealth-hub/shared'
-import { ledgerApi as rawLedgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, getCategoryDisplayName } from '@wealth-hub/shared'
-import type { Account, Category } from '@wealth-hub/shared'
+import { ledgerApi as rawLedgerApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups } from '@wealth-hub/shared'
+import type { Account } from '@wealth-hub/shared'
 
 import { guardWrites, entryWriteState, uncertainWriteMessage } from './entrySafety'
 import { localDateTime } from '../views/ledgerViewModel'

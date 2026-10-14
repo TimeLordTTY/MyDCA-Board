@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
-import { execFileSync } from 'node:child_process'
 import ts from 'typescript'
 import { parse, compileScript, compileTemplate } from '@vue/compiler-sfc'
 import * as vue from 'vue'
@@ -163,7 +162,7 @@ test('today suggestions discard late requests and distinguish failure from verif
   s.cleanup()
 })
 
-test('home templates compile, show factual contracts and preserve financial handlers verbatim', async () => {
+test('home templates compile, show factual contracts and retain manual settlement entry points', async () => {
   const files = ['views/Dashboard.vue', 'components/FinanceRadar.vue', 'components/RecentLedgerGlance.vue', 'components/AssetStructureGlance.vue', 'components/MonthlyBudgetGlance.vue', 'components/GoalProgressGlance.vue']
   for (const file of files) {
     const source = await read(file)
@@ -174,9 +173,12 @@ test('home templates compile, show factual contracts and preserve financial hand
   for (const title of ['净资产', '可用资金', '持仓市值', '负债', '今日待办', '待结算清单']) assert.ok(dashboard.includes(title))
   for (const entry of ['handleDashboardAmountChange', 'handleDashboardSharesChange', 'handleDashboardNavChange', 'handleSettlementNavDateChange', 'handleConfirmSettlementFromDashboard', 'handleTodayActionClick', 'handleTodoItemClick']) assert.match(dashboard, new RegExp(`@(?:click|change)="${entry}`))
   assert.match(dashboard, /name: 'Holdings'/); assert.match(dashboard, /name: 'DraftInbox'/)
-  const baseline = execFileSync('git', ['show', 'e88c3cd43833fd0dadc87224550925f0e8ae1d0f:web/pc-app/src/views/Dashboard.vue'], { encoding: 'utf8' }).replaceAll('\r\n', '\n')
-  const handlers = s => s.slice(s.indexOf('// ---------- 今日建议 - 订单结算相关逻辑'), s.indexOf('function updateAllocationChart') >= 0 ? s.indexOf('function updateAllocationChart') : s.indexOf('function handleTodayActionClick')) + s.slice(s.indexOf('function handleTodayActionClick'), s.indexOf('function handleTodoItemClick'))
-  assert.equal(handlers(dashboard), handlers(baseline))
+  // Runtime cases above exercise all four order types, blocked previews, owner cancellation
+  // and the backend fresh token. Historical source equality also included unused helpers.
+  assert.match(dashboard, /await settlementApi\.previewSettlement\(input\)/)
+  assert.match(dashboard, /if \(!preview\.confirmSupported\)/)
+  assert.match(dashboard, /await ElMessageBox\.confirm\(buildSettlementPreviewText\(preview\)/)
+  assert.match(dashboard, /await orderApi\.confirmSettlement\(\{ \.\.\.input, freshPreviewToken: preview\.freshPreviewToken \}\)/)
   const radar = await read('components/FinanceRadar.vue')
   assert.match(radar, /v-for="item in items"/); assert.match(radar, /JSON.stringify\(radar, null, 2\)/); assert.match(radar, /radar.warnings/); assert.match(radar, /setInterval/)
   const ledger = await read('components/RecentLedgerGlance.vue')

@@ -1,0 +1,213 @@
+{
+  "node": "v24.19.0",
+  "baselineCommit": "9008ec9e646b3804fd7d6a6fd6e0651be17338e1",
+  "baselineLogSha256": "da3078b9267dc499733e483a4e702346229d891167fa4e019245010924adce32",
+  "baselineExitCode": 2,
+  "baselineCount": 44,
+  "baselineDiagnostics": {
+    "src/components/NewOrderModal.vue: error TS6133: 'acc' is declared but its value is never read.": 1,
+    "src/components/QuickEntryModal.vue: error TS6133: 'getCategoryDisplayName' is declared but its value is never read.": 1,
+    "src/components/QuickEntryModal.vue: error TS6196: 'Category' is declared but never used.": 1,
+    "src/components/RefundModal.vue: error TS6133: 'txnAny' is declared but its value is never read.": 1,
+    "src/components/ReimburseModal.vue: error TS6133: 'reimburseCategory' is declared but its value is never read.": 1,
+    "src/components/ReimburseModal.vue: error TS6133: 'categoryId' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'node' is declared but its value is never read.": 12,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'getFundUsageLabel' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'parentAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'availableChildAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'availableFromChildAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'availableToChildAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'expenseAllocationError' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedParentAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedParentAccountCredit' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedChildAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'isSelectedChildCreditAccount' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedFromParentAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedFromParentAccountCredit' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedFromChildAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'isSelectedFromChildCreditAccount' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedToParentAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedToParentAccountCredit' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedToChildAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'isSelectedToChildCreditAccount' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleRepaymentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleFromParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleToParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleBuyParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleBuyAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleSellParentAccountChange' is declared but its value is never read.": 1,
+    "src/views/Dashboard.vue: error TS6133: 'calculateSettlementFromForm' is declared but its value is never read.": 1
+  },
+  "final": {
+    "config": "web/pc-app/tsconfig.json",
+    "exitCode": 0,
+    "output": "",
+    "diagnostics": {}
+  },
+  "focused": [
+    {
+      "config": "web/pc-app/tests/tsconfig.allocation.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.budgetReview.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.dashboardHome.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.dashboardKpiTruth.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.draftWorkflow.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.foundation.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.goalBudget.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.goalForecast.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.goalProgressGlance.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.holdings.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.ledger.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.management.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.monthlyBudgetGlance.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.navigation.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.ordersSettlements.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.pendingSettlementList.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.portalAuth.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.readinessSettings.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.research.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.risk.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    },
+    {
+      "config": "web/pc-app/tests/tsconfig.todayTodo.json",
+      "exitCode": 0,
+      "output": "",
+      "diagnostics": {}
+    }
+  ],
+  "added": {},
+  "removed": {
+    "src/components/NewOrderModal.vue: error TS6133: 'acc' is declared but its value is never read.": 1,
+    "src/components/QuickEntryModal.vue: error TS6133: 'getCategoryDisplayName' is declared but its value is never read.": 1,
+    "src/components/QuickEntryModal.vue: error TS6196: 'Category' is declared but never used.": 1,
+    "src/components/RefundModal.vue: error TS6133: 'txnAny' is declared but its value is never read.": 1,
+    "src/components/ReimburseModal.vue: error TS6133: 'reimburseCategory' is declared but its value is never read.": 1,
+    "src/components/ReimburseModal.vue: error TS6133: 'categoryId' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'node' is declared but its value is never read.": 12,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'getFundUsageLabel' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'parentAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'availableChildAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'availableFromChildAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'availableToChildAccounts' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'expenseAllocationError' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedParentAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedParentAccountCredit' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedChildAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'isSelectedChildCreditAccount' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedFromParentAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedFromParentAccountCredit' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedFromChildAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'isSelectedFromChildCreditAccount' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedToParentAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedToParentAccountCredit' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'selectedToChildAccountBalance' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'isSelectedToChildCreditAccount' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleRepaymentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleFromParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleToParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleBuyParentAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleBuyAccountChange' is declared but its value is never read.": 1,
+    "src/components/UnifiedEntryModal.vue: error TS6133: 'handleSellParentAccountChange' is declared but its value is never read.": 1,
+    "src/views/Dashboard.vue: error TS6133: 'calculateSettlementFromForm' is declared but its value is never read.": 1
+  },
+  "baselineReadOnly": true
+}

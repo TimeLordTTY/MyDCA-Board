@@ -45,9 +45,10 @@ test('Dashboard wiring keeps independent settlements unchanged and todo GET/manu
   assert.doesNotMatch(dashboard, /router.push\(item.actionPath\)|console.warn\('加载今日待办/)
   assert.match(dashboard, /watch\(\[\(\) => userStore.token, \(\) => userStore.user\], todoLoader.reset/)
   assert.match(dashboard, /onBeforeUnmount\(todoLoader.suspend\)/); assert.match(dashboard, /onDeactivated\(todoLoader.suspend\)/)
-  const cp = await import('node:child_process'); const baseline = cp.execFileSync('git', ['show', 'e88c3cd43833fd0dadc87224550925f0e8ae1d0f:web/pc-app/src/views/Dashboard.vue'], { encoding: 'utf8' }).replaceAll('\r\n', '\n')
-  const handlers = s => s.slice(s.indexOf('// ---------- 今日建议 - 订单结算相关逻辑'), s.indexOf('function updateAllocationChart') >= 0 ? s.indexOf('function updateAllocationChart') : s.indexOf('function handleTodayActionClick')) + s.slice(s.indexOf('function handleTodayActionClick'), s.indexOf('function handleTodoItemClick'))
-  assert.equal(handlers(dashboard), handlers(baseline))
+  // Manual settlement runtime gates are covered in dashboardHome.test.mjs.
+  const todoHandler = dashboard.slice(dashboard.indexOf('function handleTodoItemClick'), dashboard.indexOf('</script>'))
+  assert.match(todoHandler, /draftDestination\(item\)/)
+  assert.doesNotMatch(todoHandler, /confirmSettlement|previewSettlement|\.confirm\(/)
   assert.doesNotMatch(source, /confirm\(|settlementApi|orderApi|console\.|localStorage|fetch\(/)
 })
 

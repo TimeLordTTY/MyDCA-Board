@@ -81,7 +81,7 @@
                 style="flex: 1; min-width: 280px;"
                 clearable
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -136,7 +136,7 @@
                     clearable
                     @update:model-value="(val: any) => handleExpenseAccountChange(index, val)"
                   >
-                    <template #default="{ node, data }">
+                    <template #default="{ data }">
                       <span>{{ data.label }}</span>
                       <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '11px', marginLeft: '8px' }">
                         {{ data.balanceText }}
@@ -198,7 +198,7 @@
                 style="flex: 1; min-width: 280px;"
                 clearable
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -271,7 +271,7 @@
                   style="flex: 1; min-width: 280px;"
                   clearable
                 >
-                  <template #default="{ node, data }">
+                  <template #default="{ data }">
                     <span>{{ data.label }}</span>
                     <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                       {{ data.balanceText }}
@@ -293,7 +293,7 @@
                   style="flex: 1; min-width: 280px;"
                   clearable
                 >
-                  <template #default="{ node, data }">
+                  <template #default="{ data }">
                     <span>{{ data.label }}</span>
                     <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                       {{ data.balanceText }}
@@ -477,7 +477,7 @@
                 clearable
                 @change="handleBuyAccountCascaderChange"
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -589,7 +589,7 @@
                 clearable
                 @change="handleBuyAccountCascaderChange"
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -775,7 +775,7 @@
                 clearable
                 @change="handleSellAccountCascaderChange"
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -917,7 +917,7 @@
                 clearable
                 @change="handleSellAccountCascaderChange"
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -1060,7 +1060,7 @@
                 style="flex: 1; min-width: 280px;"
                 clearable
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -1155,7 +1155,7 @@
                 style="flex: 1; min-width: 280px;"
                 clearable
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -1181,7 +1181,7 @@
                 style="flex: 1; min-width: 280px;"
                 clearable
               >
-                <template #default="{ node, data }">
+                <template #default="{ data }">
                   <span>{{ data.label }}</span>
                   <span v-if="data.balanceText" :style="{ color: data.isCredit ? '#ef4444' : '#4ea4ff', fontSize: '12px', marginLeft: '12px' }">
                     {{ data.balanceText }}
@@ -1224,7 +1224,7 @@
 import { ref, computed, watch } from 'vue'
 import { ElNotification } from 'element-plus'
 import { useAccountStore, useProductStore } from '@wealth-hub/shared'
-import { ledgerApi as rawLedgerApi, accountApi, getFundUsageLabel, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi as rawOrderApi, holdingApi } from '@wealth-hub/shared'
+import { ledgerApi as rawLedgerApi, accountApi, expenseCategories, incomeCategories, getCategoryGroups, findCategoryById, getCategoryDisplayName, navApi, productApi, formatCurrency, orderApi as rawOrderApi, holdingApi } from '@wealth-hub/shared'
 import type { Account, LedgerTxnDetail, CreateOrderRequest } from '@wealth-hub/shared'
 import { guardWrites, entryWriteState, uncertainWriteMessage } from './entrySafety'
 import { localDateTime, editReason } from '../views/ledgerViewModel'
@@ -1405,33 +1405,6 @@ const txnTypeOptions: Record<string, { name: string; icon: string }> = {
   ADJUST: { name: '调整', icon: '⚙️' },
 }
 
-// const cashLeafAccounts = computed(() => accountStore.cashLeafAccounts) // 未使用，已注释
-
-// 父账户列表（有子账户的账户）
-const parentAccounts = computed(() => {
-  // 从账户树中获取所有有子账户的账户
-  const parentList: Account[] = []
-  
-  // 安全检查：确保 accountTree 存在且是数组
-  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
-    return parentList
-  }
-  
-  function traverse(accounts: Account[]) {
-    accounts.forEach(acc => {
-      // 如果有children且children不为空，说明是父账户
-      if (acc.children && acc.children.length > 0 && acc.accountKind === 'REAL') {
-        parentList.push(acc)
-        // 递归处理子账户（因为子账户可能也是父账户）
-        traverse(acc.children)
-      }
-    })
-  }
-  
-  traverse(accountStore.accountTree)
-  return parentList
-})
-
 // 从账户树中查找账户的辅助函数
 function findAccountById(accounts: Account[], id: number): Account | null {
   for (const acc of accounts) {
@@ -1445,54 +1418,6 @@ function findAccountById(accounts: Account[], id: number): Account | null {
   }
   return null
 }
-
-// 可用的子账户（根据选择的父账户）
-const availableChildAccounts = computed(() => {
-  if (!form.value.parentAccountId) return []
-  
-  // 安全检查：确保 accountTree 存在且是数组
-  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
-    return []
-  }
-  
-  const parentAccount = findAccountById(accountStore.accountTree, form.value.parentAccountId)
-  if (!parentAccount || !parentAccount.children) return []
-  
-  // 返回父账户的所有REAL类型的子账户
-  return parentAccount.children.filter(acc => acc.accountKind === 'REAL')
-})
-
-// 转出账户的可用于账户（根据选择的转出父账户）
-const availableFromChildAccounts = computed(() => {
-  if (!form.value.fromParentAccountId) return []
-  
-  // 安全检查：确保 accountTree 存在且是数组
-  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
-    return []
-  }
-  
-  const parentAccount = findAccountById(accountStore.accountTree, form.value.fromParentAccountId)
-  if (!parentAccount || !parentAccount.children) return []
-  
-  // 返回父账户的所有REAL类型的子账户
-  return parentAccount.children.filter(acc => acc.accountKind === 'REAL')
-})
-
-// 转入账户的可用于账户（根据选择的转入父账户）
-const availableToChildAccounts = computed(() => {
-  if (!form.value.toParentAccountId) return []
-  
-  // 安全检查：确保 accountTree 存在且是数组
-  if (!accountStore.accountTree || !Array.isArray(accountStore.accountTree)) {
-    return []
-  }
-  
-  const parentAccount = findAccountById(accountStore.accountTree, form.value.toParentAccountId)
-  if (!parentAccount || !parentAccount.children) return []
-  
-  // 返回父账户的所有REAL类型的子账户
-  return parentAccount.children.filter(acc => acc.accountKind === 'REAL')
-})
 
 // 关联产品的父账户列表（有 linkedProductId 的账户）
 const linkedProductParentAccounts = computed(() => {
@@ -1753,16 +1678,6 @@ const expenseTotalAllocatedAmount = computed(() => {
     .reduce((sum, fl) => sum + (fl.amount || 0), 0)
 })
 
-// 组合支付分配错误提示
-const expenseAllocationError = computed(() => {
-  if (!useComboPayment.value || form.value.amount == null) return null
-  const diff = Math.abs(expenseTotalAllocatedAmount.value - form.value.amount)
-  if (diff > 0.01) {
-    return `已分配金额 ${expenseTotalAllocatedAmount.value.toFixed(2)} 元，与总金额 ${form.value.amount.toFixed(2)} 元不一致（差额：${diff.toFixed(2)} 元）`
-  }
-  return null
-})
-
 // 组合支付 - 还需分配的金额
 const expenseRemainingAmount = computed(() => {
   if (!form.value.amount) return 0
@@ -1875,85 +1790,6 @@ function calculateParentBalances(account: Account | null): { balance: number; cr
   }
   return { balance: account.balance || 0, credit: 0 }
 }
-
-// 余额计算属性
-// 父账户余额和贷款额
-const selectedParentBalances = computed(() => {
-  if (!form.value.parentAccountId) return { balance: 0, credit: 0 }
-  const account = findAccountInTree(accountStore.accountTree || null, form.value.parentAccountId)
-  return calculateParentBalances(account)
-})
-
-const selectedParentAccountBalance = computed(() => selectedParentBalances.value.balance)
-const selectedParentAccountCredit = computed(() => selectedParentBalances.value.credit)
-
-// 子账户余额：从账户树中获取
-const selectedChildAccountBalance = computed(() => {
-  if (!form.value.accountId) return 0
-  const account = findAccountInTree(accountStore.accountTree || null, form.value.accountId)
-  if (!account) return 0
-  return account.balance || 0
-})
-
-// 子账户是否为信贷账户
-const isSelectedChildCreditAccount = computed(() => {
-  if (!form.value.accountId) return false
-  const account = findAccountInTree(accountStore.accountTree || null, form.value.accountId)
-  if (!account) return false
-  return isCreditAccountType(account.accountType)
-})
-
-// 转出父账户余额和贷款额
-const selectedFromParentBalances = computed(() => {
-  if (!form.value.fromParentAccountId) return { balance: 0, credit: 0 }
-  const account = findAccountInTree(accountStore.accountTree, form.value.fromParentAccountId)
-  return calculateParentBalances(account)
-})
-
-const selectedFromParentAccountBalance = computed(() => selectedFromParentBalances.value.balance)
-const selectedFromParentAccountCredit = computed(() => selectedFromParentBalances.value.credit)
-
-// 转出子账户余额
-const selectedFromChildAccountBalance = computed(() => {
-  if (!form.value.fromAccountId) return 0
-  const account = findAccountInTree(accountStore.accountTree, form.value.fromAccountId)
-  if (!account) return 0
-  return account.balance || 0
-})
-
-// 转出子账户是否为信贷账户
-const isSelectedFromChildCreditAccount = computed(() => {
-  if (!form.value.fromAccountId) return false
-  const account = findAccountInTree(accountStore.accountTree, form.value.fromAccountId)
-  if (!account) return false
-  return isCreditAccountType(account.accountType)
-})
-
-// 转入父账户余额和贷款额
-const selectedToParentBalances = computed(() => {
-  if (!form.value.toParentAccountId) return { balance: 0, credit: 0 }
-  const account = findAccountInTree(accountStore.accountTree, form.value.toParentAccountId)
-  return calculateParentBalances(account)
-})
-
-const selectedToParentAccountBalance = computed(() => selectedToParentBalances.value.balance)
-const selectedToParentAccountCredit = computed(() => selectedToParentBalances.value.credit)
-
-// 转入子账户余额
-const selectedToChildAccountBalance = computed(() => {
-  if (!form.value.toAccountId) return 0
-  const account = findAccountInTree(accountStore.accountTree, form.value.toAccountId)
-  if (!account) return 0
-  return account.balance || 0
-})
-
-// 转入子账户是否为信贷账户
-const isSelectedToChildCreditAccount = computed(() => {
-  if (!form.value.toAccountId) return false
-  const account = findAccountInTree(accountStore.accountTree, form.value.toAccountId)
-  if (!account) return false
-  return isCreditAccountType(account.accountType)
-})
 
 // 信贷账户余额（用于还款）
 const selectedCreditAccountBalance = computed(() => {
@@ -2627,14 +2463,6 @@ function handleChannelChange() {
   }
 }
 
-function handleParentAccountChange() {
-  form.value.accountId = undefined
-}
-
-function handleRepaymentAccountChange() {
-  form.value.accountId = undefined
-}
-
 // 转账类型切换（金额转账 / 份额转移）
 function handleTransferTypeChange() {
   // 切换类型时清空相关表单数据
@@ -2766,26 +2594,6 @@ function formatNumber(value: number, decimals: number = 2): string {
   return value.toFixed(decimals)
 }
 
-function handleFromParentAccountChange() {
-  // 转出父账户改变时，清空转出子账户选择
-  form.value.fromAccountId = undefined
-}
-
-function handleToParentAccountChange() {
-  // 转入父账户改变时，清空转入子账户选择
-  form.value.toAccountId = undefined
-}
-
-function handleBuyParentAccountChange() {
-  // 买入父账户改变时，清空子账户选择和资金分配
-  form.value.accountId = undefined
-  buyFundingLines.value = []
-}
-
-function handleBuyAccountChange() {
-  buyFundingLines.value = []
-}
-
 // 买入账户级联选择器变化处理
 function handleBuyAccountCascaderChange() {
   // 清空资金分配
@@ -2795,12 +2603,6 @@ function handleBuyAccountCascaderChange() {
     const inferred = inferBrokerAccountIdByAccountId(form.value.accountId) || inferBrokerAccountIdByAccountId(form.value.parentAccountId)
     if (inferred) form.value.brokerAccountId = inferred
   }
-}
-
-function handleSellParentAccountChange() {
-  // 卖出父账户改变时，清空子账户选择和份额分配
-  form.value.accountId = undefined
-  sellFundingLines.value = []
 }
 
 // 卖出到账账户级联选择器变化处理

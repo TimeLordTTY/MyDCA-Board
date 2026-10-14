@@ -138,7 +138,6 @@ watch(visible, (val) => {
   if (val && props.expenseTxn) {
     // 回显支出信息
     const expense = props.expenseTxn
-    const txnAny = expense as any
     
     // 默认使用原流水的发生时间
     const defaultOccurredAt = expense.requestedAt || localDateTime()

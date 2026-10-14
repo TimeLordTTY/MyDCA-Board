@@ -215,7 +215,7 @@ const childAccounts = computed(() => {
 
 // 获取可用的子账户（排除已选择的）
 const availableChildAccounts = computed(() => {
-  return childAccounts.value.filter((acc) => {
+  return childAccounts.value.filter(() => {
     // 如果该账户已经在fundingLines中被选择（除了当前编辑的行），则不可选
     return true // 在el-option中通过disabled属性控制
   })

@@ -621,11 +621,6 @@ const settlementForm = ref<{ amount?: number; shares?: number; confirmDate: stri
 // The pending-list button opens the existing editor; settlement still requires preview and confirmation.
 const handleConfirmSettlement = (orderId: string) => openOrderSettlement(orderId)
 
-const isBuyType = computed(() => {
-  if (!settlementOrder.value) return false
-  return settlementOrder.value.orderType === 'BUY' || settlementOrder.value.orderType === 'SUBSCRIPTION'
-})
-
 const topHoldings = computed(() => homeHoldings(kpiState.value.snapshot, kpiState.value.loading))
 
 async function loadData() {
@@ -818,26 +813,6 @@ async function handleSettlementNavDateChange() {
     }
   } catch (error: any) {
     ElNotification.warning({ title: '警告', message: '获取净值失败，请手动输入', position: 'bottom-right' })
-  }
-}
-
-function calculateShares(amount: number, nav: number, fee: number = 0): number {
-  if (!nav || nav <= 0) return 0
-  const netAmount = amount - fee
-  return netAmount / nav
-}
-
-function calculateAmount(shares: number, nav: number): number {
-  return shares * nav
-}
-
-function calculateSettlementFromForm() {
-  if (!settlementForm.value.confirmNav || !settlementOrder.value) return
-  if (isBuyType.value && settlementOrder.value.amount) {
-    const fee = settlementForm.value.confirmFee || 0
-    settlementForm.value.confirmShares = calculateShares(settlementOrder.value.amount, settlementForm.value.confirmNav, fee)
-  } else if (!isBuyType.value && settlementOrder.value.shares) {
-    settlementForm.value.confirmAmount = calculateAmount(settlementOrder.value.shares, settlementForm.value.confirmNav)
   }
 }
 
