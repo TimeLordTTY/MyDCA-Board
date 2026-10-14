@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -639,10 +640,8 @@ public class OrderService {
      */
     @Transactional
     public void cancelOrder(String orderId) {
-        Order order = orderMapper.selectByOrderId(orderId);
-        if (order == null) {
-            throw new RuntimeException("订单不存在: " + orderId);
-        }
+        // 对象归属必须先于状态判断、关联流水读取及任何余额/订单写入。
+        Order order = requireOwnedOrder(orderId);
         if (!"PENDING".equals(order.getStatus())) {
             throw new RuntimeException("只能取消PENDING状态的订单，当前状态: " + order.getStatus());
         }
@@ -651,11 +650,27 @@ public class OrderService {
         // 注意：正常情况下，PENDING状态的订单不应该有流水记录（流水是在结算时创建的）
         // 但为了处理异常情况（比如订单状态异常），这里仍然检查并删除
         List<com.timelordtty.dca.model.LedgerTxn> relatedTxns = ledgerTxnMapper.selectByOrderId(orderId);
+
+        // 先校验全部关联账户，再开始任何恢复余额、删除流水或订单写入。
+        // 本人历史订单的资金账户也可能因家庭变更而失去当前可见性。
+        com.timelordtty.dca.dto.AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(orderId);
+        java.util.Map<String, List<LedgerPosting>> postingsByTxn = new java.util.HashMap<>();
+        for (com.timelordtty.dca.model.LedgerTxn txn : relatedTxns) {
+            List<LedgerPosting> relatedPostings = ledgerPostingMapper.selectByTxnId(txn.getTxnId());
+            for (LedgerPosting posting : relatedPostings) {
+                requireVisibleCancelAccount(posting.getAccountId(), currentUser.getId(), currentUser.getFamilyId());
+            }
+            postingsByTxn.put(txn.getTxnId(), relatedPostings);
+        }
+        for (OrderFundingLine fundingLine : fundingLines) {
+            requireVisibleCancelAccount(fundingLine.getAccountId(), currentUser.getId(), currentUser.getFamilyId());
+        }
         
         // 删除所有相关的流水记录（直接删除，不是退款）
         for (com.timelordtty.dca.model.LedgerTxn txn : relatedTxns) {
             // 查询所有分录
-            List<com.timelordtty.dca.model.LedgerPosting> postings = ledgerPostingMapper.selectByTxnId(txn.getTxnId());
+            List<com.timelordtty.dca.model.LedgerPosting> postings = postingsByTxn.get(txn.getTxnId());
             
             // 反向操作：恢复账户余额
             // 注意：对于PENDING状态的订单，正常情况下不应该有流水，所以这个循环通常不会执行
@@ -693,8 +708,7 @@ public class OrderService {
             ledgerTxnMapper.deleteByTxnId(txn.getTxnId());
         }
 
-        // 查询order_funding_line，获取所有资金来源行
-        List<OrderFundingLine> fundingLines = orderFundingLineMapper.selectByOrderId(orderId);
+        // 资金来源行已在写入前完成全量可见性校验。
         
         // 逐条释放各账户的reserved_amount（历史兼容）
         // 注意：当前 BUY / SUBSCRIPTION 下单已改为直接生成付款账本并扣减 balance，
@@ -723,34 +737,74 @@ public class OrderService {
      * 读取订单相关列表或明细，供订单台账、结算确认和资金来源展示使用。
      */
     public List<Order> getPendingOrders() {
-        return orderMapper.selectByStatus("PENDING");
+        return getOrdersByStatus("PENDING");
     }
 
     /**
      * 读取订单相关列表或明细，供订单台账、结算确认和资金来源展示使用。
      */
     public List<Order> getOrdersByStatus(String status) {
-        return orderMapper.selectByStatus(status);
+        // 复用带 user_id 条件的 SQL，避免先读取全站订单；保留原状态列表的日期排序。
+        return orderMapper.selectByUserId(currentUserId()).stream()
+                .filter(order -> status.equals(order.getStatus()))
+                .sorted(Comparator.comparing(Order::getExpectedConfirmDate,
+                        Comparator.nullsFirst(Comparator.naturalOrder())))
+                .collect(java.util.stream.Collectors.toList());
     }
 
     /**
      * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public List<Order> getOrdersByUserId(Long userId) {
-        return orderMapper.selectByUserId(userId);
+        Long authenticatedUserId = currentUserId();
+        if (!authenticatedUserId.equals(userId)) {
+            throw new RuntimeException("不能查询其他用户的订单");
+        }
+        return orderMapper.selectByUserId(authenticatedUserId);
     }
 
     /**
      * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public Order getOrderByOrderId(String orderId) {
-        return orderMapper.selectByOrderId(orderId);
+        Long userId = currentUserId();
+        if (orderId == null || orderId.isBlank()) {
+            return null;
+        }
+        Order order = orderMapper.selectByOrderId(orderId);
+        // 订单仅有 user_id 归属；家庭账户可见性和 ADMIN 角色不授予他人订单权限。
+        return order != null && userId.equals(order.getUserId()) ? order : null;
+    }
+
+    private Long currentUserId() {
+        Long userId = userService.getCurrentUser().getId();
+        if (userId == null) {
+            throw new RuntimeException("当前用户身份无效");
+        }
+        return userId;
+    }
+
+    /** 取消只能影响当前 owner/family 可见账户，账户缺失同样保守拒绝。 */
+    private void requireVisibleCancelAccount(Long accountId, Long userId, Long familyId) {
+        Account account = accountMapper.selectById(accountId);
+        if (account == null || !isVisibleToUserOrFamily(account, userId, familyId)) {
+            throw new RuntimeException("订单关联账户不在当前用户 / 家庭可见范围，不能取消");
+        }
+    }
+
+    private Order requireOwnedOrder(String orderId) {
+        Order order = getOrderByOrderId(orderId);
+        if (order == null) {
+            throw new RuntimeException("订单不存在或不属于当前用户");
+        }
+        return order;
     }
 
     /**
      * 读取订单相关列表或明细，供订单台账、结算确认和资金来源展示使用。
      */
     public List<OrderFundingLine> getOrderFundingLines(String orderId) {
+        requireOwnedOrder(orderId);
         return orderFundingLineMapper.selectByOrderId(orderId);
     }
     /**
@@ -771,6 +825,7 @@ public class OrderService {
      * 读取订单关联对象 ID，用于把订单与用户、结算确认或资金来源明细关联起来。
      */
     public SettlementConfirm getSettlementByOrderId(String orderId) {
+        requireOwnedOrder(orderId);
         return settlementConfirmMapper.selectByOrderId(orderId);
     }
 }

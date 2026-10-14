@@ -39,6 +39,8 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /**
  * v0.13.0 人工结算预览与二次确认：仅验证预览只读规则、fresh preview 令牌门禁与 confirm 落账边界。
@@ -527,6 +529,58 @@ class SettlementServicePreviewTest {
         assertEquals("ledger-down", ex.getMessage());
         assertEquals("PENDING", pendingOrder.getStatus());
         verify(orderMapper, never()).update(any());
+    }
+
+    @Test
+    void visibleFundingAccountDoesNotGrantForeignOrderOwnership() {
+        stubBuyPendingOrder("ORD-FOREIGN", order("ORD-FOREIGN", "BUY", "PENDING", OTHER_USER_ID));
+        SettlementPreviewDTO preview = service.previewSettlement("ORD-FOREIGN", CONFIRM_DATE, NAV_DATE,
+                new BigDecimal("2"), null, null, BigDecimal.ZERO);
+        assertFalse(preview.isConfirmSupported());
+        assertNull(preview.getProductId());
+        assertNull(preview.getOrderStatus());
+        assertThrows(RuntimeException.class, () -> service.confirmSettlement("ORD-FOREIGN", CONFIRM_DATE,
+                NAV_DATE, new BigDecimal("2"), null, null, BigDecimal.ZERO, "stolen-token"));
+        verifyNoInteractions(orderFundingLineMapper, productMasterMapper, accountMapper, ledgerService, accountService);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"BUY", "SUBSCRIPTION", "SELL", "REDEMPTION"})
+    void foreignLinkedProductAccountCannotReceiveSettlement(String orderType) {
+        if ("BUY".equals(orderType) || "SUBSCRIPTION".equals(orderType)) {
+            stubBuyPendingOrder("ORD-LINKED", order("ORD-LINKED", orderType, "PENDING", USER_ID));
+        } else {
+            stubSellLikeOrder("ORD-LINKED", orderType);
+        }
+        when(accountMapper.selectByLinkedProductId(PRODUCT_ID)).thenReturn(
+                account(900L, "FOREIGN", "隔离外域账户", "MMF", OTHER_USER_ID, "0", "0"));
+        SettlementPreviewDTO preview = service.previewSettlement("ORD-LINKED", CONFIRM_DATE, NAV_DATE,
+                new BigDecimal("2"), new BigDecimal("100"), new BigDecimal("200"), BigDecimal.ZERO);
+        assertFalse(preview.isConfirmSupported());
+        assertTrue(hasReason(preview, "关联账户"));
+        assertThrows(RuntimeException.class, () -> service.confirmSettlement("ORD-LINKED", CONFIRM_DATE,
+                NAV_DATE, new BigDecimal("2"), new BigDecimal("100"), new BigDecimal("200"), BigDecimal.ZERO, "stolen-token"));
+        verifyNoInteractions(ledgerService, accountService);
+        verify(accountMapper, never()).updateInitialShares(any(), any());
+        verify(settlementConfirmMapper, never()).insert(any());
+    }
+
+    @Test
+    void ownerCanPreviewAndConfirmUsingVisibleFamilyFunding() {
+        stubBuyPendingOrder("ORD-FAMILY");
+        when(userService.getCurrentUser()).thenReturn(currentUser(USER_ID, 77L));
+        Account family = account(SOURCE_ACCOUNT_ID, "FAMILY", "隔离家庭卡", "BANK", OTHER_USER_ID, "5000", "0");
+        family.setOwnerType("FAMILY");
+        family.setOwnerFamilyId(77L);
+        when(accountMapper.selectById(SOURCE_ACCOUNT_ID)).thenReturn(family);
+        stubCreatedVirtualAccount();
+        SettlementPreviewDTO preview = service.previewSettlement("ORD-FAMILY", CONFIRM_DATE, NAV_DATE,
+                new BigDecimal("2"), null, null, BigDecimal.ZERO);
+        assertTrue(preview.isConfirmSupported());
+        assertNotNull(service.confirmSettlement("ORD-FAMILY", CONFIRM_DATE, NAV_DATE,
+                new BigDecimal("2"), null, null, BigDecimal.ZERO, preview.getFreshPreviewToken()));
+        verify(settlementConfirmMapper).insert(any());
+        verify(orderMapper).update(any());
     }
 
     // ===================== 测试支撑 =====================

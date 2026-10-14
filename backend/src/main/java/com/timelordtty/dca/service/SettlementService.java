@@ -49,7 +49,7 @@ import java.util.Map;
  * - 创建 SettlementConfirm 作为订单到记账的桥梁
  * - 释放订单占用的 reserved_amount（支持组合支付，从 order_funding_line 读取；只释放有金额的出资行）
  * - 根据订单类型生成对应的 ledger_txn/ledger_posting（调用 LedgerService）
- * - 只允许结算当前 user / family 可见的订单与出资账户
+ * - 只允许结算当前 user 自己的订单，出资及关联账户仍须在当前 user / family 可见范围
  *
  * @author timelordtty
  * @since 1.0.0
@@ -143,13 +143,15 @@ public class SettlementService {
         if (orderId == null || orderId.isBlank()) {
             throw new RuntimeException("订单ID不能为空");
         }
+        // 包括幂等重放：先校验订单归属，再读取或返回结算确认记录。
+        Long currentUserId = userService.getCurrentUser().getId();
+        Order currentOrder = orderMapper.selectByOrderId(orderId);
+        if (currentUserId == null || currentOrder == null || !currentUserId.equals(currentOrder.getUserId())) {
+            throw new RuntimeException("订单不存在或不属于当前用户，不能查看结算确认");
+        }
         // 幂等：同一订单已存在 settlement_confirm 时直接返回既有结果，绝不重复生成第二套结算流水。
         SettlementConfirm existing = settlementConfirmMapper.selectByOrderId(orderId);
         if (existing != null) {
-            Order existingOrder = orderMapper.selectByOrderId(orderId);
-            if (existingOrder == null || !java.util.Objects.equals(existingOrder.getUserId(), userService.getCurrentUser().getId())) {
-                throw new RuntimeException("订单不属于当前用户，不能查看结算确认");
-            }
             return existing;
         }
         SettlementComputation computation = runSettlement(orderId, confirmDate, navDate, confirmNav, confirmShares,
@@ -188,10 +190,15 @@ public class SettlementService {
             return block(computation, "订单ID不能为空");
         }
         Order order = orderMapper.selectByOrderId(orderId);
-        computation.order = order;
         if (order == null) {
-            return block(computation, "订单不存在：" + orderId);
+            return block(computation, "订单不存在或不属于当前用户，不能结算");
         }
+        com.timelordtty.dca.dto.AuthResponse.UserInfo currentUser = userService.getCurrentUser();
+        if (currentUser.getId() == null || !currentUser.getId().equals(order.getUserId())) {
+            // 不把未授权订单放入计算结果，避免 DTO 泄露产品、方向、状态及预览指纹。
+            return block(computation, "订单不存在或不属于当前用户，不能结算");
+        }
+        computation.order = order;
         computation.orderType = order.getOrderType();
         computation.orderTypeLabel = orderTypeLabelOf(order.getOrderType());
         computation.orderStatus = order.getStatus();
@@ -203,7 +210,6 @@ public class SettlementService {
         }
 
         // 当前 user / family 归属：preview 只读读取，不创建任何账户
-        com.timelordtty.dca.dto.AuthResponse.UserInfo currentUser = userService.getCurrentUser();
         computation.ownerType = currentUser.getFamilyId() != null ? "FAMILY" : "PERSONAL";
         computation.ownerUserId = currentUser.getId();
         computation.ownerFamilyId = currentUser.getFamilyId();
@@ -234,18 +240,10 @@ public class SettlementService {
 
         // 权限与一致性加固：出资账户必须属于当前 user / family 可见范围
         List<Account> fundingAccounts = new ArrayList<>();
-        boolean anyVisibleFundingAccount = false;
         for (OrderFundingLine fundingLine : fundingLines) {
             Account fundingAccount = accountMapper.selectById(fundingLine.getAccountId());
             fundingAccounts.add(fundingAccount);
             computation.snapshot(fundingAccount);
-            if (fundingAccount != null
-                    && isVisibleToUserOrFamily(fundingAccount, computation.ownerUserId, computation.ownerFamilyId)) {
-                anyVisibleFundingAccount = true;
-            }
-        }
-        if (order.getUserId() != null && !order.getUserId().equals(computation.ownerUserId) && !anyVisibleFundingAccount) {
-            return block(computation, "订单不属于当前用户 / 家庭可见范围，不能结算");
         }
         for (int i = 0; i < fundingLines.size(); i++) {
             OrderFundingLine fundingLine = fundingLines.get(i);
@@ -398,6 +396,9 @@ public class SettlementService {
 
             // 检查产品是否有关联账户
             Account linkedAccount = accountMapper.selectByLinkedProductId(order.getProductId());
+            if (linkedAccount != null && !isVisibleToUserOrFamily(linkedAccount, ownerUserId, ownerFamilyId)) {
+                return block(computation, "产品关联账户不在当前用户 / 家庭可见范围，不能结算");
+            }
             computation.snapshot(linkedAccount);
             boolean hasLinkedAccount = linkedAccount != null;
 
@@ -515,6 +516,9 @@ public class SettlementService {
             
             // 检查产品是否有关联账户
             Account linkedAccount = accountMapper.selectByLinkedProductId(order.getProductId());
+            if (linkedAccount != null && !isVisibleToUserOrFamily(linkedAccount, ownerUserId, ownerFamilyId)) {
+                return block(computation, "产品关联账户不在当前用户 / 家庭可见范围，不能结算");
+            }
             computation.snapshot(linkedAccount);
             boolean hasLinkedAccount = linkedAccount != null;
             
