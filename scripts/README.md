@@ -20,7 +20,7 @@
 
 ## 开发与验证
 
-按具体子目录 README / requirements 安装依赖并执行最小相关测试。任何仓库代码或项目文件修改后，最终仍需运行根目录 `scripts/post-task-compile-hook.ps1`；成功只写 stdout/log，不播放声音、不弹 Windows 通知。
+按具体子目录 README / requirements 安装依赖并执行最小相关测试。按改动范围直接运行项目原生测试与构建，并记录实际结果。后端使用 `mvn -f backend/pom.xml test` / `mvn -f backend/pom.xml -DskipTests package`；前端使用 `npm --prefix web run build` 及对应 Node/类型检查。文档或脚本清理只做相关静态检查，不自动全仓构建；未执行项须明确说明。成功只写 stdout/log，不播放声音、不弹 Windows 通知。
 
 ## 历史说明
 

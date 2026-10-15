@@ -29,7 +29,8 @@ python -m unittest discover -s scripts/deploy -p test_deploy_offline.py -v
 powershell -ExecutionPolicy Bypass -File scripts/deploy/test_standard_deploy_offline.ps1
 python -m unittest discover -s scripts/deploy -p test_systemd_local_rollback.py -v
 python -m unittest discover -s scripts/deploy -p test_mysql_isolated_rehearsal.py -v
-powershell -ExecutionPolicy Bypass -File scripts/post-task-compile-hook.ps1
+mvn -f backend/pom.xml -DskipTests package
+npm --prefix web run build
 ```
 
 原 Python 入口继续保留严格健康探针语料，并运行新事务与真实 Bash 阻断入口。

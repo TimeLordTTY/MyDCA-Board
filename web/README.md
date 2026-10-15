@@ -28,4 +28,4 @@
 
 ## 任务收尾
 
-仓库根目录执行 `scripts/post-task-compile-hook.ps1`。成功构建只写日志，不播放提示音、不弹窗。
+仓库根目录直接执行 `npm --prefix web run build`；按改动运行相关 Node 测试与类型检查。成功构建只写日志，不播放提示音、不弹窗。

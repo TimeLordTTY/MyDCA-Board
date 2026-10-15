@@ -17,7 +17,8 @@ npm --prefix web run build:shared
 npm --prefix web/pc-app run build
 web/node_modules/.bin/vue-tsc.cmd --noEmit -p web/pc-app/tests/tsconfig.goalBudget.json
 node --test web/pc-app/tests/*.test.mjs
-powershell -ExecutionPolicy Bypass -File scripts/post-task-compile-hook.ps1 -MaxFixRounds 0
+mvn -f backend/pom.xml -DskipTests package
+npm --prefix web run build
 git diff --check
 ```
 

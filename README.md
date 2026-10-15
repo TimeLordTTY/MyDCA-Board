@@ -100,8 +100,7 @@ v0.13.0 制品：待 owner push 后回填（普通自动任务只提交、不 pu
 
 ## 构建与验证
 
-任务完成后必须运行：
-`powershell -ExecutionPolicy Bypass -File scripts/post-task-compile-hook.ps1`
+按改动范围直接运行项目原生测试与构建，并记录实际结果。后端使用 `mvn -f backend/pom.xml test` / `mvn -f backend/pom.xml -DskipTests package`；前端使用 `npm --prefix web run build` 及对应 Node/类型检查。文档或脚本清理只做相关静态检查，不自动全仓构建；未执行项须明确说明。
 
 成功构建只写 stdout/log，**不播放提示音，不弹 Windows Toast/Popup**。
 

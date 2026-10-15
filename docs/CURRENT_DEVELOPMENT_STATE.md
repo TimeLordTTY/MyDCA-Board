@@ -263,7 +263,7 @@ v0.14 人工结算历史与只读对账已写入代码；新结算精确流水�
 普通工程当前通过 AiCore：
 `ChatGPT/owner → ai-core Git task → Windows scheduler → approved Codex executor → MyDCA v2 → tests/build → local commit → 后续由 owner 安排推送与交付`
 
-`scripts/post-task-compile-hook.ps1` 构建成功后必须静默：只输出 stdout/log，不播放声音，不弹 Windows Toast/Popup。
+2026-10-16 Owner 明确取消自动编译 hook。按改动范围直接运行项目原生测试与构建，并记录实际结果。后端使用 `mvn -f backend/pom.xml test` / `mvn -f backend/pom.xml -DskipTests package`；前端使用 `npm --prefix web run build` 及对应 Node/类型检查。文档或脚本清理只做相关静态检查，不自动全仓构建；未执行项须明确说明。构建成功只输出 stdout/log，不播放声音、不弹 Windows Toast/Popup。以下历史验证记录保留原样，不作为继续调用已删除脚本的指令。
 
 ## 当前安全边界
 

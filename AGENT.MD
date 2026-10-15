@@ -49,8 +49,7 @@
 
 ## 验证
 
-任何代码或项目文件编辑后必须运行：
-`powershell -ExecutionPolicy Bypass -File scripts/post-task-compile-hook.ps1`
+按改动范围直接运行项目原生测试与构建，并记录实际结果。后端使用 `mvn -f backend/pom.xml test` / `mvn -f backend/pom.xml -DskipTests package`；前端使用 `npm --prefix web run build` 及对应 Node/类型检查。文档或脚本清理只做相关静态检查，不自动全仓构建；未执行项须明确说明。
 
 成功构建必须静默：**不播放声音、不弹系统通知/窗口**。结果只写 stdout/log，并由 AiCore/Hermes 负责 owner-facing 交付通知。
 
