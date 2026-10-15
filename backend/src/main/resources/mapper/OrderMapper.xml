@@ -21,6 +21,11 @@
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
+    <!-- 必须在写事务中调用；唯一 uk_order_id 定位一行，等待前一事务提交。 -->
+    <select id="lockByOrderId" resultType="java.lang.Long" flushCache="true" useCache="false">
+        SELECT id FROM orders WHERE order_id = #{orderId} FOR UPDATE
+    </select>
+
     <select id="selectById" resultMap="BaseResultMap">
         SELECT * FROM orders WHERE id = #{id}
     </select>

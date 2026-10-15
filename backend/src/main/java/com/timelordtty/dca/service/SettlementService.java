@@ -16,6 +16,7 @@ import com.timelordtty.dca.model.SettlementConfirm;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -135,7 +136,7 @@ public class SettlementService {
      * 订单状态 / 更新时间、资金来源行、输入参数或关键账户快照任一变化都会使旧令牌失效并阻断确认。
      * 同一订单已有结算确认时直接返回既有结果，绝不重复生成第二套结算流水。</p>
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public SettlementConfirm confirmSettlement(String orderId, LocalDate confirmDate, LocalDate navDate,
                                                BigDecimal confirmNav, BigDecimal confirmShares,
                                                BigDecimal confirmAmount, BigDecimal confirmFee,
@@ -143,6 +144,9 @@ public class SettlementService {
         if (orderId == null || orderId.isBlank()) {
             throw new RuntimeException("订单ID不能为空");
         }
+        OrderService.requireFreshOrderTransaction();
+        // 等待同订单 confirm/cancel 提交后再建立关联读取；flushCache 清除锁前缓存。
+        orderMapper.lockByOrderId(orderId);
         // 包括幂等重放：先校验订单归属，再读取或返回结算确认记录。
         Long currentUserId = userService.getCurrentUser().getId();
         Order currentOrder = orderMapper.selectByOrderId(orderId);

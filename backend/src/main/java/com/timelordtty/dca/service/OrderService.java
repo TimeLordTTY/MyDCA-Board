@@ -13,6 +13,8 @@ import com.timelordtty.dca.model.ProductMaster;
 import com.timelordtty.dca.model.SettlementConfirm;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -638,12 +640,18 @@ public class OrderService {
      * 
      * @param orderId 系统订单ID
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void cancelOrder(String orderId) {
+        requireFreshOrderTransaction();
+        // 与 confirm 保持相同锁序：订单行 -> 身份/关联读取 -> 资金/账本写入。
+        orderMapper.lockByOrderId(orderId);
         // 对象归属必须先于状态判断、关联流水读取及任何余额/订单写入。
         Order order = requireOwnedOrder(orderId);
         if (!"PENDING".equals(order.getStatus())) {
             throw new RuntimeException("只能取消PENDING状态的订单，当前状态: " + order.getStatus());
+        }
+        if (settlementConfirmMapper.selectByOrderId(orderId) != null) {
+            throw new RuntimeException("订单已存在结算确认记录，不能取消");
         }
 
         // 查询与订单相关的所有流水记录
@@ -774,6 +782,19 @@ public class OrderService {
         Order order = orderMapper.selectByOrderId(orderId);
         // 订单仅有 user_id 归属；家庭账户可见性和 ADMIN 角色不授予他人订单权限。
         return order != null && userId.equals(order.getUserId()) ? order : null;
+    }
+
+    /**
+     * REQUIRED 不会提升外层事务隔离级别。拒绝旧 RR 快照或只读外层事务，
+     * 保持调用方整体回滚边界，不用 REQUIRES_NEW 提前提交资金副作用。
+     */
+    static void requireFreshOrderTransaction() {
+        if (TransactionSynchronizationManager.isActualTransactionActive()
+                && (TransactionSynchronizationManager.isCurrentTransactionReadOnly()
+                || !Integer.valueOf(Isolation.READ_COMMITTED.value()).equals(
+                        TransactionSynchronizationManager.getCurrentTransactionIsolationLevel()))) {
+            throw new IllegalStateException("订单确认/取消需要 READ_COMMITTED 写事务");
+        }
     }
 
     private Long currentUserId() {

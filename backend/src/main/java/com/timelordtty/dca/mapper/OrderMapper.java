@@ -11,6 +11,8 @@ import java.util.List;
  */
 @Mapper
 public interface OrderMapper {
+    /** 同订单确认/取消的共同事务锁；SQL 同时清除锁前的 MyBatis 一级缓存。 */
+    void lockByOrderId(@Param("orderId") String orderId);
     Order selectById(@Param("id") Long id);
     Order selectByOrderId(@Param("orderId") String orderId);
     List<Order> selectByStatus(@Param("status") String status);

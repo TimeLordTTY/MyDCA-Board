@@ -58,7 +58,8 @@
         AND o.status = 'PENDING'
         AND o.order_type IN ('SELL', 'REDEMPTION')
         AND ofl.account_id = #{accountId}
-        AND ofl.line_type = 'SOURCE'
+        <!-- 历史 NULL 仍是 SOURCE；保留份额占用，不回填旧资金记录。 -->
+        AND (ofl.line_type = 'SOURCE' OR ofl.line_type IS NULL)
         AND ofl.shares IS NOT NULL
     </select>
 
