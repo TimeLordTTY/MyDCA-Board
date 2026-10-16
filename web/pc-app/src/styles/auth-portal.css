@@ -45,6 +45,7 @@
 .portal-explore-card:focus-visible { outline: 3px solid var(--wh-border); outline-offset: 3px; }
 .portal-explore-card:disabled { cursor: wait; }
 .portal-explore-card:disabled:hover { border-color: var(--line); background: var(--card); }
+.portal-explore-heading { font-size: 20px; font-weight: 700; }
 .portal-explore-description { display: block; margin: 1em 0; color: var(--muted); line-height: 1.7; font-size: 14px; }
 .portal-explore-status { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .portal-explore-status:not(.is-visible) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; white-space: nowrap; clip-path: inset(50%); border: 0; }
