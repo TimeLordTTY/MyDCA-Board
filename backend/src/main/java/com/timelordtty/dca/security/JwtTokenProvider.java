@@ -74,5 +74,14 @@ public class JwtTokenProvider {
             return false;
         }
     }
+
+    /** Read expiry through the same signature/expiry verification; never extend a private session past it. */
+    public Date getExpirationFromToken(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload().getExpiration();
+    }
 }
 
