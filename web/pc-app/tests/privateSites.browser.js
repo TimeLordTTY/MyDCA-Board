@@ -62,13 +62,14 @@ async page => {
   await control.goto(origin + '/fixture-control')
   const setToken = token => control.evaluate(value => value ? localStorage.setItem('token', value) : localStorage.removeItem('token'), token)
   const goto = () => page.goto(origin + '/wealth-hub/portal')
-  const button = () => page.getByRole('button', { name: '进入无限探索 / 重试', exact: true })
+  const button = () => page.getByRole('button', { name: '进入无限探索', exact: true })
   const ready = async () => { await button().waitFor(); await page.waitForFunction(() => !document.querySelector('[aria-describedby="explore-status"]').disabled) }
   await setToken(tokenA)
   holdIdentity = true
   const initial = new Promise(resolve => { identityStarted = resolve })
   await goto(); await initial
   check(await button().isDisabled(), 'entry enabled before original identity recovery')
+  check(await button().evaluate(node => node.classList.contains('app-card') && node.classList.contains('portal-explore-card') && node.tagName === 'BUTTON'), 'private entry must be the native whole-card portal button')
   check(!requests.some(r => r.path.endsWith('/exchange')), 'token presence authorized private entry')
   holdIdentity = false; releaseIdentity(); await ready()
   await page.getByText('你好，隔离Owner').waitFor()
