@@ -21,16 +21,32 @@
         </div>
 
         <div class="app-grid">
-          <div class="app-card">
-            <div class="app-icon green" aria-hidden="true"><Reading /></div>
-            <div class="app-content">
-              <div class="app-title-row"><h2>无限探索</h2></div>
-              <p>使用当前 Wealth Hub 身份接续私有会话，无需再次输入密码。</p>
+          <button
+            class="app-card portal-explore-card"
+            type="button"
+            aria-label="进入无限探索"
+            :disabled="identityLoading || privateBusy || loggingOut"
+            :aria-busy="privateBusy"
+            aria-describedby="explore-status"
+            @click="enterExplore"
+          >
+            <span class="app-icon green" aria-hidden="true"><Reading /></span>
+            <span class="app-content">
+              <span class="app-title-row">
+                <h2>无限探索</h2>
+                <el-icon aria-hidden="true"><ArrowRight /></el-icon>
+              </span>
+              <span class="portal-explore-description">使用当前 Wealth Hub 身份接续私有会话，无需再次输入密码。</span>
               <code>/explore/</code>
-              <p id="explore-status" role="status" aria-live="polite">{{ privateMessage }}</p>
-              <button class="wh-button" type="button" :disabled="identityLoading || privateBusy || loggingOut" :aria-busy="privateBusy" aria-describedby="explore-status" @click="enterExplore">{{ privateBusy ? '正在接续…' : '进入无限探索 / 重试' }}</button>
-            </div>
-          </div>
+              <span
+                id="explore-status"
+                class="portal-explore-status"
+                :class="{ 'is-visible': privateBusy || privateMessage !== '验证当前账号后可进入，仅 Owner 获准访问。' }"
+                role="status"
+                aria-live="polite"
+              >{{ privateMessage }}</span>
+            </span>
+          </button>
           <a
             v-for="item in apps"
             :key="item.href"
