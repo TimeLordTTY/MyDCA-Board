@@ -40,10 +40,12 @@ public class PrivateSiteSessions {
         cleanup();
         User user = users.selectByUsername(username);
         requireOwner(user);
-        if (jwtExpiry == null || !jwtExpiry.isAfter(clock.instant())) throw denied(HttpStatus.UNAUTHORIZED);
+        Instant now = clock.instant();
+        if (jwtExpiry == null || !jwtExpiry.isAfter(now)) throw denied(HttpStatus.UNAUTHORIZED);
         if (sessions.size() >= properties.getSessionCapacity()) throw denied(HttpStatus.TOO_MANY_REQUESTS);
-        Instant expiry = jwtExpiry.isBefore(clock.instant().plusSeconds(properties.getSessionTtlSeconds()))
-                ? jwtExpiry : clock.instant().plusSeconds(properties.getSessionTtlSeconds());
+        // Use one time sample so clock progress cannot move the selected deadline past the JWT.
+        Instant ttlExpiry = now.plusSeconds(properties.getSessionTtlSeconds());
+        Instant expiry = jwtExpiry.isBefore(ttlExpiry) ? jwtExpiry : ttlExpiry;
         String cookie = randomValue();
         Session session = new Session(user.getId(), username, randomValue(), expiry);
         sessions.put(hash(cookie), session);

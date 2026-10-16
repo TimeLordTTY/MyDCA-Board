@@ -3,6 +3,12 @@ package com.timelordtty.dca.privatesite;
 import com.timelordtty.dca.mapper.UserMapper;
 import com.timelordtty.dca.model.User;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.context.properties.bind.BindException;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.web.server.ResponseStatusException;
 import java.time.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,8 +42,8 @@ class PrivateSiteSessionsTest {
         status(429, () -> service.issue(u.getUsername(), clock.now.plusSeconds(9999)));
         clock.now = clock.now.plusSeconds(3);
         status(401, () -> service.require(first.cookie()));
-        var second = service.issue(u.getUsername(), clock.now.plusSeconds(9999));
-        assertEquals(clock.now.plusSeconds(900), second.session().expiresAt());
+        var second = service.issue(u.getUsername(), clock.now.plusSeconds(172800));
+        assertEquals(clock.now.plusSeconds(86400), second.session().expiresAt());
         assertNotEquals(first.cookie(), second.cookie());
         service.revoke(second.cookie()); status(401, () -> service.require(second.cookie()));
     }
@@ -69,8 +75,80 @@ class PrivateSiteSessionsTest {
         when(users.selectByUsername("disabled")).thenReturn(user(7001, "disabled", false));
         status(401, () -> service.issue("disabled", clock.now.plusSeconds(60)));
         p.setSessionCapacity(1025); status(503, () -> service.issue("other", clock.now.plusSeconds(60)));
-        p.setSessionCapacity(1); p.setSessionTtlSeconds(3601); status(503, () -> service.require("unknown"));
+        p.setSessionCapacity(1); p.setSessionTtlSeconds(86401); status(503, () -> service.require("unknown"));
         p.setSessionTtlSeconds(1); p.setOwnerUserId(null); status(503, () -> service.require("unknown"));
+    }
+
+    @Test void defaultDayLimitSurvivesFifteenMinutesButReadsNeverRenewIt() {
+        var p = properties(); assertEquals(86400, p.getSessionTtlSeconds());
+        var users = mock(UserMapper.class); var owner = user(7001, "fixture-owner", true);
+        when(users.selectByUsername(owner.getUsername())).thenReturn(owner);
+        when(users.selectById(owner.getId())).thenReturn(owner);
+        var clock = new MutableClock(); var start = clock.now;
+        var service = new PrivateSiteSessions(p, users, clock);
+        var issued = service.issue(owner.getUsername(), start.plusSeconds(172800));
+        for (long elapsed : new long[] {900, 901, 960, 43200, 86399}) {
+            clock.now = start.plusSeconds(elapsed);
+            assertEquals(start.plusSeconds(86400), service.require(issued.cookie()).expiresAt());
+        }
+        clock.now = start.plusSeconds(86400);
+        status(401, () -> service.require(issued.cookie()));
+        status(401, () -> service.issue(owner.getUsername(), clock.now));
+        status(401, () -> service.issue(owner.getUsername(), null));
+        verify(users, never()).insert(any()); verify(users, never()).update(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {1, 900, 3600, 3601, 86399, 86400})
+    void configuredTtlUsesEarlierOfLimitAndJwt(long ttl) {
+        var p = properties(); p.setSessionTtlSeconds(ttl);
+        var users = mock(UserMapper.class); var owner = user(7001, "fixture-owner", true);
+        when(users.selectByUsername(owner.getUsername())).thenReturn(owner);
+        when(users.selectById(owner.getId())).thenReturn(owner);
+        var clock = new MutableClock(); var start = clock.now;
+        var service = new PrivateSiteSessions(p, users, clock);
+        var longJwt = service.issue(owner.getUsername(), start.plusSeconds(172800));
+        var shortJwt = service.issue(owner.getUsername(), start.plusSeconds(60));
+        assertEquals(start.plusSeconds(ttl), longJwt.session().expiresAt());
+        assertEquals(start.plusSeconds(Math.min(ttl, 60)), shortJwt.session().expiresAt());
+        clock.now = start.plusSeconds(Math.min(ttl, 60));
+        status(401, () -> service.require(shortJwt.cookie()));
+        clock.now = start.plusSeconds(ttl);
+        status(401, () -> service.require(longJwt.cookie()));
+    }
+
+    @Test void advancingClockCannotMoveDayLimitPastVerifiedJwtDeadline() {
+        var p = properties(); var users = mock(UserMapper.class);
+        when(users.selectByUsername("fixture-owner")).thenReturn(user(7001, "fixture-owner", true));
+        var clock = new MutableClock() {
+            @Override public Instant instant() {
+                var sampled = now; now = now.plusMillis(1); return sampled;
+            }
+        };
+        var start = clock.now; var jwtExpiry = start.plusSeconds(86400).plusMillis(1);
+        var issued = new PrivateSiteSessions(p, users, clock).issue("fixture-owner", jwtExpiry);
+        assertFalse(issued.session().expiresAt().isAfter(jwtExpiry));
+        assertEquals(start.plusSeconds(86400), issued.session().expiresAt());
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, -1, 86401, Long.MIN_VALUE, Long.MAX_VALUE})
+    void invalidTtlFailsClosedBeforeExpiryArithmetic(long ttl) {
+        var p = properties(); p.setSessionTtlSeconds(ttl);
+        var users = mock(UserMapper.class); var clock = new MutableClock();
+        var service = new PrivateSiteSessions(p, users, clock);
+        assertFalse(p.sessionsEnabled());
+        status(503, () -> service.issue("fixture-owner", clock.now.plusSeconds(172800)));
+        status(503, () -> service.require("unknown"));
+        verifyNoInteractions(users);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"9223372036854775808", "-9223372036854775809", "18446744073709638016"})
+    void overflowingConfigurationCannotWrapIntoAnAllowedTtl(String ttl) {
+        var source = new MapConfigurationPropertySource(java.util.Map.of("private-sites.session-ttl-seconds", ttl));
+        assertThrows(BindException.class, () -> new Binder(source)
+                .bind("private-sites", Bindable.of(PrivateSiteProperties.class)));
     }
 
     @Test void concurrentIssueCannotExceedCapacity() throws Exception {
