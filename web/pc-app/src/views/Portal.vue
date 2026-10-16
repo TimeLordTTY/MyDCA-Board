@@ -33,7 +33,7 @@
             <span class="app-icon green" aria-hidden="true"><Reading /></span>
             <span class="app-content">
               <span class="app-title-row">
-                <h2>无限探索</h2>
+                <span class="portal-explore-heading">无限探索</span>
                 <el-icon aria-hidden="true"><ArrowRight /></el-icon>
               </span>
               <span class="portal-explore-description">使用当前 Wealth Hub 身份接续私有会话，无需再次输入密码。</span>
