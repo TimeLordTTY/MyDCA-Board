@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/auth/privateSites.ts", "../src/auth/session.ts", "../src/views/Portal.vue", "../src/env.d.ts"]
+}

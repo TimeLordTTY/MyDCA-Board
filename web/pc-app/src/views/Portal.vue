@@ -17,10 +17,20 @@
       <section class="section" aria-label="应用入口">
         <div class="section-title">
           <span>应用入口</span>
-          <small>已接入 Wealth Hub 账号认证</small>
+          <small>各站点分别校验权限；无限探索仅限 Owner</small>
         </div>
 
         <div class="app-grid">
+          <div class="app-card">
+            <div class="app-icon green" aria-hidden="true"><Reading /></div>
+            <div class="app-content">
+              <div class="app-title-row"><h2>无限探索</h2></div>
+              <p>使用当前 Wealth Hub 身份接续私有会话，无需再次输入密码。</p>
+              <code>/explore/</code>
+              <p id="explore-status" role="status" aria-live="polite">{{ privateMessage }}</p>
+              <button class="wh-button" type="button" :disabled="identityLoading || privateBusy || loggingOut" :aria-busy="privateBusy" aria-describedby="explore-status" @click="enterExplore">{{ privateBusy ? '正在接续…' : '进入无限探索 / 重试' }}</button>
+            </div>
+          </div>
           <a
             v-for="item in apps"
             :key="item.href"
@@ -72,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -88,11 +98,14 @@ import {
   Setting,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@wealth-hub/shared'
-import { readSessionIdentity } from '../auth/session'
+import { endPrivateSession, readSessionIdentity, sessionRevision } from '../auth/session'
+import { privateSiteSession } from '../auth/privateSites'
 
 const router = useRouter()
 const userStore = useUserStore()
 const loggingOut = ref(false), identityLoading = ref(false), identityError = ref('')
+const { busy: privateBusy, message: privateMessage } = privateSiteSession
+const enterExplore = () => privateSiteSession.enter(() => readSessionIdentity(userStore))
 
 const apps = [
   {
@@ -113,7 +126,7 @@ const apps = [
   },
   {
     title: '游戏墙',
-    description: '浏览和管理已收录的游戏内容。',
+    description: '浏览和管理已收录的游戏内容，访问权限由该站独立校验。',
     path: '/game-wall/games',
     href: '/game-wall/games',
     icon: PictureFilled,
@@ -159,19 +172,27 @@ async function loadIdentity() {
     identityError.value = `${error instanceof Error ? error.message : '账号读取失败'}。请检查网络后手动重试。`
   } finally { identityLoading.value = false }
 }
-onMounted(() => { if (!userStore.user) void loadIdentity() })
+onMounted(() => { void loadIdentity() })
+onBeforeUnmount(() => { if (privateBusy.value) void endPrivateSession('portal-leave') })
 
 async function handleLogout() {
   if (loggingOut.value) return
   loggingOut.value = true
+  const token = userStore.token, revision = sessionRevision.value
   try {
+    await endPrivateSession('logout')
+    if (userStore.token !== token || localStorage.getItem('token') !== token || sessionRevision.value !== revision) return
     await userStore.logout()
   } catch {
     // Finish local logout even when the service is unreachable.
   } finally {
-    localStorage.removeItem('token')
-    userStore.$patch({ token: null, user: null })
-    await router.replace({ name: 'PortalLogin', query: { redirect: '/portal' } })
+    // An older logout must not clear a different tab's newly restored account.
+    if ((userStore.token === token && sessionRevision.value === revision && [token, null].includes(localStorage.getItem('token')))
+      || (userStore.token === null && localStorage.getItem('token') === null)) {
+      localStorage.removeItem('token')
+      userStore.$patch({ token: null, user: null })
+      await router.replace({ name: 'PortalLogin', query: { redirect: '/portal' } })
+    }
     loggingOut.value = false
   }
 }
