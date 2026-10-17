@@ -39,6 +39,17 @@
 .app-content code { color: var(--muted); font-size: 12px; }
 .quick-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
 .quick-card { display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 64px; padding: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+/* Keep the private entrance visually identical to other portal tiles.
+   Unlike a direct link, the tile must exchange the Owner session before navigation. */
+.portal-explore-card { width: 100%; color: inherit; font: inherit; text-align: left; cursor: pointer; appearance: none; }
+.portal-explore-card:focus-visible { outline: 3px solid var(--wh-border); outline-offset: 3px; }
+.portal-explore-card:disabled { cursor: wait; }
+.portal-explore-card:disabled:hover { border-color: var(--line); background: var(--card); }
+.portal-explore-heading { font-size: 20px; font-weight: 700; }
+.portal-explore-description { display: block; margin: 1em 0; color: var(--muted); line-height: 1.7; font-size: 14px; }
+.portal-explore-status { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.portal-explore-status:not(.is-visible) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; white-space: nowrap; clip-path: inset(50%); border: 0; }
+
 .portal-footer { margin-top: 32px; font-size: 12px; }
 @media (max-width: 1024px) { .auth-page { gap: 32px; padding: 32px; } .auth-card { padding: 28px; } }
 @media (max-width: 768px) {
