@@ -78,6 +78,15 @@ async page => {
     check(await page.locator('.portal-page').evaluate(node => node.scrollWidth <= node.clientWidth + 1), `portal overflow ${width}`)
     await button().focus()
     check(await button().evaluate(node => node === document.activeElement), `keyboard entry unreachable ${width}`)
+    check(await button().evaluate(node => getComputedStyle(node).outlineStyle !== 'none'), `missing keyboard focus outline ${width}`)
+    check(await page.locator('.app-grid').evaluate(grid => {
+      const cards = [...grid.children].map(node => node.getBoundingClientRect())
+      return cards.every((a, i) => cards.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1))
+    }), `portal cards overlap ${width}`)
+    check(await page.locator('.portal-explore-heading').evaluate(node => {
+      const peer = document.querySelector('.app-title-row h2')
+      return getComputedStyle(node).fontSize === getComputedStyle(peer).fontSize && getComputedStyle(node).fontWeight === getComputedStyle(peer).fontWeight
+    }), `card title typography differs ${width}`)
     matrix.push(`layout-keyboard-${width}`)
   }
   check(await page.locator('.app-card[target="_blank"][rel="noopener noreferrer"]').count() === 2, 'independent poem entries changed')
@@ -85,6 +94,7 @@ async page => {
   for (const [failure, copy] of [[401, '过期'], [403, '仅 Owner'], [404, '尚未启用'], [503, '尚未启用'], ['network', '网络'], ['expired', '响应无效或已过期'], ['cacheable', '响应无效或已过期']]) {
     mode = failure; await button().focus(); await page.keyboard.press('Enter')
     await page.waitForFunction(text => document.querySelector('#explore-status')?.textContent.includes(text), copy)
+    check(await page.locator('#explore-status').evaluate(node => node.getAttribute('role') === 'status' && node.getAttribute('aria-live') === 'polite' && node.getBoundingClientRect().height > 1), `error not visibly announced ${failure}`)
     check(page.url().endsWith('/portal'), `failure ${failure} navigated`)
     check(await page.evaluate(() => localStorage.getItem('token')) === tokenA, `private ${failure} revoked Wealth Hub token`)
     matrix.push(`failure-${failure}`)
@@ -92,7 +102,8 @@ async page => {
   mode = 'ok'; holdExchange = true
   const started = new Promise(resolve => { exchangeStarted = resolve })
   const before = requests.filter(r => r.path.endsWith('/exchange')).length
-  await button().focus(); await page.keyboard.press('Enter'); await started
+  await button().focus(); await page.keyboard.press('Space'); await started
+  check(await button().isDisabled() && await button().getAttribute('aria-busy') === 'true', 'exchange did not expose disabled/busy state')
   await page.keyboard.press('Enter')
   check(requests.filter(r => r.path.endsWith('/exchange')).length === before + 1, 'duplicate keyboard exchange')
   holdExchange = false; releaseExchange()
