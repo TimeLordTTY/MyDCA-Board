@@ -114,10 +114,11 @@ const apps = [
   {
     title: '游戏墙',
     description: '浏览和管理已收录的游戏内容。',
-    path: '/game-wall/games',
-    href: '/game-wall/games',
+    path: 'games.timelordtty.cn/games',
+    href: 'https://games.timelordtty.cn/games',
     icon: PictureFilled,
     iconClass: 'orange',
+    external: true,
   },
   {
     title: '诗词站',

@@ -92,5 +92,8 @@ test('auth/portal templates compile with labels, live feedback and scrolling; no
   assert.match(entry, /for="auth-password"/); assert.match(entry, /role="alert"/)
   assert.doesNotMatch(entry, /keyup.enter|setTimeout|localStorage/)
   assert.match(portal, /noopener noreferrer/); assert.match(portal, /PortalLogin/)
+  assert.match(portal, /href: 'https:\/\/games\.timelordtty\.cn\/games'/)
+  assert.match(portal, /title: '游戏墙',[\s\S]*?external: true/)
+  assert.doesNotMatch(portal, /\/game-wall\/games/)
   assert.match(await read('styles/auth-portal.css'), /height: 100dvh; overflow: auto/)
 })
